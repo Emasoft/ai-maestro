@@ -70,7 +70,14 @@ export async function GET(req: NextRequest) {
     try {
       const { dirname, join: pathJoin } = await import('path')
       const { writeFileSync, unlinkSync } = await import('fs')
-      const pluginRoot = dirname(resolved)
+      // MUST derive from realResolved, NOT from `resolved`. The containment check above proves
+      // the REAL path is in-tree; `resolved` is the caller's LEXICAL path and can still traverse
+      // a symlinked directory pointing into an agent-writable tree. Deriving the root from it
+      // let ${CLAUDE_PLUGIN_ROOT} expand to an agent-writable directory — a value that is both
+      // substituted into the JSON below and exported to the spawned process, so a confined agent
+      // could get its own file executed by this unconfined server. Checking one path and using
+      // another is the bug (TRDD-NB70FKKT).
+      const pluginRoot = dirname(realResolved)
 
       // Resolve ${CLAUDE_PLUGIN_ROOT} and other Claude plugin variables in .mcp.json
       // before passing to the discovery script, since node/python won't expand shell vars in JSON

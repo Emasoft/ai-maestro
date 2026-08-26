@@ -72,6 +72,10 @@ export async function POST(req: NextRequest) {
   // 2. serverConfig — inline JSON for standalone MCP (from ~/.claude.json, no file on disk)
   const { serverConfig } = body as { serverConfig?: Record<string, unknown> }
   let tmpFile: string
+  // The CONTAINED plugin root, derived from the realpath'd config path. Hoisted out of the
+  // `if (configPath)` block because the exec below needs it too — it must never re-derive the
+  // root from the caller's lexical path (see the comment at its assignment).
+  let pluginRootReal: string | undefined
 
   if (configPath) {
     // Plugin-based: read from .mcp.json file
@@ -89,8 +93,16 @@ export async function POST(req: NextRequest) {
     if (!realResolved.startsWith(PLUGINS_BASE + '/')) {
       return NextResponse.json({ error: 'Access denied — configPath must be under ~/.claude/plugins/' }, { status: 403 })
     }
-    // Resolve ${CLAUDE_PLUGIN_ROOT} and other variables in .mcp.json
-    const pluginRoot = dirname(resolved)
+    // Resolve ${CLAUDE_PLUGIN_ROOT} and other variables in .mcp.json.
+    // MUST derive from realResolved, NOT from `resolved`. The containment check above proves
+    // the REAL path is in-tree; `resolved` is the caller's LEXICAL path and can still traverse
+    // a symlinked directory that points into an agent-writable tree. Deriving the root from it
+    // let a config whose real path is legitimately in-tree expand ${CLAUDE_PLUGIN_ROOT} to an
+    // agent-writable directory — and that value is both substituted into the JSON below and
+    // exported to the spawned process, so a confined agent could get its own file executed by
+    // this unconfined server. Checking one path and using another is the bug (TRDD-NB70FKKT).
+    const pluginRoot = dirname(realResolved)
+    pluginRootReal = pluginRoot
     let mcpJsonContent = await readFile(resolved, 'utf-8')
     mcpJsonContent = mcpJsonContent.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot)
     tmpFile = join(os.tmpdir(), `mcp-discover-${Date.now()}.json`)
@@ -142,7 +154,9 @@ export async function POST(req: NextRequest) {
       timeout: (Math.min(timeout || 25, 60) + 5) * 1000,
       maxBuffer: 2 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'ignore'],
-      env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
+      // Same rule as above: the contained, realpath-derived root — never a re-derivation from
+      // the caller's lexical configPath, which would reintroduce the symlink escape here.
+      env: { ...process.env, ...(pluginRootReal ? { CLAUDE_PLUGIN_ROOT: pluginRootReal } : {}) },
     }).toString()
 
     // Clean up temp file

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T16:15:40+0200
+updated: 2026-08-26T16:24:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -411,6 +411,52 @@ showed an empty pane, and two ancestry scans looking at the wrong DEPTH (the pan
 child shell, so the injected process is a grandchild). **A failed attack probe is the most
 dangerous false zero on this card**, because it licenses shipping the thing it was meant to test.
 Each was caught only by a positive control asking "did the injection land at all?".
+
+### HOW TO SOLVE IT — and first, what actually needs solving
+
+**Separate the two problems, because conflating them is what made (A) look sufficient.**
+
+1. **Credential exposure** — this card's original subject. (A) or (D) both close it.
+2. **Cross-agent CONTROL via the shared tmux server** — a DIFFERENT and worse vulnerability.
+   **It exists TODAY, independent of any credential design.** Agent A can already drive agent B's
+   pane and make it do anything, with or without a token. Choosing (A) does not introduce it and
+   does not fix it; (D) fixes it only as a side effect.
+
+**Within one uid on one shared tmux server, problem 2 is not solvable. Measured, not argued:**
+
+- POSIX permissions and ACLs cannot separate principals the kernel considers identical — the owner
+  always has access, so a per-agent socket path buys nothing.
+- **macOS sandboxing does not rescue it in the cheap form.** `sandbox-exec` exists and DOES enforce
+  (control: `(deny default)` → `execvp failed: Operation not permitted`, exit 71). But the
+  permissive shape — `(allow default)` plus a targeted `(deny file-read* …)` — **failed to deny**,
+  tested with two rule forms. Enforcement would need a restrictive `(deny default)` base
+  enumerating everything Claude Code requires: large, brittle, and unverified.
+
+**So any real fix must break one of the two premises — same uid, or shared tmux.** Which points at
+the option neither of us had raised, and which the USER's own objections to (D) select for:
+
+### CONTAINERS — the direction I would argue for, and it is PARTLY BUILT ALREADY
+
+`app/api/agents/docker/create/route.ts` and `services/agents-docker-service.ts` exist in this repo.
+
+A per-agent container gives, by construction rather than by policy:
+
+- a **separate PID namespace** — agent A cannot `ps` agent B at all, which kills EXPOSURES 1, 2 and
+  3 outright rather than mitigating them;
+- a **separate filesystem** — no shared tmux socket, so the demonstrated `send-keys` attack has no
+  path;
+- **no OS user accounts** — directly answering the USER's objection to (D) ("hundreds of accounts
+  every day, a mess no one would like on their own computer");
+- **cross-platform** — the other objection to (D).
+
+Inside a container the credential question also becomes easy: one agent per container means the
+container IS the identity boundary, and a token in that environment is readable only by that agent.
+
+**What I have NOT verified, and must be before this is a plan:** whether that docker path actually
+runs agents in containers today or only manages remote hosts; how complete it is; whether the
+dashboard's PTY streaming works through it; and the performance cost of a container per agent.
+**Those are the next measurements** — I am naming a direction with an existing foothold, not
+claiming a finished answer.
 
 ### Q: can one user control another user's tmux? YES — mechanism verified
 

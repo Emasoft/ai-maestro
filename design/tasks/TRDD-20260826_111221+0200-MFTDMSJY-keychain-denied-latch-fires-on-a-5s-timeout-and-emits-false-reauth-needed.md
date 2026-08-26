@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:28:38+0200
+updated: 2026-08-26T11:32:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -113,10 +113,47 @@ capture-caused story (see the correction below).
 > under a break rule of "any `reauth-needed`". I caught this by checking my own arithmetic against
 > the tick cadence; a bare count of a mixed population is not a measurement of one class in it.
 
-`PROBE_TIMEOUT_MS = 5_000` (`lib/oauth-rotator/keychain.ts:30`) governs the read path. A
-`security find-generic-password` on a loaded box can exceed 5 s with no prompt involved, so the
-timeout is very likely simply too tight — but that is a HYPOTHESIS this card must measure, not
-assume.
+~~`PROBE_TIMEOUT_MS = 5_000` governs the read path. A `security find-generic-password` on a loaded
+box can exceed 5 s with no prompt involved, so the timeout is very likely simply too tight~~ —
+**MEASURED AND REFUTED 2026-08-26T11:3x. Do not spend a session on the timeout.**
+
+```
+N=36 (3 accounts × 2 services × 6 rounds), fails=0
+p50=25.9 ms   p95=59.0 ms   max=78.3 ms   min=16.4 ms   over_5000ms=0
+```
+
+**A 5 s timeout is 64× the observed maximum.** Baseline read latency does not come within two
+orders of magnitude of tripping it, so "the timeout is too tight" is dead and **proposed fix #3
+is withdrawn** — raising `PROBE_TIMEOUT_MS` would mask whatever is actually stalling, which is the
+one thing #3 could do that the others cannot.
+
+> **⚠ AND THIS PARTLY REVERSES THIS CARD'S HEADLINE FRAMING — recording it rather than quietly
+> keeping the stronger claim.** If a read is normally 26 ms, then a >5000 ms stall is not slowness,
+> it is a **block** — and the most obvious thing that blocks a `security` read indefinitely is
+> exactly what the banner names: **a keychain unlock/ACL prompt waiting on a human who is not
+> there.** Note the asymmetry that makes this invisible to the `DENIAL_MARKERS` path: a prompt that
+> HANGS never returns, so it can only ever surface as a TIMEOUT, never as a denial string. So
+> "350 timeouts / zero denials" is consistent with BOTH readings — spurious stalls *and* real
+> hanging ACL prompts — and I presented it as evidence for the first. **It is not: it cannot
+> discriminate them.** The wording "(a keychain unlock/ACL prompt)" is still unjustified *by the
+> code* (it is printed for ANY non-ENOENT spawn error, including ones that have nothing to do with
+> a prompt), but the cause it names has gone from "an ACL problem that does not exist" to **the
+> leading hypothesis**. That sentence in the Problem section above is hereby narrowed to the code
+> objection only.
+>
+> **What this does NOT change:** the false `reauth-needed: slot-unreadable` is wrong either way — a
+> read the server DECLINED to attempt is not an unreadable slot — so proposed fix #2 (and the
+> coverage floor) stand on their own regardless of which hypothesis wins. **What it sharpens:** the
+> question is no longer "is 5 s too tight" but **"what blocks a 26 ms read for >5 s, 7.6× a day,
+> while 87 % of reads in the same period succeed?"** A blanket ACL denial is ruled out by that 87 %
+> — the server plainly reads these items most of the time.
+>
+> **Caveat on my own instrument, stated because it is the same trap this thread keeps hitting:**
+> these 36 samples were taken from an INTERACTIVE SHELL, not from the server process. Shell
+> latency is a PROXY for server latency — different session, different keychain ACL context. It is
+> sufficient to kill fix #3 (nothing about the server makes a 26 ms operation take 5 s *by
+> latency*) and it is NOT sufficient to characterise the stall. Measuring that needs the timing
+> instrumented inside `runSecurity` itself, which is a code change and belongs in the fix.
 
 ## Why this is priority 0
 
@@ -150,8 +187,15 @@ X4RK1NUW asked for *"if it persists after 3GU9V70H's recovery"* — it demonstra
    cannot currently distinguish "the keychain says no" from "we declined to ask". A third state
    (`probe-suppressed`) keeps `reauth-needed` for real credential faults only — the same
    same-label-different-noun trap 3GU9V70H hit with `all-maxed`.
-3. **Raise/justify `PROBE_TIMEOUT_MS`** only if the measurement below shows real read latency
-   near 5 s. A bare bump without the measurement is a guess replacing a guess.
+3. ~~**Raise/justify `PROBE_TIMEOUT_MS`** only if the measurement below shows real read latency
+   near 5 s.~~ **WITHDRAWN — the measurement was taken and killed it** (p95 59 ms against a 5000 ms
+   budget). Raising the timeout would only lengthen the block.
+4. **NEW, and now the highest-value one: instrument the stall.** Record the elapsed time and the
+   argv of any `security` call that exceeds ~1 s, inside `runSecurity` itself. That is the only
+   measurement that can answer "what blocks a 26 ms read for >5 s, 7.6× a day, while 87 % of
+   reads in the same period succeed" — and it distinguishes a hanging ACL prompt (the banner's
+   own claim, now the leading hypothesis) from anything else, which decides whether 1 is even the
+   right frame.
 
 ## Verification
 
@@ -170,8 +214,15 @@ contract moves; a purely server-side latch/classification change does not need t
 
 ## Acceptance
 
-- [ ] `security` read latency measured on this box (p50/p95/max, N≥30, under representative load)
-      and recorded here — decides whether 5 s is too tight
+- [x] `security` read latency measured on this box (p50/p95/max, N≥30) and recorded here —
+      **DONE 2026-08-26T11:3x: N=36, 0 fails, p50 25.9 ms / p95 59.0 ms / max 78.3 ms, zero
+      samples over 5000 ms.** Verdict: 5 s is NOT too tight (64× the max), fix #3 withdrawn, and
+      the framing shifts from "spurious timeout" toward "something BLOCKS the read" — see the
+      reversal note in Problem. Measured from an interactive shell, which is a PROXY for the
+      server's context; sufficient to kill #3, not to characterise the stall (that is new fix #4).
+- [ ] The stall characterised from INSIDE `runSecurity` (elapsed + argv for any call > ~1 s), so
+      a hanging ACL prompt is distinguishable from any other block — this is what decides the
+      fix, now that latency is ruled out
 - [ ] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
 - [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`

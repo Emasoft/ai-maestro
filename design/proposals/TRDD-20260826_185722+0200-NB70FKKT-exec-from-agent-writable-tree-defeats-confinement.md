@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:03:40+0200
+updated: 2026-08-26T20:08:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -162,8 +162,36 @@ the `subprocess.PIPE` kwarg of an outer call. Only a handful expose a first arg 
 same shape as every other false zero on this card.
 
 **What box 1 actually needs is an AST pass** (`ast.parse` → walk `Call` nodes → classify argv[0]
-as literal / name / expression), not another grep. Recorded so the next session does not spend
-the slice discovering this a second time.
+as literal / name / expression), not another grep.
+
+### The AST pass, run — box 1's janitor half is 77 sites, not 656
+
+`reports/impersonation-audit/20260826_200812+0200-janitor-argv0-ast-census.md` (gitignored)
+carries the full enumeration. Under `scripts/`:
+
+| argv[0] shape | count |
+|---|---|
+| LITERAL (a constant first element) | 117 |
+| NAME (argv is a bare variable) | 34 |
+| NAME-in-list | 22 |
+| EXPR-in-list | 11 |
+| EXPR | 10 |
+| **TOTAL call sites** | **194** |
+
+**77 non-literal sites** — that is the real size of the remaining janitor triage, and it is
+tractable by hand. (The AST also corrects my own grep from the previous slice: 194, not 205 —
+grep counted an outer call's `subprocess.PIPE` kwarg as a site.)
+
+**POSITIVE CONTROL — the instrument finds all three sites already known to be true:**
+`plugin_manage.py:194` (the card's founding seed), `detectors/memory-librarian.py:490` (the
+`$MEMGREP_BIN` rank-1 item), and `lib/terminal_trigger.py:1372` (the `$AIMAESTRO_CLI` path,
+adjacent to `_resolve_aimaestro_cli` at `:1350`). A census that missed any of them would be
+reporting a number about a set it cannot see.
+
+**Not yet done, and NOT to be confused with the above:** non-literal argv[0] is a CANDIDATE
+shape, not a finding — most of the 77 will resolve to `sys.executable`, a hardcoded `git`, or a
+PATH lookup. Classifying each against "is the resolved target agent-writable, and is the caller
+unconfined" is the remaining work, and it is per-site reading, not another sweep.
 
 ## Enumeration status — PARTIAL, and the worker said so
 

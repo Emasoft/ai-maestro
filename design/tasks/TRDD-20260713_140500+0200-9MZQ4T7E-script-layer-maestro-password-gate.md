@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:06:21+0200
+updated: 2026-08-26T05:16:46+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -84,12 +84,12 @@ One principal, one secret, one prompt:
 
 ## Acceptance
 
-- [ ] The `~/.local/bin/aimaestro-*.sh` verbs that hit a `strict` route are enumerated from `security-registry.json` (not guessed) and each carries the shared MAESTRO-password prompt step.
-- [ ] The password is read from a TTY prompt only — never accepted as an argument or env var, never echoed.
-- [ ] A strict-route script invoked with no TTY and no token exits non-zero and performs nothing (fail-closed).
-- [ ] A wrong password is rejected by the shared step and consumes no sudo token.
-- [ ] `history`, `ps aux`, and argv are checked and show no trace of the password after a real invocation.
-- [ ] An agent-authenticated (AID) call through the same scripts is unaffected — no regression in the AID path.
+- [x] The `~/.local/bin/aimaestro-*.sh` verbs that hit a `strict` route are enumerated from `security-registry.json` (not guessed) and each carries the shared MAESTRO-password prompt step — 14 call sites: teams create/edit(x2)/delete, session send/command (PATCH x2) + block-state(x2) + prompt/answer + queue, panel post, trdd edit/approve/refuse/promote/archive, agent probe. Gate: `maestro_sudo_ensure` in shell-helpers/common.sh + a documented family copy in agent-helper.sh (the agent module set does not source common.sh). Commit e1a8988d.
+- [x] The password is read from a TTY prompt only (`read -rs < /dev/tty`), never argv/env, never echoed — stdin at every hop (`jq -Rn 'input'`, `curl -d @-`), the exact pattern the dev-login test pins argv-containment for.
+- [x] A strict-route script invoked with no TTY and no token exits non-zero and performs nothing — T1/T5 in tests/unit/maestro-sudo-gate.test.ts assert the stub server received ZERO requests; neuters N1/N2 red exactly one test each (disjoint).
+- [ ] A wrong password is rejected by the shared step and consumes no sudo token — TRUE BY THE EXCHANGE'S OWN CONTRACT (403 mints nothing; the step's empty-token branch refuses and performs nothing) but NOT DRIVEN: the prompt path needs a real pty and `script(1)` syntax diverges macOS/Linux. Open until a pty harness or an operator run.
+- [ ] `history`, `ps aux`, and argv are checked and show no trace of the password after a real invocation — OPERATOR HALF (needs a real terminal + real server). The identical stdin-only pattern is argv-pinned by the dev-login test's curl shim; this box is the live confirmation.
+- [x] An agent-authenticated (AID) call through the same scripts is unaffected — T3/T6: no sudo exchange occurs and the request carries the same Bearer, byte-identical path (the gate returns before touching anything when AID_AUTH is set).
 
 ## Approval log
 

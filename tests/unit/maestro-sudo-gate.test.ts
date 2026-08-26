@@ -17,10 +17,21 @@
  * path's secret-handling (jq -Rn 'input' + curl -d @-) reuses the exact pattern
  * the dev-login test already pins argv-containment for.
  *
- * NEUTER (recorded 2026-08-26, restore blob-verified): making maestro_sudo_ensure
- * a no-op `return 0` in common.sh reds exactly T1 (the strict request reaches the
- * server) and leaves T2/T3/T4 green — the complement proving T1 pins the GATE and
- * the others pin the PASSTHROUGHS.
+ * NEUTER RUNS (2026-08-26 — OBSERVED, restores verified by blob hash; do not
+ * retype these numbers, they are pasted from the runs):
+ *   N1  common.sh::maestro_sudo_ensure → `return 0`      ⇒ 1 red / 5 green: exactly T1.
+ *   N2  agent-helper.sh family copy    → `return 0`      ⇒ 1 red / 46 green: exactly T5
+ *       (via scripts/dev/neuter; the FIRST run of N2 reddened NOTHING because the
+ *       stub failed resolve_agent and probe returned before the gate — the fixture
+ *       now resolves, which is what makes T5 a test of the gate at all).
+ * Disjoint red sets ⇒ each copy is pinned independently, none passes for an
+ * unknown reason.
+ *
+ * NOT DRIVEN (recorded, not hidden): the wrong-password branch of the exchange
+ * (server 403 → empty token → refuse) and the post-invocation history/ps/argv
+ * sweep both need a REAL pty + terminal; macOS/Linux `script(1)` syntax diverges,
+ * so this file deliberately stops at the no-TTY half. The card's boxes for those
+ * stay open until an operator run or a pty harness exists.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn } from 'child_process'

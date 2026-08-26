@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:40:00+0200
+updated: 2026-08-26T13:47:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -141,7 +141,39 @@ pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole pi
 
 ## Decisions — the 17, one at a time
 
-### `help/agent` — 2026-08-26: read, NARROWED to one open question, NOT decided
+### `help/agent` — DECIDED 2026-08-26: CLEAR, and the answer GENERALISES to every forwarding route
+
+The open question below is now settled by reading `DeleteAgent`'s gate chain:
+
+```
+G00: if (!options?.authContext) → 'authContext is mandatory for DeleteAgent (security invariant)'
+     await gate0Auth('delete-agent', agentId, options.authContext, ops)
+
+gate0Auth: if (authContext.isSystemOwner) return null        // operator passes
+           const authz = authorize(authResult, action, agentId)
+           if (!authz.ok) return authz.reason || 'Not authorized'
+```
+
+So a non-owner principal is routed into **`authorize()`** — the STRONG_AUTHZ primitive itself. The
+receiver genuinely decides, `authContext` is a hard requirement rather than an optional hint, and
+`help/agent` is therefore **correct forwarding**, not debt.
+
+**THE REUSABLE RESULT, which is worth more than this one verdict:** *any* route that forwards a
+built `authContext` into `DeleteAgent` is clear on the authorization axis, because G00 refuses a
+missing context outright and routes a present one through `authorize()`. That converts the
+forward-only tier's central worry — "forwarding proves it hands the identity on, NOT that the
+receiver decides anything" — into a settled question **for this receiver**. Each remaining route
+still needs its own receiver identified; this establishes one of them.
+
+**One observation, flagged NOT as a finding:** G01b (R39.6) blocks INDEPENDENT deletion of an agent
+whose `governanceTitle === 'assistant'` unless `cascadeFromUser` is set, and `help/agent`'s DELETE
+does not set it. If `_aim-assistant` carries that title, its DELETE can never succeed — a
+FUNCTIONAL dead-end, not a security hole. I found no `governanceTitle` assignment in
+`services/help-service.ts`, which suggests G01b does not fire, but I did **not** verify the
+registry record (the agent is not currently present on this host). Worth one check by whoever
+touches this route next; it is not this card's business.
+
+### ~~`help/agent` — read, NARROWED to one open question~~ (SETTLED above, kept for the trail)
 
 Read first from my own triage list because it looked ungated. It is not ungated — both mutating
 methods authenticate — but it IS genuinely forward-only, which is the tier's real subject.
@@ -183,7 +215,7 @@ meaning opposite things. Treat the table as ordering, never as an answer.
 
 | route | `!isSystemOwner` refusal | owner compare | `enforceAuth` | read priority |
 |---|---|---|---|---|
-| `help/agent` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **READ — narrowed to one question, see below** |
+| `help/agent` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (forwards into `DeleteAgent` G00 → `authorize()`) |
 | `messages/forward` | 0 | 0 | **0** | **2 — forwards messages, no local gate** |
 | `teams/[id]/kanban-config` | 0 | 0 | **0** | **3** |
 | `teams/[id]/tasks` | 0 | 0 | **0** | **4** |
@@ -246,7 +278,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `teams/[id]/tasks` | NO | undecided |
 | `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
 
-So **8 genuinely undecided** (`auth/sudo-password` and `governance/user` both decided below), not 15. Two are known false positives and two are decided clear.
+So **7 genuinely undecided** (`auth/sudo-password` and `governance/user` both decided below), not 15. Two are known false positives and two are decided clear.
 
 **The `NO-enforceAuth` column is new information and is where I would start.** A route that forwards
 an auth context WITHOUT calling `enforceAuth` is relying entirely on the receiving service to

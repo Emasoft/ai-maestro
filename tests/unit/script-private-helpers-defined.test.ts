@@ -35,7 +35,12 @@ function definedIn(src: string): Set<string> {
 function calledIn(src: string): Set<string> {
   const out = new Set<string>()
   const stripped = src.replace(/^\s*#.*$/gm, '')
-  for (const m of stripped.matchAll(/(?:^|[|;&(]|\$\()\s*(_[A-Za-z0-9_]+)(?=\s|$)/gm)) out.add(m[1])
+  // Command position: line start, after a pipe/;/&/(/{/backtick/$(, or after a keyword that
+  // opens one (`if`, `then`, `do`, `else`, `!`). The narrow form missed those keyword cases,
+  // and a MISS is invisible: it yields an empty call set, which every per-file row reads as
+  // GREEN. Widening took the layer-wide yield 71 -> 80 call sites across 32 files.
+  const RE = /(?:^|[|;&(`{]|\$\(|\bthen\b|\bdo\b|\belse\b|\bif\b|!)\s*(_[A-Za-z0-9_]+)(?=\s|$|\))/gm
+  for (const m of stripped.matchAll(RE)) out.add(m[1])
   return out
 }
 
@@ -78,6 +83,22 @@ describe('script layer: every private helper a script calls is defined', () => {
   it('has scripts to scan and a readable common.sh (non-vacuity: a broken scan must not read clean)', () => {
     expect(shells.length).toBeGreaterThan(5)
     expect(commonDefs.size).toBeGreaterThan(0)
+  })
+
+  /**
+   * THE LOAD-BEARING GUARD. Every per-file row below asserts `missing == []`, which passes
+   * identically whether a file has no UNRESOLVED calls or no calls EXTRACTED AT ALL — so a
+   * `calledIn()` regex that silently stopped matching (a `_helper` after `!`, after `then`/
+   * `do`, inside `[[ ]]`, in backticks) would turn every row green while checking nothing.
+   * The corpus guard above cannot see that: it measures the CORPUS, not the EXTRACTOR.
+   * So assert the extractor's total yield and pin the observed figure as a FLOOR — it may
+   * only rise. MEASURED 2026-08-26 (not estimated): 80 call sites across 32 files, with the
+   * widened extractor above; the narrow one yielded 71. Re-derive with the same reduce if you
+   * ever need to move this floor.
+   */
+  it('the call extractor actually sees calls across the layer (floor may only RISE)', () => {
+    const total = shells.reduce((n, f) => n + calledIn(srcOf.get(f)!).size, 0)
+    expect(total).toBeGreaterThanOrEqual(80)
   })
 
   it.each(shells)('%s calls no undefined _helper', (file) => {

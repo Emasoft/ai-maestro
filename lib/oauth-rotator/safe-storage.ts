@@ -26,6 +26,7 @@
 // This module never logs a secret value.
 
 import { spawnSync } from 'child_process'
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -47,8 +48,10 @@ const LATCH_COOLDOWN_DEFAULT_S = 600.0
 
 const KEYCHAIN_LATCH_NAME = 'keychain-denied.latch'
 
-// TRDD-MFTDMSJY: log any `security` invocation at or past this duration, with its argv. Set at
-// ~40x the measured p95 (59ms, N=36) so a healthy box is silent and only a genuine block speaks.
+// TRDD-MFTDMSJY: log any `security` invocation at or past this duration. Set at ~40x the measured
+// READ p95 (59ms, N=36) so a healthy box is silent and only a genuine block speaks. WRITES were
+// never timed and can legitimately prompt — if one ever exceeds this it is itself a finding, which
+// is why the threshold is not raised to cover an unmeasured path.
 // Deliberately BELOW the 5000ms timeout: a call that stalls but recovers at 3s is the most
 // informative sample there is, and the timeout path throws it away.
 const SLOW_SECURITY_LOG_MS = 2_500
@@ -210,6 +213,11 @@ export function isDenial(stderr: string): boolean {
  *
  * Redacting "the token after `-w`" would also have worked TODAY and is exactly the fragile shape
  * that broke: it depends on a per-verb fact about one flag. The allowlist depends on nothing.
+ *
+ * ONE UNASSERTED INVARIANT MAKES IT SAFE, stated so a future argv builder cannot break it in
+ * silence: in every argv this module builds, `-s` and `-a` PRECEDE `-w`, and `indexOf` returns
+ * the FIRST match — so a secret can never be selected even if its own value is the literal
+ * string `-s`. Put `-w` before `-s` in some future builder and that stops being true.
  */
 export function describeSecurityArgv(argv: string[]): string {
   const verb = argv[1] ?? '<none>'
@@ -219,7 +227,14 @@ export function describeSecurityArgv(argv: string[]): string {
   }
   const svc = valueOf('-s')
   const acct = valueOf('-a')
-  return `verb=${verb}${svc === null ? '' : ` service=${svc}`}${acct === null ? '' : ` account=${acct}`}`
+  // `service` is a fixed constant ('Claude Code-rotator-slot' and friends) — safe in clear.
+  // `account` is NOT: for a slot it is the owner's EMAIL ADDRESS, and for the live/livebak
+  // family it is the macOS USERNAME (live.ts::keychainAccount -> $USER). Both are PII, and this
+  // log lands in pm2-error.log, whose lines get quoted into PUBLIC GitHub issues. The log's only
+  // job is to say WHICH item blocks, and that needs DISTINGUISHABILITY, not identity — so the
+  // account is reduced to a short stable digest. Do not "improve" this back to the address.
+  const tag = acct === null ? null : crypto.createHash('sha256').update(acct, 'utf8').digest('hex').slice(0, 8)
+  return `verb=${verb}${svc === null ? '' : ` service=${svc}`}${tag === null ? '' : ` account=#${tag}`}`
 }
 
 /**

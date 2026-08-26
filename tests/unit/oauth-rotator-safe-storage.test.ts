@@ -270,12 +270,30 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     // ...and it still answers the question the log exists for: WHICH item blocked.
     expect(line).toContain('verb=add-generic-password')
     expect(line).toContain('service=svc-x')
-    expect(line).toContain('account=acct-y')
+    // The account is a DIGEST, never the value. `account` is an EMAIL for a slot and the macOS
+    // USERNAME for the live family, and this log is quoted into public issues — so asserting the
+    // raw value here (as the first draft of this test did) PINS a PII leak in as a requirement.
+    expect(line).not.toContain('acct-y')
+    expect(line).toMatch(/account=#[0-9a-f]{8}\b/)
+  })
+
+  it('describeSecurityArgv NEVER emits an email address, and still discriminates accounts', () => {
+    const a = describeSecurityArgv(macosRetrieveArgv('svc', 'someone@example.com'))
+    const b = describeSecurityArgv(macosRetrieveArgv('svc', 'other@example.com'))
+    for (const line of [a, b]) {
+      expect(line).not.toContain('@')
+      expect(line).toMatch(/account=#[0-9a-f]{8}\b/)
+    }
+    // Discrimination is the ONLY property the log needs here — two accounts must not collide, or
+    // "which item blocks" becomes unanswerable.
+    expect(a).not.toBe(b)
+    // ...and it must be STABLE, or one item looks like a different one on each beat.
+    expect(describeSecurityArgv(macosRetrieveArgv('svc', 'someone@example.com'))).toBe(a)
   })
 
   it('describeSecurityArgv describes a RETRIEVE argv without the -w flag leaking a value', () => {
     const line = describeSecurityArgv(macosRetrieveArgv('svc-r', 'acct-r'))
-    expect(line).toBe('verb=find-generic-password service=svc-r account=acct-r')
+    expect(line).toMatch(/^verb=find-generic-password service=svc-r account=#[0-9a-f]{8}$/)
   })
 
   it('runSecurity stays SILENT for a fast spawn (a healthy box logs nothing)', () => {

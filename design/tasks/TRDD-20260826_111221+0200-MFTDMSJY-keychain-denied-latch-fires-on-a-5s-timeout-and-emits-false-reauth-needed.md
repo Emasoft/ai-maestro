@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:40:36+0200
+updated: 2026-08-26T11:48:23+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -229,11 +229,21 @@ contract moves; a purely server-side latch/classification change does not need t
       19 green), so each test falls to exactly one mutation and none is vacuous. Observation only:
       the latch, its cooldown and every verdict are untouched.
 - [ ] **The stall CHARACTERISED from that instrumentation** — still open, and it is a WAIT, not
-      work: the log is armed but the server has not been restarted onto it, and at ~7.6 latches/day
-      the first sample may be hours away. NEXT: `pm2 restart ai-maestro` (owner's call — it drops
-      every live PTY stream), then `grep -a "SLOW \`security\` op" logs/pm2-error.log`. A line
-      naming one item repeatedly points at an ACL prompt on that item; lines spread across all six
-      items point at something process-wide.
+      work: the log is armed but NOT DEPLOYED, and at ~7.6 latches/day the first sample may be
+      hours after it is. **NEXT: `bash scripts/with-node.sh yarn build` FIRST, THEN
+      `pm2 restart ai-maestro`** (the restart is the owner's call — it drops every live PTY
+      stream), then `grep -a "SLOW \`security\` op" logs/pm2-error.log`. A line naming one item
+      repeatedly points at an ACL prompt on that item; lines across all six point at something
+      process-wide.
+
+      > **The build step is load-bearing and I nearly omitted it — on the card that documents this
+      > exact trap.** `safe-storage.ts` lives under `lib/`, so it is BUNDLED into `.next`, not
+      > runtime-imported the way `server-tick.ts` is. Measured: `grep -c 'server-tick' server.mjs`
+      > = **1**, `grep -c 'safe-storage' server.mjs` = **0**. A `pm2 restart` alone therefore keeps
+      > running the OLD bundle, the instrumentation never fires, and the result presents as *"no
+      > slow ops were recorded"* — an absence read as a result, which is the same failure this
+      > whole card is about. X4RK1NUW's own STATE block records the identical "landed, undeployed"
+      > trap from 2026-08-21; it recurred here four days later.
 - [ ] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
 - [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`

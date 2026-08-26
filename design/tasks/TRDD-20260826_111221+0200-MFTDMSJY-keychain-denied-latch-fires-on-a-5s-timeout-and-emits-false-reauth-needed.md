@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:32:22+0200
+updated: 2026-08-26T11:40:36+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -220,9 +220,20 @@ contract moves; a purely server-side latch/classification change does not need t
       the framing shifts from "spurious timeout" toward "something BLOCKS the read" — see the
       reversal note in Problem. Measured from an interactive shell, which is a PROXY for the
       server's context; sufficient to kill #3, not to characterise the stall (that is new fix #4).
-- [ ] The stall characterised from INSIDE `runSecurity` (elapsed + argv for any call > ~1 s), so
-      a hanging ACL prompt is distinguishable from any other block — this is what decides the
-      fix, now that latency is ruled out
+- [x] **INSTRUMENTATION LANDED** (`c471b66d`) — `runSecurity` now times every spawn and, at
+      >= `SLOW_SECURITY_LOG_MS` (2500 ms, ~40x the measured p95, deliberately BELOW the 5000 ms
+      timeout so a stall that recovers at 3 s is still captured), logs elapsed + argv + whether it
+      timed out + whether it was the half-open probe. argv is safe to log: the secret is never on
+      the command line (`-w` prints to stdout), and WHICH item blocks is the open question.
+      3 tests, complementary neuter pair (`if (false)` -> 2 red / 18 green; `if (true)` -> 1 red /
+      19 green), so each test falls to exactly one mutation and none is vacuous. Observation only:
+      the latch, its cooldown and every verdict are untouched.
+- [ ] **The stall CHARACTERISED from that instrumentation** — still open, and it is a WAIT, not
+      work: the log is armed but the server has not been restarted onto it, and at ~7.6 latches/day
+      the first sample may be hours away. NEXT: `pm2 restart ai-maestro` (owner's call — it drops
+      every live PTY stream), then `grep -a "SLOW \`security\` op" logs/pm2-error.log`. A line
+      naming one item repeatedly points at an ACL prompt on that item; lines spread across all six
+      items point at something process-wide.
 - [ ] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
 - [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`

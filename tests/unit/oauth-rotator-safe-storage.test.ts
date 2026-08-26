@@ -200,6 +200,16 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     expect(run.ok).toBe(false)
   })
 
+  // NEUTER RUNS (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+  // A COMPLEMENTARY PAIR, because neither mutation alone can reach all three tests: disabling the
+  // log cannot redden a test that asserts silence, and forcing it cannot redden one that asserts
+  // a log. Run singly, either would have certified a third of this block as pinned when it was not.
+  //   s/if \(elapsedMs >= SLOW_SECURITY_LOG_MS\)/if (false)/  → 2 red / 18 green:
+  //       runSecurity LOGS elapsed + argv for a spawn at/over the slow threshold
+  //       runSecurity marks the log TIMED OUT when the spawn is killed by its own timeout
+  //   s/if \(elapsedMs >= SLOW_SECURITY_LOG_MS\)/if (true)/   → 1 red / 19 green:
+  //       runSecurity stays SILENT for a fast spawn (a healthy box logs nothing)
+  // Each test falls to exactly one mutation; none is vacuous.
   // TRDD-MFTDMSJY — the SLOW-op instrumentation. The latch fired 350 times in 46 days recording
   // only "hung past 5s", with no duration and no argv, so nobody could tell a hanging ACL prompt
   // from any other block. These pin that a slow spawn now names itself. They drive `sleep`/`true`

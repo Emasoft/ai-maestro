@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:27:11+0200
+updated: 2026-08-26T05:28:40+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -128,6 +128,9 @@ both arms measured the SAME tree (the pop then resurrected a checkout-guard auto
 an old neuter, which was the mystery common.sh delta). Re-proven properly in a worktree at
 `e1a8988d^` (pre-gate): the SAME 5 files / SAME 6 tests fail there (continuity x2, headless
 ledger x1, manifest --check x1, trdd-doctor corpus x1, specs-in-sync x1) — genuinely
-pre-existing. Also settled by the same review: the strict matcher is EXACT anchored template
-match (lib/security-registry.ts::findBestMatch), so the portfolio-subpath and kanban-tasks
-rulings hold; amp-kanban-edit PUTs /api/teams/[id]/tasks/[taskId], not a strict template.
+pre-existing. Also settled by the same review — and by the COMPILE SITE, not the doc comment
+(second fork's demand): `compilePattern` at lib/security-registry.ts:62-68 escapes regex
+metachars, expands `[param]` to the single-segment class `[^/]+` (:67), and anchors the
+whole pattern `^...$` (:68) — so a subpath can never prefix-match a shorter template. The
+portfolio-subpath and kanban-tasks non-strict rulings are therefore proven by code;
+amp-kanban-edit PUTs /api/teams/[id]/tasks/[taskId], which matches no strict template.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:38:00+0200
+updated: 2026-08-26T15:42:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -268,12 +268,38 @@ via ordinary file permissions — **no secret, no peer-credential API, and no na
 sidesteps the Node limitation entirely rather than working around it. `ps eww` also stops exposing
 one agent's environment to another, because that is a cross-user read.
 
-**Do NOT treat that as the answer yet.** Two things must be measured first, and I am recording
-them as open rather than asserting past them a fourth time:
-1. **Does macOS enforce filesystem permissions on connect(2) to a Unix socket?** Linux does; some
-   BSDs historically did not. If macOS does not, the whole idea collapses.
-2. What per-uid agents cost operationally — user creation, tmux under another uid, workdir
-   ownership, and whether the harness can spawn as a different user at all.
+**MEASURE 1 — DONE, and it PASSES.** macOS enforces filesystem permissions on `connect(2)` to a
+Unix socket. A socket at mode `0000` refuses even its own owner:
+
+```
+mode after chmod: 0
+RESULT: REFUSED EACCES — perms ARE enforced on connect()
+```
+
+So the kernel will enforce a per-uid socket with no help from us. **This is the design (call it
+(D)), and it beats (A):**
+
+| | (A) native addon | (D) per-uid socket |
+|---|---|---|
+| secret delivered | none | none |
+| needs peer-credential API Node lacks | **yes** | no |
+| needs a compiled dependency | **yes** | no |
+| enforcement | our code, after reading the peer pid | **the kernel, before `connect` returns** |
+| fixes EXPOSURE 2 (`ps eww`) | no — env still readable by peers | **yes** — cross-user env reads are denied |
+
+(A) leaves `AID_AUTH`'s replacement enforceable only by code we write; (D) removes the shared-uid
+premise that every exposure on this card rests on.
+
+**MEASURE 2 — STILL OPEN, and it is the real cost.** Per-uid agents need: user creation on macOS,
+tmux and Claude Code running as another uid, workdir ownership, and `chown` on the socket — which
+needs privilege the server may not have. **This is an operational question, not a security one,
+and it is the one that decides (D) vs (A).** Not measured; do not let the security verdict above
+imply it is cheap.
+
+**One claim in the table I have NOT verified here:** that `ps eww` cannot read another USER's
+environment. It is standard Unix behaviour, but I could not test it without a second account, and
+this card has already recorded three cases of me asserting a mechanism I had not exercised. Treat
+it as expected, not measured.
 
 ### What this does to the staging
 

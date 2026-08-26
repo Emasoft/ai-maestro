@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-08-26T05:36:41+0200
+updated: 2026-08-26T05:37:57+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -76,9 +76,15 @@ folder deletion, purge cemetery, STATE-WIPE.
       logs its whole outcome durably: the summary line at
       `services/element-management-service.ts:4532` (`[ChangeTitle] Agent <id> "<name>": <old> ->
       <new> (N gates, restart=...)`) and `logDegradedOps('ChangeTitle', ...)` right after it, which
-      is LOUD for any WARN gate — so the scenario's verify step is a read-only grep of the pm2 log
-      (`<project>/logs/pm2-out.log`; Rule 6 allows read-only verification), asserting the
-      `[ChangeTitle]` line exists (positive control) AND no degraded-ops WARN names G15/G16. No
+      is LOUD for any WARN gate — VERIFIED at the body, not the name (`logDegradedOps` at :353-358:
+      the predicate `/\b(WARN|FAIL|DENIED|VIOLATION|MISMATCH)\b/` includes WARN, so no silent
+      filter) — and it writes via **`console.warn`, i.e. STDERR, i.e. the pm2 ERROR log**, while
+      the summary line is `console.log` → the OUT log. The verify step must therefore grep BOTH
+      files (Rule 6 allows read-only verification): the `[ChangeTitle]` summary in the out log
+      (positive control for stdout capture) AND the absence of `[ChangeTitle] ... DEGRADED` lines
+      naming G15/G16 in the ERROR log — grepping only the out log would report "no WARN" forever,
+      healthy or not (the vacuous-negative shape). Re-derive both paths from
+      `pm2 jlist` (`pm_out_log_path` / `pm_err_log_path`) at run time; never hardcode them. No
       dependency on whether the HTTP response surfaces `ops`. (2) the vehicle — extend
       `SCEN-001_title-change-lifecycle` (which already drives a title change through the UI with
       the Rule-12 sudo modal) with that one verify step; do NOT author a 41st file and do NOT use

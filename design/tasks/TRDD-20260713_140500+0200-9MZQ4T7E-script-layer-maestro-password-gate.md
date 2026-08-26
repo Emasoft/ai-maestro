@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:18:13+0200
+updated: 2026-08-26T05:24:21+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -112,3 +112,12 @@ real pty/terminal (macOS/Linux `script(1)` divergence documented in the test hea
 gate's fail-closed OUTCOME for those paths is already pinned; what is unproven is the
 prompt-path behavior under a live terminal. NEXT ACTION: an operator run at a real
 terminal (wrong password once, then `history`/`ps aux` sweep), or a pty harness card.
+
+**Commit-message erratum:** `d45df031` contains the three FIXTURE fixes (pre-minted sudo token
+in the trdd/teams verb harnesses) but wears the earlier feat commit's message — a stale
+/tmp/commit-msg.txt survived a failed `git add` (index.lock) and the retry reused it. The real
+gate implementation is `e1a8988d`; the full triage text intended for d45df031: 3 red files were
+the gate working (fixtures now pre-mint), 4 are the load-timeout flake class (green isolated),
+5 fail identically with the gate stashed (pre-existing: continuity-cli-restart-self,
+headless-handler-auth-ledger, build-script-manifest, trdd-doctor, specs-in-sync). Already
+pushed, so documented here rather than rewritten.

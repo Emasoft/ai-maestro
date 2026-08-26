@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T12:52:00+0200
+updated: 2026-08-26T13:00:27+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,27 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `settings/mcp-discover` — DECIDED 2026-08-26: a CRITICAL hole, filed as TRDD-NWTTU0AQ
+
+Two input modes; only one is contained. **`configPath` is fine** (resolve → realpath → must be
+under `~/.claude/plugins/`, else 403). **`serverConfig` is an arbitrary caller-supplied object**
+written straight into a tmp `.mcp.json` — `shellSafe()` is applied to `serverName`, `format`,
+`method`, `toolName` and every `toolArg`, and NEVER to `serverConfig`. An MCP config names a
+command to spawn, and the script spawns it: `scripts_dev/mcp_discovery.py:148-165`,
+`popen_kwargs = {"args": command, …}` → `subprocess.Popen(**popen_kwargs)` (read first-hand).
+
+So this is **arbitrary command execution by any authenticated agent**, not a disclosure. Filed as
+**TRDD-NWTTU0AQ** (`min-approval-requirement: manager`).
+
+**The route's own header is not a defence** — *"agents legitimately need this for the
+mcp-discovery skill"* is sound for the `configPath` branch (discovering a plugin the operator
+already installed) and does not extend to letting the caller DEFINE the server. It is evidence the
+second branch was never considered under that ruling.
+
+**One honest mitigating fact, stated so it is not mistaken for a control:** `scripts_dev/` is
+gitignored (`.gitignore:123`), so on a clean deploy the script is absent and the route 500s at its
+own `existsSync`. It is present on THIS host. Packaging luck, not a boundary.
 
 ### `plugin-builder/scan-repo` — DECIDED 2026-08-26: authn-only is CORRECT (CLEAR)
 

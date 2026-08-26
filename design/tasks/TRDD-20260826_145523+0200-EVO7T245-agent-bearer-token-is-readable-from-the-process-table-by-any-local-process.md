@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:42:30+0200
+updated: 2026-08-26T15:47:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -290,7 +290,22 @@ So the kernel will enforce a per-uid socket with no help from us. **This is the 
 (A) leaves `AID_AUTH`'s replacement enforceable only by code we write; (D) removes the shared-uid
 premise that every exposure on this card rests on.
 
-**MEASURE 2 — STILL OPEN, and it is the real cost.** Per-uid agents need: user creation on macOS,
+**MEASURE 2 — PARTLY DONE, and it names the blocker precisely.** The server runs as
+**`emanuelesabetta`, uid 501 — not root** (measured from the process table). Three consequences,
+all POSIX, none avoidable by cleverness:
+
+- it **cannot `chown`** a socket (or a containing directory) to another uid — only root may give a
+  file away;
+- it **cannot create users**;
+- it **cannot spawn a process as another uid** — `setuid` needs privilege.
+
+**So (D) is not a code change the server can make unilaterally. It needs a one-time privileged
+provisioning step**, and that is the honest shape of its cost: the human (or an installer) creates
+the per-agent uids once, and the server is granted a narrow privileged helper to spawn a session as
+one of them. That is bounded and auditable — a small helper with one job — but it is a real
+addition to the install story, and it is the part to weigh against (A)'s compiled dependency.
+
+**MEASURE 2 — REMAINDER STILL OPEN.** Per-uid agents need: user creation on macOS,
 tmux and Claude Code running as another uid, workdir ownership, and `chown` on the socket — which
 needs privilege the server may not have. **This is an operational question, not a security one,
 and it is the one that decides (D) vs (A).** Not measured; do not let the security verdict above

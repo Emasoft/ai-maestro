@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:34:35+0200
+updated: 2026-08-26T19:36:50+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -172,15 +172,24 @@ Three corrections, all pushing the same direction the report did not look:
    config ⇒ "stdio"` (true of a real plugin config) → `:1219 get("command")` → `:1222
    _resolve_command_value` → `:1066 an absolute path returned VERBATIM` · `:1224 get("args")` →
    **no resolution at all** → `:1367 [command, *args]` → `:1324 StdioMCPClient` → `:164
-   Popen(args=)`. **No containment check on any hop.**
+   Popen(args=)`. **No containment check on any hop** — including `:2079 validate_args`, the one
+   hop that could have REFUTED this and was therefore read last when it should have been first.
+   It is 45 lines of argument COHERENCE (timeouts, transport/option compatibility, auth combos)
+   and never inspects the VALUE of `command`/`args`. Its own contrast is the tell: the REMOTE
+   branch validates `--url` (scheme + netloc); the stdio branch asserts only that a command is
+   PRESENT. The code knows how to constrain a target and does not constrain this one.
 
    BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
    since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,
    `:1485`) is a SECOND entrypoint with the same shape, so this is not one call site to relocate.
 2. **The unattended reach is UNDERSTATED.** "Two run with nobody present" measures as four, and
-   the widest is every PROMPT: `hooks/on-prompt-submit-autorecall.py` → `user_mem_lib:524` →
-   `$MEMGREP_BIN`. Plus `hooks/post-edit-wikimem-lint.py` (every edit), `memory-librarian`
-   (every beat), `detectors/wikimem-syntax.py`.
+   the widest is every PROMPT: `hooks/on-prompt-submit-autorecall.py:346` (inside `main()`, the
+   module entrypoint) → `user_mem_lib:524` → `$MEMGREP_BIN`. Plus
+   `hooks/post-edit-wikimem-lint.py` (every edit), `memory-librarian` (every beat),
+   `detectors/wikimem-syntax.py`. QUALIFIED after a review caught me asserting "past ONLY a
+   length guard" over 37 lines I had not read: the call is reached on an ordinary prompt while
+   `CLAUDE_PLUGIN_OPTION_MEMORY_AUTORECALL` is on (opt-out, default ON), excluding slash
+   commands, `[janitor-` markers, and very short prompts. Reach stands; "only" did not.
 3. **"Read by 6 modules" is 6 CALL SITES across 5 modules** (`user_mem_lib` holds two).
    Not load-bearing; recorded so the number is not re-quoted wrong.
 

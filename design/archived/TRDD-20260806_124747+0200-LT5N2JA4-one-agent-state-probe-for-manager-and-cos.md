@@ -1,11 +1,11 @@
 ---
 trdd-id: LT5N2JA4
 title: One agent-state probe for MANAGER and COS, aggregating every source that already knows
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:47:47+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-26T00:05:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -197,13 +197,19 @@ wait on, so the honest frontmatter is empty and the relationship lives in the pr
 it is a reference rather than a claim on the graph.
 
 ## Acceptance
-- [ ] `GET /api/agents/[id]/probe` exists, aggregating registry status + block-state + hook chat-state + (where the join key is proven) agentlenspro usage
-- [ ] MANAGER (and own-team COS) can answer "what is agent X doing, and if it is stuck, why" in one script-layer call, with zero `/api/*` calls from the plugin
-- [ ] Every unavailable/stale source is NAMED in the `sources` field of the response, never silently defaulted or dropped
-- [ ] The join key for any agentlenspro `sessions`-derived field is either PROVEN (mapping to an ai-maestro agent id) or that field is omitted from the response
-- [ ] An ASSISTANT-titled agent is refused by the probe route; a COS is refused when probing outside its own team
-- [ ] The two-source Gate 0b keeps refusing an inject at a stalled-but-asked-nothing agent (regression check on already-pinned behavior)
-- [ ] `aimaestro-agent.sh` wraps the probe and ships as a skill to the MANAGER and CHIEF-OF-STAFF role-plugins
+- [x] `GET /api/agents/[id]/probe` exists, aggregating registry status + block-state + hook chat-state + (where the join key is proven) agentlenspro usage
+- [x] MANAGER (and own-team COS) can answer "what is agent X doing, and if it is stuck, why" in one script-layer call, with zero `/api/*` calls from the plugin
+- [x] Every unavailable/stale source is NAMED in the `sources` field of the response, never silently defaulted or dropped
+- [x] The join key for any agentlenspro `sessions`-derived field is either PROVEN (mapping to an ai-maestro agent id) or that field is omitted from the response
+- [x] An ASSISTANT-titled agent is refused by the probe route; a COS is refused when probing outside its own team
+      — enforced by the SAME layer block-state uses (`lib/sudo-guard.ts` STRICT_AGENT_RULES:
+      `GET /api/agents/[id]/probe` → action `unblock-prompt`, `targetFromPathId: true`), NOT a
+      second inline gate that could drift from it. The probe's own test pins that a 403 from
+      that guard propagates verbatim; the guard's title matrix is pinned where it is defined.
+- [x] The two-source Gate 0b keeps refusing an inject at a stalled-but-asked-nothing agent (regression check on already-pinned behavior)
+      — RUN, not assumed: `npx vitest run tests/services/agents-core-service.test.ts` → 100/100
+      green at this card's close (2026-08-26).
+- [x] `aimaestro-agent.sh` wraps the probe and ships as a skill to the MANAGER and CHIEF-OF-STAFF role-plugins
 
 ## Approval log
 

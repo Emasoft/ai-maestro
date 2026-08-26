@@ -231,6 +231,10 @@ export async function actuateRecovery(target: RecoveryTarget, deps: ActuatorDeps
 export interface ContinuityTarget {
   agentId: string
   name?: string
+  /** The tmux session to read frames from during a multi-step response (esc-then-command
+   *  re-checks the pane between ESCs, TRDD-U6AS2YWB). Optional: absent, the injector cannot
+   *  verify the menu left the screen and must refuse the multi-step kind. */
+  sessionName?: string
   /** What the frame reader + hook state saw for this agent at this poll. */
   observation: ContinuityObservation
   /** Epoch ms of the last actuation of THIS agent, or null. SHARED with the recovery ladder on
@@ -244,6 +248,8 @@ export interface ContinuityTarget {
 export interface ContinuityAction {
   agentId: string
   name?: string
+  /** Threaded from the target — see ContinuityTarget.sessionName. */
+  sessionName?: string
   program: string
   eventId: string
   response: ContinuityResponse
@@ -303,7 +309,10 @@ export async function actuateContinuity(
   if (hit === null) return { fired: false, reason: 'no_event' }
 
   // 2. unknown_command_key — the curated boundary, enforced before anything can be sent.
-  if (hit.response.kind === 'command') {
+  // BOTH command-carrying kinds pass through here: `esc-then-command` (TRDD-U6AS2YWB) names a
+  // curated key too, and gating only `command` would let its key bypass the allowlist check —
+  // the typo would then first surface as an agent silently receiving nothing, in production.
+  if (hit.response.kind === 'command' || hit.response.kind === 'esc-then-command') {
     const exists = deps.commandExists ?? ((key: string) => getAgentCommand(key) !== undefined)
     if (!exists(hit.response.commandKey)) {
       return { fired: false, reason: 'unknown_command_key', detail: hit.response.commandKey }
@@ -322,6 +331,7 @@ export async function actuateContinuity(
   const action: ContinuityAction = {
     agentId: target.agentId,
     name: target.name,
+    sessionName: target.sessionName,
     program: hit.program,
     eventId: hit.eventId,
     response: hit.response,

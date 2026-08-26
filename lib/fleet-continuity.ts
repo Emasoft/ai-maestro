@@ -23,7 +23,7 @@ import { fleetActuationBlocked } from '@/lib/janitor-control'
 import { sendAgentSessionCommand } from '@/services/agents-core-service'
 import { buildSystemAuthContext } from '@/lib/agent-auth'
 import { getAgentCommand } from '@/lib/agent-commands'
-import { ESC_KEYSTROKE, type ContinuityEpisodes } from '@/lib/continuity-registry'
+import { ESC_KEYSTROKE, findClientEntry, type ContinuityEpisodes } from '@/lib/continuity-registry'
 import {
   actuateContinuity,
   type ContinuityAction,
@@ -87,6 +87,9 @@ export async function runContinuityTick(
       const decision = await deps.actuate({
         agentId: a.id,
         name: a.name,
+        // Threaded so a multi-step response (esc-then-command, TRDD-U6AS2YWB) can re-read THIS
+        // pane between keystrokes. Absent, the injector refuses that kind rather than flying blind.
+        sessionName: a.sessionName,
         observation: {
           program: a.program,
           frame,
@@ -184,10 +187,18 @@ export function defaultContinuityDeps(episodes: Map<string, ContinuityState>, no
   }
 }
 
+/** Delay between an injected ESC and the frame re-read that decides whether the menu is gone
+ *  (esc-then-command, TRDD-U6AS2YWB). Long enough for the TUI to repaint after the keystroke;
+ *  short enough that maxEsc(≈5) bounds the whole flood under ~3 s. */
+export const ESC_RECHECK_DELAY_MS = 400
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 /** The gates + the one side effect. Split out so the injector is visible in isolation: it is the
  *  only place this subsystem can affect an agent, and it can only send a raw ESC or a CURATED
- *  command key — never free text. */
-function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps, 'episodes'> {
+ *  command key — never free text. Exported for tests: the esc-then-command loop is behavior the
+ *  tick-level fakes cannot reach (they replace `actuate` whole). */
+export function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps, 'episodes'> {
   return {
     now: () => now,
     fireEnabled: process.env.AIM_FLEET_RECOVERY_FIRE === '1',
@@ -209,6 +220,64 @@ function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps, 'epis
           requireIdle: false,
         }, auth)
         return { ok: !r.error, status: r.status ?? 0, detail: r.error }
+      }
+      if (action.response.kind === 'esc-then-command') {
+        // TRDD-U6AS2YWB (E4). Dismiss a blocking modal menu with bounded ESCs — re-reading the
+        // FRAME between keystrokes, because "the menu is gone" is only observable on screen (the
+        // foreground process stays the client TUI throughout, so waitForShellReady-style probes
+        // can never answer it) — then type ONE curated command.
+        //
+        // FAIL DIRECTION, chosen deliberately at every branch: anything unverifiable ABORTS
+        // WITHOUT SENDING THE COMMAND. A directive typed into an unknown screen state is worse
+        // than a stalled agent (the stall is caught again next poll; the mistyped directive is
+        // an action taken in the agent's name). So: no sessionName → refuse; event not found for
+        // the re-check → refuse; matcher throws → treat as STILL PRESENT; menu survives maxEsc →
+        // refuse. NOTE for event authors: the re-check evaluates the event's own matcher against
+        // a fresh frame with `notification: null`, so an esc-then-command event MUST match on the
+        // frame alone — a notification-dependent matcher would read "gone" while the menu is up.
+        const { commandKey, maxEsc } = action.response
+        const sessionName = action.sessionName
+        if (!sessionName) {
+          return { ok: false, status: 0, detail: 'esc-then-command: no sessionName to re-check the frame — refusing' }
+        }
+        const entry = findClientEntry(action.program)
+        const event = entry?.events.find((e) => e.id === action.eventId)
+        if (!event) {
+          return { ok: false, status: 0, detail: `esc-then-command: event ${action.eventId} not found for re-check — refusing` }
+        }
+        let dismissed = false
+        for (let i = 0; i < maxEsc; i++) {
+          const esc = await sendAgentSessionCommand(action.agentId, {
+            command: ESC_KEYSTROKE,
+            addNewline: false,
+            requireIdle: false,
+          }, auth)
+          if (esc.error) return { ok: false, status: esc.status ?? 0, detail: esc.error }
+          await sleep(ESC_RECHECK_DELAY_MS)
+          const frame = await getRuntime().capturePane(sessionName, 0).catch(() => '')
+          let stillPresent = true
+          try {
+            stillPresent = event.match({ program: action.program, frame, bufferType: 'alternate', notification: null })
+          } catch {
+            stillPresent = true // unverifiable ⇒ assume the menu is still up ⇒ keep ESCing / abort
+          }
+          if (!stillPresent) { dismissed = true; break }
+        }
+        if (!dismissed) {
+          return { ok: false, status: 0, detail: `esc-then-command: menu still present after ${maxEsc} ESC — command NOT sent` }
+        }
+        const curatedDirective = getAgentCommand(commandKey)
+        if (!curatedDirective) {
+          return { ok: false, status: 0, detail: `unknown command key: ${commandKey}` }
+        }
+        const send = await sendAgentSessionCommand(action.agentId, {
+          // requireIdle:true doubles as "the tool-rejection turn has settled": the directive
+          // lands at a typeable prompt, never into a still-running turn.
+          requireIdle: true,
+          command: curatedDirective.command,
+          addNewline: true,
+        }, auth)
+        return { ok: !send.error, status: send.status ?? 0, detail: send.error }
       }
       // RESOLVE the curated key to its literal command. `sendAgentSessionCommand` types whatever
       // string it is given straight into the pane, so passing the KEY would type `compact` instead

@@ -223,6 +223,19 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     requiresIdle: true,
     description: 'Reload standalone (non-plugin) skills — the Claude Code built-in, distinct from reload-plugins.',
   },
+  // ── Continuity: post-AskUserQuestion continuation directive (TRDD-U6AS2YWB) ──────────────
+  // Not a slash command: this is a PROMPT MESSAGE, typed verbatim into the agent's composer
+  // after the continuity automaton has dismissed a blocking AskUserQuestion menu with ESC.
+  // The text is the USER's verbatim directive from the mandate card — registered here as a
+  // curated key (never free text through the response union) so the injection-proof boundary
+  // holds: a registry entry can name this key but can never alter what gets typed.
+  {
+    key: 'continuity-decide-yourself',
+    label: 'Continuity: decide yourself',
+    command: 'decide the best course of action by yourself after carefully evaluate the facts. do not assume anything, verify all before deciding.',
+    requiresIdle: true,
+    description: 'Continuation directive injected after dismissing a blocking AskUserQuestion menu (unattended fleet).',
+  },
 ] as const
 
 /** Resolve a command by key. Returns undefined for any key not in the allowlist. */

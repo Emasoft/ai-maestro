@@ -47,10 +47,21 @@ export interface ContinuityObservation {
  * The fixed answer an event declares. A CLOSED union by design (see the header):
  *  - `esc`     — one raw ESC. Dismisses a modal / aborts a wedged turn without asserting intent.
  *  - `command` — a CURATED key from `lib/agent-commands.ts`; the actuator refuses an unknown one.
- * Other shapes (e.g. E4's ESC-flood-then-directive) are added by the TRDD that also teaches the
- * actuator to PERFORM them — a response kind the injector cannot execute would be a lie in the type.
+ *  - `esc-then-command` — E4's ESC-flood-then-directive (TRDD-U6AS2YWB): bounded ESCs until the
+ *    menu leaves the frame, then a CURATED key. Landed together with its injector support —
+ *    a response kind the injector cannot execute would be a lie in the type.
  */
-export type ContinuityResponse = { kind: 'esc' } | { kind: 'command'; commandKey: string }
+export type ContinuityResponse =
+  | { kind: 'esc' }
+  | { kind: 'command'; commandKey: string }
+  // TRDD-U6AS2YWB (E4): dismiss a blocking modal MENU with repeated ESC — re-checking the frame
+  // between keystrokes and stopping the moment the menu is gone — then type ONE curated command.
+  // `maxEsc` bounds the flood (a menu that survives maxEsc ESCs aborts the whole response, and
+  // the curated command is NOT sent — half an actuation into an unknown screen is worse than
+  // none). `commandKey` is a curated key exactly as in `command`; the same allowlist gate
+  // applies. Added together with the actuator/injector support, per this union's own contract
+  // that a kind the injector cannot perform is a lie in the type.
+  | { kind: 'esc-then-command'; commandKey: string; maxEsc: number }
 
 /** One recognisable screen state and its fixed answer. `match` must be PURE and cheap: it runs
  *  per agent per poll, and a throwing matcher is caught and treated as "no match" (fail-open). */

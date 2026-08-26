@@ -210,6 +210,22 @@ export function loadState(): RotatorState {
 /** Persist the state index with an in-advance backup + sha256 sidecar (integrity.backup_and_write
  * semantics), 0600. */
 export function saveState(state: RotatorState): void {
+  // REFUSE to persist while the root is unresolved. Without this the fail-closed guard in
+  // rotatorRoot() makes the wiped-DATA-dir case WORSE, not better: rotatorRoot() returns
+  // canonical (no state.json), loadState() is LENIENT and hands back defaultState(), the tick
+  // proceeds on an empty state and saveState() writes that empty state INTO canonical — after
+  // which the "canonical has state.json" branch is permanently true with zero slots, the legacy
+  // root is never reached again, and AIM_ROTATOR_ALLOW_LEGACY_ROOT can no longer rescue it.
+  // A recoverable "DATA dir missing" would have become an unrecoverable "DATA dir present and
+  // empty", which is strictly worse than the stale-but-coherent state the old code adopted.
+  //
+  // Guarded at the WRITE PRIMITIVE rather than at the ~8 saveState call sites in tick.ts,
+  // because a per-call-site guard cannot cover the next call site anyone adds.
+  rotatorRoot() // refresh lastRootFallbackRefusal for this call
+  if (lastRootFallbackRefusal) {
+    console.warn(`rotator-state-write-refused: ${lastRootFallbackRefusal}`)
+    return
+  }
   backupAndWrite(stateFilePath(), Buffer.from(JSON.stringify(state, null, 2), 'utf8'), 0o600)
 }
 

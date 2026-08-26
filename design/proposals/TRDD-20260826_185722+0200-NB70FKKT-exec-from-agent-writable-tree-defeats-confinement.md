@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:17:45+0200
+updated: 2026-08-26T20:22:55+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -221,8 +221,29 @@ defaults to a non-empty `agentlenspro get_burn_status`, so absent any config it 
 
 **Instrument correction factor for the remaining 52:** 3 of these 6 were false positives from one
 blind spot — the resolver cannot follow argv through a helper's RETURN, only through assignments
-in the same function. Expect the same shape in the rest; a site whose argv comes from a
-`*_argv()`-style helper is probably literal.
+in the same function. Rather than carry that as a caveat over 52 hand-reads, the resolver was
+fixed to follow returns (v3 report, gitignored). Deduped, the whole population reconciles:
+
+| argv[0] resolves to | count |
+|---|---|
+| LITERAL | 117 |
+| PATH-`which` | 11 |
+| `sys.executable` | 7 |
+| LITERAL via a helper's return | 3 |
+| **UNRESOLVED — the human-read set** | **56** |
+| total | **194** |
+
+**Three controls, all passing** — recorded because a classifier's output is only worth its
+controls: the totals sum to 194 and LITERAL is 117, both matching the authoritative census; the
+3 safe_storage sites left the flagged set (the false-positive class is gone); and the 3 sites
+already KNOWN true are **still flagged**, so the fix removed noise without losing a positive.
+
+That last one is not luck and is worth stating: `memory-librarian.py:490` stays unresolved
+because `binary = _find_memgrep()` returns a bare `override` name, so following one hop of
+returns still does not reach `os.environ`. **A resolver that had "resolved" it would have been
+the broken one.**
+
+Box 1's janitor half is therefore **56 sites of hand-reading**, from an inherited 656.
 
 Two instrument caveats, stated because the numbers are the deliverable:
 - The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted

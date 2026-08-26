@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:32:00+0200
+updated: 2026-08-26T19:34:35+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -163,11 +163,20 @@ Three corrections, all pushing the same direction the report did not look:
    Grants nothing under single-uid, and it is a gate the sandbox would be resting on.
    Remedy: use `realResolved` for BOTH the read and the `pluginRoot`.
 
-   **Chain read END-TO-END after an adversarial review caught it inferred from two endpoints**
-   (`:1219 get("command")` → `:1222 _resolve_command_value` → `:1066 absolute returned VERBATIM`
-   · `:1224 get("args")` → **no resolution at all** → `:1367 [command, *args]` → `:1324
-   StdioMCPClient` → `:164 Popen(args=)`). No containment check on any hop. The `args` route is
-   the stronger of the two, and it is the drizzle-cube shape.
+   **Chain read FRONT-TO-BACK, after two adversarial reviews each caught a different unread
+   segment** (the first the middle, the second the front — closing a gap RELOCATES it unless you
+   walk to a named endpoint):
+   `route execFileSync('uv',['run',SCRIPT,tmpFile,safeName,…])` → `:2326` one flat parser, no
+   subcommands, positionals `config_path`/`server_name` → `:2698 main` → `:2709
+   merge_config_into_args` → `:1213 detect_transport_from_server_config` → `:1096 "command" in
+   config ⇒ "stdio"` (true of a real plugin config) → `:1219 get("command")` → `:1222
+   _resolve_command_value` → `:1066 an absolute path returned VERBATIM` · `:1224 get("args")` →
+   **no resolution at all** → `:1367 [command, *args]` → `:1324 StdioMCPClient` → `:164
+   Popen(args=)`. **No containment check on any hop.**
+
+   BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
+   since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,
+   `:1485`) is a SECOND entrypoint with the same shape, so this is not one call site to relocate.
 2. **The unattended reach is UNDERSTATED.** "Two run with nobody present" measures as four, and
    the widest is every PROMPT: `hooks/on-prompt-submit-autorecall.py` → `user_mem_lib:524` →
    `$MEMGREP_BIN`. Plus `hooks/post-edit-wikimem-lint.py` (every edit), `memory-librarian`

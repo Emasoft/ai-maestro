@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-21T21:58:50+0200
+updated: 2026-08-26T05:49:44+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -70,5 +70,17 @@ a real blocking bug in the delivery primitive itself, not just a missing trigger
 - [ ] Verified end-to-end: a filed TRDD/AMP directive reaches an idle agent without human bridging
 - [ ] No conflict with the janitor's existing ESC-wedge injector confirmed
 - [ ] Comment posted on Emasoft/ai-maestro#51 confirming the card and status
+
+## ⏵ STATE — 2026-08-26 (hub, premise check on resume)
+
+**Claim 1 is ALREADY FIXED in the tree** — verify before building on this card's root-cause
+text: `services/sessions-service.ts:1359` runs the `requireIdle && !isSessionIdle` gate BEFORE
+the activity bump at `:1374`, and the comment at `:1370` records the exact self-defeat this
+card describes as the bug it fixed ("the activity bump used to run BEFORE the idle check, so
+isSessionIdle always read ~0"). Box 1's remaining ask is only the "verified against a real
+idle session" half. Boxes 2-5 (the wake path) remain the card's substance and are
+`min-approval-requirement: manager` with `mandate: false` and NO approval record — this card
+is NOT authorized to execute; route it for MANAGER approval (or the USER's word) before any
+build. The hub did not build anything on it.
 
 ## Approval log

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:27:33+0200
+updated: 2026-08-26T18:32:08+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -65,7 +65,11 @@ decorative, whatever else is layered on top.
 
 ## Acceptance
 
-- [x] Every runtime-loaded server path enumerated, with its current owner and mode recorded.
+- [ ] Every runtime-loaded server path enumerated, with its current owner and mode recorded.
+      (UN-TICKED 2026-08-26T18:32 — the first enumeration was prose-derived and missed 44
+      runtime-loaded `.ts` modules including `lib/agent-registry.ts`. What IS established: the
+      scope is the whole first-party tree, 804 files, plus `node_modules/` and `.next/`. The
+      per-file owner/mode record over that scope is not done.)
 - [x] Reachability from an agent established — by uid identity (server, tmux server and all 21
       agent processes share one uid), not by driving a live agent, which the blacklist forbids.
 - [ ] A safeguard applied that makes the enumerated paths unwritable by the agent uid.
@@ -74,8 +78,29 @@ decorative, whatever else is layered on top.
 
 ## Investigation — 2026-08-26 (read-only, evidence only; no safeguard applied)
 
-**Runtime-loaded set enumerated.** Per CLAUDE.md the `.mjs` files go live on `pm2 restart`
-alone while the rest is bundled into `.next`, so the set the server actually loads is:
+> **⚠ CORRECTED 2026-08-26T18:32 — the first enumeration below was WRONG and the correction is
+> the most important thing on this card. It was derived from CLAUDE.md PROSE (".mjs is
+> runtime-loaded, the rest is bundled") instead of from the code. Measured: `server.mjs` and
+> `lib/*.mjs` contain **57 runtime `import()` calls naming `.ts` files**, resolving to **44
+> distinct first-party modules** — transpiled by tsx at runtime, therefore live on `pm2 restart`
+> exactly like the `.mjs` files.**
+>
+> **`lib/agent-registry.ts` is one of them.** That is the identity-resolution code this card and
+> TRDD-W4MTW35A exist to protect. A safeguard scoped to the original 18-path list would have
+> left it agent-writable while reporting the tree covered — the precise failure this card is
+> about, committed inside the card itself.
+>
+> **The honest scope is therefore the whole first-party tree** — 804 `.ts`/`.tsx`/`.mjs` files
+> under `lib services app components` — plus `node_modules/` and `.next/`, which are trees of
+> thousands of files each, not the two entries the list made them look like. "18 paths" made an
+> intractable surface sound tractable.
+>
+> Instrument note, because the obvious check does not work: `lsof` on the server pid returns
+> **2** entries. Node reads a module and closes the fd, so open-descriptors is itself a proxy
+> for "loaded" and a broken one. The settling instrument is the import graph, not the fd table.
+
+**Original (INCOMPLETE) enumeration — kept as the record of what was wrong.** Per CLAUDE.md the
+`.mjs` files go live on `pm2 restart` alone while the rest is bundled into `.next`, giving:
 
 ```
 -rw-r--r-- emanuelesabetta:staff  server.mjs
@@ -95,10 +120,17 @@ parties they guard.
 **Reachability from an agent: established by uid identity, not by touching a live agent.**
 
 ```
-server process        : emanuelesabetta
-tmux server           : emanuelesabetta
-21 agent claude procs : emanuelesabetta   (all of them)
+# 2026-08-26; re-derive, do NOT quote the count — the population drifts (31/22/21/20 in one
+# session) and it includes any non-agent claude session on the box, such as the hub's own.
+ps -eo user,pid,command > /tmp/p.txt
+awk '$4 ~ /claude$/ {print $1}' /tmp/p.txt | sort -u     # -> emanuelesabetta   (ONE uid)
+
+server process : emanuelesabetta
+tmux server    : emanuelesabetta
 ```
+
+The load-bearing fact is the **cardinality of the uid set, which is one** — not how many
+processes are in it.
 
 The write is a uid-level property, so every agent has it by construction. Nothing short of a
 sandbox or a different owner changes that, and no sandbox is applied today. Deliberately NOT

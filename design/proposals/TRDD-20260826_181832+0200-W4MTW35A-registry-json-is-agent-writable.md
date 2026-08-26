@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:29:10+0200
+updated: 2026-08-26T18:32:08+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -99,8 +99,15 @@ and 644 are the same permission here. Identical to the `private.pem` 0644→0600
 `agent-isolation-is-not-enforced` (ATOM-UBMF-AWTG): a protection against other Unix users, on a
 system that has none.
 
-**Reachability from an agent** — established by uid identity, as in TRDD-K4BEKT3L: server, tmux
-server and all 21 agent processes run as `emanuelesabetta`. Not tested by driving a live agent
+**Reachability from an agent** — established by uid identity, as in TRDD-K4BEKT3L. Re-derive it,
+do NOT quote a process count: the population drifts (31 / 22 / 21 / 20 within one session) and it
+includes any non-agent `claude` session on the box, such as the hub's own. The load-bearing fact
+is the CARDINALITY of the uid set:
+
+```bash
+ps -eo user,pid,command > /tmp/p.txt
+awk '$4 ~ /claude$/ {print $1}' /tmp/p.txt | sort -u   # 2026-08-26 -> one row: emanuelesabetta
+``` Not tested by driving a live agent
 (blacklist), and the uid identity is the stronger proof.
 
 **Not yet done:** the safeguard. Note it cannot be "chmod 600" — that is the fix already proven

@@ -23,6 +23,7 @@
 #   export      Export agent to file
 #   import      Import agent from file
 #   presence    Print the human user's presence (last input + idle window)
+#   probe       Aggregate status + block-state + hook chat-state for one agent
 #   help        Show this help
 #
 # Version: Sync with bump-version.sh - currently v1.0.1
@@ -145,6 +146,7 @@ dispatch() {
         export)       [ "$mode" != run ] || cmd_export "$@" ;;
         import)       [ "$mode" != run ] || cmd_import "$@" ;;
         presence)     [ "$mode" != run ] || cmd_presence "$@" ;;
+        probe)        [ "$mode" != run ] || cmd_probe "$@" ;;
         hibernation)  [ "$mode" != run ] || cmd_hibernation "$@" ;;
         subconscious) [ "$mode" != run ] || cmd_subconscious "$@" ;;
         # help / --version are dispatched in main BEFORE the gate — deliberately

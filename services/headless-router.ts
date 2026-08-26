@@ -80,6 +80,7 @@ import {
   importAgent,
   transferAgent,
 } from '@/services/agents-transfer-service'
+import { getAgentProbe } from '@/services/block-state-service'
 import {
   getSkillsConfig,
   updateSkills,
@@ -1647,6 +1648,26 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/transfer$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
     sendServiceResult(res, await transferAgent(params.id, body))
+  }},
+
+  // TRDD-LT5N2JA4 — mirror of app/api/agents/[id]/probe/route.ts GET. Same authorization
+  // action as block-state ('unblock-prompt'): this route can surface the same pane excerpt.
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/probe$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'unblock-prompt', params.id)
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to probe this agent' })
+      return
+    }
+    sendServiceResult(res, await getAgentProbe(params.id))
   }},
 
   // AMP addresses

@@ -469,6 +469,10 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // exactly the USER's rule for who may unblock. Two policies for two halves of one
   // capability is how a gate drifts open on the half nobody re-reads.
   'GET /api/agents/[id]/block-state': { action: 'unblock-prompt', targetFromPathId: true },
+  // TRDD-LT5N2JA4 — the aggregating probe carries the SAME pane excerpt block-state does
+  // (`block.excerpt`), so it gets the SAME policy for the same reason: a caller who may not
+  // read a peer's screen via block-state must not be able to read it here either.
+  'GET /api/agents/[id]/probe': { action: 'unblock-prompt', targetFromPathId: true },
   // #54 (TRDD-ED9A4VVY): the IMMEDIATE twin of `queue` — PATCH …/session types
   // arbitrary text straight into a live pane. Only its arbitrary-`command` branch
   // calls the guard (the curated `commandKey` allowlist branch stays open), so a

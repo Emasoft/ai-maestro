@@ -39,6 +39,7 @@ Commands:
   export <agent>                Export agent to file
   import <file>                 Import agent from file
   presence                      Print the human user's presence (last input + idle window)
+  probe <agent>                 Aggregate status + block-state + hook chat-state for one agent
   help                          Show this help
 
 Examples:
@@ -266,6 +267,47 @@ cmd_presence() {
     response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/users/me/presence" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch presence"
+        return 1
+    fi
+    echo "$response"
+}
+
+# cmd_probe — one aggregating read of an agent's registry status, pane block-state, and hook
+# chat-state (TRDD-LT5N2JA4). This is the script-layer wrap the MANAGER/CHIEF-OF-STAFF skills
+# call so a supervisor never reaches for `/api/*` directly (R23). Same auth as `show`/`block-
+# state`: the route is strict and gated on `unblock-prompt` (MANAGER any, COS own-team, never
+# an ASSISTANT, self always) because the pane excerpt it can surface is the same sensitive
+# content block-state guards.
+cmd_probe() {
+    local agent=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: aimaestro-agent.sh probe <agent>"
+                return 0 ;;
+            -*) print_error "Unknown option: $1"; return 1 ;;
+            *) agent="$1"; shift ;;
+        esac
+    done
+    [[ -z "$agent" ]] && { print_error "Agent name or ID required"; return 1; }
+
+    resolve_agent "$agent" || return 1
+    local agent_id="$RESOLVED_AGENT_ID"
+
+    local api_base
+    api_base=$(get_api_base)
+    local -a auth_args=()
+    _build_auth_args auth_args
+    local response
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
+    if [[ -z "$response" ]]; then
+        print_error "Failed to fetch agent probe"
+        return 1
+    fi
+    if ! echo "$response" | jq -e '.status' >/dev/null 2>&1; then
+        local error_msg
+        error_msg=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
+        print_error "${error_msg:-Invalid response from API}"
         return 1
     fi
     echo "$response"

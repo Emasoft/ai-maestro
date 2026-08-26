@@ -9,11 +9,14 @@
  * The verdict logic is pure and lives in `lib/agent-block-state.ts`, with the measurements
  * that justify trusting the pane over the hook. This file is only the I/O around it.
  */
+import fs from 'fs'
 import { getAgentById } from '@/services/agents-core-service'
 import { getRuntime } from '@/lib/agent-runtime'
 import { readPendingPrompt } from '@/services/sessions-service'
 import { resolveBlockState, matchPane, type BlockVerdict } from '@/lib/agent-block-state'
-import { computeSessionName } from '@/types/agent'
+import { computeSessionName, type Agent } from '@/types/agent'
+import { chatStateFileFor } from '@/lib/chat-state-path'
+import { resolveAgentStatus } from '@/lib/agent-status'
 
 /** How much scrollback to read. Enough to hold a long AskUserQuestion, bounded so a huge
  *  buffer cannot be pulled through this surface in one call. */
@@ -143,4 +146,110 @@ export async function getBlockState(
   }
 
   return { data: { ...verdict, sessionName } }
+}
+
+/** The hook's chat-state fields the probe surfaces (TRDD-LT5N2JA4). */
+interface HookSnapshot {
+  notificationType: string | null
+  message: string | null
+  options: unknown[] | null
+  updatedAt: string | null
+  ageSeconds: number | null
+}
+
+const HOOK_STALE_AFTER_SECONDS = 60 * 60 // 1h — the card's own staleness bound
+
+/** Read the hook's raw chat-state file for a workdir. Same resolver as every other
+ *  chat-state reader (lib/chat-state-path) — never a second cwd-hash mirror. */
+function readHookSnapshot(workingDirectory: string | undefined): HookSnapshot | null {
+  if (!workingDirectory) return null
+  try {
+    const stateFile = chatStateFileFor(workingDirectory)
+    if (!fs.existsSync(stateFile)) return null
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as Record<string, unknown>
+    const updatedAt = typeof state.updatedAt === 'string' ? state.updatedAt : null
+    const ageMs = updatedAt ? Date.now() - Date.parse(updatedAt) : NaN
+    return {
+      notificationType: typeof state.notificationType === 'string' ? state.notificationType : null,
+      message: typeof state.message === 'string' ? state.message : null,
+      options: Array.isArray(state.options) ? state.options : null,
+      updatedAt,
+      ageSeconds: Number.isFinite(ageMs) ? Math.round(ageMs / 1000) : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export interface ProbeResult {
+  agent: Agent
+  status: ReturnType<typeof resolveAgentStatus>
+  block: (BlockVerdict & { sessionName: string }) | null
+  hook: HookSnapshot | null
+  usage: null
+  lastError: { text: string; at: string | null; source: 'hook' } | null
+  sources: Record<'registry' | 'pane' | 'hook' | 'usage', string>
+}
+
+/**
+ * `GET /api/agents/[id]/probe` — one aggregating read of everything this server already
+ * knows about an agent (registry status + pane block-state + hook chat-state), per
+ * TRDD-LT5N2JA4. `usage` (agentlenspro) is deliberately OMITTED: the card measured that its
+ * `sessions` view keys on the Claude Code session id, which has no proven mapping to an
+ * ai-maestro agent id — a guessed join would attribute one agent's cost/context-fill to
+ * another, a wrong number that looks authoritative. `sources` names every feed's outcome so a
+ * degraded read is visible rather than silently defaulted (the whole point of this card).
+ */
+export async function getAgentProbe(agentId: string): Promise<{
+  data?: ProbeResult
+  error?: string
+  status?: number
+}> {
+  const result = getAgentById(agentId)
+  if (result.error || !result.data) {
+    return { error: result.error || 'Agent not found', status: result.status || 404 }
+  }
+  const agent = result.data.agent
+
+  const isOnline = agent.session?.status === 'online'
+  const programRunning = agent.session?.programRunning
+
+  const sources: ProbeResult['sources'] = {
+    registry: 'ok',
+    pane: 'unavailable: not queried',
+    hook: 'unavailable: not queried',
+    usage: 'unavailable: no proven join key (see TRDD-LT5N2JA4)',
+  }
+
+  const blockResult = await getBlockState(agentId)
+  const block = blockResult.data ?? null
+  sources.pane = block ? 'ok' : `unavailable: ${blockResult.error || 'unknown error'}`
+
+  const hook = readHookSnapshot(agent.workingDirectory)
+  if (!hook) {
+    sources.hook = 'unavailable: no chat-state file'
+  } else if (hook.ageSeconds !== null && hook.ageSeconds > HOOK_STALE_AFTER_SECONDS) {
+    sources.hook = `stale:${hook.ageSeconds}s`
+  } else {
+    sources.hook = 'ok'
+  }
+
+  const status = resolveAgentStatus(
+    isOnline,
+    false, // isHibernated — no persisted hibernation flag on Agent today; see TRDD-LT5N2JA4 report
+    undefined,
+    hook?.notificationType ?? undefined,
+    programRunning,
+    undefined,
+  )
+
+  const lastError: ProbeResult['lastError'] =
+    hook && (hook.notificationType === 'api_error' || hook.notificationType === 'rate_limited')
+      ? { text: hook.message || hook.notificationType, at: hook.updatedAt, source: 'hook' }
+      : null
+
+  return {
+    data: { agent, status, block, hook, usage: null, lastError, sources },
+    status: 200,
+  }
 }

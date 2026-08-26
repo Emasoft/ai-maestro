@@ -183,8 +183,9 @@ Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the messag
 
 ### 2026-08-26T04:47 — box-2 deploy VERIFIED; card BLOCKED on credential recovery (TRDD-3GU9V70H)
 
-- **Box-2 fix is DEPLOYED** (review-fork-corrected wording): the live pm2 process started
-  **2026-08-26 04:27:34** (`pm2_env.pm_uptime`, read from the process — not the handoff), which
+- **Box-2 fix is DEPLOYED** (review-fork-corrected wording): the live pm2 process was last (re)started
+  **2026-08-26 04:27:34** (`pm2_env`: created 04:27:32, restarts 5, unstable 0 — a deliberate
+  fresh start, not a crash loop; the whole fleet restarted ~04:2x), which
   post-dates the fix by 5 days, and `server-tick.ts` is runtime-imported, so the code in memory
   is the fixed one. The "landed, undeployed" ⛔ above is resolved. **The discriminating
   BEHAVIOR is honestly unproven**: old and new code diverge only when `all-maxed` and a reason

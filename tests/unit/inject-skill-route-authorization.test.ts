@@ -41,6 +41,7 @@ function req(body: unknown, token = 'tok') {
 }
 
 const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitle: 'member', teamId: null }
+const COS = { agentId: 'dddddddd-4444-4444-8444-dddddddddddd', governanceTitle: 'chief-of-staff', teamId: 'team-1' }
 const MANAGER = { agentId: 'cccccccc-3333-4333-8333-cccccccccccc', governanceTitle: 'manager', teamId: null }
 
 describe('TRDD-DQVPODKW — inject-skill authorizes, not merely authenticates', () => {
@@ -61,6 +62,19 @@ describe('TRDD-DQVPODKW — inject-skill authorizes, not merely authenticates', 
     // plugin-not-found branch, which would pass with the gate deleted.
     const body = await res.json()
     expect(String(body.error)).toMatch(/cannot manage-skills/i)
+    expect(mockInject).not.toHaveBeenCalled()
+  })
+
+  it('refuses a CHIEF-OF-STAFF — a plugin mutation is fleet-wide, not team-scoped', async () => {
+    /** Pins the EMERGENT policy: authorize() has no explicit manage-skills rule, so the COS
+     * denial falls out of the general no-target branch ("Chief-of-Staff must specify a target
+     * agent"). Without this test a refactor of that general branch would silently change the
+     * decided policy with nothing naming it. */
+    mockAuthenticate.mockReturnValue(COS)
+    const { POST } = await import('@/app/api/agents/role-plugins/inject-skill/route')
+    const res = await POST(req({ pluginName: 'some-plugin' }) as never)
+
+    expect(res.status).toBe(403)
     expect(mockInject).not.toHaveBeenCalled()
   })
 

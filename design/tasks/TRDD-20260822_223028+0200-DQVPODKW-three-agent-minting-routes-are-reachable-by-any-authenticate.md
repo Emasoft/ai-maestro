@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:34:18+0200
+updated: 2026-08-26T06:36:57+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -200,7 +200,7 @@ Adding it:
       service-not-called, MANAGER positive control, neuter OBSERVED 1 red / 1 green exactly as
       predicted. Coverage ledger shrunk 16 → 15.
 - [x] `health` — DONE 2026-08-26 (`1a88fe48`). The pre-login constraint was MEASURED and does
-      not exist: the route has NO callers anywhere — app/components/hooks use
+      not exist: the route has NO STATIC callers anywhere (grep-based census — dynamic URL construction and out-of-tree curls are invisible to it; safe here because the change only tightens) — app/components/hooks use
       `/api/hosts/health`, headless *.mjs, scripts/ and the fleet plugin repos carry zero hits
       (the AMAMA report-formats reference even asserts "There is no separate /api/agents/health
       endpoint"). So unauthenticated was an omission. Decided: `enforceAuth` (any authenticated
@@ -255,7 +255,8 @@ Adding it:
       Measured: `migrateDefaultPluginSettings` executes with implicit system authority (passes
       `{isSystemOwner: true}` into DeleteMarketplace; rewrites USER_GLOBAL_SETTINGS + every
       agent's settings.local.json), its own docstring says "Authority: implicit system-owner,
-      called only from … server startup" — and the claimed startup caller DOES NOT EXIST. The
+      called only from … server startup" — and the claimed startup caller DOES NOT EXIST (as a
+      STATIC caller; grep census over server.mjs + lib + services + app). The
       only invokers are the Next route and the headless twin, both of which admitted any
       authenticated agent — a forged-authority path. Fixed on BOTH surfaces: Next route →
       `enforceSystemOwner`; headless handler → agent tokens 403 (its blanket gate only

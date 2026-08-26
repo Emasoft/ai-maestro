@@ -45,7 +45,14 @@ function req() {
 }
 
 const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitle: 'member', teamId: null }
-const WEB_OWNER = { userId: 'user-1' } // no agentId ⇒ system owner under legacy semantics
+// `userTitle: 'maestro'` so the fixture is the system owner under BOTH authority
+// models: legacy (isSystemOwner = !agentId) AND R36/R37 (requires userTitle ∈
+// {maestro, maestro-delegate}). Without it the positive control's verdict depended
+// on the REAL machine's governance state — buildAuthContext reads
+// isUserAuthorityModelEnabled() from disk — i.e. a test asserting ambient config
+// (the adversarial review caught it: green only because the dev box has the
+// model off).
+const WEB_OWNER = { userId: 'user-1', userTitle: 'maestro' }
 
 describe('TRDD-DQVPODKW — sync-defaults is system-owner only', () => {
   beforeEach(() => {

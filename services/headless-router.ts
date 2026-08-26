@@ -3538,7 +3538,15 @@ const routes: Route[] = [
     // TRDD-DQVPODKW item 10 — mirrors the Next route's enforceSystemOwner. The
     // service runs with implicit system authority (forges isSystemOwner into
     // DeleteMarketplace, rewrites global + every agent's settings), so an agent
-    // token must not reach it. A web session (no agentId) is the system owner.
+    // token must not reach it.
+    //
+    // `buildAuthContext(auth).isSystemOwner`, NOT `!auth.agentId`: under the
+    // R36/R37 user-authority model a logged-in NON-maestro web user has no
+    // agentId and is still NOT the system owner — the bare-agentId check would
+    // grant exactly the caller enforceSystemOwner refuses. The adversarial
+    // review caught this (a proxy read: !agentId standing in for isSystemOwner);
+    // note the same proxy shape is the file's pre-existing idiom elsewhere
+    // (e.g. the DeleteTeam handler) — a systemic gap, not fixed here.
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
       getHeader(req, 'X-Agent-Id'),
@@ -3548,7 +3556,7 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    if (auth.agentId) {
+    if (!buildAuthContext(auth).isSystemOwner) {
       sendJson(res, 403, { error: 'Forbidden — system owner only' })
       return
     }

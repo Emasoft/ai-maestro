@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:45:18+0200
+updated: 2026-08-26T13:47:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -244,6 +244,37 @@ files record that this route *"authenticated and then discarded the result"*. Th
 describes the route before that fix. **A forward-only row is a question, not a finding** — this is
 the second one (after `help/agent`) whose answer already lives on the receiving side.
 
+### `teams/[id]/kanban-config` + `teams/[id]/tasks` — DECIDED 2026-08-26: BOTH CLEAR
+
+Read together because they are the same shape, and both landed their guards in the **service**
+rather than the route — which is exactly why the route-level needle scored them 0.
+
+Both routes: `isValidUuid(id)` → 400, `authenticateFromRequest` → 401, then
+`buildAuthContext(auth)` forwarded into the service. All four service entry points
+(`getKanbanConfig:1509`, `setKanbanConfig:1541`, `listTeamTasks:931`, `createTeamTask:1037`) open
+with the identical pair:
+
+```ts
+const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)  // anti-spoof
+if (mismatch) return mismatch
+const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
+if (!access.allowed) return { error: access.reason || 'Access denied', status: 403 }
+```
+
+`checkTeamAccess` (`lib/team-acl.ts:54`) is a real ACL and was read rather than assumed: system
+owner allowed; **no agentId and not owner → DENY** (`:66`, with its own comment recording that the
+previous shortcut "accepted no header as proof of identity; that's the bug"); then MANAGER, or
+ORCHESTRATOR **of this team only**, or this team's COS, or `team.agentIds.includes(...)`. A
+non-member agent is refused.
+
+`setKanbanConfig` carries a **second, stricter** gate the others do not (`:1562-1571`): an agent
+caller must be MANAGER / ORCHESTRATOR / COS, because the column set encodes each column's
+move-permission `roles`, so a plain member rewriting it is a privilege escalation. Its comment
+records the placement reason that matters here — *"placing the gate in the service closes it for
+BOTH the Next.js route and the headless router (no FULL-vs-headless drift)"*. **That is the
+generalisable finding: a service-side gate is STRONGER than a route-side one, and the ledger's
+needle can only see route-side.** Three of this tier's four decided rows now share that cause.
+
 ### TRIAGE of the 8 still-undecided forward-only routes (2026-08-26) — NOT verdicts
 
 Classified by shape so the next session has a sorted queue. **Every row still needs READING** —
@@ -255,8 +286,8 @@ meaning opposite things. Treat the table as ordering, never as an answer.
 |---|---|---|---|---|
 | `help/agent` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (forwards into `DeleteAgent` G00 → `authorize()`) |
 | `messages/forward` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (own-mailbox scoped lookup + R6 gate) |
-| `teams/[id]/kanban-config` | 0 | 0 | **0** | **3** |
-| `teams/[id]/tasks` | 0 | 0 | **0** | **4** |
+| `teams/[id]/kanban-config` | 0 | 0 | 0 (authenticates + forwards) | **DECIDED — CLEAR** (`checkTeamAccess` + a stricter WRITE role gate) |
+| `teams/[id]/tasks` | 0 | 0 | 0 (authenticates + forwards) | **DECIDED — CLEAR** (`checkTeamAccess`) |
 | `groups` · `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` | 0 | 0 | 1-2 | 5 (authenticated at least) |
 
 The top four call **nothing** locally — they authenticate nowhere and rely entirely on the
@@ -312,8 +343,8 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `messages` | NO | **already read — FALSE positive** (uses `auth.agentId` to OVERRIDE a client param) |
 | `sessions/create` | yes | **already DECIDED clear** |
 | `teams/[id]/batch-create-agents` | NO | **already DECIDED clear** |
-| `teams/[id]/kanban-config` | NO | undecided |
-| `teams/[id]/tasks` | NO | undecided |
+| `teams/[id]/kanban-config` | NO | **CLEAR** — `checkTeamAccess` + WRITE role gate (2026-08-26) |
+| `teams/[id]/tasks` | NO | **CLEAR** — `checkTeamAccess` (2026-08-26) |
 | `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
 
 So **7 genuinely undecided** (`auth/sudo-password` and `governance/user` both decided below), not 15. Two are known false positives and two are decided clear.

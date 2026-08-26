@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:36:48+0200
+updated: 2026-08-26T20:41:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -83,12 +83,41 @@ a script, a config that names a command, an env var that selects a binary.
 
 - [ ] Exec-from-writable-tree sites enumerated across this repo and the fleet plugins, each
       with the executing process and whether it is sandboxed.
+      **STILL OPEN, and precisely this much is left:** the census is complete and classified
+      (janitor 194 sites → 4 classes; 6 fleet plugins; this repo's 5 class-A + 4 class-B + 1
+      class-C, all verified). The EXECUTING PROCESS is named per class in Remedies below. What
+      is NOT done is a per-site process column across all ~300 sites — deliberately, since the
+      answer is one of five values. **"Whether it is sandboxed" has a one-word answer today:
+      NO, everywhere** — TRDD-O0RHX7K6's profile is written and deliberately unwired, so no
+      process on this machine runs confined and the column would read `no` for every row. It
+      becomes a real question the day that profile is wired, which is the day this box must be
+      re-answered rather than inherited.
 - [x] Env-var-selected exec paths (`$AIMAESTRO_CLI` and any sibling) included in that list.
       DONE 2026-08-26: `$AIMAESTRO_CLI`, `$MEMGREP_BIN` (6 call sites / 5 modules),
       `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND` — every one READ in source, not grepped.
-- [ ] A stated remedy per site: relocate the artifact, or verify before exec.
+- [x] A stated remedy per site: relocate the artifact, or verify before exec.
+      DONE 2026-08-26, stated per CLASS because the census showed the population IS classes —
+      see "Remedies" below. A per-site table would repeat one of five remedies 80+ times and
+      would be the padding this card warns against.
 - [ ] TRDD-O0RHX7K6 does not ship its profile as a claimed boundary until this list is empty
       or every remaining entry is documented as an accepted hole.
+
+## Remedies — one per CLASS, because the census showed the population IS classes
+
+Ordered by exposure. "Executing process" is the box-1 column; every row is UNSANDBOXED today.
+
+| # | class | executing process | remedy |
+|---|---|---|---|
+| 1 | **Env-var-selected CLI** — `$MEMGREP_BIN` (6 call sites / 5 modules), `$AIMAESTRO_CLI` + 5 siblings in the COS, `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND`, `$CLAUDE_PLUGIN_OPTION_HANDOFF_VERIFY_CONTEXT_COMMAND` | the janitor daemon (every beat), a hook (every prompt / every edit), the COS plugin | **Resolve to an ABSOLUTE path under a non-agent-writable root, and verify before exec.** Where the var must stay (a test pin), require it to name a path that passes the same check. A bare NAME default is the worst case — it hands the decision to PATH. |
+| 2 | **Self-component exec from the plugin cache** — 5 janitor sites, our `external_handoff_clear.py` (A3) | the daemon, and our server | **Make the exec'd tree non-agent-writable** (TRDD-K4BEKT3L) or digest-verify components. Note this class is *already* subsumed: an agent that can write the cache owns the fleet before any call site runs. |
+| 3 | **Pre-`realpath` `pluginRoot`** — `mcp-discover/route.ts:73/95/145`, `element-content/route.ts:73/78/88` | the ai-maestro server (unconfined) | **Derive `pluginRoot` from `realResolved`, and read `realResolved`** — both sites, both carriers (substitution + env). One line each. |
+| 4 | **Repo-tree exec** — `scripts/aim-jsonl-reader` (A1), `scripts_dev/mcp_discovery.py` (A5), the plugin-builder's copied `build-plugin.sh` (A2), `~/.aimaestro/agent-keychain-probe.sh` (A4) | the server | Same as 2 — relocate or verify. A4 additionally needs its **substring** integrity test replaced with a digest, and its module-level `installed` short-circuit reconsidered. |
+| 5 | **Generic PATH lookup** — ~45 `shutil.which` sites, 11 of them in a human-run `publish.py` | various | **Accepted hole, deliberately.** Identical for every program on the machine; only relevant if the sandbox constrains PATH itself. `daemon_path.py` already passes an explicit `path=` — the in-tree example of doing it the constrained way. |
+
+**The pattern to copy for 1 and 4** is in-tree and was found during this audit:
+`global_state.automation_python_path()` — walk candidates, reject anything failing an integrity
+test, and say in one line why the obvious PATH lookup is unsafe. It is not the dispatcher stub,
+which is FAIL-OPEN by cardinal rule and is an availability mechanism, not a boundary.
 
 ## Re-ranked 2026-08-26 — the lead instance is NOT the one this card was filed on
 

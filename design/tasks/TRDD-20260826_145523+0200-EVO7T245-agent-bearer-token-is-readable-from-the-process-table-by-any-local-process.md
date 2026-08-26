@@ -1,12 +1,12 @@
 ---
 trdd-id: EVO7T245
-title: The agent bearer token AID_AUTH is readable from the process table by any local process — argv at 47 call sites and environment at every one
+title: The agent bearer token AID_AUTH leaks at three of five lifecycle stages — delivery argv, session environment, and 47 curl call sites
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:14:30+0200
+updated: 2026-08-26T15:24:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -75,6 +75,60 @@ other agent on the host, continuously — not just during a request.
 **The threat model this breaks is the real one:** agent A reads agent B's token and acts as B. The
 governance system's entire authorization layer — titles, the R6 graph, team ACLs, every gate
 decided under TRDD-R268J32X today — keys off an identity that any peer can steal.
+
+### EXPOSURE 3 — DELIVERY. Raised by the USER 2026-08-26, missed by my first pass, PROVEN.
+
+The USER asked whether an attacker could capture the token *at the moment the server injects it*.
+**Yes.** `lib/agent-runtime.ts:386`:
+
+```ts
+async setEnvironment(name: string, key: string, value: string): Promise<void> {
+  // Use execFileAsync (array args, no shell) to prevent shell injection (CC-P1-502)
+  await execFileAsync('tmux', ['set-environment', '-t', name, key, value])
+}
+```
+
+**The comment is correct and insufficient.** Array args do prevent shell *injection*; they do
+nothing about argv *visibility*. The token is the 5th argv element of a `tmux` process.
+
+A first probe missed it — `set-environment` exits far faster than a 0.4 s snapshot, and that false
+zero would have read as "not exposed". A polling attacker is the right model, and it wins.
+Captured verbatim by a same-user poll racing the injection:
+
+```
+tmux set-environment -t r292415 AID_AUTH aid_tk_EVIDENCE_92415
+```
+
+**Honest limit on the rate:** the window is demonstrably catchable — hit repeatedly across a 4 s
+race — but I did **not** determine a per-injection probability and will not quote one, because
+several polls can observe a single injection. What matters operationally is the USER's point:
+**this fires once per agent per server restart**, so an attacker who polls across restarts
+accumulates opportunities rather than needing to win once.
+
+**This is the exposure that most strongly favours stage 2 and most weakens stage 1.** `curl -K -`
+does nothing for it: the leak happens before any CLI runs. And there is no argv-free way to hand a
+value to `tmux set-environment` — `tmux new-session -e KEY=VAL` has the same shape. **The only fix
+is to stop delivering a secret at all**, which is precisely what UDS + peer credentials does.
+
+### The one stage that is CLEAN — registration and minting, which the USER also asked about
+
+*"Is the AID registration still using the CLI?"* **No, and this is the part with no finding.**
+
+- Minting is in-process: `randomBytes(TOKEN_RANDOM_BYTES)` in `lib/aid-token.ts:375,426`.
+- Registration is an in-process route. Swept `services/ lib/ app/` for shell-outs to
+  `aid-init`/`aid-register`/`amp-register`: **2 hits, both rate-limiter KEY STRINGS** in
+  `app/api/v1/register/route.ts:47,54` — read, not counted. Positive control: the same sweep style
+  finds 12 real `execFileAsync('tmux'` shell-outs, so it can see a shell-out when one exists.
+
+So the credential's lifecycle is clean at both ends and leaks in the middle three stages:
+
+| stage | mechanism | exposed |
+|---|---|---|
+| mint | `randomBytes`, in-process | **no** |
+| register | in-process route, no CLI | **no** |
+| **deliver** | `tmux set-environment … <token>` | **YES — argv, proven** |
+| **at rest** | tmux session environment | **YES — `ps eww`, proven** |
+| **in use** | `curl -H "Authorization: Bearer …"` ×47 | **YES — argv, proven** |
 
 ### What the codebase ALREADY does right, which is why this is an oversight and not a policy
 

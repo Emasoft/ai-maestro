@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:06:40+0200
+updated: 2026-08-26T15:14:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -108,6 +108,47 @@ and not applied to the bearer token.**
 5. **"An agent cannot send network messages without a CLI."** True, and it does not matter. The CLI
    stays; what changes is how it authenticates. Under (3) the CLI opens a UDS and the kernel
    attests who it is — the agent needs no secret at all.
+
+## "But the agent must pass the secret through the Bash tool" — NO. It passes nothing today.
+
+The USER raised this as the objection that would sink stage 2: *the agent must call the script via
+Claude Code's Bash tool, and Claude Code has no internal transport, so the secret must cross the
+tool boundary as an argument.* **Measured: it does not, and it never did.**
+
+- **The main agent CLI takes no identity argument.** `aimaestro-agent.sh <command> [options]`. An
+  agent types a VERB. `AID_AUTH` is already in the process environment it inherited from its tmux
+  session — the server put it there at spawn. Nothing secret is typed, so nothing secret crosses
+  the Bash-tool boundary.
+- **Where an identity IS typed, the server overrides it.** `aimaestro-message.sh --from <agent>` is
+  a display/convenience claim, not an authorization one: `app/api/messages/route.ts:81` does
+  `body.from = auth.agentId` for any authenticated agent. Same shape as `messages/forward`
+  (decided CLEAR under TRDD-R268J32X). Argument-level spoofing is already closed.
+
+**So the Bash tool's limitation does not bite, because the requirement was never "a special
+transport" — it is "the secret must not have to be TYPED".** The script is a child process; it can
+open a socket, consult the kernel, read a file. None of that has to be expressible in the command
+line the agent writes.
+
+**Stage 2 makes this strictly better, not harder.** Today the agent holds a secret it never types
+(env). Under UDS + peer credentials the agent holds **no secret at all**: it types
+`aimaestro-agent.sh list`, the script connects, the kernel reports the peer PID, and the server
+maps PID → agent through the session tree it already owns. Removing `AID_AUTH` from the
+environment is the POINT of stage 2, and it is what closes EXPOSURE 2.
+
+### The residual this design does NOT solve, named so it is not mistaken for solved
+
+If identity derives from the process tree, then **anything running inside agent A's session IS
+agent A** — including whatever A was talked into running. That is correct behaviour (A cannot
+become B), and it means a prompt-injected A still acts with A's full privileges. A confused-deputy
+problem, not a transport problem; no authentication scheme here addresses it, and TRDD-V2BLADSF is
+a live example of how A gets talked into things.
+
+### One narrower argv exposure found while checking this
+
+`scripts/aid-register.sh` takes `--token <jwt>` (an admin JWT) as an ARGUMENT — a genuine argv
+exposure for anyone who runs it. It is a provisioning script against a 23blocks Auth server rather
+than the per-call agent path, and under the USER's 2026-08-26 ruling an external instance must not
+run registration at all. Recorded as in-scope-adjacent, not folded into the 47.
 
 ## Proposed fix — staged, because (3) is a design change and (2) is not
 

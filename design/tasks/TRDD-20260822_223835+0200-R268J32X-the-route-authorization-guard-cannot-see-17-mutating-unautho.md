@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:47:00+0200
+updated: 2026-08-26T13:50:11+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -275,6 +275,28 @@ BOTH the Next.js route and the headless router (no FULL-vs-headless drift)"*. **
 generalisable finding: a service-side gate is STRONGER than a route-side one, and the ledger's
 needle can only see route-side.** Three of this tier's four decided rows now share that cause.
 
+### the five `groups/*` — DECIDED 2026-08-26: routes CLEAR, but the read found a REAL hole below them
+
+**As ledger rows: CLEAR.** All five call `enforceAuth` AND forward `buildAuthContext`, and every
+receiving function gates on `checkGroupMutationAuth` (`services/groups-service.ts:43` — 401 without
+a context, 401 without an agentId, then MANAGER / system-owner / current subscriber, else 403).
+`subscribeAgent:257` and `unsubscribeAgent` additionally enforce self-only-unless-MANAGER. Nothing
+to fix at the route layer, and the ledger should not move.
+
+**But the tier's question — "does the receiver actually refuse?" — turned up a defect two functions
+further down, filed as TRDD-V2BLADSF (severity high).** `createNewGroup` takes `subscriberIds`
+verbatim (`lib/group-registry.ts:326`, no consent check), so an agent creates a group naming every
+agent, is thereby a "current subscriber", passes `checkGroupMutationAuth` honestly, and
+`notifyGroupSubscribers` → `sendTmuxNotification` **injects its text into every other agent's live
+pane, attributed to a hardcoded `'AI Maestro'`** — bypassing the R6 graph that `messages/forward`
+(decided CLEAR above) runs twice. The file's own comment at `subscribeAgent:239` states the
+invariant being broken: *"No agent can silently subscribe other agents to broadcasts."*
+
+**This is what the forward-only tier is FOR.** Four of its five decided rows were clear because the
+receiver gated properly; this one is clear at the route and not at the destination, which is
+exactly the failure mode TRDD-CAVCTULL found once in twelve. **A "CLEAR" verdict is about the
+ROUTE, and it is not a clean bill of health for the path.**
+
 ### TRIAGE of the 8 still-undecided forward-only routes (2026-08-26) — NOT verdicts
 
 Classified by shape so the next session has a sorted queue. **Every row still needs READING** —
@@ -288,7 +310,7 @@ meaning opposite things. Treat the table as ordering, never as an answer.
 | `messages/forward` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (own-mailbox scoped lookup + R6 gate) |
 | `teams/[id]/kanban-config` | 0 | 0 | 0 (authenticates + forwards) | **DECIDED — CLEAR** (`checkTeamAccess` + a stricter WRITE role gate) |
 | `teams/[id]/tasks` | 0 | 0 | 0 (authenticates + forwards) | **DECIDED — CLEAR** (`checkTeamAccess`) |
-| `groups` · `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` | 0 | 0 | 1-2 | 5 (authenticated at least) |
+| `groups` · `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` | 0 | 0 | 1-2 | **DECIDED — routes CLEAR**, but the read found TRDD-V2BLADSF below them |
 
 The top four call **nothing** locally — they authenticate nowhere and rely entirely on the
 receiving service. That is precisely the theory TRDD-CAVCTULL found held for 11 routes and failed
@@ -337,7 +359,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 |---|---|---|
 | `auth/sudo-password` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `governance/user` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
-| `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | undecided (5) |
+| `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | **CLEAR** as routes — hole below them filed as TRDD-V2BLADSF (2026-08-26) |
 | `help/agent` | NO | undecided |
 | `messages/forward` | NO | **CLEAR** — own-mailbox scoped lookup + R6 graph (2026-08-26) |
 | `messages` | NO | **already read — FALSE positive** (uses `auth.agentId` to OVERRIDE a client param) |

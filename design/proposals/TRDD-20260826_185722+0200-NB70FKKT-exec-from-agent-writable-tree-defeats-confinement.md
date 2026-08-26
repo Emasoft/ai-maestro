@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:36:50+0200
+updated: 2026-08-26T19:39:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -174,10 +174,22 @@ Three corrections, all pushing the same direction the report did not look:
    **no resolution at all** → `:1367 [command, *args]` → `:1324 StdioMCPClient` → `:164
    Popen(args=)`. **No containment check on any hop** — including `:2079 validate_args`, the one
    hop that could have REFUTED this and was therefore read last when it should have been first.
-   It is 45 lines of argument COHERENCE (timeouts, transport/option compatibility, auth combos)
-   and never inspects the VALUE of `command`/`args`. Its own contrast is the tell: the REMOTE
-   branch validates `--url` (scheme + netloc); the stdio branch asserts only that a command is
-   PRESENT. The code knows how to constrain a target and does not constrain this one.
+   `:2079-:2122`, read whole: argument COHERENCE only (timeouts, transport/option compatibility,
+   auth combos, `--method` dependencies), never the VALUE of `command`/`args`.
+   **`validate_args` validates `--url` syntactically and does not validate the stdio command at
+   all.** (Stated flat, as evidence. An earlier draft added *"the code knows how to constrain a
+   target and does not constrain this one"* — an imputation of OVERSIGHT, which is a claim about
+   intent no reading of the file can support: a URL has a closed grammar and a local command path
+   has none, so the asymmetry is equally consistent with "URLs are checkable, commands are not".
+   The finding needs no motive, and one disputable sentence is how a reviewer discounts a whole
+   card. It survives in the message of commit `a0a0c337`, which cannot be edited.)
+
+   Three further hops read afterwards, so no route to `Popen` is left assumed: the
+   `merge_config_into_args` **tail** (`:1228-:1264` — `cwd` type-checked then
+   `_resolve_path_like_value`, `env` type-checked; **no late containment guard**),
+   `determine_secret` (`:1162-:1182` — secret prompting only), and
+   `split_argv_for_server_command` (`no "--" in argv ⇒ server_command = []`, so the route cannot
+   reach `build_stdio_command`'s verbatim-passthrough branch).
 
    BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
    since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,

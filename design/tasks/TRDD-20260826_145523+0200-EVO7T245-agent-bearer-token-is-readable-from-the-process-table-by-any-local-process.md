@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T14:55:23+0200
+updated: 2026-08-26T15:06:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -112,7 +112,31 @@ and not applied to the bearer token.**
 ## Proposed fix — staged, because (3) is a design change and (2) is not
 
 - **STAGE 1 (contains EXPOSURE 1, no design change):** route the auth header through `curl -K -`
-  at all 47 sites, in the shared helper so no site decides for itself. Resolve the stdin collision
+  at all 47 sites, in the shared helper so no site decides for itself.
+
+  **"Use stdin" is NOT sufficient as an instruction — the PRODUCER decides whether it works, and
+  this is easy to get wrong.** `ps` shows argv, so pipe CONTENTS never leak; the exposure moves to
+  whatever puts the bytes on the pipe. Measured 2026-08-26 with a positive control (an external
+  process holding the secret in argv WAS visible; a builtin-fed pipeline with a live reader was
+  not):
+
+  | producer | leaks to `ps`? |
+  |---|---|
+  | shell BUILTIN (`printf`, `read`, `echo` under bash/zsh) | **no** — no separate process exists |
+  | EXTERNAL command with the secret in its argv (`/bin/echo s`, `python -c "print('s')"`) | **yes** |
+
+  So stage 1 must specify a builtin producer, and a reviewer must check the producer rather than
+  the presence of `-K -`. **The password path already models this exactly**
+  (`scripts/agent-helper.sh:228-233`): `read -rs` from the TTY, `printf` (builtin) into `jq -Rnc`,
+  `printf` (builtin) into `curl -d @-`, with `unset` after each. Copy that shape.
+
+  **Fragility worth knowing rather than discovering:** this rests on `printf` resolving to the
+  BUILTIN. `/usr/bin/printf` exists, and a shell that resolves to it would expose the secret in
+  that process's argv. Measured as a builtin here — but that is a property of the shell, not of
+  the technique.
+
+  **And none of it touches EXPOSURE 2.** Stdin says nothing about `ps eww` / `/proc/<pid>/environ`,
+  nor about a same-user debugger attaching to process memory. Resolve the stdin collision
   with request bodies explicitly (a `--config` FIFO, or the body via `--data @file` with a 0600
   temp — noting a 0600 temp is same-user-readable and therefore only acceptable for the BODY,
   never the token).

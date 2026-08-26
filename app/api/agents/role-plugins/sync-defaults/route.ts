@@ -13,12 +13,21 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { syncDefaultRolePlugins } from '@/services/role-plugin-service'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const authErr = enforceAuth(req)
+  // TRDD-DQVPODKW item 10 ruling: "any authenticated caller may re-assert
+  // defaults" is NOT intended. syncDefaultRolePlugins → migrateDefaultPluginSettings
+  // executes with implicit system authority — it passes {isSystemOwner: true} into
+  // DeleteMarketplace and rewrites the user's global settings plus EVERY agent's
+  // settings.local.json — and its own docstring says "Authority: implicit
+  // system-owner". This route (plus its headless twin) is the ONLY way the function
+  // is ever invoked (measured 2026-08-26: no server-startup caller exists despite
+  // the docstring's claim, and no frontend caller either), so the gate here is what
+  // makes the code's own authority model true.
+  const authErr = enforceSystemOwner(req)
   if (authErr) return authErr
 
   const force = req.nextUrl.searchParams.get('force') === 'true'

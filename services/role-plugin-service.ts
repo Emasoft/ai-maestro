@@ -1054,8 +1054,13 @@ export async function syncDefaultRolePlugins(_force = false): Promise<SyncDefaul
  *   - The intent here is "fix the settings file, leave the plugin disk
  *     state alone" — exactly what ChangePlugin would NOT do.
  *
- * Authority: implicit system-owner, called only from `syncDefaultRolePlugins`
- * which runs at server startup (server.mjs `start()`).
+ * Authority: implicit system-owner, called only from `syncDefaultRolePlugins`.
+ * CORRECTED 2026-08-26 (TRDD-DQVPODKW): this comment claimed the caller "runs at
+ * server startup (server.mjs start())" — no such startup caller exists. The only
+ * invokers are POST /api/agents/role-plugins/sync-defaults and its headless twin,
+ * and BOTH now enforce system-owner, which is what makes the implicit authority
+ * this function exercises (isSystemOwner passed into DeleteMarketplace, global +
+ * per-agent settings rewrites) legitimate rather than reachable by any agent.
  */
 async function migrateDefaultPluginSettings(): Promise<void> {
   // Step 1: Remove deprecated 23blocks-OS marketplace (replaced by

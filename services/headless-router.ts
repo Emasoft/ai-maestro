@@ -3535,6 +3535,23 @@ const routes: Route[] = [
 
   // Sync default role plugins from GitHub into local marketplace
   { method: 'POST', pattern: /^\/api\/agents\/role-plugins\/sync-defaults$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-DQVPODKW item 10 — mirrors the Next route's enforceSystemOwner. The
+    // service runs with implicit system authority (forges isSystemOwner into
+    // DeleteMarketplace, rewrites global + every agent's settings), so an agent
+    // token must not reach it. A web session (no agentId) is the system owner.
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    if (auth.agentId) {
+      sendJson(res, 403, { error: 'Forbidden — system owner only' })
+      return
+    }
     const url = new URL(req.url || '/', `http://${getHeader(req, 'host') || 'localhost'}`)
     const force = url.searchParams.get('force') === 'true'
     try {

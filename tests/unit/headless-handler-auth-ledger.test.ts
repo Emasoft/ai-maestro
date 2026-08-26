@@ -209,7 +209,6 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/agents\\/creation-helper\\/raw-materials$/',
   'GET /^\\/api\\/agents\\/role-plugins$/',
   'POST /^\\/api\\/agents\\/role-plugins$/',
-  'POST /^\\/api\\/agents\\/role-plugins\\/sync-defaults$/',
   'GET /^\\/api\\/agents\\/role-plugins\\/required$/',
   'POST /^\\/api\\/agents\\/create-persona$/',
   'POST /^\\/api\\/agents\\/create-from-toml$/',

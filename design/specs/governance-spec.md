@@ -1,13 +1,14 @@
 ---
 spec: governance
-spec-version: 2.6.0
+spec-version: 2.6.1
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-08-20T16:16:40+0200
+updated: 2026-08-26T07:50:25+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
 reconciled-with:
+  - "2.6.1 (2026-08-26): R6.6 + R6.9 prose corrected to match the code they describe (TRDD-2XV78BND; MANAGER-approved 2026-08-15) — in both the CODE was right and the TEXT was stale, the dangerous direction. R6.6 drops 'unconditional': the human sender's outbound Y is conditional on the sender context RESOLVING (R38.2 fail-closed branch, test-pinned) — the old wording licensed deleting that guard. R6.9 names the generic auth gate as today's enforcement and records the dedicated isSubagent guard as LATENT (zero production callers pass isSubagent: true). PATCH: record-only, no behavior or matrix change, no new clause ids."
   - "2.6.0 (2026-08-20): R42.9 CORRECTED by direct USER directive, same day as its 2.5.0 addition — the outbound half is INVERTED: a permissions.deny SendMessage entry is now FORBIDDEN (the deny keys on the whole client tool and breaks the agent's own subagent handling), and the amp-only-messaging invariant REMOVES the entry it previously wrote. The lockdown is crossSessionInbound refuse alone. Effectively a breaking change to a 12-hour-old rule with no external pinners beyond the invariant corrected in the same commit; recorded as MINOR with this explicit note rather than a major bump."
   - "2.5.0 (2026-08-20): R42.9 ADDED (USER directive, TRDD-027HZOYN) — client-native cross-session messaging structurally denied in harness workdirs, BOTH directions (permissions.deny SendMessage + crossSessionInbound refuse), enforced by the amp-only-messaging workdir invariant; sub-agent messaging explicitly untouched. MINOR: new rule, no existing MUST changed. Catalog row follows in the same commit."
   - "docs/GOVERNANCE-RULES.md v4.7.1 (2026-07-22) — catalog and spec are in sync as of the inversion; henceforth the spec LEADS and the catalog follows it (was: spec derived from catalog v4.5.0)."
@@ -366,8 +367,13 @@ user-directed messages. `R6.5b` **maintainer-edges** [Explicit] — MAINTAINER c
 MANAGER and the human user; cannot reach COS, team roles, AUTONOMOUS, or peer MAINTAINERs; the H-edge
 is `Y` (not reply-only) — MAINTAINERs surface repo-scoped concerns directly to the user when MANAGER
 routing would add latency. `R6.6` **human-first-class** [Explicit] — the human user (H) is a
-first-class node with unconditional outbound `Y` to EVERY other node INCLUDING other humans (H → H is
-`Y` for user-to-user messaging); inbound to H from team titles is `1` (reply-only: team agents cannot
+first-class node with outbound `Y` to EVERY other node INCLUDING other humans (H → H is
+`Y` for user-to-user messaging), CONDITIONAL on the human sender's context RESOLVING (legacy
+`isUserMessage`, or an R38.2 `userSender` block): an unresolved human sender is DENIED
+(`user sender context unresolved — cannot route (R38.2)`), never defaulted to allow — the static
+full-Y adjacency row is consulted only AFTER that resolution, so "unconditional" would misdescribe
+the live decision, and the fail-closed branch is deliberate (it closed a blanket-allow hole) and
+test-pinned; inbound to H from team titles is `1` (reply-only: team agents cannot
 proactively initiate but may reply once to an inbound user message); inbound to H from governance
 titles (M/T/A) is `Y`; agents are ADDITIONALLY persona-discouraged from proactively initiating user
 contact — the reply-only rule is the HARD floor, the persona sets the SOFT floor. `R6.7`
@@ -378,7 +384,11 @@ suggestion; the routing-suggestion table in `lib/communication-graph.ts` is auth
 sender/recipient titles BEFORE delivery via `validateMessageRoute()`, (2) role-plugin main-agent `.md`
 files list allowed/reply-only recipients, (3) sub-agents are FORBIDDEN from using AMP messaging
 entirely. `R6.9` **subagents-no-identity** [Explicit] — sub-agents have no AMP identity and cannot
-authenticate; they communicate ONLY with their spawning main-agent. `R6.10` **reply-only-enforce**
+authenticate; they communicate ONLY with their spawning main-agent. Enforcement TODAY is the
+generic authentication gate (`services/amp-service.ts` — a subagent holds no API key, so it never
+passes the 401), NOT the dedicated `isSubagent` guard: that guard exists
+(`lib/communication-graph.ts`, test-pinned) but no production caller passes `isSubagent: true` —
+a LATENT second layer awaiting a caller that can detect a subagent, kept as defence-in-depth. `R6.10` **reply-only-enforce**
 [Explicit; enforcement partial — TRDD-80557822] — reply-only (`1`) edges: the sender MUST pass
 `inReplyToMessageId` when targeting a reply-only recipient; TODAY the graph layer only requires the
 field to be a truthy string — it does NOT load the referenced message, verify its sender/recipient

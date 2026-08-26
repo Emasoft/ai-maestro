@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T10:47:01+0200
+updated: 2026-08-26T11:12:21+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -215,15 +215,34 @@ Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the messag
 capture leg had no PEP-723 header and could never start; three consecutive non-`reauth-needed`
 ticks verified 10:43-10:45). This card is UNBLOCKED (`blocked-by: []`, back to `todo`).
 
-**NEXT ACTION**: start the 48h observation window NOW — deadline 2026-08-30. Window opens at the
-first clean beat after 2026-08-26T10:43:50+0200. Sample with
-`grep -a "\[oauth-rotator\]" logs/pm2-out.log | tail -3` plus
-`cat ~/.aimaestro/oauth-rotator-tick-status.json`; a `stuck:all-maxed` verdict is CLEAN for this
-box (it is a model-window verdict, not a credential one — 3GU9V70H's REFUTED blockquote), only a
-`reauth-needed` breaks the window.
+~~**NEXT ACTION**: start the 48h observation window NOW … only a `reauth-needed` breaks the
+window.~~ — **AMENDED 2026-08-26T11:12, 25 minutes after it was written: THE WINDOW AS SPECIFIED
+IS UNPASSABLE BY CONSTRUCTION.** An adversarial review caught it and I re-measured every number
+first-hand: the server's keychain denied-latch fires **350× in the last month, 8 times today**
+(04:26:18, 04:36:58, 05:07:18, 05:21:12, 06:02:06, 06:29:24, 10:33:21, 11:03:30), each
+suppressing every `security` op for 600 s and publishing a FALSE `reauth-needed: slot-unreadable`
+throughout — **607 `reauth-needed` beats today alone**, one of them at 11:03:31, i.e. the window
+broke 4 minutes BEFORE the commit that opened it. At 7-8 latches/day no 48 h window can survive a
+break rule of "any `reauth-needed`". Carded as **TRDD-MFTDMSJY** (priority 0).
 
-**Resolved during 3GU9V70H, do NOT re-investigate:** the `slot-unreadable ↔ refresh-dead` flap
-noted above was the server's KEYCHAIN DENIED-LATCH (`[safe-storage] KEYCHAIN DENIED-LATCH SET`,
-pm2-error.log 10:33:21) — a `security` op hung past 5s while the janitor's browser capture was
-rewriting the keychain items, suppressing every server-side `security` op until the latch's 600s
-half-open self-cleared it. Not a transient `readSlot` fault; no separate card needed.
+**NEXT ACTION**: the 48 h window's break criterion is now: **any `reauth-needed` beat NOT
+attributable to a denied-latch window breaks it; a latch-attributable one does not.** Attribute by
+timestamp — a beat is latch-attributable iff a `[safe-storage] KEYCHAIN DENIED-LATCH SET` line in
+`logs/pm2-error.log` precedes it by < 600 s. `stuck:all-maxed` remains CLEAN (a model-window
+verdict, not a credential one — 3GU9V70H's REFUTED blockquote). Sample with
+`grep -a "\[oauth-rotator\]" logs/pm2-out.log | tail -3`,
+`cat ~/.aimaestro/oauth-rotator-tick-status.json`, and
+`grep -a "DENIED-LATCH SET" logs/pm2-error.log | tail -5`.
+**Prefer landing MFTDMSJY first** — a window scored under a manual attribution rule is weaker
+evidence than one with no false beats in it, and the 2026-08-30 deadline still has room.
+
+**Resolved during 3GU9V70H, do NOT re-investigate as a `readSlot` fault:** the
+`slot-unreadable ↔ refresh-dead` flap noted above is the KEYCHAIN DENIED-LATCH. Mechanism
+verified to the second — latch SET 18:58:53 → first `UNREADABLE` beat 18:58:53 → last 19:08:24 →
+19:09:25 back to `refresh-dead`, i.e. exactly the 600 s cooldown, and the same for 22:58:27 /
+23:09:41 / 04:26:18, matching every edge recorded above. **CORRECTION to my earlier note here and
+on ai-maestro#95:** the latch was NOT caused by the janitor's browser capture — that ran
+09:40-10:05 and the latch fired at 10:33:21, 28 minutes later, with 349 other latches unrelated to
+any capture. It is a routine 5 s `security` TIMEOUT (350/350 recorded latches are timeouts; **zero**
+are real denials). And it DOES need a card — this is precisely the alarm-noise defect this STATE
+block asked to be carded "if it persists after 3GU9V70H's recovery": **TRDD-MFTDMSJY**.

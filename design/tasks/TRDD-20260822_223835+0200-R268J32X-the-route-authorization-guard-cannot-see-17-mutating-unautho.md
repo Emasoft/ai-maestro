@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:33:00+0200
+updated: 2026-08-26T13:40:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -141,6 +141,33 @@ pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole pi
 
 ## Decisions — the 17, one at a time
 
+### `help/agent` — 2026-08-26: read, NARROWED to one open question, NOT decided
+
+Read first from my own triage list because it looked ungated. It is not ungated — both mutating
+methods authenticate — but it IS genuinely forward-only, which is the tier's real subject.
+
+- **POST**: `authenticateFromRequest` → 401, then `createAssistantAgent()`. Authn-only, and the
+  target is the **fixed singleton `_aim-assistant`** — no caller-supplied name. "Create or return
+  existing", so a second call is a no-op rather than a resource multiplier. Low stakes on its own.
+- **DELETE**: `authenticateFromRequest` → 401, then `getAgentByName('_aim-assistant')` — again a
+  **hard-coded name, not caller input** — and `DeleteAgent(assistant.id, { authContext:
+  buildAuthContext(auth) })`.
+
+**So the authorization decision is DELEGATED, and that is the whole question this tier asks.** The
+route hands a verified identity to `DeleteAgent` and lets the pipeline decide. That is the correct
+shape *if and only if* `DeleteAgent` actually refuses a non-owner `authContext`.
+
+**THE ONE OPEN CHECK:** does `DeleteAgent`'s gate sequence refuse an agent-principal `authContext`
+attempting to delete `_aim-assistant`? Read the gate that consumes `authContext` in
+`services/element-management-service.ts::DeleteAgent`. If it refuses → this route is CLEAR and is
+a model of correct forwarding. If it does not → the hole is in the PIPELINE, not here, and the
+card belongs against `DeleteAgent` rather than against this route.
+
+**Not chased now, deliberately:** that is a multi-file read of a gated all-in-one pipeline, and the
+session is far past its compaction budget. Recording the narrowed question beats a rushed verdict —
+and note the blast radius is bounded either way, because the target is a fixed singleton and not an
+arbitrary agent id.
+
 ### `governance/user` — DECIDED 2026-08-26: FALSE POSITIVE (same shape as `auth/sudo-password`)
 
 `authenticateFromRequest` → 401; `buildAuthContext` → `if (!ctx.isSystemOwner)` → **403 "only the
@@ -156,7 +183,7 @@ meaning opposite things. Treat the table as ordering, never as an answer.
 
 | route | `!isSystemOwner` refusal | owner compare | `enforceAuth` | read priority |
 |---|---|---|---|---|
-| `help/agent` | 0 | 0 | **0** | **1 — no local gate of any kind** |
+| `help/agent` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **READ — narrowed to one question, see below** |
 | `messages/forward` | 0 | 0 | **0** | **2 — forwards messages, no local gate** |
 | `teams/[id]/kanban-config` | 0 | 0 | **0** | **3** |
 | `teams/[id]/tasks` | 0 | 0 | **0** | **4** |

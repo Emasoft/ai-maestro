@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:24:10+0200
+updated: 2026-08-26T15:31:20+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -203,6 +203,49 @@ a live example of how A gets talked into things.
 exposure for anyone who runs it. It is a provisioning script against a 23blocks Auth server rather
 than the per-call agent path, and under the USER's 2026-08-26 ruling an external instance must not
 run registration at all. Recorded as in-scope-adjacent, not folded into the 47.
+
+## ⚠ CORRECTION 2026-08-26T15:3x — I CALLED STAGE 2 "IMPLEMENTABLE" WITHOUT CHECKING THE RUNTIME
+
+The USER asked the load-bearing question: *if stage 2 delivers no secret, how does the server
+identify the agent?* Answering it properly refuted my own feasibility claim.
+
+**Node exposes NO peer credentials on a Unix socket.** Measured under the pinned Node 22:
+
+```
+socket props matching cred/peer/pid/uid: []
+typeof c.getPeerCredentials: undefined
+remoteAddress: undefined
+```
+
+`SO_PEERCRED` (Linux) and `LOCAL_PEERPID` (macOS `getsockopt(fd, SOL_LOCAL, …)`) are real syscalls
+and **`net.Socket` surfaces neither**. I asserted "implementable" from the SYSCALLS EXISTING and
+never asked whether our runtime can reach them — the same *mechanism exists ≠ available to us*
+error this card already documents twice (a signature read as a behaviour; a name read as a
+consumer). **Third instance, in my own proposed remedy.**
+
+### What actually survives, and at what cost
+
+- **(A) Native addon / FFI for `LOCAL_PEERPID`.** Works, and adds a compiled dependency to a
+  project that already carries real native-module pain (node-pty pinned to NODE_MODULE_VERSION
+  127, better-sqlite3 capped below Node 26). A new native module is not a small ask here.
+- **(B) INHERITED FILE DESCRIPTOR — the strongest secret-free option, and UNVERIFIED.** The server
+  creates a socketpair at spawn and passes one end INTO the tmux session as an inherited fd. The
+  capability IS the descriptor: unforgeable, not in argv, not in the environment, and nothing to
+  capture at delivery — the fd number may be public because a number is useless without having
+  inherited the descriptor. This needs no peer credentials at all.
+  **NOT YET MEASURED, and it must be before anyone commits to it:** does `tmux` preserve an
+  inherited fd into a pane's process, and does the shell Claude Code's Bash tool spawns inherit it?
+  If either answer is no, (B) is dead and (A) is the only secret-free route.
+- **(C) Anything that keeps a long-lived secret** — file, env, argv — fails to EXPOSURE 2 by
+  construction, because every agent is the same Unix user.
+
+### What this does to the staging
+
+**Stage 2 is no longer "a design change with a known mechanism". It is a design change with an
+OPEN feasibility question**, and that must be settled before it is ruled on rather than after.
+Stage 1 is meanwhile weakened to near-nothing by EXPOSURE 3. So the honest position is: **the
+credential design has no currently-verified secret-free implementation on this stack**, and the
+next action is the (B) measurement, not a ruling.
 
 ## Proposed fix — staged, because (3) is a design change and (2) is not
 

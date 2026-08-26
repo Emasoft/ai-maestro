@@ -172,6 +172,33 @@ own task acquired), `TIOCSTI` injection (unavailable OS-wide; control = fails on
 `launchctl submit` under seatbelt (control = works unsandboxed), `osascript do shell script`
 (inherits the sandbox).
 
+
+^ATOM-QUX1-YP3Q [desc: "VERIFIED end to end — Claude Code boots and completes an API call under the per-agent seatbelt profile while that same profile denies every measured cross-agent channel.", keywords: does_claude_code_run_under_sandbox-exec will_seatbelt_break_the_agent is_the_per-agent_sandbox_profile_viable verified_agent_confinement_profile, ocd: 2026-08-26, lmd: 2026-08-26]
+
+The gate that could have killed the confinement design is measured and PASSES.
+
+`sandbox-exec -f <per-agent profile> claude -p "…"` → **exit 0**, full boot, plugin load,
+config read, network, model reply. Under the SAME profile, in the same shell:
+
+| probe | result |
+|---|---|
+| tmux socket (binary or raw `connect`) | denied |
+| `~/Library/LaunchAgents` plist drop | denied |
+| `~/.zshrc` write | denied |
+| `<install>/server.mjs` write | denied |
+| `~/.aimaestro/agents/registry.json` write | denied |
+| another agent's `private.pem` | denied |
+| own settings.json / plugins / shell-snapshots read | **ok** |
+| `git status` in the repo | **ok** |
+
+Both halves matter: a profile that permits everything also passes the boot test, and a profile
+that denies everything also passes the deny test. The pair is the evidence.
+
+Profile shape that works — `(allow default)` plus targeted denies, with three non-obvious rules:
+`(deny signal)` MUST be paired with `(allow signal (target self))` + `(target children))` or the
+agent cannot manage its own subprocesses; shell-snapshots must be READ-allowed and WRITE-denied
+(the Bash tool sources them); and paths must be the RESOLVED ones (`/private/tmp`, never `/tmp`).
+
 ## Notes and lessons learned
 
 [^1]: [id: ATOM-R6ML-4HWR, status: valid, supersedes: ATOM-CQIV-P55N, desc: "The container-only conclusion was measured-refuted on 2026-08-26 and the named hole was not the deepest one.", keywords: "the_boundary_belongs_at_the_container is_a_container_required_to_isolate_agents shared_tmux_server_is_the_hole containers_are_the_only_fix", ocd: 2026-08-26, lmd: 2026-08-26] DO NOT conclude that a container is the only boundary, or that the shared tmux server is THE hole, BECAUSE both were refuted by measurement on 2026-08-26. A seatbelt profile confines agents under one uid and a shared tmux server (see the seatbelt atom on this page) — the earlier dismissal of sandboxing used the wrong operation class and an unresolved path. And the tmux socket is not the deepest hole: the shared same-uid key store and the writable server tree both defeat every channel-level control, so ranking tmux first mis-orders the work. DO say instead: the shared tmux server is ONE control channel among an enumerable set, closable without containers; the container's real advantage is that it is default-deny while seatbelt is a deny-list needing an owner and a suite. SUPERSEDED BODY: **NO CREDENTIAL DESIGN GIVES AGENT ISOLATION, BECAUSE ANY AGENT CAN DRIVE ANY OTHER AGENT'S PANE.** Demonstrated 2026-08-26 (TRDD-EVO7T245): `tmux send-keys -t <other-agent> …` injects a command, and the injected process's ancestry resolves to the VICTIM's `pane_pid`: ``` victim pane_pid = 98120 ; injected sleep pid = 98511 ancestry: 98511 -> 98120 REACHES the victim pane: YES ``` The tmux socket is per-USER (`/tmp/tmux-<uid>`, mode 0700) and every agent is that user, so the shared tmux server is the hole. **A peer-credential scheme (kernel-attested PID → pane → agent) is verified to WORK and is still defeated**, because the attacker does not forge identity — it makes the victim act. *"Which agent is this process"* has a true answer the attacker controls. **This is a PRE-EXISTING hole, independent of any credential work.** It is present today. **It cannot be closed within one uid.** Measured: POSIX permissions and ACLs cannot separate principals the kernel considers identical (the owner always has access, so a per-agent socket path buys nothing); and macOS `sandbox-exec` DOES enforce (`(deny default)` → `execvp failed`, exit 71) but the permissive `(allow default)` + targeted-`deny` shape **failed to deny** in two rule forms. **So the boundary must be a CONTAINER, not a credential** — a separate PID namespace means one agent cannot even `ps` another, which removes the exposures rather than mitigating them, needs no OS user accounts, and is cross-platform. `services/agents-docker-service.ts` already exists. Whether that path is complete is UNVERIFIED.

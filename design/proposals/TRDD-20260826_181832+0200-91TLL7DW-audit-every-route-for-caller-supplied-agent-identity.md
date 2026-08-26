@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:18:32+0200
+updated: 2026-08-26T18:39:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -51,6 +51,49 @@ would have to catch is one an existing CLI flag makes look normal.
 
 ## Acceptance
 
-- [ ] Route inventory with the identity source for each.
-- [ ] Every parameter-sourced route has a named authorization check.
+- [x] Route inventory with the identity source for each — 257 route files enumerated, 89
+      reference an agent id. See the investigation section below.
+- [ ] Every parameter-sourced route has a named authorization check. **THREE DO NOT**:
+      `teams/notify` (reaches a tmux keystroke primitive, 0 authz calls), `agents/email-index`
+      (no auth call at all), `sessions/activity/update` (unverified `sessionName`).
 - [ ] A guard test reddens when a new route reads an agent id unchecked.
+
+## Investigation — 2026-08-26 (read-only; inventory delegated, findings verified first-hand)
+
+**257 route files enumerated, 89 reference an agent id.** 81 of those derive the acting identity
+strictly from the verified `auth`/`authContext`, or pass a parameter-selected TARGET through
+`authorize()` / `gate0Auth()` / `checkTeamAccess()` / `withAuthorizedTrdd()` / an explicit
+`auth.agentId !== id` self-guard. Three do not.
+
+### The one that matters — `app/api/teams/notify/route.ts` (VERIFIED BY READING IT)
+
+```ts
+const auth = authenticateFromRequest(request)      // caller authenticated...
+if (auth.error) return 401
+const parsed = NotifyTeamSchema.safeParse(raw)     // agentIds[] + teamName from the BODY
+const result = await notifyTeamAgents(parsed.data) // ...and `auth` is never used again
+```
+
+`grep -cE "authorize|gate0Auth|checkTeamAccess|requireTitle|auth\.agentId"` on that file: **0**.
+
+`notifyTeamAgents` maps over the caller's `agentIds` into `notifyAgent`, and its own comment reads
+*"Strip control characters to prevent command injection via tmux send-keys"* — so the path
+terminates in a **tmux keystroke primitive**. It sanitizes the MESSAGE and never checks whether the
+CALLER may address those agents. Every sibling route reaching the same primitive does check.
+
+**Design consequence, and it is the important part.** This is the confused deputy of Class 4.2:
+the SERVER holds the tmux socket, so the agent does not need it. **A seatbelt profile denying the
+tmux socket does NOT close cross-agent keystroke injection while this route stands** — the agent
+simply asks the server to do it. Any authenticated agent, of any title, in or out of the team.
+
+Confinement and route authorization are therefore NOT alternatives; the sandbox is void on every
+capability the server will exercise on request.
+
+### The other two
+
+- `app/api/agents/email-index/route.ts:15` (GET) — **no auth call of any kind**; `agentId` query
+  param goes straight to the service. Read-only, but genuinely unauthenticated.
+- `app/api/sessions/activity/update/route.ts:22,72` (POST) — `sessionName` from the body is
+  authenticated but unverified against the caller; carries an inline comment accepting it as a
+  known limitation. That acceptance predates the impersonation threat model on this card set and
+  should be re-decided, not inherited.

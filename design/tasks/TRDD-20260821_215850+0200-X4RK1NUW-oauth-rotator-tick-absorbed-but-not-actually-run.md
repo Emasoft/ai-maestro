@@ -1,12 +1,13 @@
 ---
 trdd-id: X4RK1NUW
 title: oauth-rotator-tick beats but its verdict is not yet clean — one 48h observation window stands before the 2026-08-30 deadline
-column: todo
+column: blocked
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-22T14:26:30+0200
+updated: 2026-08-26T04:47:18+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -21,7 +22,7 @@ approval-datetime: 2026-08-21T21:58:50+0200
 derived: false
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [TRDD-3GU9V70H]
 release-via: none
 priority: 0
 severity: critical
@@ -179,3 +180,25 @@ one is working it, and the next honest move is a reading taken later, not a chan
 **NEXT ACTION** — re-read the status file and compare against the deadline:
 `cat ~/.aimaestro/oauth-rotator-tick-status.json`. Clean for 48h ⇒ tick the last box and close.
 Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the message's own remedy.
+
+### 2026-08-26T04:47 — box-2 deploy VERIFIED; card BLOCKED on credential recovery (TRDD-3GU9V70H)
+
+- **Box-2 fix is now RUNNING.** The fleet restart at ~00:05 deployed `server-tick.ts`
+  (runtime-imported, live on restart alone). Verified across beats: status file (04:42,
+  `reauth-needed`/`slot-unreadable`) and rotator.log's 04:26 ONSET carry the SAME code and
+  message, and the old `rotator-stuck:all-maxed ↔ reauth-needed:refresh-dead` code-flap is
+  absent from the post-restart log. The "landed, undeployed" ⛔ above is resolved.
+- **The 48h window cannot start.** Ground truth in `state.json`: ALL THREE slots are
+  `credential-dead` (`invalid_grant` × 233/576/789), access tokens expired ~08-08..11,
+  `cookie-leg-since.json` = `{}` (the no-human rung has minted nothing), `cookie-leg-stuck`
+  cycling for all three accounts. Recovery is the janitor's cookie leg or a human
+  `/janitor-refresh-cc-logins` — carded as **TRDD-3GU9V70H**, which now blocks this card.
+- **New observation, NOT the box-2 defect:** the REASON flaps `slot-unreadable ↔ refresh-dead`
+  beat-to-beat (18:58→19:09→22:58→23:19→04:26), spanning pre- and post-restart. Code and
+  message agree at every transition, so it is not verdict logic — `readSlot` intermittently
+  returns null for slots that exist (transient keychain read failure from the server process).
+  Alarm-noise defect in the READ layer; card it separately if it persists after 3GU9V70H's
+  recovery (a healthy slot set may make it moot).
+
+**NEXT ACTION**: complete TRDD-3GU9V70H (cookie-leg check via ai-maestro#95, else the owner runs
+`/janitor-refresh-cc-logins`), then start the 48h observation window — deadline 2026-08-30.

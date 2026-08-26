@@ -220,6 +220,14 @@ const rel = (f: string) => path.relative(collectionRoot, f)
  *
  * The remaining 16 are measured, not assumed — see TRDD-DQVPODKW for the per-route verdicts,
  * including which are still sub-agent-reported rather than verified first-hand.
+ *
+ * ── 16 → 15, TRDD-DQVPODKW item 7 (2026-08-26) ──────────────────────────────────────
+ * `role-plugins/inject-skill` now runs `authorize(auth, 'manage-skills')` (no target agent:
+ * MANAGER + system owner only). Injecting skills into a shared local-marketplace plugin is a
+ * fleet-wide capability change — every agent using the plugin inherits them — so "any
+ * authenticated caller" was the wrong policy. Pinned by
+ * tests/unit/inject-skill-route-authorization.test.ts (MEMBER 403 + service-not-called,
+ * MANAGER positive control, neuter observed 1 red / 1 green).
  */
 const COLLECTION_UNREVIEWED: string[] = [
   'creation-helper/cleanup/route.ts',
@@ -235,7 +243,6 @@ const COLLECTION_UNREVIEWED: string[] = [
   'directory/sync/route.ts',
   'health/route.ts',
   'normalize-hosts/route.ts',
-  'role-plugins/inject-skill/route.ts',
   'role-plugins/sync-defaults/route.ts',
   'startup/route.ts',
 ]

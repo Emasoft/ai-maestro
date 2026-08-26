@@ -77,8 +77,9 @@ describe('TRDD-DQVPODKW — inject-skill authorizes, not merely authenticates', 
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: s/if (!authz.allowed)/if (false)/ in inject-skill/route.ts
- *   predicted: the MEMBER denial test reds (gate inert → falls through to 404),
- *   the MANAGER positive control stays green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(!authz\.allowed\)/if (false)/   [inject-skill/route.ts]
+ *   → 1 red / 1 green, exactly as predicted:
+ *       RED: refuses a MEMBER — an authenticated agent is not an authorized one
+ *       green: the MANAGER positive control (a disabled gate refuses nobody)
  */

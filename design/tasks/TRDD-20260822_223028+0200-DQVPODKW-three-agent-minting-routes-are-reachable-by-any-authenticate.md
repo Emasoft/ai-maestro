@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-22T22:38:54+0200
+updated: 2026-08-26T06:17:29+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -191,8 +191,14 @@ Adding it:
 - [x] a MANAGER positive control, without which a deny-everyone gate passes every other test
 - [x] neuter observed and recorded with its predicted-vs-observed count, line-anchored
 - [x] the coverage ledger shrunk 19 → 16 rather than the guard being loosened
-- [ ] `role-plugins/inject-skill` — decide the authority (`'manage-skills'` is the vocabulary the
-      element pipelines use for install/remove of an element)
+- [x] `role-plugins/inject-skill` — DONE 2026-08-26 (`da061b32` + the ledger-shrink commit).
+      Authority decided as `authorize(auth, 'manage-skills')` with NO target agent: MANAGER +
+      system owner only (a plugin mutation is fleet-wide, not team-scoped, so COS is refused by
+      authorize()'s no-target branch — that is the general rule doing the right thing, not a
+      special case). Same `authenticateFromRequest` shape as the minting siblings. Pinned by
+      tests/unit/inject-skill-route-authorization.test.ts: MEMBER 403 pinning the reason +
+      service-not-called, MANAGER positive control, neuter OBSERVED 1 red / 1 green exactly as
+      predicted. Coverage ledger shrunk 16 → 15.
 - [ ] `health` — decide whether it should authenticate at all; establish first whether the
       dashboard calls it pre-login, because that is a real constraint
 - [ ] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand, not relayed

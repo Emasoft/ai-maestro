@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:39:43+0200
+updated: 2026-08-26T06:41:52+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -269,14 +269,20 @@ Adding it:
       user-authority model a logged-in non-maestro web user has no agentId and is still not
       the system owner. SYSTEMIC CLASS FLAGGED HERE: the bare `!auth.agentId`-as-isSystemOwner
       proxy is services/headless-router.ts's pre-existing idiom at multiple handlers (e.g. the
-      DeleteTeam handler's `isSystemOwner: !auth.agentId`; `userTitle` = 0 hits file-wide), so
-      NO headless handler honored the authority model before this one. That class belongs to
-      TRDD-R268J32X's audit scope (router-wide auth-shape review) — recorded there-adjacent
-      here so the comment in the handler citing "flagged on the card" is true. The headless
-      gate is pinned BEHAVIORALLY by tests/unit/headless-sync-defaults-system-owner.test.ts
-      (drives the real router; agent 403 + service-not-called, maestro web session 200) —
-      before it, deleting the headless gate reddened zero tests (the UNGUARDED_LEDGER is a
-      source scan, text standing in for behavior).
+      DeleteTeam handler's `isSystemOwner: !auth.agentId`; `userTitle` = 0 hits file-wide —
+      NOTE that grep is name-keyed and cannot see buildAuthContext-consuming sites, so the
+      defensible claim is "no handler GATES on the model's isSystemOwner semantics", not "no
+      handler honors the model"). That class belongs to TRDD-R268J32X's audit scope
+      (router-wide auth-shape review) — recorded there-adjacent here so the comment in the
+      handler citing "flagged on the card" is true. The headless gate is pinned by
+      tests/unit/headless-sync-defaults-system-owner.test.ts for gate-EXISTENCE ONLY (drives
+      the real router; agent 403 + service-not-called, maestro web session 200; deleting the
+      gate → 1 red OBSERVED) — the buildAuthContext-vs-bare-agentId SEMANTICS are NOT pinned:
+      a second observed neuter reverting the swap to `if (auth.agentId)` reddened 0 of 2,
+      because both fixtures agree under both forms. Discriminating them needs an R36/R37
+      model-ON test (mock isUserAuthorityModelEnabled); that gap rides with the R268J32X
+      class fix. Before this suite, deleting the headless gate reddened zero tests anywhere
+      (the UNGUARDED_LEDGER is a source scan, text standing in for behavior).
 - [x] audit `enforceAuth`'s callers outside this subtree — DONE, and it found the guard's next
       blind spot: **26 mutating routes call `enforceAuth` with no authorization, and 17 of them
       are OUTSIDE `app/api/agents/`**, so no guard can see them. Filed as **TRDD-R268J32X**.

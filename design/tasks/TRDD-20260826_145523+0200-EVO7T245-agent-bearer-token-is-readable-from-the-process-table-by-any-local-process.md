@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:47:10+0200
+updated: 2026-08-26T15:53:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -285,10 +285,56 @@ So the kernel will enforce a per-uid socket with no help from us. **This is the 
 | needs peer-credential API Node lacks | **yes** | no |
 | needs a compiled dependency | **yes** | no |
 | enforcement | our code, after reading the peer pid | **the kernel, before `connect` returns** |
-| fixes EXPOSURE 2 (`ps eww`) | no — env still readable by peers | **yes** — cross-user env reads are denied |
+| fixes EXPOSURE 2 (`ps eww`) | **yes — see the correction below** | **yes** |
 
 (A) leaves `AID_AUTH`'s replacement enforceable only by code we write; (D) removes the shared-uid
 premise that every exposure on this card rests on.
+
+### ⚠ CORRECTION — I scored (A) wrong on EXPOSURE 2, and the USER caught it
+
+The table above originally read *"(A) fixes EXPOSURE 2: no — env still readable by peers"*. **That
+is wrong.** Under (A) the peer-credential lookup means there is **no token at all** — removing
+`AID_AUTH` from the environment IS the design, not an extra step. So there is nothing left for
+`ps eww` to expose, and (A) closes all three token exposures exactly as (D) does.
+
+**What (A) actually leaves is not a token exposure — it is the shared-uid weakness itself.** Agent
+A and agent B remain the same Unix principal, so A can still read B's files, signal B's processes,
+and inspect its command lines. The credential stops being stealable; the isolation never existed.
+That is a materially different and smaller claim than the one I put in the table.
+
+**And the USER's follow-up — "can a custom binary hide the env, since we're building one anyway?"
+— the answer is: you should not try.** Hiding is the wrong goal. An env var cannot be retracted
+from same-uid `ps eww` by userspace (the kernel serves it; a process can scribble over its own
+`environ` after start, but the value is also held in the tmux SESSION environment, and racing that
+is a hack that fails open). **Delete the secret instead of concealing it** — which both (A) and (D)
+already do. A concealment that half-works is worse than none, because it reads as protection.
+
+### Q: can one user control another user's tmux? YES — mechanism verified
+
+Relevant only to (D). Measured:
+
+```
+/tmp/tmux-501                       drwx------      ← the DEFAULT socket dir is per-uid, locked
+tmux -S /tmp/shared-sock … 
+  → srw-------                      ← relocatable
+  → chmod 770 → srwxrwx---          ← widenable (the classic shared-session pattern)
+  → /bin/chmod +a "user allow read,write"
+    srw-------@  0: user:… allow read,write   ← macOS ACLs work on the socket
+```
+
+So the maestro server (uid 501) can drive an agent's tmux server owned by another uid, by putting
+the socket at a known path and granting **exactly uid 501** via an ACL. ACLs matter here rather
+than groups: a per-agent group would need one group per agent, and macOS has historically capped
+supplementary groups (16) for some APIs — an ACL sidesteps that and grants one principal, so
+agents still cannot reach each other.
+
+**Caveat, stated because I cannot close it here:** every step above was run as ONE user. That the
+grant actually works ACROSS uids needs a second account to prove. The mechanism exists and is
+configurable; the cross-user behaviour is expected, not measured.
+
+**(One instrument note: `chmod +a` first failed with `invalid mode: '+a'` because GNU chmod is on
+PATH here. `/bin/chmod` is the one with ACL support — the GNU-vs-BSD trap this repo already
+records.)**
 
 **MEASURE 2 — PARTLY DONE, and it names the blocker precisely.** The server runs as
 **`emanuelesabetta`, uid 501 — not root** (measured from the process table). Three consequences,

@@ -2,7 +2,7 @@
 name: password-and-credential-system
 description: "which password or token do I need / I set an env var and auth still fails / 403 sudo_required / 429 sudo_token_quota_exceeded / how do I authenticate a script or run tests with the owner away / is this token an agent's or a human's / where is the governance password stored / how do I mint a dev-mode token / there is no wiki page for this topic and the knowledge is scattered / I learned it from a code comment / where should this fact live / no spec exists for the password system"
 ocd: 2026-08-22
-lmd: 2026-08-22
+lmd: 2026-08-26
 metadata:
   node_type: memory
   type: reference
@@ -97,6 +97,34 @@ AID + title + portfolio token and is REFUSED a sudo token (`if (!ctx.isSystemOwn
 the other's credential, which is the design working. Practically: when a strict verb needs
 authorization here, the answer is never *"get an AID"* — it is the owner's dev-mode session plus a
 per-call sudo token (see [[password-and-credential-system]] ATOM-G59T-8U0O).
+
+
+^ATOM-1S7B-13X9 [desc: "A Claude developing ANY ai-maestro plugin is not an agent and must perform NO registration; it becomes one only by running in the harness AND being imported by the MAESTRO user, which grants everythin", keywords: can_my_plugin_dev_session_register_with_ai-maestro should_I_run_aid-init_in_a_plugin_repo amp-register_refused_you_are_developing_a_role-plugin does_my_plugin_depend_on_the_ai-maestro_server_being_up fleet-wide_401_provisioning_blocker how_does_a_claude_instance_become_an_ai-maestro_agent SendMessage_is_the_sanctioned_interface_between_plugin_claudes, ocd: 2026-08-26, lmd: 2026-08-26]
+
+**A plugin-development session is an ORDINARY EXTERNAL Claude project, and must stay one.** This
+generalises [[password-and-credential-system]] ATOM-B6AR-MQGE from *"a Claude developing
+ai-maestro"* to *a Claude developing ANY ai-maestro plugin* (USER ruling 2026-08-26, given to this
+session verbatim and relayed the same day by the architect plugin session).
+
+A session becomes an ai-maestro agent only when **BOTH** hold, and only in the future: (1) it runs
+INSIDE the ai-maestro harness, **and** (2) the MAESTRO user imports the instance via the server
+dashboard. **Import grants registration plus AMP/AIP and the ai-maestro scripts AUTOMATICALLY** —
+which is why nothing is requested in advance, and why "provision me first" is never the answer.
+
+Until then **NO registration of any kind may be performed by an external Claude instance — not
+`aid-init`, not `amp-register`, not a token mint.** Two consequences that get mis-triaged as bugs
+and are the boundary working: a fleet-wide **HTTP 401** is not a provisioning blocker, and
+`amp-register`'s refusal (*"you are DEVELOPING a role-plugin, you are not that agent"*) is correct.
+Do not work around either.
+
+**The external instance must carry NO dependency on the ai-maestro server** — API or services, up
+or down, its own work is unaffected. A plugin repo that breaks when the server is down has already
+violated this.
+
+**`SendMessage` between such sessions IS the sanctioned interface, not a stopgap for a missing
+credential.** The ai-maestro hub session is itself external by the same rule — you cannot develop
+ai-maestro from inside ai-maestro — so hub and plugin sessions coordinating peer-to-peer, with the
+hub applying the plugin session's reports, is the intended architecture rather than a workaround.
 
 ## Notes and lessons learned
 

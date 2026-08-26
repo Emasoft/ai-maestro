@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T21:55:00+0200
+updated: 2026-08-26T21:57:25+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -236,6 +236,24 @@ The narrow point that matters here: the verified walk is an **AVAILABILITY mecha
 confinement boundary**, and must not be cited as the pattern for a hard-fail exec gate. Building
 one means accepting the bricked-heartbeat risk this design explicitly refuses — a trade for the
 owner, not something to inherit by leaving the earlier sentence unchallenged.
+
+**And the second half of that trade is not the bricked heartbeat — it is that a fail-CLOSED gate
+hides its own bugs from its author.** The peer reports (`git-index-lock-orphan-recovery`,
+janitor `afc279c5`) that **three of four post-ship fixes to their lock-recovery subsystem were
+the same defect** — a liveness probe returning "held" for a process that was gone: an exited git
+in a `ps` still-photograph, a zombie that `os.kill(pid, 0)` calls alive while `lsof` resolves no
+cwd, and a real fd-holder reading UNKNOWN because a 5 s `lsof` timeout had no margin under 16-way
+xdist. All three fail-closed, so all three surfaced as a *refusal to recover* — which looks like
+caution, not like a bug, and took three encounters to name. Their finding, not re-derived here.
+
+**My own first-hand datum from this session, which is the same shape from the other side:** I hit
+`.git/index.lock` **twice** while committing this card, and **both times it was already gone by
+the time I looked** (`ls` → no such file, `lsof` → no holder). A refusal keyed on that file's mere
+existence would have blocked two commits and reported contention that had ended. So: **liveness
+is not holding**, in both repos, measured independently. If the owner does build a hard-fail exec
+gate here, this is the failure mode to design against first — not the forged binary, but the
+gate's own probe answering a question adjacent to the one it was asked, and failing safe in a
+direction that makes the bug look like the feature working.
 
 ## Box 1: the "656 subprocess sites" figure does not reproduce, and a grep cannot triage them
 

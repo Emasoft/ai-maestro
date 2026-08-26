@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:32:08+0200
+updated: 2026-08-26T18:35:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -68,7 +68,8 @@ decorative, whatever else is layered on top.
 - [ ] Every runtime-loaded server path enumerated, with its current owner and mode recorded.
       (UN-TICKED 2026-08-26T18:32 — the first enumeration was prose-derived and missed 44
       runtime-loaded `.ts` modules including `lib/agent-registry.ts`. What IS established: the
-      scope is the whole first-party tree, 804 files, plus `node_modules/` and `.next/`. The
+      scope is the runtime-reachable closure, 353 first-party files (NOT the 804 that merely
+      exist), plus `node_modules/` and `.next/`. The
       per-file owner/mode record over that scope is not done.)
 - [x] Reachability from an agent established — by uid identity (server, tmux server and all 21
       agent processes share one uid), not by driving a live agent, which the blacklist forbids.
@@ -90,14 +91,41 @@ decorative, whatever else is layered on top.
 > left it agent-writable while reporting the tree covered — the precise failure this card is
 > about, committed inside the card itself.
 >
-> **The honest scope is therefore the whole first-party tree** — 804 `.ts`/`.tsx`/`.mjs` files
-> under `lib services app components` — plus `node_modules/` and `.next/`, which are trees of
-> thousands of files each, not the two entries the list made them look like. "18 paths" made an
-> intractable surface sound tractable.
+> **SCOPE — corrected twice, and the second correction matters as much as the first.** The
+> number first written here was **804**, from `find lib services app components -type f -name
+> '*.ts' …`. That is a count of files that **EXIST**, silently substituted for the set the
+> runtime can **REACH** — the same proxy-for-the-thing defect as the prose error above, one
+> level up, committed in the act of fixing it. It is wrong in BOTH directions: it over-counts
+> (`components/**/*.tsx` are browser-bundled and the node process never loads them) and
+> under-counts (it excludes `types/`, root-level `.ts`, and everything reached through
+> `node_modules`).
 >
-> Instrument note, because the obvious check does not work: `lsof` on the server pid returns
-> **2** entries. Node reads a module and closes the fd, so open-descriptors is itself a proxy
-> for "loaded" and a broken one. The settling instrument is the import graph, not the fd table.
+> **Measured transitive closure from the 44 entry modules, following relative and `@/` alias
+> specifiers: 353 first-party files** (control: `lib/agent-registry.ts` is in it). Approximate —
+> 3 entry specifiers did not resolve as written — and it excludes `node_modules/` and `.next/`,
+> which are trees of thousands of files each, not the two entries the original list made them
+> look like.
+>
+> ```
+> exist under lib/services/app/components : 804   <- NOT the scope
+> runtime-reachable transitive closure     : 353   <- the scope, + node_modules/ + .next/
+> ```
+>
+> **On the 44 being a floor:** it comes from a single-quoted `./`-relative one-line regex, so it
+> was checked against the shapes it cannot see — double-quoted **0**, `@/` alias **0**, template
+> literal **0**, variable specifier **0**, multi-line `import(` **0**, static `from '…ts'` **0**.
+> For `server.mjs` + `lib/*.mjs` it is therefore a complete set, not a floor. The residual
+> caveat is real and unfixable by any regex: a path built at runtime from a variable would be
+> invisible, and none is present today.
+>
+> **57 vs 44 reconciled:** 57 is the count of `import('…​.ts')` CALL SITES, 44 the DISTINCT
+> modules among them — same pattern for both, so the two are commensurable.
+>
+> **Instrument note — the obvious check does not work, and this is measured, not inferred.**
+> `lsof` on the server pid lists **44 open paths and ZERO with a `.ts`/`.mjs`/`.js` extension**,
+> while native `fsevents.node` and `.dylib` files ARE held open. Node holds native modules and
+> reads-then-closes JS/TS source, so open-descriptors cannot see loaded modules. The settling
+> instrument is the import graph, not the fd table.
 
 **Original (INCOMPLETE) enumeration — kept as the record of what was wrong.** Per CLAUDE.md the
 `.mjs` files go live on `pm2 restart` alone while the rest is bundled into `.next`, giving:

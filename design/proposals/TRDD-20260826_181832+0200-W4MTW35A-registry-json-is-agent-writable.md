@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:32:08+0200
+updated: 2026-08-26T18:35:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -102,13 +102,26 @@ system that has none.
 **Reachability from an agent** — established by uid identity, as in TRDD-K4BEKT3L. Re-derive it,
 do NOT quote a process count: the population drifts (31 / 22 / 21 / 20 within one session) and it
 includes any non-agent `claude` session on the box, such as the hub's own. The load-bearing fact
-is the CARDINALITY of the uid set:
+is the CARDINALITY of the uid set, which is one.
+
+Settled against the REGISTRY's agent set rather than a `ps` pattern — the earlier
+`awk '$4 ~ /claude$/'` matched on the first ARGUMENT, not the executable, so it described a
+subset and would miss an agent launched through a wrapper:
 
 ```bash
-ps -eo user,pid,command > /tmp/p.txt
-awk '$4 ~ /claude$/ {print $1}' /tmp/p.txt | sort -u   # 2026-08-26 -> one row: emanuelesabetta
-``` Not tested by driving a live agent
-(blacklist), and the uid identity is the stronger proof.
+# resolve registry agents -> live pane pids -> their uids
+python3 -c "import json,os,subprocess; \
+ r=json.load(open(os.path.expanduser('~/.aimaestro/agents/registry.json'))); \
+ a=r if isinstance(r,list) else list(r.values()); \
+ n={x.get('tmuxSession') or x.get('name') for x in a if isinstance(x,dict)}; \
+ p=[l.split()[1] for l in subprocess.run(['tmux','list-panes','-a','-F','#{session_name} #{pane_pid}'],capture_output=True,text=True).stdout.split(chr(10)) if l.strip() and l.split()[0] in n]; \
+ print(sorted(set(subprocess.run(['ps','-o','user=','-p',','.join(p)],capture_output=True,text=True).stdout.split())))"
+# 2026-08-26 -> 13 registry entries, 2 with live panes, distinct uids: ['emanuelesabetta']
+```
+
+Small sample — only 2 of 13 registry agents had live panes at measurement time — but it is the
+ACTUAL agent set rather than a pattern, and it agrees with the server and tmux server uid. Not
+tested by driving a live agent (blacklist), and the uid identity is the stronger proof.
 
 **Not yet done:** the safeguard. Note it cannot be "chmod 600" — that is the fix already proven
 inert. It must be a different OWNER (root or a server service account), or authenticated records

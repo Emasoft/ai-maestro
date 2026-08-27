@@ -367,6 +367,9 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     // 39OPYXQ9) closed with an open box or no checklist AFTER the gate landed; they are
     // terminal and frozen (IND rule 12), so they are evidence, not something to tick. The
     // filter was never broken — this test was pinning a census that had moved.
+    // EXPECTED FUTURE MOVE (TRDD-CV5KDCB7): 22 parked cards carry a WARN BLOCKED-WITHOUT-PROBE;
+    // the next routine edit of any of them flips it to ERROR (the `updated:` boundary is the
+    // ratchet working, not this test breaking). Add the card's probe, or re-pin here.
     expect(lines).toHaveLength(5)
     expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tDXJZM3BW\t/)
     expect(lines[1]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tIBKR7F74\t/)

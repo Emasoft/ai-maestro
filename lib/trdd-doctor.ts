@@ -1000,7 +1000,10 @@ export function lintCorpus(designDir: string): DoctorReport {
         .map((l) => l.trim().toLowerCase())
         .filter(Boolean)
       const reviewAfter = frontmatterDay(c.fm['review-after'])
-      const todayDay = frontmatterDay(new Date())
+      // LOCAL calendar day — `review-after:` is written local, and `frontmatterDay(new Date())`
+      // would go through toISOString() = the UTC day, making a just-expired park read as parked
+      // for the hours the two days disagree (review fork, 2026-08-27; test U2 pins it).
+      const todayDay = new Date().toLocaleDateString('en-CA')
       const parked =
         c.column === 'blocked' ||
         blockedBy.length > 0 ||

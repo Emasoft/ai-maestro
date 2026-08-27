@@ -78,6 +78,16 @@ describe('TRDD-CV5KDCB7 — BLOCKED-WITHOUT-PROBE and its grammar rules', () => 
     expect(r.scanned).toBe(1)
     expect(r.findings.filter((f) => f.rule.startsWith('BLOCK')).map((f) => f.rule)).toEqual([])
   })
+  it('U2 SILENT: review-after equal to LOCAL today is an EXPIRED park, not a future one (zone-safe)', () => {
+    // `review-after:` is written as a LOCAL date; comparing it to a UTC calendar day made a
+    // just-expired park read as parked for the hours the two days disagree — a false fire on
+    // an unparked card. Run under TZ=Pacific/Kiritimati (UTC+14) to reproduce at any hour.
+    const localToday = new Date().toLocaleDateString('en-CA')
+    write('a.md', card('U2U2U2U2', { 'review-after': localToday, updated: POST }))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(r.findings.filter((f) => f.rule.startsWith('BLOCK')).map((f) => f.rule)).toEqual([])
+  })
   it('E1 FIRES: an EMPTY blocker-probe does NOT satisfy the gate even with a valid predicate', () => {
     write('a.md', card('E1E1E1E1', { ...PARK, updated: POST, 'blocker-probe': '', 'blocker-holds-if': 'exit-0' }))
     expect(find('BLOCKED-WITHOUT-PROBE').map((x) => x.id)).toEqual(['E1E1E1E1'])

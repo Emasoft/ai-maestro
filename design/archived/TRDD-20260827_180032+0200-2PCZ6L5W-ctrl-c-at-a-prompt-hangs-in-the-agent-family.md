@@ -1,12 +1,12 @@
 ---
 trdd-id: 2PCZ6L5W
 title: Ctrl-C at a read prompt is SWALLOWED in aimaestro-agent.sh because its INT trap returns instead of exiting
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T18:00:32+0200
-updated: 2026-08-27T18:01:55+0200
+updated: 2026-08-27T18:06:16+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -64,9 +64,9 @@ handler was meant to say). Sweep the other `aimaestro-*.sh` for the same shape
 
 ## Acceptance
 
-- [ ] `aimaestro-agent.sh`'s INT/TERM traps exit after cleanup; EXIT trap unchanged
-- [ ] A pty test drives ^C at the sudo prompt through `aimaestro-agent.sh` itself (not the sourced gate) and asserts the process dies with 130; neuter (restore the returning trap) → the process is still alive at the prompt and the test reds
-- [ ] The sweep of `scripts/aimaestro-*.sh` for returning INT traps is recorded here with its result
+- [x] `aimaestro-agent.sh`'s INT/TERM traps exit after cleanup (130 / 143); EXIT trap unchanged
+- [x] tests/unit/aimaestro-agent-ctrl-c.test.ts — a pty test drives ^C at the sudo prompt through `aimaestro-agent.sh` itself (not the sourced gate) and asserts the process dies with 130; neuter (restore the returning trap) → the process is still alive at the prompt and the test reds
+- [x] Sweep recorded: `grep -rn "trap .*INT" scripts --include='*.sh'` → the only other hit is `aimaestro-statusline-capture.sh:204` `trap '' HUP INT` inside a subshell that deliberately IGNORES INT so an ingest survives Claude Code cancelling the statusline script (its comment says so; TERM is left trappable) — correct as written, untouched
 
 ## Approval log
 

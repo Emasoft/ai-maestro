@@ -80,8 +80,13 @@ _source_module "agent-plugin.sh"
 # Check dependencies (defined in agent-core.sh)
 check_dependencies
 
-# Set up cleanup trap (cleanup() is defined in agent-core.sh)
-trap cleanup EXIT INT TERM
+# Set up cleanup trap (cleanup() is defined in agent-core.sh).
+# INT/TERM must EXIT after cleanup: cleanup() returns, and a returning INT handler makes
+# bash RESUME an interrupted `read` — so Ctrl-C at the MAESTRO password prompt was silently
+# swallowed and the next keystrokes became the password (TRDD-2PCZ6L5W, measured in a pty).
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 # ============================================================================
 # DISPATCH — ONE verb list, consulted twice

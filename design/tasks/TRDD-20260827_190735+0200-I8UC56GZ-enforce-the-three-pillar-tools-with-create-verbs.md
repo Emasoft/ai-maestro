@@ -77,6 +77,15 @@ write paths, create verbs for prrdgrep/specgrep, and META-MISSING (154 warns —
 `created-by` on cards nobody can now attribute; `new` writes them, so the count stops GROWING).
 `edit` gates BEFORE the write rather than linting after, which is stronger than the box asks.
 
+**USER ACTION REQUIRED — `PRRD G12.1` now carries a FALSE caveat, and only the USER may fix it.**
+Its MEASURED CAVEAT block (PRRD.md:161-171) says the "refuses a malformed write" clause is "NOT
+YET TRUE for TRDDs" and cites `pillarPreWriteCheck` early-returning a no-op at
+`lib/pillar/edit-guard.ts:181`. As of commit 82595e21 that is no longer so: the per-document
+branch is a real gate, pinned by three refusal tests and a recorded neuter. G12.1 is GOLDEN, so
+no agent may edit it — the caveat stands until the USER strikes it. It is flagged here rather
+than left implicit for the caveat`s own stated reason, pointed the other way: a rule that DENIES
+a protection it now provides teaches its readers not to trust the tool that provides it.
+
 ### Measured 2026-08-27T19:07:35+0200
 
 | claim | reality |

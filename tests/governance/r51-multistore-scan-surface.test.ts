@@ -80,6 +80,11 @@ export interface ScanRow {
 export function scanSource(file: string, src: string): ScanRow {
   // Strip comments: this file's own prose names every primitive it hunts, and a detector that
   // counts documentation is the self-match trap one layer up.
+  // NEUTER (2026-08-27, direct insert then git checkout, restore verified): putting the OLD
+  // block-first strip back on this line reds exactly `every allowlist entry is a REAL current
+  // finding` — headless-router.ts's row vanishes again, 1 red / 5 green. That is the wiring
+  // proven live, and the regression guard TRDD-ENFCF8O7 cites. (A first attempt via a perl
+  // s/// produced code esbuild could not parse and read 0 red / 0 green — measured nothing.)
   const code = stripComments(src)
   const stores = Object.entries(STORE_WRITES)
     .filter(([, prims]) => prims.some((p) => new RegExp(`\\b${p}\\s*\\(`).test(code)))

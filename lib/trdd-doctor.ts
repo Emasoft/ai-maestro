@@ -296,6 +296,20 @@ export function frontmatterDay(v: unknown): string {
 export const CHECKLIST_GATE_SINCE = '2026-07-31'
 
 /**
+ * The GRANDFATHER BOUNDARY of the parked-card blocker-probe gate (TRDD-CV5KDCB7).
+ *
+ * A parked card TOUCHED (`updated:`) on/after this day without a runnable probe is an ERROR;
+ * an older one is a WARN. Measured on landing day: 23 parked cards, 22 without a probe, none
+ * of the 22 touched that day — so day one emits 22 warns and ZERO errors, and the live
+ * zero-ERROR census stays meaningful. Touching a parked card is the moment to add its probe
+ * (the same migrate-on-next-touch policy `approval-tier` retired under).
+ */
+export const PROBE_GATE_SINCE = '2026-08-27'
+
+/** `blocker-holds-if:` grammar — deliberately tiny, no expression language (TRDD-CV5KDCB7). */
+export const BLOCKER_HOLDS_IF_RE = /^(exit-0|exit-nonzero|match:\S.*|not-match:\S.*)$/
+
+/**
  * Does a body state claim AGREE with the card's `column:`?
  *
  * Exported and shared by the lint and the fixer deliberately. The sibling rule
@@ -956,6 +970,79 @@ export function lintCorpus(designDir: string): DoctorReport {
         message: 'blocked without `pre-block-column:` — when the blocker clears there is no record of where to put it back, so it will land in the wrong column or be forgotten',
         autofixable: false,
       })
+    }
+
+    // ---- a PARKED card must carry a RUNNABLE blocker probe (TRDD-CV5KDCB7) ----
+    //
+    // A blocker recorded as a VALUE ("the refresh tokens are dead") has a silent timestamp
+    // and rots while reading as current — measured 4-in-5 stale across five parked cards in
+    // one sitting, and the parking is exactly what stops anyone re-reading it. Recorded as a
+    // PREDICATE (`blocker-probe:` argv + `blocker-holds-if:`) it is re-answerable by a
+    // machine forever, at zero cost. This is the one step that needs a human, so it is the
+    // one step worth enforcing.
+    //
+    // "Parked" = `column: blocked`, a non-empty `blocked-by:`, a FUTURE `review-after:`, or a
+    // `hub-blocked` / `fleet-ask` label. Two false-fire directions this repo has shipped in
+    // other gates, both pinned by tests: never fire on an UNPARKED card (a rule that reddens
+    // correct work gets routed around), and never accept an EMPTY probe as present (a
+    // condition written only over the bad items is vacuous on an empty set).
+    //
+    // `match:` is TWO-valued where the runner needs THREE: a timeout, a missing script, or an
+    // emitter that drifted all produce no-match, which reads as "the blocker cleared" —
+    // fail-open, silently, forever. So a `match:` probe MUST declare a canary (a string the
+    // HEALTHY output always contains); its absence is verdict "could not run", never
+    // "cleared". `not-match:` on a success sentinel is already fail-closed and needs none.
+    {
+      // NOT `asList`: that is the REFERENCE-field parser and drops every non-id token, so
+      // `labels: [governance, fleet-ask]` reads as [] through it (measured: F5 red).
+      const rawLabels = c.fm['labels']
+      const labels = (Array.isArray(rawLabels) ? rawLabels.map(String) : String(rawLabels ?? '').replace(/^\s*\[|\]\s*$/g, '').split(','))
+        .map((l) => l.trim().toLowerCase())
+        .filter(Boolean)
+      const reviewAfter = frontmatterDay(c.fm['review-after'])
+      const todayDay = frontmatterDay(new Date())
+      const parked =
+        c.column === 'blocked' ||
+        blockedBy.length > 0 ||
+        (reviewAfter !== '' && reviewAfter > todayDay) ||
+        labels.includes('hub-blocked') ||
+        labels.includes('fleet-ask')
+      if (parked) {
+        const probe = String(c.fm['blocker-probe'] ?? '').trim()
+        const holds = String(c.fm['blocker-holds-if'] ?? '').trim()
+        const canary = String(c.fm['blocker-probe-canary'] ?? '').trim()
+        const day = frontmatterDay(c.fm['updated'])
+        // Unparseable `updated:` fails toward error, as the checklist gate does.
+        const sev: Finding['severity'] = !day || day >= PROBE_GATE_SINCE ? 'error' : 'warn'
+        if (probe === '' || holds === '') {
+          add({
+            rule: 'BLOCKED-WITHOUT-PROBE',
+            severity: sev,
+            id: c.id,
+            filePath: c.filePath,
+            message: `is parked (${c.column === 'blocked' ? 'column blocked' : blockedBy.length ? 'blocked-by non-empty' : reviewAfter > todayDay && reviewAfter !== '' ? `review-after ${reviewAfter}` : 'hub-blocked/fleet-ask label'}) with no runnable blocker probe — its blocker is a VALUE with a silent timestamp and will rot while reading as current. Add \`blocker-probe: <argv>\` + \`blocker-holds-if: exit-0|exit-nonzero|match:<re>|not-match:<re>\` (take the needle from the EMITTER's source, never from vocabulary seen elsewhere)`,
+            autofixable: false,
+          })
+        } else if (!BLOCKER_HOLDS_IF_RE.test(holds)) {
+          add({
+            rule: 'BLOCKER-PROBE-BAD-PREDICATE',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: `\`blocker-holds-if: ${holds}\` is not one of exit-0 | exit-nonzero | match:<re> | not-match:<re> — a predicate nothing can evaluate is a value wearing a predicate's field`,
+            autofixable: false,
+          })
+        } else if (holds.startsWith('match:') && canary === '') {
+          add({
+            rule: 'BLOCKER-PROBE-NO-CANARY',
+            severity: sev,
+            id: c.id,
+            filePath: c.filePath,
+            message: `\`blocker-holds-if: match:\` without \`blocker-probe-canary:\` — a timeout, a missing script or a drifted emitter all read as "cleared" (fail-open). Declare \`blocker-probe-canary: match:<a string HEALTHY output always contains>\`, or assert the success sentinel with \`not-match:\``,
+            autofixable: false,
+          })
+        }
+      }
     }
 
     // (3) NPT ordering: a Necessary Prerequisite Task must be finished BEFORE the parent

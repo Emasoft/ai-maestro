@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-27T01:25:33+0200
+updated: 2026-08-27T17:14:13+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -29,6 +29,7 @@ effort: M
 labels: [fleet-ask]
 blocker-probe: bash /Users/emanuelesabetta/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-janitor/3.3.26/scripts/oauth_rotator/lifetime-status.sh
 blocker-holds-if: match:ACTION DUE
+blocker-probe-canary: match:cookie/session
 external-refs: [Emasoft/ai-maestro#95, TRDD-1GGQ4HWY, TRDD-DPPYVLVH]
 ---
 
@@ -82,6 +83,13 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 - [x] Two janitor-side fixes referenced in the issue ported to the TS daemon
 - [ ] Verified clean across a 48h+ window ~~before the 2026-08-30 deadline~~ (deadline struck 2026-08-27: the owner renewed all 3 accounts on 08-26; cookies read 27.4 d ≈ 2026-09-23, refresh tokens alive. Window start 2026-08-27T01:25:33+0200. Re-derive with the three commands in the STATE block; PASS = cookie days still >7 AND the three `expires_at` still staggered-and-recent after 48h)
 - [x] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
+
+## Blocker probe — source positive controls (2026-08-27, TRDD-CV5KDCB7)
+
+`blocker-holds-if: match:ACTION DUE` — emitter `lifetime-status.sh:146` prints it iff `action` is
+non-empty (closed by construction). `blocker-probe-canary: match:cookie/session` — the header
+line every HEALTHY run prints (`lifetime-status.sh`, the `print(f"{'account':40} {'cookie/session':>16}…")`
+column header). Re-derive: `grep -nE 'ACTION DUE|cookie/session' <the probe's script path>` → both non-zero.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-27
 

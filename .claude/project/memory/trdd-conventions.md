@@ -2,7 +2,7 @@
 name: trdd-conventions
 description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live."
 ocd: 2026-06-23
-lmd: 2026-08-20
+lmd: 2026-08-27
 metadata:
   node_type: memory
   type: reference
@@ -96,6 +96,19 @@ TRDD-FKGMNGJB is closed and archived.[^7]
 ^ATOM-8FVL-IV1A [desc:"A terminal-column card with zero acceptance checkboxes makes the completion gate vacuous — every box in an empty file is trivially checked; boxes must live under Acceptance", keywords: acceptance_gate_vacuous_no_checkboxes terminal_column_zero_boxes_always_passes card_can_never_close_spec_bullets_counted_as_boxes completion_gate_needs_at_least_one_box where_must_acceptance_boxes_live, ocd: 2026-08-16, lmd: 2026-08-16]
 
 A terminal-column card with NO acceptance checkboxes at all makes the completion gate (verdict G20260731: every box checked before complete/published/live) vacuous — "every box in the file is checked" is trivially true of a file with zero boxes. Measured 2026-08-16: 51 open cards had no checkboxes under ## Acceptance. Fixed in fd5fc4ee: 291 unchecked boxes added, 0 pre-ticked (adding boxes never asserts a check ran). Boxes MUST live under a ## Acceptance heading and nowhere else in the body — a spec-shaped ## bullet list elsewhere gets counted by the naive box-count and can make a card permanently unclosable.
+
+
+^ATOM-KBQ6-H6Q5 [desc: "Parking a card (blocked, blocked-by, future review-after, hub-blocked/fleet-ask): it MUST carry blocker-probe + blocker-holds-if (+ canary for match:) or trddgrep validate flags BLOCKED-WITHOUT-PROBE", keywords: blocker-probe blocker-holds-if blocker-probe-canary BLOCKED-WITHOUT-PROBE BLOCKER-PROBE-NO-CANARY BLOCKER-PROBE-BAD-PREDICATE parked_card_stale_blocker blocked-by_rots review-after_probe how_do_I_park_a_TRDD stale_blocker_detected_by_machine not-match_success_sentinel fail-open_match PROBE_GATE_SINCE trddgrep_validate_blocked_card_warning, ocd: 2026-08-27, lmd: 2026-08-27]
+
+A PARKED card must carry a runnable blocker probe. "Parked" = `column: blocked`, a non-empty `blocked-by:`, a FUTURE `review-after:`, or a `hub-blocked` / `fleet-ask` label. Three optional-elsewhere, mandatory-when-parked frontmatter fields, one line each:
+
+```yaml
+blocker-probe:        bash /path/to/emitter.sh          # an ARGV vector — no shell, no expansion
+blocker-holds-if:     match:ACTION DUE                  # exit-0 | exit-nonzero | match:<re> | not-match:<re>
+blocker-probe-canary: match:cookie/session              # REQUIRED with match: — a string HEALTHY output always contains
+```
+
+The blocker STILL holds when the predicate is true. Prefer `not-match:` on a SUCCESS sentinel (fail-closed: no output ⇒ still blocked); use `match:` only where the emitter has one aggregate FAILURE sentinel that every failure branch provably feeds, and then declare the canary — without it a timeout, a missing script or a drifted emitter all read as "cleared". Take every needle from the EMITTER'S SOURCE (`grep -nE '<needle>' <emitter>` must be non-zero — the source positive control); a regex tested only against a string you typed is degenerate. Enforced by `trddgrep validate`: `BLOCKED-WITHOUT-PROBE` (error when the card was touched on/after 2026-08-27, warn before — `PROBE_GATE_SINCE` in `lib/trdd-doctor.ts`), `BLOCKER-PROBE-BAD-PREDICATE`, `BLOCKER-PROBE-NO-CANARY`. The janitor's `stale-blocker` detector RUNS the probes (their half, three verdicts: holds / cleared / could-not-run — could-not-run is never "cleared"). Why: a blocker recorded as a VALUE has a silent timestamp and rots while reading as current (measured 4-in-5 stale across five parked cards); recorded as a PREDICATE it is re-answerable forever. TRDD-CV5KDCB7.
 
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned

@@ -8,7 +8,7 @@ severity: high
 effort: small
 task-type: infra
 created: 2026-07-15T01:07:00+0200
-updated: 2026-08-21T22:36:05+0200
+updated: 2026-08-27T18:33:43+0200
 scope: project
 approved: true
 approval-judge: ai-maestro-hub-session
@@ -20,6 +20,55 @@ external-refs:
 ---
 
 # The installed CLI is stale, and no invariant notices
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-27T18:33:43+0200
+
+**The live harm is FIXED; the DESIGN is still open, and the body's proposal is WRONG IN SHAPE.**
+
+### Measured 2026-08-27T18:33 (all first-hand, re-derive before trusting)
+
+| fact | measurement |
+|---|---|
+| drift, repo `scripts/*.sh` vs `~/.local/bin` | 91 files: 79 identical, **5 differ**, **7 missing** |
+| by manifest tier | differ = 3 **Tier A** (`amp-kanban-create-task/list/move.sh`) + 1 Tier B (`ecosystem-config.sh`) + 1 Tier C (`remote-install.sh`); all 7 missing are **Tier C** |
+| what the Tier A drift WAS | installed CLIs advertised **"14 TRDD-v2 pipeline stages"**; repo says **19** (+3 exception = the 22 columns TRDD-UNTF690M ratified 2026-08-23). **The ratification never reached the CLI agents actually invoke.** |
+| clobber risk in this set | **none** — `ecosystem-config.sh`'s installed-only keys (`AMP/AID_PLUGIN_NAME/REPO`) were deliberately dropped by commit `9b3474a5` and have **zero consumers** anywhere (`grep` across `*.sh *.ts *.mjs`) |
+| installer intent | `install-messaging.sh:755` globs `"$SCRIPTS_DIR"/*.sh` minus a 4-name exclusion list — so "everything ships" IS the intent; nothing re-runs it, nothing checks |
+| Tier A installer coverage | **50 / 50 covered** (install-agent-cli.sh's explicit 10-file list + the glob). The twice-recorded "missing from the explicit list" bug (panel CLI, continuity CLI) is **not live today** |
+| the verification gap | **no test compares repo scripts to installed ones.** `script-manifest-announces-every-script.test.ts` + `build-script-manifest.test.ts` verify the manifest as a **document** (every script announced, tier counts agree) — never as a **deployment** |
+| manifest claim that is FALSE on this host | §4: *"`install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too"* — 7 Tier C scripts are absent |
+
+### Done
+
+Deployed the 4 consequential files (Tier A trio + `ecosystem-config.sh`) repo → `~/.local/bin`,
+backed up first to `/private/tmp/claude-501/-Users-emanuelesabetta-ai-maestro/8ac348e6-5fba-4811-a525-781a5da95b7a/scratchpad/local-bin-backup-20260827_182625+0200/`, verified byte-identical by `cmp`,
+and confirmed each runs (`--help` exit 0; `ecosystem-config.sh` sources clean). Remaining drift:
+`remote-install.sh` + the 7 missing, **all Tier C** — which the manifest itself calls *"not a
+plugin API. A plugin must never call them."*
+
+### The body's `## Proposed fix` is wrong in shape — do NOT implement it as written
+
+1. **Not a per-agent row.** `agent-invariants.ts` rows are per-AGENT-workdir guarantees, run once
+   per agent per sweep. `~/.local/bin` is **per-HOST and shared**, so a `script-layer` row with
+   `triggers: create·wake·periodic` would run N× per sweep against one directory, racing itself —
+   the exact mistake the sweep's own comment already documents for the keychain check
+   (`lib/agent-invariants.ts:433` — *"ONCE per sweep, BEFORE the per-agent loop — never
+   per-agent … running it per-agent would both waste the sweep and turn one root cause into N
+   alarm lines"*, TRDD-78J4I4QS). If a runtime sweep is wanted at all, the shape is
+   `sweepTmuxServerKeychain()`'s: a host-level function called from that fleet-level block.
+2. **"every `scripts/*.sh` … byte-identical" is the wrong SSOT.** `docs/SCRIPT-MANIFEST.md`
+   tiers are the SSOT; Tier A is the contract, Tier C is explicitly not.
+
+### NEXT ACTION — a DESIGN decision, not code
+
+Advisor consulted 2026-08-27T18:33 (verdict pending at the time of writing; record it here before
+building). The open question is whether a runtime writer should exist **at all**: the harm this
+card exists to prevent was 4 stale files fixed by one `cp`, and a 5-minute watchdog writing into
+`~/.local/bin` forever is a permanent background writer with clobber risk. The cheaper reading is
+that this is a **deploy** step — nothing re-runs the installer when the repo changes — and the
+repo already owns a deploy step (`yarn build`). Decide between:
+(a) wire the existing copy loop to the build; (b) the host-level sweep of §1; (c) close as
+over-built now the live drift is gone. Do not implement the body's per-agent row under any of them.
 
 ## Problem
 

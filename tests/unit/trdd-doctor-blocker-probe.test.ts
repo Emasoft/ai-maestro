@@ -82,7 +82,9 @@ describe('TRDD-CV5KDCB7 — BLOCKED-WITHOUT-PROBE and its grammar rules', () => 
     // `review-after:` is written as a LOCAL date; comparing it to a UTC calendar day made a
     // just-expired park read as parked for the hours the two days disagree — a false fire on
     // an unparked card. Run under TZ=Pacific/Kiritimati (UTC+14) to reproduce at any hour.
-    const localToday = new Date().toLocaleDateString('en-CA')
+    const d = new Date()
+    const localToday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    expect(localToday).toMatch(/^\d{4}-\d{2}-\d{2}$/) // a wrong SHAPE must red, never pass vacuously
     write('a.md', card('U2U2U2U2', { 'review-after': localToday, updated: POST }))
     const r = lintCorpus(tmp)
     expect(r.scanned).toBe(1)

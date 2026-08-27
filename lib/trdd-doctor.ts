@@ -1003,7 +1003,11 @@ export function lintCorpus(designDir: string): DoctorReport {
       // LOCAL calendar day — `review-after:` is written local, and `frontmatterDay(new Date())`
       // would go through toISOString() = the UTC day, making a just-expired park read as parked
       // for the hours the two days disagree (review fork, 2026-08-27; test U2 pins it).
-      const todayDay = new Date().toLocaleDateString('en-CA')
+      // Built from the getters, NOT `toLocaleDateString('en-CA')`: that is locale DATA standing
+      // in for a format — a small-icu Node falls back to en-US and returns `8/27/2026`, which
+      // silently breaks every comparison here (review fork, 2026-08-27).
+      const now = new Date()
+      const todayDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const parked =
         c.column === 'blocked' ||
         blockedBy.length > 0 ||

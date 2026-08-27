@@ -159,7 +159,10 @@ function nonJoinUses(files: string[]): string[] {
  * SECOND BLIND SPOT, MEASURED not assumed: a root reaching a path by STRING CONCATENATION
  *   (`root + '/profiles'`) after an already-reviewed binding is invisible to all three
  *   assertions — neutered in, 0 red / 5 green. Deliberately NOT scaffolded against: there are
- *   zero instances and this codebase uses `path.join` throughout, so a fourth assertion would
+ *   zero instances, AND — the load-bearing half of that argument — because a concatenation needs
+ *   a rotator root, and every BINDING of one is already pinned by NON_JOIN_REVIEWED above. The
+ *   `path.join` idiom is the weaker reason and must not be quoted as the reason. A fourth
+ *   assertion would
  *   guard a shape that does not exist while adding a fourth allowlist to re-review on every
  *   refactor. Named here so the next reader inherits the measurement, not the silence.
  *

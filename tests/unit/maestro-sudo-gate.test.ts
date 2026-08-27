@@ -32,6 +32,7 @@
  * sweep both need a REAL pty + terminal; macOS/Linux `script(1)` syntax diverges,
  * so this file deliberately stops at the no-TTY half. The card's boxes for those
  * stay open until an operator run or a pty harness exists.
+ *   → DRIVEN since 2026-08-27 by maestro-sudo-gate-pty.test.ts (node-pty; P1-P3).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn } from 'child_process'

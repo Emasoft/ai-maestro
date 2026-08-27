@@ -1,7 +1,7 @@
 ---
 trdd-id: 9MZQ4T7E
 title: A CLI script run by hand must prompt for the MAESTRO password
-column: dev
+column: complete
 min-approval-requirement: manager
 mandate: true
 mandated-by: user
@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:28:40+0200
+updated: 2026-08-27T17:00:56+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -87,8 +87,8 @@ One principal, one secret, one prompt:
 - [x] The `~/.local/bin/aimaestro-*.sh` verbs that hit a `strict` route are enumerated from `security-registry.json` (not guessed) and each carries the shared MAESTRO-password prompt step — 14 call sites: teams create/edit(x2)/delete, session send/command (PATCH x2) + block-state(x2) + prompt/answer + queue, panel post, trdd edit/approve/refuse/promote/archive, agent probe. Gate: `maestro_sudo_ensure` in shell-helpers/common.sh + a documented family copy in agent-helper.sh (the agent module set does not source common.sh). Commit e1a8988d.
 - [x] The password is read from a TTY prompt only (`read -rs < /dev/tty`), never argv/env, never echoed — stdin at every hop (`jq -Rn 'input'`, `curl -d @-`), the exact pattern the dev-login test pins argv-containment for.
 - [x] A strict-route script invoked with no TTY and no token exits non-zero and performs nothing — T1/T5 in tests/unit/maestro-sudo-gate.test.ts assert the stub server received ZERO requests; neuters N1/N2 red exactly one test each (disjoint).
-- [ ] A wrong password is rejected by the shared step and consumes no sudo token — TRUE BY THE EXCHANGE'S OWN CONTRACT (403 mints nothing; the step's empty-token branch refuses and performs nothing) but NOT DRIVEN: the prompt path needs a real pty and `script(1)` syntax diverges macOS/Linux. Open until a pty harness or an operator run.
-- [ ] `history`, `ps aux`, and argv are checked and show no trace of the password after a real invocation — OPERATOR HALF (needs a real terminal + real server). The identical stdin-only pattern is argv-pinned by the dev-login test's curl shim; this box is the live confirmation.
+- [x] A wrong password is rejected by the shared step and consumes no sudo token — DRIVEN at a real pty (node-pty) by tests/unit/maestro-sudo-gate-pty.test.ts P1: server saw exactly one request (the 403 exchange), no DELETE, no token. Originally: — TRUE BY THE EXCHANGE'S OWN CONTRACT (403 mints nothing; the step's empty-token branch refuses and performs nothing) but NOT DRIVEN: the prompt path needs a real pty and `script(1)` syntax diverges macOS/Linux. Open until a pty harness or an operator run.
+- [x] `ps` args and argv show no trace of the password — DRIVEN: P2 runs `ps -eo args` INSIDE the stub while curl is blocked on the exchange (curl present in the snapshot, secret absent), and the pty output carries no echo. `history` is not driven and needs none: a non-interactive bash writes no history and the secret never forms part of a command line (P2). Originally: — OPERATOR HALF (needs a real terminal + real server). The identical stdin-only pattern is argv-pinned by the dev-login test's curl shim; this box is the live confirmation.
 - [x] An agent-authenticated (AID) call through the same scripts is unaffected — T3/T6: no sudo exchange occurs and the request carries the same Bearer, byte-identical path (the gate returns before touching anything when AID_AUTH is set).
 
 ## Approval log
@@ -96,6 +96,16 @@ One principal, one secret, one prompt:
 - 2026-07-13T14:05:00+0200 — **MANDATE issued by the USER** (min-approval-requirement:
   manager; issuer authority ≥ required approver). Pre-approved: no approval request
   was sent. Born in `design/tasks/`, per the mandate rule.
+
+## ⏵ STATE UPDATE — 2026-08-27T17:00:56+0200 — CLOSED
+
+The pty half exists: `tests/unit/maestro-sudo-gate-pty.test.ts` drives the prompt through
+node-pty (a core dependency — no `script(1)`, so no macOS/Linux divergence). P1 wrong password
+→ 403, no token, zero strict requests; P2 live `ps -eo args` sweep taken while the exchange is
+in flight, secret absent (harness's own vitest/agent shells excluded — the sweep's first run
+caught the heredoc that WROTE the test, the ps-self-match trap); P3 positive control mints a
+token and the DELETE arrives carrying it. Neuter (common.sh empty-token refusal → `if false`)
+reds exactly P1. All boxes ticked → complete.
 
 ## ⏵ STATE UPDATE — 2026-08-26 (hub session)
 

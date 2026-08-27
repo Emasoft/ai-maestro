@@ -69,8 +69,23 @@ Three defects found while wiring it, each fixed at the primitive rather than the
 
 NEUTERS RECORDED (each broke exactly the named tests, positive controls green):
 dispatch `per-document` → `per-nothing`: 3 red in `pillar-edit-guard.test.ts`, both positive
-controls green. `complete` out of `CHECKLIST_GATED_STATES` and `want === archived` unreachable:
-2 red in `trddgrep-new-and-move.test.ts`, one each.
+controls green.
+The second neuter was run COMBINED first — `complete` out of `CHECKLIST_GATED_STATES` AND the
+`want === archived` branch unreachable, in one run — which reddened 2 tests and was reported as
+"one each". **That attribution was wrong, and it was a guess: two mutations on one code path, one
+run.** An adversarial review named it, and the complementary runs settle it:
+
+* checklist set ALONE → exactly **1** red (`refuses to archive as complete when the acceptance
+  checklist is not finished`). So the gate IS pinned, by that one test, and that test fails when
+  and only when the gate is gone.
+* archive dispatch ALONE → **2** red (both). The branch is UPSTREAM of the checklist gate: with it
+  unreachable the dispatcher falls through to `advanceColumn`, which never archives, so the
+  checklist test cannot reach the gate at all.
+
+So the true mapping is 1-and-2, not one-each. The combined run produced the right COUNT for the
+wrong reason, which is exactly why a count is not an attribution — the repo`s own lesson
+("run the complement before naming the cause"), violated here by its own author and caught only
+because something else went looking.
 
 STILL OPEN, and why each is not a hidden landmine: `split`/`supersede`/`merge`, `migrate`
 (82 cards still carry `approval-tier:`), the structured setters, `fix` auto-invocation on the

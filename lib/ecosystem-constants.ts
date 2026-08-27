@@ -289,6 +289,26 @@ export const ROLE_PLUGIN_AUTONOMOUS = 'ai-maestro-autonomous-agent'
  */
 export const ROLE_PLUGIN_ASSISTANT = 'ai-maestro-assistant-role-agent'
 
+// ── User-scope plugins agents may use (R17.24, TRDD-C455WHV3) ────
+//
+// The WHITELIST. The host user may have any number of plugins enabled at user
+// scope; an agent's Claude Code process may use ONLY these. Every other
+// user-scope plugin is switched off in the agent's own settings.local.json by
+// `lib/user-scope-plugin-whitelist.ts` (a `false` there overrides the user
+// scope `true` for that process alone — the one lever the platform offers
+// that touches nothing at user scope). Keys are the exact `name@marketplace`
+// stamps Claude Code uses in `enabledPlugins`. Named by the USER 2026-08-27.
+//
+// Adding a name here changes R17 → `manager` approval. Mirror:
+// scripts/ecosystem-config.sh USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS.
+export const USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS: readonly string[] = [
+  'ai-maestro-janitor@ai-maestro-plugins',
+  'perfect-skill-suggester@emasoft-plugins',
+  'claude-plugins-validation@emasoft-plugins',
+  'llm-externalizer@emasoft-plugins',
+  'ai-maestro-visual-communicator-plugin@ai-maestro-plugins',
+]
+
 /** All predefined role-plugin names */
 export const PREDEFINED_ROLE_PLUGIN_NAMES = [
   ROLE_PLUGIN_PROGRAMMER,

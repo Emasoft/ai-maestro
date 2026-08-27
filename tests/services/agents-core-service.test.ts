@@ -157,6 +157,20 @@ vi.mock('child_process', () => ({
   execSync: vi.fn().mockReturnValue(''),
 }))
 vi.mock('@/lib/authorization', () => mockAuthorization)
+// R17.24 (TRDD-C455WHV3): wakeAgent runs the user-scope plugin whitelist gate beside the R17
+// core heal. This file mocks `fs` WITHOUT `promises`, so the real gate's read of
+// ~/.claude/settings.json threw and the gate FAILED CLOSED — 8 wake tests went 500, which is the
+// gate behaving exactly as designed against a fixture that predates it. Mocked like every other
+// collaborator here: a clean pass by default; the wake-wiring case below overrides it once to
+// prove wakeAgent actually consults the verdict. The gate's own behaviour is pinned in
+// tests/unit/user-scope-plugin-whitelist.test.ts against a real (temp) filesystem.
+const mockWhitelist = {
+  enforceUserScopePluginWhitelist: vi.fn(
+    async (): Promise<{ ok: boolean; disabled: string[]; alreadyDisabled: string[]; wrote: boolean; error?: string }> =>
+      ({ ok: true, disabled: [], alreadyDisabled: [], wrote: false }),
+  ),
+}
+vi.mock('@/lib/user-scope-plugin-whitelist', () => mockWhitelist)
 vi.mock('@/lib/governance', () => mockGovernance)
 vi.mock('@/lib/team-registry', () => mockTeamRegistry)
 vi.mock('@/services/sessions-service', () => mockSessionsService)
@@ -598,6 +612,42 @@ describe('lookupAgentByName', () => {
 // ============================================================================
 
 describe('wakeAgent', () => {
+  // R17.24 (TRDD-C455WHV3): the whitelist gate is WIRED, not merely tolerated. The default mock
+  // above returns a clean pass, so a wakeAgent that never called the gate would look identical
+  // to one that did — these two cases are what separate them. Neuter (observed 2026-08-27):
+  // deleting the `if (!wl.ok)` refusal in wakeAgent reds the second case only.
+  it('runs the user-scope plugin whitelist gate on every wake, for the agent\'s own workdir', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+    mockWhitelist.enforceUserScopePluginWhitelist.mockClear()
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(200)
+    expect(mockWhitelist.enforceUserScopePluginWhitelist).toHaveBeenCalledTimes(1)
+    expect(mockWhitelist.enforceUserScopePluginWhitelist).toHaveBeenCalledWith('/home')
+  })
+
+  it('refuses the wake when the whitelist gate cannot read user scope (fail closed, not fail open)', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+    mockWhitelist.enforceUserScopePluginWhitelist.mockResolvedValueOnce({
+      ok: false, disabled: [], alreadyDisabled: [], wrote: false, error: 'cannot read user-scope settings: corrupt',
+    })
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(500)
+    expect(result.error).toMatch(/whitelist could not be enforced.*corrupt/)
+    // The refusal happens BEFORE the session is created — an agent with an unknown plugin
+    // surface never starts.
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
+
   it('wakes a hibernated agent', async () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)

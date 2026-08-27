@@ -37,6 +37,18 @@ ABSTRACT_IR_DIR_NAME=".abstract"
 # ── User-Scope Plugins ──────────────────────────────────────
 MAIN_PLUGIN_NAME="ai-maestro-plugin"
 
+# The user-scope plugins an AGENT may use (R17.24, TRDD-C455WHV3). Mirror of
+# lib/ecosystem-constants.ts USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS — keep the
+# two byte-identical in order and content; a test asserts it. Every other
+# user-scope plugin is switched off per agent in its settings.local.json.
+USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS=(
+  "ai-maestro-janitor@ai-maestro-plugins"
+  "perfect-skill-suggester@emasoft-plugins"
+  "claude-plugins-validation@emasoft-plugins"
+  "llm-externalizer@emasoft-plugins"
+  "ai-maestro-visual-communicator-plugin@ai-maestro-plugins"
+)
+
 # ── Role Plugins ─────────────────────────────────────────────
 ROLE_PLUGIN_MANAGER="ai-maestro-assistant-manager-agent"
 ROLE_PLUGIN_COS="ai-maestro-chief-of-staff"

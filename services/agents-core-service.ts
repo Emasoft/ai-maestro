@@ -2292,6 +2292,29 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
           status: 400,
         }
       }
+
+      // R17.24 (TRDD-C455WHV3): the user-scope plugin WHITELIST. Every plugin the host user has
+      // enabled at user scope that is NOT on the whitelist gets `false` in THIS agent's own
+      // settings.local.json, so the Claude process about to start sees only the allowed set. It
+      // runs here — on every wake, beside the R17 core heal — because R17.18 forbids a loop and
+      // this is the pipeline that owns the file; every existing agent is covered on its next
+      // start with no back-fill. It never touches ~/.claude/settings.json (the IRON no-user-scope
+      // -writes rule): a `false` at local scope overrides the user-scope `true` for this process
+      // alone. A wake proceeds on a clean pass; an UNREADABLE user-scope file is surfaced and the
+      // wake is refused, because starting an agent with an unknown plugin surface is the exact
+      // state the whitelist exists to prevent — a lenient "read nothing, write nothing, report
+      // ok" here would be the gate passing because it read nothing.
+      if (clientType === 'claude') {
+        const { enforceUserScopePluginWhitelist } = await import('@/lib/user-scope-plugin-whitelist')
+        const wl = await enforceUserScopePluginWhitelist(workingDirectory)
+        if (!wl.ok) {
+          console.error(`[wakeAgent] R17.24 whitelist gate refused for ${agentId}: ${wl.error}`)
+          return { error: `user-scope plugin whitelist could not be enforced: ${wl.error}`, status: 500 }
+        }
+        if (wl.disabled.length > 0) {
+          console.log(`[wakeAgent] R17.24 whitelist: switched off ${wl.disabled.length} non-whitelisted user-scope plugin(s) for ${agentId}: ${wl.disabled.join(', ')}`)
+        }
+      }
     }
 
     // PRE-CREATE: build the env bag for `tmux new-session -e KEY=VAL`.

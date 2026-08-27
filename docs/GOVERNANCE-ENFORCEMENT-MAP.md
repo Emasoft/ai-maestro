@@ -193,6 +193,7 @@ Row format is fixed so a regex parses each line:
 | R17.21 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.22 | ENFORCED | services/agents-core-service.ts:1833-1866 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.23 | ENFORCED | services/agents-core-service.ts:2300-2303 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.24 | ENFORCED | services/agents-core-service.ts:2307-2318 | tests/unit/user-scope-plugin-whitelist.test.ts |
 | R18.1 | ENFORCED | services/element-management-service.ts (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.2 | ENFORCED | services/element-management-service.ts (ChangeClient::G05) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.3 | ENFORCED | services/element-management-service.ts (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |

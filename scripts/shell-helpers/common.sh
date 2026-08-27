@@ -704,12 +704,15 @@ maestro_sudo_ensure() {
     # discipline and the password appears on screen — measured by the node-pty harness
     # (TRDD-Q758CX98). Restored on return and on Ctrl-C, which is then re-raised so the
     # script still dies. Belt and braces with -s: this ORDER is pinned by a source test.
+    # If the caller's INT trap RETURNS (aimaestro-agent.sh's cleanup does), bash resumes the
+    # interrupted read — so echo is switched OFF again right after the re-raise, or the
+    # password typed next would be on screen (measured, TRDD-2PCZ6L5W).
     # The caller's own INT trap (aimaestro-agent.sh:84 has one) is SAVED and re-installed,
     # never reset to default: `trap - INT` would silently disarm it for the rest of the run.
     # Not a `local`: a RETURN trap runs as the function unwinds, when locals may be gone.
     _MAESTRO_PREV_INT="$(trap -p INT)"
     stty -echo < /dev/tty 2>/dev/null
-    trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT; kill -INT $$' INT
+    trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT; kill -INT $$; stty -echo < /dev/tty 2>/dev/null' INT
     trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT' RETURN
     printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
     IFS= read -rs _pw < /dev/tty

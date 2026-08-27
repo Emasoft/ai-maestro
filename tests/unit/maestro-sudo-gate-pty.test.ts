@@ -21,6 +21,7 @@
  *   common.sh empty-token refusal → `if false` ⇒ exactly P1 red.
  *   RETURN trap `eval prior` → `trap - INT`  ⇒ exactly P5 red.
  *   INT handler without `stty echo`          ⇒ exactly P6 red (prior trap saw `-echo`).
+ *   INT handler without the `stty -echo` after the re-raise ⇒ exactly P8 red (typed text echoed).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn as ptySpawn } from 'node-pty'
@@ -201,6 +202,26 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     const r = await runGateCtrlC('true')
     expect(r.out).not.toMatch(/RC=/)
     expect(r.signal ?? (r.code === 130 ? 2 : r.code)).toBe(2)
+  })
+
+  it('P8: a RETURNING prior INT trap resumes the read with echo still OFF, and echo is back on afterwards', async () => {
+    // The 2PCZ6L5W caller shape. Type after the ^C: the text must not appear in the pty
+    // output (echo re-disabled after the re-raise) and the final flag must be `echo`.
+    const out = await new Promise<string>((resolve) => {
+      const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT' INT; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"`], {
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+      })
+      let o = ''
+      let sent = false
+      p.onData((d) => { o += d; if (!sent && o.includes('MAESTRO password')) { sent = true; setTimeout(() => p.write('\x03'), 300); setTimeout(() => p.write(SECRET + '\r'), 1200) } })
+      const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+      p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
+    })
+    expect(out).toMatch(/PRIOR-INT/)
+    expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
+    expect(out).toMatch(/RC=1/)
+    expect(out).toMatch(/\necho\n?$/)
+    expect(seen[0]?.body).toContain(SECRET) // and it WAS the password the gate sent
   })
 
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {

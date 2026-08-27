@@ -323,6 +323,13 @@ describe('trddgrep set', () => {
     // correct content — measured. The payload must be a line the card cannot already have.
     const id = seed()
     const r = cli('set', id, 'parent-trdd', 'AAAA1111\nsuperseded-by: [BBBB2222]')
+    // THE NEUTER THAT EARNS THIS ASSERTION, because the obvious one does not: disabling the
+    // guard makes the CLI exit 0 with empty stderr, so the message check, the status check
+    // and the negative match all fail or pass together — one red, three assertions, no
+    // attribution. The isolating mutation leaves the guard FIRING and changes only its
+    // message text; then /must be one line/ reds while status stays 2, which is the only
+    // way to show the message assertion does work no status check does. Measured: 1 red.
+    //
     // MESSAGE FIRST, deliberately. The assertion a test is NAMED for must come first or a
     // weaker one ahead of it absorbs every neuter and the specific claim is never reached.
     // WHICH BRANCH SPOKE. Exit 2 alone cannot tell the injection guard from the
@@ -360,8 +367,17 @@ describe('trddgrep set', () => {
    * status:, trdd-id shape, a colon in title, the three ISO date fields, and
    * min-approval-requirement. `set` writes ANY field, so a bad value in an unpoliced one
    * lands; the doctor reports those, this gate does not refuse them.
+   *
+   * THIS TEST IS A BOUNDARY MARKER, NOT A REQUIREMENT — read this before "fixing" it.
+   * Nothing wants `severity: not-a-severity` to be writable; the test records where the
+   * gate's edge SITS today, so the edge is a fact in the suite instead of a sentence in a
+   * commit message nobody will find. It follows that IF SOMEONE ADDS severity validation
+   * THIS TEST GOES RED, and that red is the improvement landing, not a regression: move
+   * the boundary, then move this marker (or delete it, and say so). A boundary marker that
+   * is silently "repaired" back to green by weakening the new validation is the failure
+   * mode it exists to make visible.
    */
-  it('does NOT police a field outside the candidate predicate — `severity` lands unvalidated', () => {
+  it('BOUNDARY MARKER (not a requirement) — `severity` is outside the gate today and lands unvalidated', () => {
     const id = seed()
     expect(cli('set', id, 'severity', 'not-a-severity').status).toBe(0)
     expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^severity: not-a-severity$/m)

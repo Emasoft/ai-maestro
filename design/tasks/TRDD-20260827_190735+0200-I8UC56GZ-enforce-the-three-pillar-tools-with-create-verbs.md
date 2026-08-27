@@ -48,7 +48,7 @@ is the TOOLING half, without which G12.1 mandates something the tools cannot do.
 |---|---|
 | `trddgrep new` | **does not exist.** Verbs are: board · next · why · unblocks · roots · show · search · lint · validate · fix · edit · env · index-verify. No create/new/add/init |
 | `prrdgrep` create verb | **does not exist** (show · search · edit · lint · env) |
-| `specgrep` create verb | not surveyed yet — assume the same until measured |
+| `specgrep` create verb | **does not exist** — verbs READ from `specgrep help`, not grep-counted: show · search · edit · lint · env. No create under any name (`new`/`init`/`scaffold`/`mint`) |
 | lint on access/update | `prrdgrep edit` states its gate enforces the lint predicates pre-write; `trddgrep edit` is lock+CAS-guarded but **no post-write lint is documented** |
 | enforcement rule before today | **none.** The only "never hand-author, use the write verbs" text in the whole rules corpus was `markdown-memory-recall.md:142`, for **memgrep**. The memory system had this discipline; 3-pillars had the linters and no mandate |
 

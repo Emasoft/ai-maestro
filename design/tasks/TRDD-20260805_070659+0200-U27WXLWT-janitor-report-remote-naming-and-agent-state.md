@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T07:06:59+0200
-updated: 2026-08-05T07:06:59+0200
+updated: 2026-08-27T21:05:39+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -129,12 +129,16 @@ some commands pointing at the upstream, which is the one direction that must nev
 
 - [ ] the column semantics settled on `#112` — `upstream` vs `push target`, never keyed on remote NAME
 - [ ] USER decision recorded on whether to rename the remotes to the conventional layout
-- [ ] the nested-repo filter stated: real sub-projects yes, gitignored `*_dev/` scratch no
-- [ ] stopped-vs-hibernated verified against `session-control-5-state-model` and, if the distinction is not externally visible, a card filed to make it so
+- [x] the nested-repo filter stated: real sub-projects yes, gitignored `*_dev/` scratch no
+- [x] stopped-vs-hibernated verified against `session-control-5-state-model` and, if the distinction is not externally visible, a card filed to make it so
 - [ ] reply to the USER's five points naming which are ours and which are the janitor's
+- [x] **stopped-vs-hibernated — VERIFIED, and the answer is that the distinction EXISTS but not on the field an outside reader would naturally read.** `Agent['status']` is `active|idle|offline|deleted` (`types/agent.ts`) — no `hibernated` value — so hibernated, crashed and never-woken ALL read `offline` there, which is why anything reporting from `status` renders them alike. The real vocabulary is `lib/agent-hibernation.ts`: `!hasSession`→`never_woken`, live tmux→`running`, `!exists && isPersisted`→`crashed`, `!exists && !isPersisted`→`hibernated`. **The USER's model IS implemented; only the NAME differs** — their "stopped/not-running, will auto-resume" is the code's `crashed` (persistence record survives ⇒ the clean hibernate path never ran ⇒ it gets resumed), and their "hibernated, will not auto-resume" is the code's `hibernated` (`hibernateAgent` calls `unpersistSession`, so a clean sleep always drops the record). **And it IS externally visible:** `AgentHibernationRecord extends HibernationVerdict`, so every per-agent record carries `state` + a `reason` string, and `lib/janitor-daemon-publisher.ts` writes each janitor's entitled slice atomically to disk. So the janitor does not need to infer anything — it must read the roster's `state`, not `Agent.status`. That is the sentence to put on #112.
+- [ ] **BLOCKED ON THE USER — the three remaining boxes are all outward-facing or a USER call, and I did neither.** Boxes 1, 5 need a comment on the janitor's issue #112: posting to another project's tracker is outward-facing and hard to unpost, and the USER has been absent for this whole session, so I verified the CONTENT and left the SENDING. The comment writes itself from the two verified findings on this card: (a) remote-name semantics — this repo's remotes are INVERTED (`origin`=23blocks-OS upstream, `fork`=Emasoft where work and issues go), so columns must be keyed on SEMANTICS (`upstream` vs `push target`) and never on a remote's NAME, and "post the issue to origin" is WRONG here; (b) the janitor must read the hibernation roster's per-agent `state` (`running|hibernated|crashed|never_woken`, each with a `reason`, published atomically to its own slice) and NOT `Agent.status`, which collapses all three inactive states to `offline` — that collapse is the whole "everything shows inactive" complaint. Box 2 (rename our remotes to the conventional layout?) is explicitly the USER's, per this card's own STATE block: it would remove the trap at its source but touches `CLAUDE.md` and every habit that says "push to `fork`".
 
 ## Approval log
 
 - 2026-08-05T07:06:59+0200 — MANDATE issued by USER (min-approval-requirement: none). The USER
   reported these defects directly and asked for the ai-maestro-side changes. No approval request
   was sent.
+- 2026-08-27T21:05:25+0200 — column → blocked. boxes 1/2/5 need the USER: a comment on janitor#112 (outward-facing) and the remote-rename decision
+- 2026-08-27T21:05:39+0200 — column → todo. reverted from blocked — blocked-by takes TRDD ids and a USER decision is not a card; the ask is recorded in Acceptance

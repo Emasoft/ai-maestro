@@ -9,6 +9,9 @@ effort: small
 task-type: infra
 created: 2026-07-15T01:07:00+0200
 updated: 2026-08-27T18:50:33+0200
+review-after: 2026-09-27
+blocker-probe: bash /Users/emanuelesabetta/ai-maestro/scripts/check-script-drift.sh
+blocker-holds-if: exit-0
 scope: project
 approved: true
 approval-judge: ai-maestro-hub-session
@@ -78,10 +81,24 @@ What shipped instead: **`scripts/check-script-drift.sh`** — Tier-A-only (the c
 0 clean / 1 drift / 2 could-not-run. Positive control recorded: seeding one stale Tier A script
 makes it print `STALE <name>` and exit 1; restoring returns exit 0.
 
-**This card is now PARKED on that check, not on a memory.** `blocker-probe: bash
-scripts/check-script-drift.sh` + `blocker-holds-if: exit-0` (TRDD-CV5KDCB7's convention, shipped
-this morning): the reason to stay parked — *no Tier A drift, so no watchdog is warranted* — is
-re-derivable by a machine forever. If Tier A drifts again the probe exits 1, the blocker no longer
+**This card is PARKED on that check.** `blocker-probe:` (absolute) + `blocker-holds-if: exit-0`
+(TRDD-CV5KDCB7's convention, shipped this morning): the reason to stay parked — *no Tier A drift,
+so no watchdog is warranted* — is re-DERIVABLE by a machine, a weaker claim than re-derivED:
+
+> **What actually wakes this card today is `review-after: 2026-09-27` — a date, i.e. the
+> "someone remembers" mechanism the probe convention exists to replace.** Nothing evaluates the
+> probe yet: the janitor's `stale-blocker` detector ships DISABLED by default (§Part 2 records
+> that), and when enabled their condition 4 refuses a probe whose root is agent-writable — which
+> `scripts/` in this repo is. The probe is **human-run** for now.
+>
+> **Three defects in the first draft of this park, all self-inflicted, all caught only after a
+> commit had claimed otherwise:** (i) the recorded command was RELATIVE, so from any cwd but the
+> repo root it exits **127** — it would have unparked this card permanently for a reason unrelated
+> to drift (review fork caught it; now absolute, matching X4RK1NUW); (ii) the three frontmatter
+> fields were **never written** — the insert anchored on a `created-by:` line this card does not
+> have and failed silently; (iii) `trddgrep validate` reading 5 ERRORs was taken as confirmation,
+> but 5 is exactly what their ABSENCE also produces, so the check confirmed nothing. Claiming a
+> guarantee the artifact does not carry is the failure class this card was filed about. If Tier A drifts again the probe exits 1, the blocker no longer
 holds, and this card comes back with evidence instead of a hunch. THAT is the trigger to
 reconsider (b), the host-level sweep — not before.
 

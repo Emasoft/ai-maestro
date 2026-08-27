@@ -1,9 +1,9 @@
 ---
 trdd-id: IIXYIU7G
 title: The always-loaded lessons file grows ~6KB per day with no budget or ceiling
-column: todo
+column: complete
 created: 2026-08-27T14:30:07+0200
-updated: 2026-08-27T14:30:07+0200
+updated: 2026-08-27T16:55:15+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -80,10 +80,23 @@ deletions.
 
 ## Acceptance
 
-- [ ] A policy decided for what stays always-loaded vs moves to an on-demand reference
-- [ ] The file brought under a stated ceiling, with the ceiling asserted by a test
-- [ ] No lesson deleted in the process — relocation only
-- [ ] The growth curve re-measured after the change and recorded here
+- [x] A policy decided for what stays always-loaded vs moves to an on-demand reference
+- [x] The file brought under a stated ceiling, with the ceiling asserted by a test
+- [x] No lesson deleted in the process — relocation only
+- [x] The growth curve re-measured after the change and recorded here
+
+## Resolution — 2026-08-27T16:55:15+0200
+
+Policy: an entry ≤ 500 chars stays in the always-loaded core; longer entries relocated VERBATIM,
+same section headings, to `.claude/rules-reference/lessons-verification-full.md`. Ceiling 96 KB on
+the core + the 500-char cap asserted by `tests/governance/lessons-file-budget.test.ts` (neuter:
+lowering either limit reds exactly its own test).
+
+Re-measured after the split: core **88 077 B** (was 282 242; 279 entries kept), reference
+195 239 B (190 entries moved). 469 entries before, 469 after — every original entry verified
+present in exactly one of the two files by the split script. Future growth: only ≤500-char
+entries can land in the core, and the ceiling test reds at 96 KB, so the curve is now bounded
+rather than linear.
 
 ## Approval log
 

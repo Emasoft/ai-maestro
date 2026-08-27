@@ -32,12 +32,41 @@ beforeAll(() => {
   script = join(dir, 'aimaestro-continuity.sh')
   copyFileSync(REAL_SCRIPT, script)
   mkdirSync(join(dir, 'shell-helpers'), { recursive: true })
-  // Stub the sourced helpers: check_jq passes, and _api CAPTURES the request as a
-  // single line `API <METHOD> <PATH> <BODY>` instead of hitting the network. The
-  // script sources ${SCRIPT_DIR}/shell-helpers/common.sh first, so this wins.
+  // Stub the sourced helpers ONE LAYER DOWN from where this file used to stub them.
+  //
+  // It used to define `_api` here, on the theory that "the script sources common.sh
+  // first, so this wins". That stopped being true at 20f44bad (TRDD-39OPYXQ9), which
+  // moved `_api` INTO the script, defined AFTER the source line — so the script's own
+  // `_api` shadowed the stub, called the real get_api_base, and died exit 127
+  // (`get_api_base: command not found`). Both request-shape tests went red on a
+  // fixture defect, not a behaviour change.
+  //
+  // So the capture now lives in a `curl` shadow, and the real `_api` runs end to end:
+  // base resolution, auth args, the status-code parse, the >=400 branch. Only the
+  // network is faked. The capture line is emitted by the request, so a verb that never
+  // reaches `_api` (the positional-target rejection) still prints no `API` line — the
+  // property the third test relies on. The fake response is a body line plus `200`,
+  // matching `-w '\n%{http_code}'`, so the parse below the call sees a real status.
+  //
+  // curl's argv: `-s -w <fmt> --max-time 30 -X <METHOD> [auth/sudo -H …] [-H … -d <BODY>] <URL>`.
+  // The URL is the LAST arg; METHOD follows -X; BODY follows -d. Nothing else is parsed.
   writeFileSync(
     join(dir, 'shell-helpers', 'common.sh'),
-    'check_jq() { return 0; }\n_api() { printf "API %s %s %s\\n" "$1" "$2" "${3:-}"; }\n',
+    [
+      'check_jq() { return 0; }',
+      'get_api_base() { printf "%s" "http://stub"; }',
+      'get_auth_args() { eval "$1=()"; }',
+      'curl() {',
+      '  local method="" body="" url="" prev=""',
+      '  for a in "$@"; do',
+      '    case "$prev" in -X) method="$a";; -d) body="$a";; esac',
+      '    prev="$a"; url="$a"',
+      '  done',
+      '  printf "API %s %s %s\\n" "$method" "${url#http://stub}" "${body:-}"',
+      '  printf "{}\\n200\\n"',
+      '}',
+      '',
+    ].join('\n'),
   )
 })
 

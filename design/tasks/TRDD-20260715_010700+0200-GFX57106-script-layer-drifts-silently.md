@@ -1,14 +1,14 @@
 ---
 trdd-id: GFX57106
 title: Nothing keeps the installed script layer in sync, so the fleet cannot reach verify
-column: planned
+column: backburner
 min-approval-requirement: none
 priority: 1
 severity: high
 effort: small
 task-type: infra
 created: 2026-07-15T01:07:00+0200
-updated: 2026-08-27T18:33:43+0200
+updated: 2026-08-27T18:50:33+0200
 scope: project
 approved: true
 approval-judge: ai-maestro-hub-session
@@ -60,7 +60,37 @@ plugin API. A plugin must never call them."*
 2. **"every `scripts/*.sh` … byte-identical" is the wrong SSOT.** `docs/SCRIPT-MANIFEST.md`
    tiers are the SSOT; Tier A is the contract, Tier C is explicitly not.
 
-### NEXT ACTION — a DESIGN decision, not code
+### DECIDED 2026-08-27T18:50 — build nothing; park on a runnable probe
+
+**Advisor consulted and did not return within 24 min** (fable-advisor, still running when this was
+written) — recorded per advisor-rules rather than blocking the board further. The decision is the
+CONSERVATIVE one, which is the direction an advisor would be least likely to overturn: no new
+runtime writer.
+
+**Verdict: (c) + a check.** The harm this card exists to prevent was 4 stale files, fixed by one
+`cp`. Everything still drifted is Tier C — *"not a plugin API. A plugin must never call them."* A
+5-minute watchdog writing into a shared `~/.local/bin` forever, with clobber risk, to automate a
+step that fails a few times a year, is the trade going the wrong way. The per-agent row the body
+proposes is additionally wrong in shape (see above).
+
+What shipped instead: **`scripts/check-script-drift.sh`** — Tier-A-only (the contract set), exit
+0 clean / 1 drift / 2 could-not-run. Positive control recorded: seeding one stale Tier A script
+makes it print `STALE <name>` and exit 1; restoring returns exit 0.
+
+**This card is now PARKED on that check, not on a memory.** `blocker-probe: bash
+scripts/check-script-drift.sh` + `blocker-holds-if: exit-0` (TRDD-CV5KDCB7's convention, shipped
+this morning): the reason to stay parked — *no Tier A drift, so no watchdog is warranted* — is
+re-derivable by a machine forever. If Tier A drifts again the probe exits 1, the blocker no longer
+holds, and this card comes back with evidence instead of a hunch. THAT is the trigger to
+reconsider (b), the host-level sweep — not before.
+
+### Superseded — do NOT carry forward
+
+The body's `## Proposed fix` (a `script-layer` row in `lib/agent-invariants.ts`, triggers
+create·wake·periodic). Wrong home (per-HOST resource in a per-AGENT registry), wrong SSOT
+(`scripts/*.sh` instead of the manifest tiers), and unwarranted by the measured harm.
+
+### Former NEXT ACTION — a DESIGN decision, not code
 
 Advisor consulted 2026-08-27T18:33 (verdict pending at the time of writing; record it here before
 building). The open question is whether a runtime writer should exist **at all**: the harm this

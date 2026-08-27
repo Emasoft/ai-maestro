@@ -1,4 +1,7 @@
 /**
+ * NEUTER (2026-08-27, direct insert then git checkout, restore verified): making Ctx.Line treat
+ * `/*` as a block opener — i.e. regressing to the bug — reds exactly THE BUG test, 1 red / 7 green.
+ *
  * Pins every enclosing context `stripComments` claims to handle. The first case is THE motivating
  * shape (TRDD-ENFCF8O7) and is asserted against the OLD strip too, so this file cannot pass while
  * the bug it fixes is still reproducible — a fixture that only proves the new code is right would

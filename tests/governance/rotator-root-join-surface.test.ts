@@ -141,6 +141,54 @@ function nonJoinUses(files: string[]): string[] {
   return out.sort()
 }
 
+/**
+ * Every call whose FIRST ARGUMENT is a bare `root` inside the rotator — i.e. an operation on the
+ * root ITSELF rather than on a path under it.
+ *
+ * This is the assertion that actually pins "no whole-tree operation reaches the store". The two
+ * enumerations above do not: the join scan sees only joins, and the non-join scan sees only lines
+ * where a root is BOUND. Proven by neuter — `fs.mkdirSync(root` → `fs.rmSync(root` reddened 0 of 4
+ * against those two, because the mutated line names no accessor and performs no join. A guarantee
+ * the test does not provide is the failure this whole file exists to catch, so it is recorded
+ * rather than quietly fixed.
+ *
+ * KNOWN BLIND SPOT, stated rather than left implicit: the regex needs an IDENTIFIER immediately
+ * before `(root`, so an immediately-invoked expression — `(deps.tickAgeS ?? tickCompletedAgeS)(root,
+ * now)` in supervisor.ts — is invisible to it. That one was read by hand and joins
+ * `tick-completed.ts`. A text scan cannot close this; naming it is what stops the next reader
+ * assuming it did.
+ */
+const ROOT_ARG_REVIEWED = [
+  // CREATE-ONLY and idempotent — cannot read, copy or remove. The one whole-root operation here.
+  'lib/oauth-rotator/decision-log.ts: fs.mkdirSync(root',
+  // Not fs at all — join a filename under the root, and read one flag file.
+  'lib/oauth-rotator/decision-log.ts: rotatorLogPath(root',
+  'lib/oauth-rotator/supervisor.ts: optInPresent(root',
+  // Pass the root ONWARD; each callee joins a known file (slots/, state.json,
+  // cookie-leg-since.json). Neither walks the root, and neither can reach `profiles`.
+  'lib/oauth-rotator/supervisor.ts: slotFacts(root',
+  'lib/oauth-rotator/supervisor.ts: trackCannotSelfRenew(root',
+].sort()
+
+/** `someCall(root,` / `someCall(root)` — the first argument is the root itself. */
+const ROOT_ARG = /([A-Za-z_$][\w$.]*)\(\s*root\s*[,)]/g
+
+function rootArgCalls(files: string[]): string[] {
+  const out = new Set<string>()
+  for (const f of files) {
+    if (!f.startsWith('lib/oauth-rotator/')) continue
+    for (const line of fs.readFileSync(path.join(REPO, f), 'utf-8').split('\n')) {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue
+      for (const m of line.matchAll(ROOT_ARG)) {
+        if (m[1] === 'if' || m[1] === 'for' || m[1] === 'while' || m[1] === 'return') continue
+        if (m[1] === 'join' || m[1] === 'path.join') continue // the JOIN scan owns these
+        out.add(`${f}: ${m[1]}(root`)
+      }
+    }
+  }
+  return [...out].sort()
+}
+
 describe('what this project joins onto the rotator root', () => {
   const { literal, dynamic, files } = scan()
 
@@ -170,5 +218,14 @@ describe('what this project joins onto the rotator root', () => {
         'reach anything operating on a TREE rather than a file? If so it can touch the cookie ' +
         'store without joining `profiles`. Then add it to NON_JOIN_REVIEWED with what it does.',
     ).toEqual(NON_JOIN_REVIEWED)
+  })
+  it('every operation taking the ROOT ITSELF has been reviewed', () => {
+    expect(
+      rootArgCalls(sources()),
+      'a call is operating on a rotator ROOT rather than a path under it. Under the legacy opt-in ' +
+        'that root physically CONTAINS the cookie store, so a recursive read, copy or removal ' +
+        'reaches every account\u2019s cookies while joining no segment. Read it and add it to ' +
+        'ROOT_ARG_REVIEWED with what it does.',
+    ).toEqual(ROOT_ARG_REVIEWED)
   })
 })

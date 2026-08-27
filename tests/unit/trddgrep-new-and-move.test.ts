@@ -258,9 +258,97 @@ describe('trddgrep move — the on-touch approval-tier migration', () => {
     expect(text).toMatch(/^min-approval-requirement: none$/m)
   })
 
+  /**
+   * THE SECOND, INDEPENDENT PROTECTION — and the one the test above cannot see.
+   *
+   * A body-only tier line is safe because of the HEAD-SLICE guard (detection). A card
+   * carrying the field in BOTH places is safe for a different reason: the replace regex
+   * has no `/g`, so it takes the FIRST match, which is the frontmatter's. Add `/g` — a
+   * plausible "make it thorough" edit — and the body line vanishes silently with the
+   * head-slice guard fully intact and every other test green. Named by an adversarial
+   * review that first filed it as not worth a run, then corrected itself.
+   */
+  it('migrates the FRONTMATTER line and leaves an identical BODY line standing', () => {
+    const id = seedWithTier(['approval-tier: 2'])
+    const file = only('tasks')
+    fs.appendFileSync(file, '\n```yaml\napproval-tier: 2\n```\n')
+    git('add', '-A'); git('commit', '-qm', 'seed both')
+    expect(cli('move', id, 'testing').status).toBe(0)
+    const text = fs.readFileSync(only('tasks'), 'utf-8')
+    expect(text).toMatch(/^min-approval-requirement: manager$/m)
+    // Exactly ONE line remains, and it is the one inside the fence.
+    expect(text.split('\n').filter((l) => l.startsWith('approval-tier:'))).toEqual(['approval-tier: 2'])
+    expect(text).toMatch(/```yaml\napproval-tier: 2\n```/)
+  })
+
   it('leaves an UNDECODABLE tier number for a human', () => {
     const id = seedWithTier(['approval-tier: 9'])
     expect(cli('move', id, 'testing').status).toBe(0)
     expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^approval-tier: 9$/m)
+  })
+})
+
+/**
+ * TRDD-I8UC56GZ — `trddgrep set`, the verb that removes the LINE NUMBER from a field edit.
+ */
+describe('trddgrep set', () => {
+  const seed = () => {
+    expect(cli('new', '--title', 'a card to set', '--task-type', 'infra', '--author', 'probe').status).toBe(0)
+    const file = only('tasks')
+    git('add', '-A'); git('commit', '-qm', 'seed')
+    return idOf(file)
+  }
+
+  it('INSERTS a field that is absent — the shape a regex patch fails at silently', () => {
+    // The failure this verb exists to prevent: a patch anchored on a line the card does
+    // not have matches nothing, writes nothing, and reports nothing.
+    const id = seed()
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toMatch(/^priority:/m)
+    expect(cli('set', id, 'priority', '0').status).toBe(0)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^priority: 0$/m)
+  })
+
+  it('refuses `column` and points at the verb that owns the other half of the transition', () => {
+    const id = seed()
+    const r = cli('set', id, 'column', 'completed')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/trddgrep move/)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^column: backburner$/m)
+  })
+
+  it('refuses a value carrying a newline — the frontmatter-injection shape', () => {
+    // `parent: "X\nmandate: true"` would forge the approval record the zone routing gates.
+    // NOT `mandate: true` as the payload: a self-mandate card legitimately carries that
+    // line already, so asserting its absence would have failed against the card's own
+    // correct content — measured. The payload must be a line the card cannot already have.
+    const id = seed()
+    const r = cli('set', id, 'parent-trdd', 'AAAA1111\nsuperseded-by: [BBBB2222]')
+    expect(r.status).toBe(2)
+    const text = fs.readFileSync(only('tasks'), 'utf-8')
+    expect(text).not.toMatch(/^superseded-by:/m)
+    expect(text).not.toMatch(/^parent-trdd:/m)
+  })
+
+  it('bumps `updated:` by default and leaves it alone under --no-bump', () => {
+    const id = seed()
+    // Compared as a STRING, never as a regex built from it: an ISO stamp carries a `+`
+    // for its offset, and hand-escaping that into a pattern is a step this assertion does
+    // not need — the first version of this test over-escaped it and reddened against
+    // correct code.
+    const updatedOf = () => fs.readFileSync(only('tasks'), 'utf-8').match(/^updated: (.+)$/m)![1]
+    const before = updatedOf()
+    expect(cli('set', id, 'severity', 'major', '--no-bump').status).toBe(0)
+    expect(updatedOf()).toBe(before)
+    // The board sorts on `updated:`, so a MECHANICAL repair that bumped it would silently
+    // reorder the whole board — the distinction the doctor's fixer already reports.
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^severity: major$/m)
+  })
+
+  it('is judged by the SAME candidate gate as edit — an illegal value is refused', () => {
+    const id = seed()
+    const r = cli('set', id, 'min-approval-requirement', 'emperor')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/not a governance title/)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toMatch(/emperor/)
   })
 })

@@ -27,6 +27,7 @@ import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pill
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
 import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT } from './trdd-vocabulary'
+import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
@@ -778,6 +779,73 @@ export type ArchiveState = 'complete' | 'completed' | 'cancelled' | 'superseded'
  * checklist from abandoned or overtaken work would make honest closure impossible.
  */
 const CHECKLIST_GATED_STATES: ReadonlySet<string> = new Set(['complete', 'completed', 'published', 'live'])
+
+
+/**
+ * SET one frontmatter field, under the document lock, through the same candidate gate
+ * `trddgrep edit` is judged by (TRDD-I8UC56GZ).
+ *
+ * WHY THIS EXISTS. Before it, changing a field meant `trddgrep edit --at-line N --expect
+ * … --replace …` — a LINE NUMBER standing in for the field you meant. The staleness
+ * guard makes that safe against a moved line, but nothing makes it safe against a field
+ * that is simply ABSENT: the card this very session hand-authored was patched twice with
+ * a regex anchored on a `created-by:` line it did not have, both inserts failed SILENTLY,
+ * and the card then claimed a state it did not carry. `setFrontmatterField` inserts a
+ * missing field rather than matching nothing, so the no-op shape cannot occur.
+ *
+ * `column` is REFUSED here on purpose. A column change is half of a transition — the
+ * other half is the zone `git mv` — and a verb that wrote one without the other is how a
+ * card ends terminal in the OPEN zone. `moveTrdd` owns that, and pointing at it is more
+ * use than performing half of it.
+ *
+ * `bump` defaults TRUE: a field set changes what the card ASSERTS, and the board sorts on
+ * `updated:`. A mechanical repair (a re-spelling that changes no fact) passes false, the
+ * same mechanical/semantic split the doctor's fixer already reports.
+ */
+export function setTrddField(
+  designDir: string,
+  id: string,
+  field: string,
+  value: string,
+  opts: { iso: string; bump?: boolean } = { iso: isoLocal().iso },
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
+    const trdd = findTrdd(designDir, id)
+    if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    if (field === 'column') {
+      return {
+        ok: false,
+        status: 409,
+        error: 'refusing to set `column:` directly — a column change is half of a transition, and writing it without the zone `git mv` is how a card ends terminal in the OPEN zone. Use `trddgrep move <id> <column>`',
+      }
+    }
+    // A newline in the value would write ARBITRARY frontmatter — `parent: "X\nmandate:
+    // true"` forges the exact approval record the zone routing exists to gate. The same
+    // guard createTrdd carries, for the same reason, on the other write path.
+    if (/[\r\n\u0000-\u001f]/.test(value) || /[\r\n\u0000-\u001f:\s]/.test(field)) {
+      return { ok: false, status: 400, error: 'field and value must be one line, and a field name carries no colon or whitespace' }
+    }
+    let content = fs.readFileSync(trdd.filePath, 'utf-8')
+    content = migrateLegacyApprovalTier(content).content
+    content = setFrontmatterField(content, field, value)
+    if (opts.bump !== false) content = setFrontmatterField(content, 'updated', opts.iso)
+
+    // THE SAME GATE, on the same bytes, inside the same lock. A setter that skipped it
+    // would be a second write path with a second (absent) predicate — the drift this
+    // card exists to remove.
+    const zone = trdd.zone
+    const violations = introducedViolations(
+      candidateFrontmatter(fs.readFileSync(trdd.filePath, 'utf-8').split('\n')),
+      candidateFrontmatter(content.split('\n')),
+      zone,
+    )
+    if (violations.length) {
+      return { ok: false, status: 409, error: `refusing the set — it would introduce: ${violations.join('; ')}` }
+    }
+    atomicWriteSync(trdd.filePath, content)
+    return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+  })
+}
 
 /** ARCHIVE a once-approved TRDD → an archived column (git mv → archived/). */
 export function archiveTrdd(

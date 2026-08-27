@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T19:07:35+0200
-updated: 2026-08-27T19:31:32+0200
+updated: 2026-08-27T19:48:58+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -19,7 +19,7 @@ approval-judge: user
 approval-datetime: 2026-08-27T19:07:35+0200
 priority: 0
 severity: major
-effort: M
+effort: L
 release-via: none
 labels: [governance, three-pillars, tooling]
 npt: []
@@ -199,7 +199,14 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 - [x] **`migrate`** — the on-next-touch field migrations the rules already mandate
       (`approval-tier:` → `min-approval-requirement:`, v1 `status:` → `column:`), applied by the
       tool instead of by each agent remembering
-- [ ] **Structured field updates** (`set`, `add-box`, `check-box`, `append-state`) so an agent
+- [~] **Structured field updates** — `set` DONE; `add-box`/`check-box`/`append-state` remain.
+      `trddgrep set <id> <field> <value>` writes ONE frontmatter field with no line number
+      anywhere in the call, INSERTS the field when absent (the shape a regex patch fails at
+      silently — the GFX57106 failure), refuses `column` (half a transition; move owns it),
+      refuses a newline in the value (the injection shape), and is judged by the SAME candidate
+      gate as `edit`. `--no-bump` for a mechanical repair, because the board sorts on `updated:`.
+      The three BODY setters are the remainder; this card was updated with `set` itself.
+      (original box text) so an agent
       never regex-patches frontmatter — the failure that produced TWO silent no-ops on
       TRDD-GFX57106 this session
 - [x] **The TRDD pre-write gate is a NO-OP today — make it real.** `pillarPreWriteCheck` early-

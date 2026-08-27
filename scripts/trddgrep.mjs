@@ -218,7 +218,7 @@ const KNOWN_FLAGS = new Set([
 // `new` and `move` join `edit` in the exemption for the same stated reason: a MUTATING
 // verb must never IGNORE a token, and an allowlist can only ever ignore. Each rejects
 // every token it did not consume, which is strictly stronger than this check.
-const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move'])
+const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move', 'set'])
 if (!STRICT_PARSE_VERBS.has(cmd)) {
   const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
   if (unknownFlag) {
@@ -1082,6 +1082,39 @@ switch (cmd) {
     process.exit(0)
   }
 
+  // ---- SET one frontmatter field. The verb that removes the LINE NUMBER from a field edit.
+  //
+  // `edit --at-line N --expect … --replace …` makes a line number stand in for the field
+  // you meant. Its staleness guard covers a MOVED line and cannot cover an ABSENT one:
+  // the card hand-authored earlier today was patched twice with a regex anchored on a
+  // `created-by:` line it did not have, both inserts failed SILENTLY, and the card then
+  // claimed a state it did not carry. A setter that INSERTS a missing field cannot
+  // produce that shape.
+  case 'set': {
+    const field = argv[2]
+    const value = argv[3]
+    if (!arg || !field || value === undefined) {
+      console.error('trddgrep: `set` needs an id, a field and a value — `trddgrep set <id> <field> <value>`')
+      process.exit(2)
+    }
+    let setRest = argv.slice(4)
+    const noBump = setRest.includes('--no-bump')
+    setRest = setRest.filter((t) => t !== '--no-bump')
+    if (setRest.length > 0) {
+      console.error(`trddgrep: unrecognised argument(s) on \`set\`: ${setRest.join(' ')} — see \`trddgrep help\``)
+      process.exit(2)
+    }
+    const { setTrddField, isoLocal } = await import('../lib/trdd-store.ts')
+    const res = await setTrddField(designDir, arg, field, value, { iso: isoLocal().iso, bump: !noBump })
+    if (!res.ok) {
+      console.error(`trddgrep: ${res.error}`)
+      process.exit(res.status === 404 ? 1 : 2)
+    }
+    console.log(C.g(`${C.b(res.id)}  ${field}: ${value}`))
+    console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}${noBump ? '  (mechanical — updated: untouched)' : ''}`))
+    process.exit(0)
+  }
+
   // ---- MOVE. The column edit AND the zone `git mv`, as ONE operation.
   //
   // A transition is two hand steps today — edit `column:`, then `git mv` between
@@ -1227,6 +1260,11 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  The ZONE is decided by AUTHORITY vs the floor, never by a flag: at or above it the')}
   ${C.d('  card is a self-approved MANDATE in tasks/, below it a proposal awaiting the approver.')}
   ${C.d('  --authority defaults to none — the only default that can never over-grant.')}
+
+  ${C.c('trddgrep set <id> <field> <value>')}   one frontmatter field, no line numbers
+  ${C.d('  --no-bump   a MECHANICAL repair — leaves `updated:` alone so the board order holds.')}
+  ${C.d('  Inserts the field when absent, so the silent no-op a regex patch produces cannot')}
+  ${C.d('  happen. Refuses `column` — that is half a transition; use move.')}
 
   ${C.c('trddgrep move <id> <column>')}   the column edit AND the zone git-mv, as ONE operation
   ${C.d('  --approver W --reason TEXT --superseded-by ID')}

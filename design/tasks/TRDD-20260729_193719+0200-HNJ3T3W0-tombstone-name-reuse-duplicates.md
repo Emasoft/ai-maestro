@@ -8,7 +8,7 @@ updated: 2026-08-27T22:54:44+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:02:08+0200
-blocked-by: [TRDD-3Q4G9ZK6]
+blocked-by: []
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager

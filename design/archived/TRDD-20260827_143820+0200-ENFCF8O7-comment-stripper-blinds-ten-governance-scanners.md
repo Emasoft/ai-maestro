@@ -1,9 +1,9 @@
 ---
 trdd-id: ENFCF8O7
 title: A block-first comment stripper blinds ten governance scanners over arbitrary regions
-column: todo
+column: complete
 created: 2026-08-27T14:38:20+0200
-updated: 2026-08-27T14:38:20+0200
+updated: 2026-08-27T15:29:37+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -24,7 +24,7 @@ release-via: none
 labels: [governance, security, tooling, detector]
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [4d155c53, 47848d73, 77e50b31]
 ---
 
 # A block-first comment stripper blinds ten governance scanners over arbitrary regions
@@ -97,14 +97,15 @@ comment AND inside a string literal — one is not the other.
 
 ## Acceptance
 
-- [ ] The stripper fixed in ONE shared place, not ten copies
-- [ ] A test feeding a fixture with `/**` in a line comment, in a string, and in a regex literal
-- [ ] A per-file assertion that the stripped line count is within a sane fraction of the raw count, so a future blinding reddens instead of removing findings
-- [ ] All ten consumers re-run and their allowlists/ratchets re-derived from the corrected scan
-- [ ] `headless-router.ts` re-assessed against the fixed scanner and its allowlist entry re-justified or removed on real evidence
+- [x] The stripper fixed in ONE shared place, not ten copies — `tests/helpers/strip-comments.ts`, a context-aware tokenizer; all ten import it
+- [x] A test feeding a fixture with `/**` in a line comment, in a string, and in a regex literal — `strip-comments.test.ts`, 8 cases; the motivating case is asserted AGAINST the old strip too
+- [x] ~~A per-file line-count floor~~ MOOT, deliberately: the tokenizer PRESERVES line count (comment bytes become spaces, newlines kept — pinned by a test), so stripped == raw by construction and a ratio check would be vacuous. The regression guard is instead the neuter: regressing the tokenizer toward the bug reds THE BUG test (1 red / 7 green), and restoring the old strip in r51 reds r51 on the headless-router row
+- [x] All ten consumers re-run and their allowlists/ratchets re-derived from the corrected scan — r51 re-derived BEFORE wiring: 6 unwrapped, exactly the existing set at MAX_UNWRAPPED=6; every other consumer green with NO set change. Full suite 483/483
+- [x] `headless-router.ts` re-assessed against the fixed scanner — two stores (team-registry + agent-import), unwrapped, entry stays; the earlier ratchet-down was wrong and its revert is confirmed
 
 ## Approval log
 
 - 2026-08-27T14:38:20+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Tier-0 self-mandate:
   measurement and filing. The fix touches ten governance scanners and is deliberately NOT done
   here — it needs its own change with the fixture above, not a same-turn patch.
+- 2026-08-27T15:29:37+0200 — COMPLETED by hub-claude. Helper 4d155c53, neuter record 47848d73, wiring 77e50b31. No allowlist grew, no ratchet moved; the instrument was the only thing wrong.

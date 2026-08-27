@@ -173,9 +173,9 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   })
 
   // P6/P7 drive the Ctrl-C path — the one path P4/P5 never executed. Measured first
-  // (2026-08-27, four bounded probes): a NON-exiting prior INT trap hangs the interrupted
-  // `read` in bash ITSELF (a bare `read -rs` with `trap 'echo x' INT` hangs identically, and so
-  // did the pre-hardening gate) — pre-existing, not this gate's, so the prior trap here EXITS,
+  // (2026-08-27, bounded probes): with a NON-exiting prior INT trap bash RESUMES the interrupted
+  // `read` — ^C is swallowed and Enter completes the read (a bare `read -rs` behaves the same,
+  // and so did the pre-hardening gate; TRDD-2PCZ6L5W) — pre-existing, so the prior trap here EXITS,
   // as a real caller's does. It runs AFTER the gate's handler, so it can read the tty flag.
   function runGateCtrlC(prelude: string): Promise<{ code: number; signal: number | undefined; out: string }> {
     return new Promise((resolve) => {

@@ -47,6 +47,14 @@ last 9 days). At that rate it passes 450 KB by October. ~282 KB is roughly 70k t
 at the 0.1x cache-read rate that is ~7k weighted tokens on every turn, before anyone
 does any work.
 
+**The two token figures above are ESTIMATES and are marked as such deliberately** — the byte
+curve is measured, they are derived. `~70k tokens` assumes ~4 chars/token (bytes/char measured
+at **1.007**, so the file is effectively pure ASCII and the byte count is a fair stand-in for
+chars); `~7k weighted` applies the 0.1x cache-read rate as documented in the token-economy rule,
+not as measured here. Both would need a real tokenizer to become facts. The card exists so a
+measurement does not rot, which is exactly why a derived number in it must not wear a
+measurement's formatting.
+
 There is no budget, no rotation, no ceiling test, and no policy for what earns a
 permanent per-turn cost. That is the shape of a guard nobody maintains until someone
 deletes the whole thing — and the content is genuinely valuable, which is exactly what

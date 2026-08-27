@@ -11,6 +11,12 @@
  * — the whole point of this file is to make it a standing check instead, so the day someone adds
  * a segment they have to say so here rather than discover it from a peer's corrupted vault.
  *
+ * NEUTER RUN (2026-08-27 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/'live-identity.json'/'profiles'/ in lib/oauth-rotator/rotate.ts
+ *   → 1 red / 2 green, the red being `joins ONLY the known segments — and never profiles`.
+ *   Its FIRST attempt reddened 0 of 3 while that mutation sat in the tree, because this scan
+ *   then read the INDEX; that is what the worktree fix below is for.
+ *
  * This is a TEXT scan and therefore a proxy: it cannot see a segment built from a variable, and
  * `root` is a name, not a thing — its first run proved both by flagging four joins onto roots that
  * have nothing to do with the rotator (TRDD zones, the browser-profile base). So the unreadable

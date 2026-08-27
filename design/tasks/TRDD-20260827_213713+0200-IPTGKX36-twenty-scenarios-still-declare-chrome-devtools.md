@@ -1,9 +1,10 @@
 ---
 trdd-id: IPTGKX36
 title: Twenty scenario files still declare the deprecated chrome-devtools required_tools block instead of browser_stack dev-browser
-column: planned
+column: ai_review
 created: 2026-08-27T21:37:13+0200
-updated: 2026-08-27T21:37:13+0200
+updated: 2026-08-27T21:44:37+0200
+implementation-commits: [55e5c3f4]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -49,12 +50,33 @@ hand-authored YAML and a regex that misses one file's indentation silently no-op
 - `tests/scenarios/scripts/scenario-setup.sh <NNN>` still parses each file's frontmatter (the
   `yq` fail-fast parser would abort on a broken block).
 
+## Implemented — 2026-08-27, in commit 55e5c3f4 — 22 files, not 20
+
+The card's scan set was "files carrying the deprecated tools block". Running the acceptance sweep
+over ALL 40 files instead of over that set found **two more**: SCEN-003 and SCEN-013 had migrated
+their tools block long ago but still carried `Chrome browser open with DevTools accessible via
+CDP`. Invisible to the card's own predicate by construction; fixed in the same pass. And the
+Problem statement above undercounted the CDP line — "18 of them" was measured with a regex that
+missed the second spelling (`Chrome browser with DevTools accessible`, SCEN-019); the true count
+inside the 20 was 17 (three files had no Chrome line at all), plus the two stragglers = 19 removed.
+
+Three parallel workers did the 20 edits from a written spec; their reports summed to 19 Chrome
+lines removed inside the 20 while the diff says 17 — two over-counted. The diff is what is
+recorded; every worker claim was re-verified per file rather than tallied.
+
 ## Acceptance
 
-- [ ] 0 files match `mcp__chrome-devtools`.
-- [ ] 0 files match the CDP prerequisite.
-- [ ] All 20 carry `browser_stack: dev-browser`.
-- [ ] Setup's frontmatter parser accepts every edited file.
+- [x] 0 of 40 files match `mcp__chrome-devtools` (was 20).
+- [x] 0 of 40 files match a Chrome/CDP prerequisite, BOTH spellings (was 22 — 20 + the two
+      stragglers).
+- [x] 40 of 40 carry `browser_stack: dev-browser` (the other 18 already did at HEAD).
+- [x] Setup's own fail-fast `yq` parser accepts all 22 edited files, exercised through
+      `assert-clean-governance.sh` (which reads the frontmatter on the real setup path) — 0
+      parse problems. Not my own awk; the gate the runner actually hits.
+- [x] No edit landed below any file's frontmatter: every diff hunk in all 22 files sits above
+      line 60; the body prose that still mentions chrome-devtools historically is untouched.
+- [x] Gates: tsc 0 · 6511 passed / 492 files · pillars:lint 0 · `trddgrep validate` 266
+      (unchanged).
 
 ## Approval log
 

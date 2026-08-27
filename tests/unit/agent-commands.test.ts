@@ -25,7 +25,16 @@ describe('agent-commands allowlist (TRDD-TBGGUA2V P2)', () => {
     // The send path is no-shell (tmux send-keys -l), but defense-in-depth: the
     // allowlisted strings themselves must never carry shell/REPL-escape chars.
     for (const c of AGENT_COMMANDS) {
-      expect(c.command.startsWith('/'), `${c.key}: command must start with /`).toBe(true)
+      // The `/` prefix is required of everything NOT declared `kind: 'prose'`. It is a proxy for
+      // "a curated literal the REPL dispatches", not the security property itself — that is the
+      // metacharacter check below, which binds BOTH kinds. A prose directive (TRDD-U6AS2YWB) is
+      // typed into the composer verbatim and legitimately carries no slash; requiring the
+      // declaration means an entry cannot skip this check just by omitting one.
+      if (c.kind === 'prose') {
+        expect(c.command.startsWith('/'), `${c.key}: declared prose but starts with /`).toBe(false)
+      } else {
+        expect(c.command.startsWith('/'), `${c.key}: command must start with / (or declare kind: 'prose')`).toBe(true)
+      }
       expect(/[;&|`$(){}<>\\"'\n\r]/.test(c.command), `${c.key}: command has unsafe chars`).toBe(false)
       expect(typeof c.requiresIdle).toBe('boolean')
       expect(c.label.length).toBeGreaterThan(0)

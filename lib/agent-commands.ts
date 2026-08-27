@@ -18,8 +18,16 @@ export interface AgentCommand {
   key: string
   /** Short human label for a UI button. */
   label: string
-  /** The exact slash-command sent to the REPL. A constant literal — never interpolated. */
+  /** The exact text sent to the REPL. A constant literal — never interpolated. */
   command: string
+  /**
+   * What SHAPE the literal is. Absent ⇒ `'slash'`: a `/command` the REPL dispatches. `'prose'`
+   * is a verbatim directive typed into the composer as a message (TRDD-U6AS2YWB). The field
+   * exists so the injection-proof test can require a `/` prefix on everything that is NOT
+   * declared prose — an entry cannot dodge that check by merely lacking a slash; it has to say
+   * what it is. Either kind is still bound by the no-metacharacter rule.
+   */
+  kind?: 'slash' | 'prose'
   /**
    * Only deliver when the agent is at its idle prompt (the safe state with no
    * subagents running / no permission prompt pending). The route enforces this
@@ -231,6 +239,7 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
   // holds: a registry entry can name this key but can never alter what gets typed.
   {
     key: 'continuity-decide-yourself',
+    kind: 'prose',
     label: 'Continuity: decide yourself',
     command: 'decide the best course of action by yourself after carefully evaluate the facts. do not assume anything, verify all before deciding.',
     requiresIdle: true,

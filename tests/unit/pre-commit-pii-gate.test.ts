@@ -30,7 +30,7 @@ const REPO = path.resolve(__dirname, '..', '..')
 const HARNESS = path.join(REPO, '.claude', 'scripts', 'test-pre-commit-pii-gate.sh')
 
 /** The count reported when this wiring landed. */
-const MIN_CASES = 9
+const MIN_CASES = 10
 
 describe('pre-commit PII gate hook', { timeout: 60_000 }, () => {
   const run = spawnSync('bash', [HARNESS], { cwd: REPO, encoding: 'utf-8' })

@@ -73,7 +73,10 @@ if [ -n "$staged" ] && [ -n "$dirty" ]; then
     echo "[pre-commit] CANNOT RUN the PII gate authoritatively — these paths are staged AND" >&2
     echo "[pre-commit] further modified, so the scanned worktree bytes are NOT the bytes being" >&2
     echo "[pre-commit] committed:" >&2
-    printf '  %s\n' $ambiguous >&2
+    # Quoted + sed, not `printf '  %s\n' $ambiguous` — unquoted it word-splits, so a path with a
+    # space renders as two wrong filenames. The refusal still fires either way; the part that
+    # breaks is the only part the developer acts on.
+    printf '%s\n' "$ambiguous" | sed 's/^/  /' >&2
     echo "[pre-commit] Re-stage them (git add <path>) so the two agree, then commit again." >&2
     exit 1
   fi

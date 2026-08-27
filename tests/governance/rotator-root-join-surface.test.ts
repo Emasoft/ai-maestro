@@ -152,6 +152,10 @@ function nonJoinUses(files: string[]): string[] {
  * the test does not provide is the failure this whole file exists to catch, so it is recorded
  * rather than quietly fixed.
  *
+ * NEUTER (2026-08-27 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/fs\.mkdirSync\(root/fs.rmSync(root/  → 1 red / 4 green, the red being this assertion.
+ *   The SAME mutation reddened 0 of 4 before this assertion existed.
+ *
  * KNOWN BLIND SPOT, stated rather than left implicit: the regex needs an IDENTIFIER immediately
  * before `(root`, so an immediately-invoked expression — `(deps.tickAgeS ?? tickCompletedAgeS)(root,
  * now)` in supervisor.ts — is invisible to it. That one was read by hand and joins

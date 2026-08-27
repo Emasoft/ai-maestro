@@ -218,7 +218,7 @@ const KNOWN_FLAGS = new Set([
 // `new` and `move` join `edit` in the exemption for the same stated reason: a MUTATING
 // verb must never IGNORE a token, and an allowlist can only ever ignore. Each rejects
 // every token it did not consume, which is strictly stronger than this check.
-const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move', 'set'])
+const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move', 'set', 'append', 'check-box'])
 if (!STRICT_PARSE_VERBS.has(cmd)) {
   const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
   if (unknownFlag) {
@@ -1115,6 +1115,63 @@ switch (cmd) {
     process.exit(0)
   }
 
+  // ---- APPEND to a named `## ` section, and TICK an acceptance box by ORDINAL.
+  //
+  // Both replace a LINE NUMBER with the address the caller actually means. `append`
+  // replaces `edit --at-line N --expect <an existing line> --replace <that line + the new
+  // text>`, which this session performed four times; `check-box` replaces hunting for the
+  // line a `- [ ]` sits on. The line-number route is CAS-guarded and safe — what it is
+  // not is honest about what is being addressed.
+  case 'append': {
+    const heading = argv[2]
+    const text = argv[3]
+    if (!arg || !heading || text === undefined) {
+      console.error('trddgrep: `append` needs an id, a section heading and a line — `trddgrep append <id> "## Approval log" "<text>"`')
+      process.exit(2)
+    }
+    let aRest = argv.slice(4)
+    const aNoBump = aRest.includes('--no-bump')
+    aRest = aRest.filter((t) => t !== '--no-bump')
+    if (aRest.length > 0) {
+      console.error(`trddgrep: unrecognised argument(s) on \`append\`: ${aRest.join(' ')} — see \`trddgrep help\``)
+      process.exit(2)
+    }
+    const { appendTrddSection, isoLocal } = await import('../lib/trdd-store.ts')
+    const res = await appendTrddSection(designDir, arg, heading, text, { iso: isoLocal().iso, bump: !aNoBump })
+    if (!res.ok) {
+      console.error(`trddgrep: ${res.error}`)
+      process.exit(res.status === 404 ? 1 : 2)
+    }
+    console.log(C.g(`${C.b(res.id)}  appended to ${heading.startsWith('## ') ? heading : `## ${heading}`}`))
+    console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}`))
+    process.exit(0)
+  }
+
+  case 'check-box': {
+    const ordinal = Number(argv[2])
+    if (!arg || !Number.isInteger(ordinal) || ordinal < 1) {
+      console.error('trddgrep: `check-box` needs an id and a 1-based box number — `trddgrep check-box <id> 3 [--uncheck]`')
+      process.exit(2)
+    }
+    let bRest = argv.slice(3)
+    const uncheck = bRest.includes('--uncheck')
+    const bNoBump = bRest.includes('--no-bump')
+    bRest = bRest.filter((t) => t !== '--uncheck' && t !== '--no-bump')
+    if (bRest.length > 0) {
+      console.error(`trddgrep: unrecognised argument(s) on \`check-box\`: ${bRest.join(' ')} — see \`trddgrep help\``)
+      process.exit(2)
+    }
+    const { checkTrddBox, isoLocal } = await import('../lib/trdd-store.ts')
+    const res = await checkTrddBox(designDir, arg, ordinal, { iso: isoLocal().iso, check: !uncheck, bump: !bNoBump })
+    if (!res.ok) {
+      console.error(`trddgrep: ${res.error}`)
+      process.exit(res.status === 404 && /TRDD not found/.test(res.error ?? '') ? 1 : 2)
+    }
+    console.log(C.g(`${C.b(res.id)}  box ${ordinal} → [${uncheck ? ' ' : 'x'}]`))
+    console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}`))
+    process.exit(0)
+  }
+
   // ---- MOVE. The column edit AND the zone `git mv`, as ONE operation.
   //
   // A transition is two hand steps today — edit `column:`, then `git mv` between
@@ -1265,6 +1322,12 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  --no-bump   a MECHANICAL repair — leaves `updated:` alone so the board order holds.')}
   ${C.d('  Inserts the field when absent, so the silent no-op a regex patch produces cannot')}
   ${C.d('  happen. Refuses `column` — that is half a transition; use move.')}
+
+  ${C.c('trddgrep append <id> <heading> <line>')}   add a line to the END of a named section
+  ${C.c('trddgrep check-box <id> <n>')}   tick the Nth acceptance box  [--uncheck] [--no-bump]
+  ${C.d('  Both address what you MEAN — a section, a box ordinal — instead of a line number.')}
+  ${C.d('  check-box counts exactly what the terminal gate counts, fenced code excluded, and')}
+  ${C.d('  refuses a tick that changes nothing rather than reporting a no-op as success.')}
 
   ${C.c('trddgrep move <id> <column>')}   the column edit AND the zone git-mv, as ONE operation
   ${C.d('  --approver W --reason TEXT --superseded-by ID')}

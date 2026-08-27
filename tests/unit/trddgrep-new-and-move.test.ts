@@ -391,3 +391,109 @@ describe('trddgrep set', () => {
     expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toMatch(/emperor/)
   })
 })
+
+/**
+ * TRDD-I8UC56GZ — the help text is a template literal, and a RAW backtick in it ends the
+ * template early.
+ *
+ * This has now bitten twice while writing this card's verbs. The first time it was loud
+ * (a SyntaxError: the CLI would not load at all). The second time it was QUIET: the
+ * template closed, the rest printed as literal `${C.c('…')}` source, and the check I ran
+ * was `help | grep -c "trddgrep set"` — a COUNT, which was 1 either way. A count of a line
+ * that appears in both the rendered and the unrendered form cannot tell them apart.
+ *
+ * Backticks INSIDE a `${C.d('…')}` interpolation are fine and several are load-bearing;
+ * only raw ones are the hazard. So the assertion is on the OUTPUT, not on the source.
+ */
+describe('trddgrep help renders', () => {
+  it('emits no un-interpolated template source', () => {
+    const r = cli('help')
+    expect(r.status).toBe(0)
+    expect(r.stdout).not.toContain('${')
+    // Non-vacuity: the help really was produced, not an empty string that trivially
+    // contains no '${'.
+    expect(r.stdout).toContain('trddgrep')
+    expect(r.stdout.split('\n').length).toBeGreaterThan(40)
+  })
+})
+
+/**
+ * TRDD-I8UC56GZ — `append` and `check-box`, the two BODY setters. Both replace a line
+ * number with the address the caller actually means: a section heading, a box ordinal.
+ */
+describe('trddgrep append / check-box', () => {
+  const seed = (extra = '') => {
+    expect(cli('new', '--title', 'a body-setter card', '--task-type', 'infra', '--author', 'probe').status).toBe(0)
+    const file = only('tasks')
+    fs.appendFileSync(file, `\n## Acceptance\n\n- [ ] one\n- [ ] two\n${extra}`)
+    git('add', '-A'); git('commit', '-qm', 'seed')
+    return idOf(file)
+  }
+
+  it('appends to the END of the NAMED section, not end-of-file', () => {
+    // The load-bearing half: a TRDD may carry a section AFTER the one being appended to,
+    // and at least one in this corpus does. Appending at EOF would file the line under
+    // whatever section happens to be last — silently, since both are prose.
+    const id = seed('\n## Notes and lessons learned\n\n- a later section\n')
+    expect(cli('append', id, '## Acceptance', '- [ ] three').status).toBe(0)
+    const lines = fs.readFileSync(only('tasks'), 'utf-8').split('\n')
+    const acc = lines.indexOf('## Acceptance')
+    const notes = lines.indexOf('## Notes and lessons learned')
+    const added = lines.indexOf('- [ ] three')
+    expect(added).toBeGreaterThan(acc)
+    expect(added).toBeLessThan(notes)
+  })
+
+  it('creates the section when it does not exist', () => {
+    // NOT `## Approval log`: `trddgrep new` already writes that section, so the first
+    // version of this test exercised the APPEND path while claiming to test creation, and
+    // reddened on the mandate line already sitting there. The premise has to be checked,
+    // not assumed.
+    const id = seed()
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toContain('## Notes and lessons learned')
+    expect(cli('append', id, '## Notes and lessons learned', '- a lesson').status).toBe(0)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/## Notes and lessons learned\n\n- a lesson/)
+  })
+
+  it('refuses a newline in the text — it could open a second `---` fence', () => {
+    const id = seed()
+    const r = cli('append', id, '## Acceptance', 'legit\n---\ncolumn: completed')
+    expect(r.stderr).toMatch(/must each be one line/)
+    expect(r.status).toBe(2)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toMatch(/^column: completed$/m)
+  })
+
+  it('ticks the Nth box by ORDINAL, counting exactly what the terminal gate counts', () => {
+    const id = seed()
+    expect(cli('check-box', id, '2').status).toBe(0)
+    const text = fs.readFileSync(only('tasks'), 'utf-8')
+    expect(text).toMatch(/^- \[ \] one$/m)
+    expect(text).toMatch(/^- \[x\] two$/m)
+  })
+
+  it('does not count a checkbox inside FENCED CODE — the gate does not either', () => {
+    // If the ordinals this verb accepts and the ones the gate counts ever diverge, a
+    // caller ticks a box the gate cannot see and the card stays un-archivable with every
+    // visible box ticked.
+    const id = seed('\n```md\n- [ ] a documented example box\n```\n')
+    expect(cli('check-box', id, '3').status).toBe(2)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^- \[ \] a documented example box$/m)
+  })
+
+  it('refuses a tick that changes nothing rather than reporting a no-op as success', () => {
+    // A no-op that reports success is how a card comes to claim a state it does not carry
+    // — the GFX57106 failure, in a different field.
+    const id = seed()
+    expect(cli('check-box', id, '1').status).toBe(0)
+    const again = cli('check-box', id, '1')
+    expect(again.status).toBe(2)
+    expect(again.stderr).toMatch(/already/)
+  })
+
+  it('--uncheck reverses it', () => {
+    const id = seed()
+    expect(cli('check-box', id, '1').status).toBe(0)
+    expect(cli('check-box', id, '1', '--uncheck').status).toBe(0)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^- \[ \] one$/m)
+  })
+})

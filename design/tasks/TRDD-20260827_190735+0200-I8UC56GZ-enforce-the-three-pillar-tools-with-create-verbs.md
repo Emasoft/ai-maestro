@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T19:07:35+0200
-updated: 2026-08-27T19:48:58+0200
+updated: 2026-08-27T20:08:55+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -228,6 +228,7 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 - [ ] **`fix` (the autofixer) is never invoked automatically by any write path** — the USER's
       directive is "detect AND fix the autofixable"; today `fix` is a verb a human remembers to
       run. Wire it into the write paths, or record why not
+- [x] **Body setters DONE** — `append <id> <heading> <line>` and `check-box <id> <n> [--uncheck]`, both addressing a SECTION or an ORDINAL instead of a line number. `append` inserts at the named section's own end (not EOF — a card may carry a later section, and this one does), creates it when absent, and refuses a newline that could open a second `---` fence. `check-box` skips fenced code so its ordinals ARE the terminal gate's ordinals, and refuses a tick that changes nothing rather than reporting a no-op as success. `supersede` needed no verb: `move <id> superseded --superseded-by ID` already writes the column, the zone move and `superseded-by:` — verified end to end.
 
 ## Approval log
 

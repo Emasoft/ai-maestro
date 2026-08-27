@@ -330,7 +330,27 @@ export function setFrontmatterField(content: string, field: string, value: strin
  * heading), after its last non-blank line so the blank separator survives.
  */
 export function appendApprovalLog(content: string, logLine: string): string {
-  const marker = '## Approval log'
+  return appendToSection(content, '## Approval log', logLine)
+}
+
+/**
+ * Append one line to the END of a named `## ` section, creating the section at EOF when
+ * it does not exist (TRDD-I8UC56GZ — this is `appendApprovalLog` generalized, and that
+ * function is now a one-line wrapper so there is one implementation, not two).
+ *
+ * WHY IT EXISTS AS A VERB. Appending to a section had no tool, so the workaround was
+ * `edit --at-line N --expect <some existing line> --replace <that same line + the new
+ * text>` — a line number and a whole line of context standing in for "put this at the end
+ * of that section". It is CAS-guarded and therefore safe, but it is a proxy operation,
+ * and it was performed four times in the session that wrote this. The heading is the
+ * address the caller actually means.
+ *
+ * The insertion point is the section's own end, backing up over trailing blanks, NOT
+ * end-of-file: a TRDD may carry `## Notes and lessons learned` after its log, and at
+ * least one in this corpus does, so appending at EOF would silently file the entry under
+ * whatever section happens to be last.
+ */
+export function appendToSection(content: string, marker: string, logLine: string): string {
   const lines = content.split('\n')
   const start = lines.findIndex(l => l.trimEnd() === marker)
 
@@ -857,6 +877,88 @@ export function setTrddField(
     }
     atomicWriteSync(trdd.filePath, content)
     return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+  })
+}
+
+
+/**
+ * APPEND a line to a named `## ` section of a card's body, under the document lock.
+ *
+ * Body-only by construction: it never touches frontmatter, so the candidate gate has
+ * nothing to judge and is not run — a gate that "passed" every body edit would be
+ * decoration, and claiming one would be worse than having none. What IS enforced is the
+ * heading shape and the one-line rule, because a `text` carrying a newline could open a
+ * `---` fence and everything after it would read as a second frontmatter block.
+ *
+ * `updated:` is bumped by default for the same reason `set` bumps it: prose appended to a
+ * card changes what the card asserts, and the board sorts on `updated:`.
+ */
+export function appendTrddSection(
+  designDir: string,
+  id: string,
+  heading: string,
+  text: string,
+  opts: { iso: string; bump?: boolean },
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
+    const trdd = findTrdd(designDir, id)
+    if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    const marker = heading.startsWith('## ') ? heading : `## ${heading}`
+    if (/[\r\n\u0000-\u001f]/.test(text) || /[\r\n\u0000-\u001f]/.test(heading)) {
+      return { ok: false, status: 400, error: 'the heading and the text must each be one line — a newline here could open a second `---` fence and everything after it would read as frontmatter' }
+    }
+    let content = fs.readFileSync(trdd.filePath, 'utf-8')
+    content = appendToSection(content, marker, text)
+    if (opts.bump !== false) content = setFrontmatterField(content, 'updated', opts.iso)
+    atomicWriteSync(trdd.filePath, content)
+    return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+  })
+}
+
+/**
+ * TICK (or untick) the Nth acceptance checkbox of a card, addressed by ORDINAL rather
+ * than by line number.
+ *
+ * The line-number route works and is CAS-guarded — `edit --at-line 68 --expect '- [ ]'`
+ * — but the caller must first FIND line 68, and the number it finds is a proxy for "the
+ * first unchecked box". The terminal-column gate counts these boxes, so getting one wrong
+ * is not cosmetic: it is the difference between a card that may archive and one that may
+ * not.
+ *
+ * Fenced code is skipped, exactly as `countAcceptanceBoxes` skips it, so the ordinals
+ * this verb accepts and the ones the gate counts are the same ordinals.
+ */
+export function checkTrddBox(
+  designDir: string,
+  id: string,
+  ordinal: number,
+  opts: { iso: string; check?: boolean; bump?: boolean },
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
+    const trdd = findTrdd(designDir, id)
+    if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    const content = fs.readFileSync(trdd.filePath, 'utf-8')
+    const lines = content.split('\n')
+    const mark = opts.check === false ? ' ' : 'x'
+    let seen = 0
+    let inFence = false
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*(?:```|~~~)/.test(lines[i])) { inFence = !inFence; continue }
+      if (inFence) continue
+      const m = lines[i].match(/^(\s*[-*]\s\[)([ xX~])(\].*)$/)
+      if (!m) continue
+      seen++
+      if (seen !== ordinal) continue
+      if (m[2] === mark) {
+        return { ok: false, status: 409, error: `box ${ordinal} is already \`[${mark}]\` — refusing a write that changes nothing, because a no-op that reports success is how a card comes to claim a state it does not carry` }
+      }
+      lines[i] = `${m[1]}${mark}${m[3]}`
+      let next = lines.join('\n')
+      if (opts.bump !== false) next = setFrontmatterField(next, 'updated', opts.iso)
+      atomicWriteSync(trdd.filePath, next)
+      return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+    }
+    return { ok: false, status: 404, error: `no acceptance box ${ordinal} — the card has ${seen} (fenced code is not counted, matching the terminal gate)` }
   })
 }
 

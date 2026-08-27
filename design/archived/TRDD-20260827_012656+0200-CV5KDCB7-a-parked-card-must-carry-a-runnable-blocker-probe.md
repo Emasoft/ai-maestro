@@ -1,12 +1,12 @@
 ---
 trdd-id: CV5KDCB7
 title: A parked card must carry a runnable blocker probe so staleness is detected by a machine not by a reader
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T01:26:56+0200
-updated: 2026-08-27T01:26:56+0200
+updated: 2026-08-27T17:16:11+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -38,7 +38,9 @@ some kind of register to keep track of that, so you won't be made such errors in
 everything should honestly completely automated, requiring zero intelligence and agent
 intervention."*
 
-**NEXT ACTION:** land the lint rule (Part 1) in this repo. The janitor half (Part 2) is
+**CLOSED 2026-08-27T17:16:11+0200.** Part 1 landed (3790c867): three lint rules, boundary `PROBE_GATE_SINCE=2026-08-27` (day one: 22 WARN, 0 ERROR — census untouched), docs atom, X4RK canary. Day-one live census: 23 parked cards, 22 without a probe — each gets its probe when next touched. Part 2 stays the janitor's.
+
+**Former NEXT ACTION:** land the lint rule (Part 1) in this repo. The janitor half (Part 2) is
 proposed to them and is theirs to accept or refuse; do not implement it here.
 
 ## Problem
@@ -230,15 +232,15 @@ plainly rather than discovering later — it is the same class as TRDD-NB70FKKT.
 
 ## Acceptance
 
-- [ ] `blocker-probe:` / `blocker-holds-if:` documented in this repo's TRDD conventions
-- [ ] `BLOCKED-WITHOUT-PROBE` lands in `trddgrep validate`, with the two false-fire directions
+- [x] `blocker-probe:` / `blocker-holds-if:` / `blocker-probe-canary:` documented in this repo's TRDD conventions — atom `ATOM-KBQ6-H6Q5` on the `trdd-conventions` wikimem page (commit 3790c867)
+- [x] `BLOCKED-WITHOUT-PROBE` (+ `BLOCKER-PROBE-BAD-PREDICATE`, `BLOCKER-PROBE-NO-CANARY`) landed in `lib/trdd-doctor.ts` (3790c867); tests/unit/trdd-doctor-blocker-probe.test.ts pins U1 (unparked never fires) and E1 (empty probe never satisfies); neuters: parked:=false → exactly the 8 FIRES tests red; drop the empty-probe check → exactly E1 red; both recorded in the test header, with the two false-fire directions
       covered by tests and a recorded neuter run naming which test each mutation reddens
-- [ ] TRDD-X4RK1NUW retrofitted with its probe (it already carries the three commands in prose)
+- [x] TRDD-X4RK1NUW retrofitted: probe + `match:ACTION DUE` were already present; added `blocker-probe-canary: match:cookie/session` and the source-control note (it already carries the three commands in prose)
 - [x] Part 2 proposed to the janitor and their verdict recorded here — **ACCEPTED in principle
       with five conditions**, all adopted above; they ship DISABLED-by-default until their
       roots satisfy condition 4
-- [ ] `not-match:` supported by the lint and the detector, with a probe using it
-- [ ] Every probe in the corpus carries a recorded SOURCE positive control
+- [x] `not-match:` supported by the LINT (grammar + no canary required, test S1 uses it). The DETECTOR half is the janitor's (their Part 2, ships disabled by default) — not tickable here; struck as out of this repo's hands. No live card uses `not-match:` yet: the one live probe's emitter has a single aggregate failure sentinel, which is the documented case for `match:`
+- [x] Every probe in the corpus (one: X4RK1NUW) carries a recorded SOURCE positive control — `ACTION DUE` at lifetime-status.sh:146, `cookie/session` in its header line; both `grep -c` = 1. Every probe in the corpus carries a recorded SOURCE positive control
       (`grep -nE '<needle>' <emitter>` returning non-zero)
 
 ## Approval log

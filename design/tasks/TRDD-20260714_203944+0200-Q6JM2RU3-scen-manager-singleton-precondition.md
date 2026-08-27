@@ -1,18 +1,21 @@
 ---
 trdd-id: Q6JM2RU3
 title: Team-governance scenarios must detect the MANAGER-singleton precondition at setup
-column: planned
+column: ai_review
 min-approval-requirement: none
 priority: 1
 severity: medium
 effort: small
 task-type: infra
 created: 2026-07-14T20:39:44+0200
-updated: 2026-08-21T22:36:05+0200
+updated: 2026-08-27T21:22:00+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
+implementation-commits: [1649efad]
 labels: [scenario-improvement, scen-030]
 relevant-rules: [7]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]
@@ -69,6 +72,54 @@ non-UI action (Rule 6). Fail-fast with guidance instead.
 LOW. Additive read-only audit in the setup script; no product code change.
 Dependency: agreement on the litter policy (SCENARIOS_TESTS_RULES.md already
 grants standing permission to delete governance litter under `~/agents/`).
+
+## Implemented — 2026-08-27, with one deliberate deviation
+
+`tests/scenarios/scripts/assert-clean-governance.sh` (new, read-only), called from
+`scenario-setup.sh` immediately after the `yq` check and **before** the backup dir is created or
+any git fixture is reset, so a refused setup mutates nothing and leaves no orphan
+`state-backups/` directory. Companion `list-governance-litter.sh` prints the structural litter
+set (`workingDirectory` under `~/agents/` + a non-empty `governanceTitle`). Pinned by
+`tests/unit/scenario-governance-audit.test.ts` (14 cases, 3 neuter runs observed).
+
+**DEVIATION — the `scen<NNN>-*` allowlist is deliberately NOT implemented.** This card proposed
+failing only when the incumbent MANAGER's name is *not* `scen<NNN>-*`. Measured against the gate
+it mirrors, that is a **false pass**: Gate 7 (`services/element-management-service.ts:2699`,
+`currentManagerId !== agentId`) compares **ids** and is blind to names, so a leftover
+`scen030-manager` from an interrupted run has a different id than the agent SCEN-030 creates at
+S003 and blocks it exactly as a foreign holder would — after setup printed OK. Allowlisting it
+would re-create the precise failure this card exists to remove. Every incumbent now fails; only
+the guidance text differs (leftover-from-this-scenario / foreign holder / stale unregistered id).
+Reviewed by the fable advisor, which independently identified the same false pass.
+
+**Also corrected against measurement:** the card's `~2249-2260` citation for Gate 7 had drifted —
+the site is `:2697-2704`. And the predicate for "does this scenario create a MANAGER" is a body
+grep, not a frontmatter read: `data_produced:` **under**-fires (SCEN-005 declares "3 test agents",
+SCEN-024 declares "scen024-mgr-01" — neither string contains MANAGER, both take the singleton) and
+`subsystems: governance` **over**-fires on 8 scenarios that never assign a title while missing
+SCEN-022. Grepping for MANAGER co-occurring with a title/create/assign/promote verb fires on
+exactly 20 of the 40 scenario files, and whole-file vs body-only was measured identical.
+
+## Acceptance
+
+- [x] Precondition audit exists on the shared setup path, one place for all scenarios
+      (`tests/scenarios/scripts/assert-clean-governance.sh`, wired into `scenario-setup.sh`).
+- [x] It runs before any state mutation (before the backup dir and before every fixture reset).
+- [x] On a host with a pre-existing foreign MANAGER, a MANAGER-creating scenario's setup exits
+      non-zero with `SETUP_FAIL pre-existing-MANAGER <name> (<id>)` — verified LIVE against this
+      host's real incumbent `testbot`, not only against a fixture.
+- [x] On a free singleton, it exits 0 with `GOVERNANCE_AUDIT_OK` and setup proceeds.
+- [x] A scenario that never assigns the MANAGER title is skipped — verified live on SCEN-027 —
+      and the skip line still names the incumbent, so a future unmatched phrasing leaves evidence.
+- [x] It never demotes or deletes anything (Rule 6): read-only, guidance only.
+- [x] `list-governance-litter.sh` prints the structural litter set; verified live (2 rows,
+      `manager*` marking the singleton holder).
+- [x] Failure modes are closed, not lenient: corrupt `governance.json` fails setup rather than
+      reading as "no manager"; a `managerId` no registry row carries fails as `<unregistered id>`.
+- [x] Pinned by tests, with the neuters observed: allowlist restored → 1 red; lenient corrupt-read
+      → 1 red; predicate skip removed → 4 reds (predicted 1 — the observation is what is recorded).
+- [x] Gates green: `tsc --noEmit` 0 · `yarn lint` 0 · `yarn test` 6511 passed / 492 files ·
+      `yarn pillars:lint` 0 · `trddgrep validate` unchanged at its 271 pre-session findings.
 
 ## Approval log
 

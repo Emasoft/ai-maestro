@@ -178,9 +178,12 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   // `read` — ^C is swallowed and Enter completes the read (a bare `read -rs` behaves the same,
   // and so did the pre-hardening gate; TRDD-2PCZ6L5W) — pre-existing, so the prior trap here EXITS,
   // as a real caller's does. It runs AFTER the gate's handler, so it can read the tty flag.
-  function runGateCtrlC(prelude: string): Promise<{ code: number; signal: number | undefined; out: string }> {
+  // BOTH copies are driven: the family copy in agent-helper.sh (what aimaestro-agent.sh runs)
+  // was text-identical but never executed until the review fork asked — text identity is a proxy.
+  const COPIES = ['scripts/shell-helpers/common.sh', 'scripts/agent-helper.sh']
+  function runGateCtrlC(prelude: string, copy = COPIES[0]): Promise<{ code: number; signal: number | undefined; out: string }> {
     return new Promise((resolve) => {
-      const p = ptySpawn('bash', ['-c', `${prelude}; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
+      const p = ptySpawn('bash', ['-c', `${prelude}; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
         cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
       })
       let out = ''
@@ -191,8 +194,8 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
   }
 
-  it('P6: Ctrl-C mid-prompt hands off to the caller\'s prior INT trap, AFTER echo is restored', async () => {
-    const r = await runGateCtrlC(`trap 'echo PRIOR-INT; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"; exit 130' INT`)
+  for (const copy of COPIES) it(`P6 [${copy}]: Ctrl-C mid-prompt hands off to the caller's prior INT trap, AFTER echo is restored`, async () => {
+    const r = await runGateCtrlC(`trap 'echo PRIOR-INT; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"; exit 130' INT`, copy)
     expect(r.out).toMatch(/PRIOR-INT\necho\n/) // prior trap ran, and saw `echo` (restored), not `-echo`
     expect(r.out).not.toMatch(/RC=/)            // the caller's trap exited — the gate did not swallow the interrupt
     expect(r.code).toBe(130)
@@ -204,11 +207,11 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(r.signal ?? (r.code === 130 ? 2 : r.code)).toBe(2)
   })
 
-  it('P8: a RETURNING prior INT trap resumes the read with echo still OFF, and echo is back on afterwards', async () => {
+  for (const copy of COPIES) it(`P8 [${copy}]: a RETURNING prior INT trap resumes the read with echo still OFF, and echo is back on afterwards`, async () => {
     // The 2PCZ6L5W caller shape. Type after the ^C: the text must not appear in the pty
     // output (echo re-disabled after the re-raise) and the final flag must be `echo`.
     const out = await new Promise<string>((resolve) => {
-      const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT' INT; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"`], {
+      const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"`], {
         cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
       })
       let o = ''

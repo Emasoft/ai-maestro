@@ -12,7 +12,7 @@ min-approval-requirement: manager
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-27T22:08:28+0200
-implementation-commits: [a0ad67ab]
+implementation-commits: [a0ad67ab, efec2705]
 priority: 1
 severity: medium
 effort: medium
@@ -83,7 +83,7 @@ sets `enabledPlugins[key] = false` at local scope in four places today (`:1159`,
 ## Proposed fix
 
 1. **The whitelist is a constant**, in the only two places plugin/repo names may live:
-   `lib/ecosystem-constants.ts` (`USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS`, the five ids above)
+   `lib/ecosystem-constants.ts` (`DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS`, the five ids above)
    and its shell mirror `scripts/ecosystem-config.sh`. One source of truth; a test asserts the
    two agree.
 2. **A post-gate in every Change\* pipeline that leaves an agent runnable** (`CreateAgent`,
@@ -142,7 +142,7 @@ nothing. The env-key enforcer's fail-closed contract is the model.
 
 ## Implemented — 2026-08-27, on the USER's "just implement the whitelist"
 
-- `lib/ecosystem-constants.ts` — `USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS` (the five ids) and its
+- `lib/ecosystem-constants.ts` — `DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS` (the five ids) and its
   shell mirror in `scripts/ecosystem-config.sh`; a test asserts the two are identical AND that both
   equal the hard-coded requirement, so they cannot satisfy each other by drifting together.
 - `lib/user-scope-plugin-whitelist.ts` — reads user-scope `enabledPlugins` directly (fail-CLOSED:
@@ -172,9 +172,27 @@ enabled) and a COPY of a real agent's local file, the gate switched off exactly 
 agent's own local plugins (core, role, dev-browser, janitor) untouched, and the real user file
 was byte-identical before and after (sha256).
 
+## Made configurable — 2026-08-27, on the USER's "stop treating the whitelist as immutable"
+
+The first cut hard-coded the list (and even its length). Corrected: the five are DEFAULTS in
+`DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS`; the effective list is `agentPluginWhitelist` in
+`~/.aimaestro/system-settings.json`, read by `lib/agent-plugin-whitelist-store.ts` on every gate
+call, and edited from the dashboard — an "AGENTS" control on each enabled plugin row in Settings
+→ Extensions → Plugins, calling the strict `PATCH /api/settings/agent-plugin-whitelist`
+(sudo-gated, owner-only in `SYSTEM_OWNER_ONLY_STRICT`). Three store semantics are pinned: absent
+key → defaults; present key → verbatim EVEN IF EMPTY (an operator who cleared it decided
+something — reading `[]` as "unconfigured" would silently overrule them); corrupt → the gate
+refuses the wake rather than masking the store as the defaults. The API replaces the list
+wholesale so two operators toggling at once cannot interleave. Adding a strict route also
+required its `SYSTEM_OWNER_ONLY_STRICT` declaration and a regenerated
+`design/specs/aimaestro-api-spec.md` — two ratchets that reddened and named their own fix.
+
 ## Acceptance
 
-- [x] The five USER-named plugins are the whitelist, under their exact `name@marketplace` ids.
+- [x] The whitelist is a SETTING: store + API + dashboard control; nothing hard-codes its
+      length; the gate reads the store, never the constant (7 store/gate cases, incl. empty-list
+      and corrupt-store).
+- [x] The five USER-named plugins are the DEFAULTS, under their exact `name@marketplace` ids.
 - [x] Every other user-scope `true` becomes `false` in the agent's own local file — 32 of 37 on
       this host, measured live on a copy.
 - [x] `~/.claude/settings.json` is never written (asserted by bytes in the test AND in the live

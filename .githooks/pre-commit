@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# pre-commit — project-scoped git hook (TRDD-N83OXS8G)
+#
+# Runs the PII gate BEFORE a commit enters history.
+#
+# WHY AT COMMIT TIME, and not later: this repo is PUBLIC, so a leaked personal
+# address cannot be retracted once committed — RULE 0.6 forbids the history
+# rewrite that would undo it, and forks, clones and GitHub's unreachable-object
+# cache hold the blob regardless. The commit is the last point where the mistake
+# is still cheap (edit the file and re-stage). After it, there is no fix at all.
+#
+# WHY THIS HOOK EXISTS: the gate
+# tests/governance/no-personal-addresses-in-tracked-files.test.ts has existed
+# since 2026-08-07 and DID catch the offending file — and a card carrying an
+# address was committed anyway on 2026-08-26. It was not a red gate nobody read.
+# It was a gate that NEVER RAN: its only two surfaces were a manual `yarn test`
+# and CI, and CI triggers on `push: [main]` + `pull_request: [main]` ONLY
+# (deliberately — TRDD-XGFJCCJ9: topic-branch runs mail the owner and manufacture
+# the notification fatigue that hides the one real failure). Branch
+# `governance-rules` had 0 CI runs and 0 PRs, so every commit on it was gated by
+# nothing. A gate with no reachable surface is indistinguishable from a gate that
+# passed.
+#
+# Therefore: do NOT "fix" this by widening the CI triggers — that re-opens the
+# exact defect TRDD-XGFJCCJ9 closed. The missing thing was a surface that fires
+# before the commit, which is this file.
+#
+# It INVOKES THE EXISTING TEST rather than re-implementing the scan, so there is
+# one definition of "what a personal address looks like" and the two can never
+# drift. (A detector keyed on a copy of the pattern goes blind the moment the
+# original is edited.)
+#
+# Any non-zero exit blocks the commit: a violation and a could-not-run are both
+# failures, because a gate that cannot run must never report clean.
+#
+# Escape hatch: `git commit --no-verify` — git's own. Do not add a second one.
+# Activation: `git config core.hooksPath .githooks` (one-time, per clone).
+
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+GATE="tests/governance/no-personal-addresses-in-tracked-files.test.ts"
+
+# Node 22 is a hard ABI constraint in this repo, not a preference — an unsupported
+# Node aborts before the test runs, which would block every commit for a reason
+# that has nothing to do with the tree. with-node.sh selects it.
+# NOTE: -f, not -x. with-node.sh is mode 644 by design and is invoked as
+# `bash scripts/with-node.sh`; an -x test here reports a false could-not-run and
+# blocks every commit. (It did, on this hook's first control run.)
+if [ ! -f "$GATE" ] || [ ! -f scripts/with-node.sh ]; then
+  echo "[pre-commit] CANNOT RUN the PII gate: missing $GATE or scripts/with-node.sh." >&2
+  echo "[pre-commit] Refusing the commit — a gate that cannot run must not report clean." >&2
+  exit 1
+fi
+
+out=$(bash scripts/with-node.sh npx vitest run "$GATE" 2>&1) && rc=0 || rc=$?
+
+if [ "$rc" -ne 0 ]; then
+  printf '%s\n' "$out" >&2
+  echo "" >&2
+  echo "[pre-commit] BLOCKED — the PII gate did not pass (exit $rc)." >&2
+  echo "[pre-commit] This repo is PUBLIC and a committed address cannot be retracted." >&2
+  echo "[pre-commit] Redact the address, re-stage, and commit again." >&2
+  exit 1
+fi
+
+echo "[pre-commit] PII gate clean." >&2

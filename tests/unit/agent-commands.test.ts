@@ -25,6 +25,10 @@ describe('agent-commands allowlist (TRDD-TBGGUA2V P2)', () => {
     // The send path is no-shell (tmux send-keys -l), but defense-in-depth: the
     // allowlisted strings themselves must never carry shell/REPL-escape chars.
     for (const c of AGENT_COMMANDS) {
+      // NEUTERS (2026-08-27, scripts/dev/neuter, restore verified by blob hash), each 1 red / 10 green,
+      // the red being this test both times: (1) removing `kind: 'prose'` from the directive — so the
+      // declaration is load-bearing, not decorative; (2) injecting `; $(id)` into the prose command —
+      // so the metacharacter rule still binds prose. Two independent guards, each pinned alone.
       // The `/` prefix is required of everything NOT declared `kind: 'prose'`. It is a proxy for
       // "a curated literal the REPL dispatches", not the security property itself — that is the
       // metacharacter check below, which binds BOTH kinds. A prose directive (TRDD-U6AS2YWB) is

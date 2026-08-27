@@ -55,6 +55,30 @@ if [ ! -f "$GATE" ] || [ ! -f scripts/with-node.sh ]; then
   exit 1
 fi
 
+# THE SCAN READS THE WORKTREE; THE COMMIT WRITES THE INDEX. Those are the same bytes for
+# almost every path, and when they are not, a clean scan says nothing about what is being
+# committed: `git add <f>` with an address, then edit it out of the worktree, and the gate
+# passes over clean bytes while the INDEX still carries the address into history. That is a
+# false negative in the only direction that matters.
+#
+# Rather than duplicate the detector against staged blobs — a second copy of the address
+# pattern would go blind the moment the first one is edited — refuse when the worktree is not
+# authoritative for a path being committed. Deliberately unfiltered by extension: over-blocking
+# costs one `git add`, under-blocking costs a published address.
+staged=$(git diff --cached --name-only)
+dirty=$(git diff --name-only)
+if [ -n "$staged" ] && [ -n "$dirty" ]; then
+  ambiguous=$(comm -12 <(printf '%s\n' "$staged" | sort -u) <(printf '%s\n' "$dirty" | sort -u))
+  if [ -n "$ambiguous" ]; then
+    echo "[pre-commit] CANNOT RUN the PII gate authoritatively — these paths are staged AND" >&2
+    echo "[pre-commit] further modified, so the scanned worktree bytes are NOT the bytes being" >&2
+    echo "[pre-commit] committed:" >&2
+    printf '  %s\n' $ambiguous >&2
+    echo "[pre-commit] Re-stage them (git add <path>) so the two agree, then commit again." >&2
+    exit 1
+  fi
+fi
+
 out=$(bash scripts/with-node.sh npx vitest run "$GATE" 2>&1) && rc=0 || rc=$?
 
 if [ "$rc" -ne 0 ]; then

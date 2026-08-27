@@ -1,9 +1,9 @@
 ---
 trdd-id: 3Q4G9ZK6
 title: Purging a cemetery archive orphans the agent workdir with no UI path left to remove it
-column: planned
+column: ai_review
 created: 2026-07-29T19:37:18+0200
-updated: 2026-08-22T21:38:01+0200
+updated: 2026-08-27T20:58:01+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:02:08+0200
@@ -15,6 +15,8 @@ severity: major
 effort: small
 labels: [scenario-improvement, scen-001, cemetery, cleanup]
 external-refs: [reports/scenarios-runner/SCEN-001_20260729T170344Z.report.md]
+assignee: hub-claude
+created-by: scenario-runner
 ---
 
 # Cemetery purge leaves a permanently unreachable agent folder
@@ -113,16 +115,16 @@ from a `blocked-by` that only points one way.
 Card carried ZERO checkboxes; a `severity: major` destructive change with a vacuous completion
 gate. Adding it:
 
-- [ ] purge resolves the archive to a **tombstoned** registry entry (`deletedAt` set), never via
+- [x] purge resolves the archive to a **tombstoned** registry entry (`deletedAt` set), never via
       the live-name helper — with a test seeding a tombstone AND a live agent of the SAME name and
       asserting the live one is untouched
-- [ ] zero-or-ambiguous candidates → the zip is purged, nothing else is, and the response SAYS what
+- [x] zero-or-ambiguous candidates → the zip is purged, nothing else is, and the response SAYS what
       remains (a silent partial purge is what this card exists to fix)
-- [ ] the tombstone, persisted-session row and tmux session go together via DeleteAgent's hard path
-- [ ] folder removal only behind the explicit dialog choice AND DeleteAgent's `~/agents/` guard —
+- [x] the tombstone, persisted-session row and tmux session go together via DeleteAgent's hard path
+- [x] folder removal only behind the explicit dialog choice AND DeleteAgent's `~/agents/` guard —
       an adopted external workdir survives the whole sequence (the card's own second verification)
-- [ ] the Purge Forever dialog copy stops saying "delete the archive" while deleting more than that
-- [ ] a neuter proves the tombstone-only resolution is load-bearing: swap it for the live-name
+- [x] the Purge Forever dialog copy stops saying "delete the archive" while deleting more than that
+- [x] a neuter proves the tombstone-only resolution is load-bearing: swap it for the live-name
       helper and the same-name test must redden
 
 ## Approval log
@@ -135,3 +137,11 @@ gate. Adding it:
   Re-measured against the live handler: `app/api/agents/cemetery/route.ts` DELETE still does only
   `fs.unlinkSync(archivePath)` and returns — no tombstone lookup, no DeleteAgent hard-path routing,
   no `~/agents/` guard, no workdir removal. The defect is unchanged from filing.
+- 2026-08-27T20:52:45+0200 — column → todo. assumptions re-verified against live code
+- 2026-08-27T20:52:46+0200 — column → verify_assumptions. assumptions re-verified against live code
+- 2026-08-27T20:52:46+0200 — column → plan. assumptions re-verified against live code
+- 2026-08-27T20:52:46+0200 — column → dispatch. assumptions re-verified against live code
+- 2026-08-27T20:52:47+0200 — column → dev. assumptions re-verified against live code
+- 2026-08-27T20:58:00+0200 — IMPLEMENTED by hub-claude, following the DESIGN FINDING and NOT the original Proposed fix. Both of the card's assumptions re-verified against live code first: the DELETE handler still did only `fs.unlinkSync` and returned, and `getAgentByNameAnyHost` still filters `!a.deletedAt`. Resolution is to a TOMBSTONE by id (`listAgents(true)` filtered on `deletedAt` + name); zero-or-ambiguous purges the zip and REPORTS what it left; the cascade runs only for `.zip` (a `.json` tombstone is a hard-delete audit record — that agent is already gone, so there is nothing to cascade, a distinction the card did not state). The filename grammar moved to the leaf `lib/cemetery-archive.ts` so the LISTING and the DELETION cannot disagree about whose file it is on a destructive path. Dialog copy now names the registry entry and session it removes, and the folder sits behind its own checkbox which RESETS after each use — otherwise a destructive default carries to the next archive's dialog pre-checked. `assignee`/`created-by` filled from the card's own data (`current-owner: scenario-runner`, the scen-001 label and report in `external-refs`), not invented.
+- 2026-08-27T20:58:01+0200 — column → testing. 6497 green, tsc 0, yarn lint clean of the touched files
+- 2026-08-27T20:58:01+0200 — column → ai_review. neuter recorded; awaiting review

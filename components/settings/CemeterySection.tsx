@@ -25,6 +25,10 @@ export default function CemeterySection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  // TRDD-3Q4G9ZK6 — the explicit choice the workdir removal is gated behind. Defaults
+  // to FALSE: a purge that quietly removed a folder would be the same silent
+  // over-reach, pointed the other way.
+  const [alsoDeleteFolder, setAlsoDeleteFolder] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ type: 'revive' | 'purge'; filename: string; agentName: string } | null>(null)
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -88,7 +92,7 @@ export default function CemeterySection() {
         {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename }),
+          body: JSON.stringify({ filename, deleteFolder: alsoDeleteFolder }),
         },
         (reason) => requestSudoToken(reason),
       )
@@ -97,7 +101,19 @@ export default function CemeterySection() {
         setStatusMessage({ text: `Failed to purge: ${data.error || 'Unknown error'}`, type: 'error' })
         return
       }
-      setStatusMessage({ text: `Archive of "${agentName}" permanently deleted.`, type: 'success' })
+      // SAY WHAT REMAINS. The server refuses the cascade when the archive resolves to zero
+      // or several tombstones, and reports what it left; swallowing that here would
+      // reproduce the silent partial purge this whole change exists to fix.
+      setStatusMessage(
+        data.left
+          ? { text: `Archive of "${agentName}" purged — ${data.left}`, type: 'error' }
+          : {
+              text: data.deleted
+                ? `"${agentName}" fully deleted — archive, registry entry and session${alsoDeleteFolder ? ' and folder' : ''}.`
+                : `Archive of "${agentName}" permanently deleted.`,
+              type: 'success',
+            },
+      )
       fetchArchives()
     } catch (err) {
       setStatusMessage({ text: `Purge failed: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' })
@@ -113,6 +129,10 @@ export default function CemeterySection() {
     } else {
       handlePurge(confirmAction.filename, confirmAction.agentName)
     }
+    // RESET, or the choice carries to the NEXT archive's dialog pre-checked — a
+    // destructive default nobody re-made. Safe to do here: `handlePurge` already read
+    // the value from this render's closure, so the in-flight request keeps it.
+    setAlsoDeleteFolder(false)
     setConfirmAction(null)
   }
 
@@ -158,11 +178,29 @@ export default function CemeterySection() {
             <p className="text-sm text-gray-300 mb-6">
               {confirmAction.type === 'revive'
                 ? `Revive agent "${confirmAction.agentName}" from the cemetery? A new agent will be created from the archive.`
-                : `Permanently delete the archive of "${confirmAction.agentName}"? This cannot be undone.`}
+                : `Purging the archive of "${confirmAction.agentName}" also removes its registry entry, its saved session and its tmux session — the archive is the last recoverable copy, so keeping the rest buys nothing. This cannot be undone.`}
             </p>
+            {/* The workdir is the one artifact that is NOT implied by "purge the archive",
+                so it gets its own explicit choice rather than riding along. */}
+            {confirmAction.type === 'purge' && (
+              <label className="flex items-start gap-2 text-sm text-gray-300 mb-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={alsoDeleteFolder}
+                  onChange={(e) => setAlsoDeleteFolder(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Also delete the agent&apos;s folder
+                  <span className="block text-xs text-gray-500">
+                    Only applies to folders under ~/agents/ — an adopted external folder is never touched.
+                  </span>
+                </span>
+              </label>
+            )}
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setConfirmAction(null)}
+                onClick={() => { setAlsoDeleteFolder(false); setConfirmAction(null) }}
                 className="px-4 py-2 bg-gray-800 text-gray-300 hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors"
               >
                 Cancel

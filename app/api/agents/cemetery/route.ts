@@ -9,11 +9,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import fs from 'fs'
 import path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
+import { listAgents } from '@/lib/agent-registry'
+import { agentNameFromArchive } from '@/lib/cemetery-archive'
+import { DeleteAgent } from '@/services/element-management-service'
 
 const CEMETERY_DIR = statePath('cemetery')
 
@@ -72,8 +75,10 @@ export async function GET(request: NextRequest) {
       if (isTombstone) {
         // Tombstone: parse name + timestamp from filename, then enrich with JSON contents.
         // Filename: <name>-tombstone-<ISO-with-hyphens>.json
-        const tMatch = filename.match(/^(.+?)-tombstone-(.+)\.json$/)
-        agentName = tMatch ? tMatch[1] : filename.replace('.json', '')
+        // SHARED PARSER (lib/cemetery-archive) — the same grammar DELETE resolves a
+        // tombstone with, so a listing and a deletion cannot disagree about whose file
+        // this is.
+        agentName = agentNameFromArchive(filename) ?? filename.replace('.json', '')
         archivedAt = stat.mtime.toISOString()  // fall-back; overridden below if JSON parses
 
         const entry: CemeteryEntry = {
@@ -107,7 +112,9 @@ export async function GET(request: NextRequest) {
       // Zip archive (soft-delete) — original behavior.
       // Parse agent name and timestamp from filename: <name>-export-<timestamp>.zip
       const match = filename.match(/^(.+?)-export-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.zip$/)
-      agentName = match ? match[1] : filename.replace('.zip', '')
+      // Name from the SHARED parser; the local match survives only for its TIMESTAMP
+      // group, which the shared one does not expose and no other caller needs.
+      agentName = agentNameFromArchive(filename) ?? filename.replace('.zip', '')
       // CC-GOV-006: Proper regex to convert timestamp hyphens to colons after T
       archivedAt = match
         ? match[2].replace(/(\d{2})-(\d{2})-(\d{2})$/, '$1:$2:$3')
@@ -260,6 +267,8 @@ export async function POST(request: NextRequest) {
  *
  * Body: { filename: string }
  */
+
+
 export async function DELETE(request: NextRequest) {
   // #116: Cemetery purge is destructive and irreversible — classified "strict"
   // in security-registry.json. Caller must present a fresh X-Sudo-Token.
@@ -276,7 +285,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    let body: { filename?: string }
+    let body: { filename?: string; deleteFolder?: boolean }
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
@@ -302,7 +311,55 @@ export async function DELETE(request: NextRequest) {
       throw unlinkErr
     }
 
-    return NextResponse.json({ success: true, purged: sanitized })
+    // ---- THE CASCADE (TRDD-3Q4G9ZK6). Purging a soft-delete archive used to remove the
+    // zip and nothing else, leaving the registry tombstone, the persisted-session row and
+    // `~/agents/<name>/` behind — with the agent invisible under every sidebar filter, so
+    // no UI affordance could reach it. Purge is the LAST step of a deletion; it now
+    // completes the deletion it is the last step of.
+    //
+    // ONLY for `.zip`. A `.json` tombstone is a HARD-delete audit record: that agent was
+    // already fully removed, so there is nothing left to cascade and routing it through
+    // DeleteAgent would be a second deletion of something already gone.
+    let cascade: { deleted?: string; left?: string } = {}
+    if (sanitized.endsWith('.zip')) {
+      const name = agentNameFromArchive(sanitized)
+      // RESOLVE TO A TOMBSTONE, BY ID — never through the live-name helper.
+      // `getAgentByNameAnyHost` filters `!a.deletedAt` (lib/agent-registry.ts:358), so it
+      // returns the LIVE agent and never the tombstone this archive belongs to. A
+      // tombstone and a live agent can share a name AND a workdir (TRDD-HNJ3T3W0,
+      // reproduced), so resolving by name here would delete a running agent's folder —
+      // the worst failure this change could have.
+      const candidates = name
+        ? listAgents(true).filter(
+            (a) => a.deletedAt && a.name?.toLowerCase() === name.toLowerCase(),
+          )
+        : []
+      if (candidates.length === 1) {
+        const result = await DeleteAgent(candidates[0].id, {
+          authContext: buildAuthContext(auth),
+          hard: true,
+          // Behind the caller's EXPLICIT choice, and DeleteAgent's own `~/agents/` guard
+          // still refuses it for an adopted external workdir.
+          deleteFolder: body.deleteFolder === true,
+        })
+        cascade = result.success
+          ? { deleted: candidates[0].id }
+          : { left: `the archive was purged, but the tombstone could not be removed: ${result.error ?? 'unknown error'}` }
+      } else {
+        // AMBIGUOUS OR ABSENT — purge the zip and STOP. An ambiguous key is precisely
+        // when a destructive default is wrong, and saying what remains is the whole point:
+        // a SILENT partial purge is the defect this card exists to fix, so a refusal that
+        // reported nothing would reproduce it.
+        cascade = {
+          left:
+            candidates.length === 0
+              ? 'no tombstoned registry entry matched this archive — the archive is gone; nothing else was touched'
+              : `${candidates.length} tombstoned entries share the name ${JSON.stringify(name)} — refusing to guess which one this archive belongs to; the archive is gone, nothing else was touched`,
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, purged: sanitized, ...cascade })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[Cemetery] Purge error:', msg)

@@ -1,16 +1,24 @@
 ---
 trdd-id: JU6Y2V7X
 title: SCEN-001 carries deprecated chrome-devtools frontmatter and two steps that cannot be run through the UI
-column: planned
+column: blocked
+pre-block-column: ai_review
+blocked-by: [AGHPMRVI, 39PSYD62]
+eht: [AGHPMRVI, 39PSYD62]
 created: 2026-07-29T19:37:20+0200
-updated: 2026-08-21T22:02:08+0200
+updated: 2026-08-27T21:37:13+0200
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
+implementation-commits: [78ee9ef6]
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: docs
 min-approval-requirement: chief-of-staff
-approval-tier: 1
+blocker-probe: sh -c 'echo PROBE-RAN; find design/tasks -iname "*AGHPMRVI*" -o -iname "*39PSYD62*" | grep -q . || echo FLOCK-TERMINAL'
+blocker-holds-if: not-match:FLOCK-TERMINAL
+blocker-probe-canary: match:PROBE-RAN
 priority: 2
 severity: minor
 effort: small
@@ -69,8 +77,46 @@ with a binary spinner; (4) is a z-order/layout overlap in the Settings sidebar.
 LOW for the scenario edits and the overlap fix; LOW-MED for the staged status, which needs a
 progress channel from the create pipeline to the dialog.
 
+## Implemented — 2026-08-27, items (1) and (2); items (3) and (4) split out
+
+Items (1) and (2) are scenario authoring and shipped in one edit of
+`tests/scenarios/SCEN-001_title-change-lifecycle.scen.md`. Items (3) and (4) are not: (3) needs a
+progress channel from the create pipeline to the dialog (a feature, LOW-MED risk by this card's own
+rating) and (4) is verified only by a live `elementFromPoint` probe in the browser. Each is its own
+EHT — `TRDD-AGHPMRVI` (staged status) and `TRDD-39PSYD62` (banner overlap) — and this card sits at
+`blocked` on them, because a parent whose flock is open is not complete.
+
+**On (2), the covering test was verified, not trusted.** `tests/authorization.test.ts:199-204`
+pins `no Bearer token but X-Agent-Id present … -> 401`, and the file's own header names S014/S032
+as its reason for existing (TRDD-0IPK36MS). The rewritten steps run those cases read-only and
+assert on the reported COUNT — because a `-t` filter that matches nothing prints `46 skipped` and
+still **exits 0** (measured), so an exit code cannot tell "the guard holds" from "the case was
+renamed and nothing ran". The commands as written in the steps produce `1 passed | 45 skipped`
+and `7 passed | 39 skipped`; the first draft of the Verify lines said `1 passed (1)` and was
+corrected to the real summary shape after running them.
+
+**A sibling finding, filed as `TRDD-IPTGKX36`:** SCEN-001 was only the file this card named. 20 of
+40 scenario files still carry the deprecated `required_tools:` block, 18 with the stale CDP
+prerequisite, 0 with `browser_stack:`. Surfaced by the USER asking why chrome-devtools was being
+installed when dev-browser is the dependency — it is not; the stale declarations make it look so.
+
+## Acceptance
+
+- [x] (1) `yq '.required_tools'` on SCEN-001's frontmatter → `null`; `.browser_stack` →
+      `dev-browser`; 0 `chrome-devtools` mentions remain; the CDP prerequisite is gone.
+- [x] (2) S014 and S032 contain no out-of-UI mutation. The only remaining `PATCH /api/agents`
+      mentions are four UI steps naming the strict route the sudo modal guards (legitimate) and two
+      historical notes in the rewritten steps themselves.
+- [x] (2) The steps' commands were run as written and produce the counts the Verify lines state.
+- [x] The frontmatter still parses through the real setup path (`assert-clean-governance.sh 001`
+      reads it and proceeds to its own verdict; `rewipe-list` still yields 4 entries).
+- [ ] (3) staged Create Team status — `TRDD-AGHPMRVI` terminal.
+- [ ] (4) banner/Cemetery overlap — `TRDD-39PSYD62` terminal.
+
 ## Approval log
 
+- 2026-08-27T21:37:13+0200 — items (1)+(2) landed; (3)+(4) split to EHTs AGHPMRVI / 39PSYD62;
+  column set to `blocked` on them (pre-block-column: ai_review).
 - 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager;
   card declares chief-of-staff tier, within delegated manager authority). Re-measured all four: (1)
   `tests/scenarios/SCEN-001_title-change-lifecycle.scen.md` still declares `required_tools:`, no

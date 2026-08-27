@@ -142,6 +142,34 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(seen[0].body).toContain(SECRET)
   })
 
+  // P4/P5 drive the gate FUNCTION directly in a pty so the tty state AFTER it returns can be
+  // read — P1-P3 cannot see a leaked -echo because the child exits and the pty is torn down.
+  function runGate(prelude: string, epilogue: string): Promise<string> {
+    return new Promise((resolve) => {
+      const p = ptySpawn('bash', ['-c', `${prelude}; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; ${epilogue}`], {
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+      })
+      let out = ''
+      let typed = false
+      p.onData((d) => { out += d; if (!typed && out.includes('MAESTRO password')) { typed = true; void typeWhenNoEcho(p, SECRET) } })
+      const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+      p.onExit(() => { clearTimeout(killer); resolve(out.replace(/\r/g, '')) })
+    })
+  }
+
+  it('P4: after a REFUSED exchange (the return-1 path) the tty has echo back on', async () => {
+    const out = await runGate('true', 'stty -a < /dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"')
+    expect(out).toMatch(/RC=1/)
+    expect(out).toMatch(/\necho\n?$/) // the LAST line is the flag: `echo`, not `-echo`
+    expect(out).not.toMatch(/-echo/)
+  })
+
+  it('P5: a caller\'s prior INT trap survives the gate (never reset to default)', async () => {
+    const out = await runGate('trap "echo PRIOR-INT" INT', 'trap -p INT')
+    expect(out).toMatch(/RC=1/)
+    expect(out).toMatch(/trap -- ['"]echo PRIOR-INT['"] (SIG)?INT/) // bash prints SIGINT
+  })
+
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], GOOD)
     const calls = seen.map((s) => `${s.method} ${s.url}`)

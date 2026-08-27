@@ -704,9 +704,13 @@ maestro_sudo_ensure() {
     # discipline and the password appears on screen — measured by the node-pty harness
     # (TRDD-Q758CX98). Restored on return and on Ctrl-C, which is then re-raised so the
     # script still dies. Belt and braces with -s: this ORDER is pinned by a source test.
+    # The caller's own INT trap (aimaestro-agent.sh:84 has one) is SAVED and re-installed,
+    # never reset to default: `trap - INT` would silently disarm it for the rest of the run.
+    # Not a `local`: a RETURN trap runs as the function unwinds, when locals may be gone.
+    _MAESTRO_PREV_INT="$(trap -p INT)"
     stty -echo < /dev/tty 2>/dev/null
-    trap 'stty echo < /dev/tty 2>/dev/null; trap - INT RETURN; kill -INT $$' INT
-    trap 'stty echo < /dev/tty 2>/dev/null; trap - INT RETURN' RETURN
+    trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT; kill -INT $$' INT
+    trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT' RETURN
     printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
     IFS= read -rs _pw < /dev/tty
     printf '\n' > /dev/tty

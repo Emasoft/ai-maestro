@@ -31,17 +31,10 @@ data_produced:
   - Plugin settings.local.json modifications (temporary, cleaned up)
   - Agent registry entry (temporary, deleted)
   - Cemetery archive entry (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - At least 1 existing team with available slots
 governance_password: "$AIM_GOVERNANCE_PASSWORD"
@@ -167,12 +160,27 @@ author: AI Maestro Team
 > properties via API. This phase verifies that constraint through the UI by
 > attempting an API call with the agent's own auth headers.
 
-#### S014: Verify agent-self-identity probe is blocked at the auth layer
-- **Action:** Check `GET /api/agents/<agentId>` to get the agent's ID. Then attempt `PATCH /api/agents/<agentId>` with header `X-Agent-Id: <agentId>` and NO `Authorization: Bearer …` header, body `{"label": "hacked"}`.
-- **Goal:** API returns 401 -- sending only `X-Agent-Id` without a Bearer token is treated as anonymous identity-spoofing and rejected by `lib/agent-auth.ts` BEFORE any RBAC check runs. This is the most-secure model: the server never trusts the `X-Agent-Id` header on its own; a matching Bearer is required to prove identity. RBAC denials (403) are covered by unit tests in `tests/authorization.test.ts`, which can exercise the post-auth path with real tokens.
+#### S014: Confirm the identity-spoofing refusal is pinned by the unit suite
+> The original S014 sent a real `PATCH /api/agents/<id>` carrying `X-Agent-Id` and no Bearer.
+> That is an out-of-UI **mutation attempt**, which Rule 6 forbids and the subagent write-guard
+> blocks, so the step could only ever be DEFERRED — and a step whose sole execution is a rule
+> violation is worse than no step, because a permanent DEFERRED reads as coverage. The assertion
+> it was reaching for is pinned in `tests/authorization.test.ts`, whose own header names this
+> scenario's S014/S032 as the reason it exists (TRDD-0IPK36MS). This step now verifies THAT.
+
+- **Action:** Run the covering case read-only, and assert on the reported test COUNT, not on the
+  exit code: `npx vitest run tests/authorization.test.ts -t "no Bearer token but X-Agent-Id present" 2>&1 | tail -20`
+- **Goal:** Exactly 1 test passes. Sending `X-Agent-Id` with no `Authorization: Bearer …` is
+  rejected 401 by `lib/agent-auth.ts` BEFORE any RBAC check runs — the server never trusts that
+  header alone. Read the `Tests` line: vitest exits **0 when `-t` matches nothing**, so an exit
+  code alone cannot tell "the guard holds" from "the case was renamed and nothing ran".
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status is 401. Error message mentions "authentication required" or "requires authentication". Screenshot: SCEN-001/S014-auth-required.png
+- **Verify:** The summary reads `Tests  1 passed | 45 skipped (46)` (the `-t` filter skips the
+  rest of the file; the skipped count may grow as cases are added — the `1 passed` is the claim).
+  `0 passed` / `46 skipped` is a FAIL: it means the cited case no longer exists under that name
+  and this scenario's claim to cover it has gone stale. Measured 2026-08-27: a non-matching `-t`
+  prints exactly that and still exits 0. Screenshot: SCEN-001/S014-auth-pinned.png
 
 ---
 
@@ -337,12 +345,26 @@ author: AI Maestro Team
 > **Context:** Only MANAGER or COS can change titles. A MEMBER agent trying to
 > change another agent's title via the API should be denied.
 
-#### S032: Attempt title change via API with the scen-prefixed MEMBER's identity header (no Bearer)
-- **Action:** Read the ID of `scen001-title-agent-2` (the scenario's OWN scen-prefixed second agent — never a real user agent's ID) via `GET /api/agents | jq '.agents[] | select(.name=="scen001-title-agent-2") | .id'`. Then send `PATCH /api/agents/<testAgentId>` with header `X-Agent-Id: <scen001-title-agent-2-id>` (no `Authorization: Bearer …`) and body `{"governanceTitle": "architect"}`. DO NOT use any other agent's ID — if you cannot find `scen001-title-agent-2` in the API response, halt and file a bug (the scenario's S027a should have created it).
-- **Goal:** API returns 401 -- sending the identity header without a matching Bearer token is blocked by `lib/agent-auth.ts` before RBAC runs. The server never trusts `X-Agent-Id` alone. The TRUE RBAC check (MEMBER cannot change other agents' titles — 403 once authenticated) is verified by `tests/authorization.test.ts`, which can provide a real Bearer token.
+#### S032: Confirm the MEMBER-cannot-retitle-others RBAC matrix is pinned by the unit suite
+> Same disposition as S014, and for the same reason: the original step sent a real
+> `PATCH /api/agents/<id>` and so was permanently DEFERRED. What it was reaching for — a MEMBER
+> cannot retitle another agent — needs a REAL Bearer to reach the RBAC layer at all, which a UI
+> scenario cannot mint. `tests/authorization.test.ts` mints real AID tokens and pins the whole
+> matrix, so the honest step is to verify that suite covers this, not to re-attempt the mutation.
+
+- **Action:** Run the covering cases read-only and assert on the COUNT:
+  `npx vitest run tests/authorization.test.ts -t "TRDD-0IPK36MS" 2>&1 | tail -20`
+- **Goal:** All 7 cases in the `TRDD-0IPK36MS — RBAC change-title authorization matrix` describe
+  block pass — including `MEMBER attempting to change ANOTHER agent's title is DENIED` (the 403
+  this step was written for), `no Bearer token but X-Agent-Id present … -> 401`, and
+  `valid Bearer token but X-Agent-Id claims a DIFFERENT identity -> 403`.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status 401. Error message references the missing Bearer or "Agent identity requires authentication". Test agent's title remains ORCHESTRATOR. Screenshot: SCEN-001/S032-auth-required.png
+- **Verify:** The summary reads `Tests  7 passed | 39 skipped (46)` — the `7 passed` is the
+  claim; the skipped count may grow as the file gains cases. Fewer than 7 means a case was renamed
+  or removed — investigate before passing the step; do NOT read a bare exit 0 as success, since a
+  `-t` matching nothing prints `46 skipped` and still exits 0 (measured 2026-08-27). The test
+  agent's title is untouched (this step mutates nothing). Screenshot: SCEN-001/S032-auth-pinned.png
 
 ---
 

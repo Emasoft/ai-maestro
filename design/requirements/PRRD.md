@@ -143,6 +143,22 @@ spec disagree, the golden rule is what must be amended into the spec — never t
   `design-included: "false"`; **`design_ai_review`** if approved and `design-included:
   "true"`.
 
+- **G12.1** — **Every create, read and update of a 3-pillars file MUST go through its own
+  tool — `trddgrep` for TRDDs, `prrdgrep` for the PRRD, `specgrep` for specs — and never
+  through a hand edit.** Forbidden for these files: the Edit/Write tools, `sed`, `python`
+  heredocs, shell redirection, or any other direct write. The tools lint on access, apply the
+  autofixable repairs, refuse a write that would leave the file malformed, and report what is
+  not autofixable; a hand edit bypasses all four, which is how a card acquires missing fields,
+  an invalid value, or a silent no-op edit. **An agent that cannot perform an operation through
+  the tool files the missing verb as a TRDD — it does NOT fall back to hand-editing.** Two
+  reasons this is GOLDEN and not a style preference: (a) correctness — the tool is the only
+  thing that makes a malformed 3-pillars file *impossible* rather than *unlikely*, and every
+  malformed card in this corpus was hand-written; (b) token economy — parameters go in, the
+  tool does the reading and the writing, so neither the file nor its rewrite passes through an
+  agent's context. This mirrors the discipline the memory system already has
+  (`markdown-memory-recall.md`: never hand-author wikimem markdown, use the write verbs); the
+  3-pillars system had the linters but never the mandate.
+
 ---
 
 ## 🥈 SILVER rules

@@ -699,9 +699,18 @@ maestro_sudo_ensure() {
         return 1
     fi
     local _pw _body _resp _tok
+    # Echo OFF before the prompt, not only inside `read -rs`: keystrokes that land in the gap
+    # between the prompt and the read (a paste, typeahead) are echoed by the tty line
+    # discipline and the password appears on screen — measured by the node-pty harness
+    # (TRDD-Q758CX98). Restored on return and on Ctrl-C, which is then re-raised so the
+    # script still dies. Belt and braces with -s: this ORDER is pinned by a source test.
+    stty -echo < /dev/tty 2>/dev/null
+    trap 'stty echo < /dev/tty 2>/dev/null; trap - INT RETURN; kill -INT $$' INT
+    trap 'stty echo < /dev/tty 2>/dev/null; trap - INT RETURN' RETURN
     printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
     IFS= read -rs _pw < /dev/tty
     printf '\n' > /dev/tty
+    stty echo < /dev/tty 2>/dev/null
     if [ -z "$_pw" ]; then
         echo "Error: empty password — strict operation refused (fail-closed)." >&2
         return 1

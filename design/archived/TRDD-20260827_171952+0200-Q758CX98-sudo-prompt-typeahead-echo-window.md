@@ -1,12 +1,12 @@
 ---
 trdd-id: Q758CX98
 title: The MAESTRO sudo prompt echoes typeahead — a password pasted before read -rs runs lands on screen
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T17:19:52+0200
-updated: 2026-08-27T17:19:52+0200
+updated: 2026-08-27T17:31:18+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -58,9 +58,9 @@ scan with a positive control), plus the existing P2 behavioural test.
 
 ## Acceptance
 
-- [ ] `stty -echo` precedes the prompt printf in common.sh and agent-helper.sh, restored after the read and on interrupt
-- [ ] A source-order test pins the order in BOTH copies; neuter (swap the order in one copy) reds exactly that copy's test
-- [ ] tests/unit/maestro-sudo-gate-pty.test.ts still 3/3 green
+- [x] `stty -echo` precedes the prompt printf in common.sh and agent-helper.sh, restored after the read and on interrupt
+- [x] A source-order test (tests/unit/maestro-sudo-gate-order.test.ts; neuter: common.sh swap → 1 red / 1 green) pins the order in BOTH copies; neuter (swap the order in one copy) reds exactly that copy's test
+- [x] tests/unit/maestro-sudo-gate-pty.test.ts still 3/3 green
 
 ## Approval log
 

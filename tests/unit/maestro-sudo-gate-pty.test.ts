@@ -107,7 +107,9 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   it('P2: the typed password is never in any process argv while the exchange is in flight, nor echoed to the tty', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], SECRET)
     expect(psSnapshot.length).toBeGreaterThan(1000) // the sweep really ran
-    expect(psSnapshot).toMatch(/curl/) // and curl was alive when it ran (the argv it would leak through)
+    // THIS run's curl, not any curl on the box: the stub port is unique per test, so its URL
+    // identifies the one process whose argv could carry the secret (review fork, 2026-08-27).
+    expect(psSnapshot).toContain(`${apiBase}/api/auth/sudo-password`)
     // Exclude the HARNESS's own processes: the vitest worker holds this file (and so the
     // literal), and an editor/agent shell that wrote this file via a heredoc carries it in
     // argv too — the ps-finds-its-own-scanner trap, measured on this test's first run.

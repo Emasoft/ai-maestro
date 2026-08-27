@@ -23,6 +23,14 @@ SCEN_FILE=$(ls "tests/scenarios/SCEN-${NNN}_"*.scen.md 2>/dev/null | head -1)
 
 command -v yq >/dev/null 2>&1 || { echo "SETUP_FAIL 'yq' not on PATH (required for frontmatter parsing)" >&2; exit 1; }
 
+# Governance precondition (TRDD-Q6JM2RU3). A scenario that assigns the MANAGER
+# title cannot run while another agent holds the per-host singleton — it walks
+# into an un-actionable UI block mid-run, by which point a forked runner may not
+# have the budget left to recover AND still clean up. This runs BEFORE the
+# backup dir is created and before any git fixture is reset, so a refused setup
+# mutates nothing and leaves no orphan state-backups/ directory behind.
+bash "$(dirname "$0")/assert-clean-governance.sh" "$NNN" "$SCEN_FILE"
+
 FM=$(awk '/^---$/{c++; if(c==2) exit; next} c==1' "$SCEN_FILE")
 
 # Fail-fast frontmatter parser. A prior version swallowed yq errors with

@@ -78,6 +78,27 @@ afterEach(async () => {
   fs.rmSync(fakeHome, { recursive: true, force: true })
 })
 
+// The prompt is printed BEFORE `read -rs` switches the tty to -echo, and a harness types
+// faster than any human: under full-suite load the keystrokes landed in that gap and the tty
+// line discipline echoed them, so P2 read the secret in the pty output (measured: 1 red in
+// 6438). Wait until the child's tty actually reports -echo — BSD /bin/stty, never the GNU one
+// on PATH (it wants -F) — then type. Falls back to a short settle only if stty cannot be read.
+async function typeWhenNoEcho(p: { pid: number; write: (s: string) => void }, password: string) {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    try {
+      const tty = execFileSync('ps', ['-o', 'tty=', '-p', String(p.pid)], { encoding: 'utf8' }).trim()
+      const st = execFileSync('/bin/stty', ['-f', `/dev/${tty}`, '-a'], { encoding: 'utf8' })
+      if (/(^|\s)-echo(\s|$)/.test(st)) break
+    } catch {
+      await new Promise((r) => setTimeout(r, 200))
+      break
+    }
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  p.write(password + '\r')
+}
+
 function runAtTerminal(args: string[], password: string): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
     const p = ptySpawn('bash', [TEAMS, ...args], {
@@ -88,7 +109,7 @@ function runAtTerminal(args: string[], password: string): Promise<{ code: number
     let typed = false
     p.onData((d) => {
       out += d
-      if (!typed && out.includes('MAESTRO password')) { typed = true; p.write(password + '\r') }
+      if (!typed && out.includes('MAESTRO password')) { typed = true; void typeWhenNoEcho(p, password) }
     })
     const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
     p.onExit(({ exitCode }) => { clearTimeout(killer); resolve({ code: exitCode, out }) })

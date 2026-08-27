@@ -34,17 +34,10 @@ data_produced:
   - 1 test marketplace registered (temporary, removed during cleanup)
   - 1 test plugin installed at user scope (temporary, uninstalled during cleanup)
   - Claude CLI ~/.claude/settings.json modifications (restored via STATE-WIPE)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser with DevTools accessible
   - Internet access for cloning marketplace from GitHub
   - "'which gh && gh auth status' succeeds"
   - Marketplace used for testing must NOT be already registered. Default choice is https://github.com/petems/petems-claude-marketplace (small, 2 plugins, no runtime deps). NOTE 2026-04-30 — this scenario originally used cblecker/claude-plugins, but that marketplace is now pre-registered in the dev user's `~/.claude/settings.json`, so a Rule 4 authoring fix swapped to petems' marketplace which is unregistered.

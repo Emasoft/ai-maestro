@@ -30,17 +30,10 @@ data_produced:
   - Plugin settings.local.json modifications (temporary, cleaned up)
   - Agent registry entry (temporary, deleted)
   - Cemetery archive entry (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - No pre-existing agent named "scen012-r17-test"
 governance_password: "$AIM_GOVERNANCE_PASSWORD"

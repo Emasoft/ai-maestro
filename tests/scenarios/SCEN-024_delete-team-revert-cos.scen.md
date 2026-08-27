@@ -34,17 +34,10 @@ data_produced:
   - Plugin settings.local.json modifications (temporary, restored)
   - Agent registry entries (temporary, deleted)
   - Cemetery archive entries (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - "ai-maestro-plugins marketplace registered (remote GitHub marketplace, hosts ai-maestro-chief-of-staff role-plugin)"
   - "ai-maestro-local-roles-marketplace registered (local, per R20)"
   - 'No pre-existing agents matching "scen024-*"'

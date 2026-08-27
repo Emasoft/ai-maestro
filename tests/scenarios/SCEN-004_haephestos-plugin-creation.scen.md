@@ -29,9 +29,8 @@ ui_sections:
   - Agent Profile -> Config tab -> Role Plugin list (to verify published plugin)
   - Settings -> Cemetery tab
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - PSS plugin installed (perfect-skill-suggester in plugin cache)
   - CPV plugin installed (claude-plugins-validation in plugin cache)
   - No pre-existing ~/agents/haephestos/ directory (clean state)
@@ -40,16 +39,7 @@ data_produced:
   - ~/agents/haephestos/ workspace (temporary, deleted during cleanup)
   - 1 test role-plugin in ~/agents/role-plugins/ (temporary, deleted during cleanup)
   - Marketplace manifest update (temporary, reverted during cleanup)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
-  - mcp__chrome-devtools__type_text
-  - mcp__chrome-devtools__upload_file
-  - mcp__chrome-devtools__press_key
+browser_stack: dev-browser
 governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json

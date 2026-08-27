@@ -33,9 +33,8 @@ data_produced:
   - Cemetery archive entry (temporary, purged)
 browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - No pre-existing agent named "scen013-codex-r17-test"
   - Codex CLI installed (`which codex` succeeds)

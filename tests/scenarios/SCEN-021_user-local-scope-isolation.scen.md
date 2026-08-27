@@ -36,15 +36,9 @@ data_produced:
   - 2 test agents, "scen021-alpha" and "scen021-beta" (temporary)
   - 1 test plugin installed at user scope then at local scope
     (temporary, removed during cleanup)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
   - ai-maestro-plugins marketplace registered
   - At least one role-plugin available (e.g. ai-maestro-autonomous-agent)

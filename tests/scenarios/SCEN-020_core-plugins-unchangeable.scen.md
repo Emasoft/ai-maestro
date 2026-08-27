@@ -34,15 +34,9 @@ data_produced:
   - MAINTAINER title assignment binds a githubRepo `Emasoft/scen020-test-repo`
     (R19.3, temporary — cleared when the title reverts to AUTONOMOUS in S013
     and again removed entirely when the agent is deleted in S014)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
   - "ai-maestro-plugin installed at local scope in each agent's workdir (core, per R17.17 — never user scope)"
   - "ai-maestro-autonomous-agent role-plugin available in local marketplace"

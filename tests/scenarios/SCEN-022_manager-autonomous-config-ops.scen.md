@@ -48,15 +48,9 @@ data_produced:
   - 1 AMP message from scen022-manager to user (the completion report)
   - 2 cemetery entries (one per deleted agent) purged during cleanup
   - All artifacts removed during cleanup
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
   - NO real user MANAGER currently assigned on host (S002 precondition
     check — if a real MANAGER exists, the scenario HALTS rather than

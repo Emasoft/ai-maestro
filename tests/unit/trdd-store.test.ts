@@ -360,7 +360,15 @@ describe('trdd-store lifecycle transitions stage the file they moved (real git r
   })
 
   it('archiveTrdd stages the column edit, not just the rename', async () => {
-    seedAndCommit(() => writeTask('CCCC3333', 'archive-me', 'complete', repoDesign))
+    // The ticked box is REQUIRED, not decoration (TRDD-I8UC56GZ): archiveTrdd now runs
+    // the terminal checklist gate on the write primitive, so a card with no acceptance
+    // checklist cannot reach `completed` at all. This test is about STAGING, so it hands
+    // the gate a card that legitimately passes it rather than asserting around it.
+    seedAndCommit(() => {
+      const f = writeTask('CCCC3333', 'archive-me', 'complete', repoDesign)
+      fs.appendFileSync(f, '\n## Acceptance\n\n- [x] done\n')
+      return f
+    })
     const r = await archiveTrdd(repoDesign, 'CCCC3333', { approver: 'm', state: 'completed', iso: ISO })
     expect(r.ok).toBe(true)
     expectFullyStaged('completed')

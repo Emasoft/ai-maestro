@@ -26,6 +26,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
+import { VALID_COLUMNS, expectedZone } from './trdd-vocabulary'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
@@ -683,6 +684,23 @@ export function advanceColumn(
   if (trdd.zone !== 'tasks') {
     return { ok: false, error: `Only an open (tasks/) TRDD can be advanced; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
+  // THE COLUMN IS VALIDATED HERE, not only in the callers (TRDD-I8UC56GZ). This verb
+  // never moves folders, so an unvalidated column reaches disk two ways that both look
+  // like success: a value outside the ratified vocabulary, and a terminal value that
+  // belongs in archived/ and would sit in tasks/ instead — the ZONE-MISMATCH the doctor
+  // reports as an ERROR. Guarding the store rather than the CLI covers the HTTP callers
+  // for free, which is the whole reason it is here and not in trddgrep.
+  if (!VALID_COLUMNS.includes(column)) {
+    return { ok: false, error: `Invalid column "${column}" — not one of the ratified values`, status: 400 }
+  }
+  const wantZone = expectedZone(column, trdd.frontmatter ?? {})
+  if (wantZone && wantZone !== 'tasks') {
+    return {
+      ok: false,
+      error: `Column "${column}" belongs in design/${wantZone}/, not tasks/ — advance does not move folders; use the promote/refuse/archive verb for that transition`,
+      status: 409,
+    }
+  }
   let content = fs.readFileSync(trdd.filePath, 'utf-8')
   content = setFrontmatterField(content, 'column', column)
   content = setFrontmatterField(content, 'updated', opts.iso)
@@ -695,24 +713,78 @@ export function advanceColumn(
   })
 }
 
-/** ARCHIVE a once-approved TRDD → completed|cancelled|superseded (git mv → archived/). */
+/**
+ * The columns that live in `design/archived/`, per `expectedZone`.
+ *
+ * `complete` is HERE (TRDD-I8UC56GZ). It was missing, and the gap was silent: a caller
+ * asking for `complete` on a `release-via: none` card could only reach `advanceColumn`,
+ * which never moves folders — so the card sat terminal in `design/tasks/`, which IS the
+ * definition of open work, and the open count became a lie. The alternative the shape
+ * invited was worse: renaming `complete` → `completed` on the way in, the dual write
+ * 3P-ZON-05 was amended to kill after it was measured drifting 232 times fleet-wide.
+ *
+ * `expectedZone` remains the arbiter of WHETHER a given card archives — `complete` with
+ * `release-via: publish` still has stages ahead of it and stays in tasks/. This list is
+ * only which column VALUES the archive verb will write.
+ */
+export type ArchiveState = 'complete' | 'completed' | 'cancelled' | 'superseded' | 'published' | 'live'
+
+/**
+ * The archive states that assert the work was FINISHED, and so must prove it with a
+ * complete acceptance checklist. `cancelled` and `superseded` are exempt, matching the
+ * linter exactly: open boxes are what those columns MEAN, and demanding a finished
+ * checklist from abandoned or overtaken work would make honest closure impossible.
+ */
+const CHECKLIST_GATED_STATES: ReadonlySet<string> = new Set(['complete', 'completed', 'published', 'live'])
+
+/** ARCHIVE a once-approved TRDD → an archived column (git mv → archived/). */
 export function archiveTrdd(
   designDir: string,
   id: string,
   opts: {
     approver: string
-    state: 'completed' | 'cancelled' | 'superseded'
+    state: ArchiveState
     reason?: string
     supersededBy?: string
     iso: string
   },
 ): Promise<TrddResult> {
-  return withTrddLock(designDir, id, () => {
+  return withTrddLock(designDir, id, async () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   // A refused proposal is terminal in refused/; only proposals/ or tasks/ archive.
   if (trdd.zone === 'archived' || trdd.zone === 'refused') {
     return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
+  }
+  // THE CHECKLIST GATE, ON THE WRITE PRIMITIVE (TRDD-I8UC56GZ). It existed only as
+  // `rejectIncompleteChecklist` in lib/trdd-authz.ts — which returns a `NextResponse`,
+  // so it is reachable from the HTTP route and from nothing else. `trddgrep move` would
+  // therefore have archived cards the API refuses, and it gated only the literal string
+  // `completed`, never `complete`/`published`/`live`, which the linter treats as the same
+  // terminal claim. Guarding the primitive covers every caller, present and future — the
+  // lesson this repo learned the other way round when a per-call-site guard could not see
+  // a compensation path that wrote through the same function.
+  //
+  // The doctor is imported LAZILY because it imports this module: a top-level import
+  // would close the cycle, while a call-time one runs long after both are loaded. Only
+  // the body-grammar counter is taken from it.
+  if (CHECKLIST_GATED_STATES.has(opts.state)) {
+    const { countAcceptanceBoxes } = await import('./trdd-doctor')
+    const boxes = countAcceptanceBoxes(trdd.body ?? '')
+    if (boxes.total === 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: `${trdd.id} has NO acceptance checklist, so archiving it as '${opts.state}' would record a completion that proves nothing: nothing states what the card promised or whether it delivered. Write the checklist first, then archive`,
+      }
+    }
+    if (boxes.open > 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: `${trdd.id} has ${boxes.open} of ${boxes.total} acceptance box(es) still unchecked — archiving it as '${opts.state}' would be a false completion. Either the work is not done, or an obsolete box must be struck through with its reason (never silently ticked)`,
+      }
+    }
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'archived')
   const edits: Array<[string, string]> = [['column', opts.state], ['updated', opts.iso]]

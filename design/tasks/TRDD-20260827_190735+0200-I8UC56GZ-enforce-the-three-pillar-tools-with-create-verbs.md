@@ -1,12 +1,12 @@
 ---
 trdd-id: I8UC56GZ
 title: The 3-pillars tools have no create verb and no lint-on-write, so G12.1 cannot yet be obeyed
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T19:07:35+0200
-updated: 2026-08-27T19:07:35+0200
+updated: 2026-08-27T19:31:32+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -42,6 +42,41 @@ the trddgrep tool (along with prrdgrep and specgrep) … add this to the golden 
 **The rule half is DONE: `PRRD G12.1` (added 2026-08-27T19:07:35+0200 via `prrdgrep edit`, lint clean).** This card
 is the TOOLING half, without which G12.1 mandates something the tools cannot do.
 
+### LANDED 2026-08-27T19 (this session) — the tooling half is real, not complete
+
+`trddgrep new` and `trddgrep move` exist; the per-document pre-write gate is real. Both verbs
+are CLI surface over machinery that ALREADY existed and was reachable only through the HTTP
+API — `lib/trdd-create.ts` (minting, mandate routing, injection guards) and `lib/trdd-store.ts`
+(promote/refuse/advance/archive, each with the git mv, the rollback and the lock). Nothing of
+that was reimplemented. The measured claim below, "no create verb in any of the three tools",
+was true of the TOOLS and understated the LIBRARY.
+
+Three defects found while wiring it, each fixed at the primitive rather than the call site:
+
+1. `archiveTrdd` could not express `complete` — its state union was `completed|cancelled|
+   superseded`, while `expectedZone` says a `complete` card with `release-via: none` belongs
+   in archived/. The only other verb, `advanceColumn`, never moves folders. So the obvious
+   dispatch would have left a terminal column in the OPEN zone (the ZONE-MISMATCH this session
+   shipped once by hand), and the shape invited the worse fix: renaming `complete` → `completed`
+   on the way in, which is the dual write 3P-ZON-05 was amended to kill.
+2. `advanceColumn` validated NO column at all. It now refuses a value outside the vocabulary and
+   one whose zone is not tasks/ — in the STORE, so the HTTP callers are covered too.
+3. The terminal CHECKLIST gate lived only in `rejectIncompleteChecklist`, which returns a
+   `NextResponse` — reachable from the route and from nothing else, and keyed on the literal
+   string `completed` only. `trddgrep move` would have archived cards the API refuses. It is
+   now on `archiveTrdd` itself and covers complete/completed/published/live.
+
+NEUTERS RECORDED (each broke exactly the named tests, positive controls green):
+dispatch `per-document` → `per-nothing`: 3 red in `pillar-edit-guard.test.ts`, both positive
+controls green. `complete` out of `CHECKLIST_GATED_STATES` and `want === archived` unreachable:
+2 red in `trddgrep-new-and-move.test.ts`, one each.
+
+STILL OPEN, and why each is not a hidden landmine: `split`/`supersede`/`merge`, `migrate`
+(82 cards still carry `approval-tier:`), the structured setters, `fix` auto-invocation on the
+write paths, create verbs for prrdgrep/specgrep, and META-MISSING (154 warns — `assignee`/
+`created-by` on cards nobody can now attribute; `new` writes them, so the count stops GROWING).
+`edit` gates BEFORE the write rather than linting after, which is stronger than the box asks.
+
 ### Measured 2026-08-27T19:07:35+0200
 
 | claim | reality |
@@ -65,7 +100,7 @@ it asks for does not exist. It is the LAST card that may be, and box 1 is what m
 
 ## Acceptance
 
-- [ ] `trddgrep new --title … --column … --task-type …` creates a card with EVERY mandatory field
+- [x] `trddgrep new --title … --column … --task-type …` creates a card with EVERY mandatory field
       populated (including `assignee`/`created-by`, whose absence is today's `META-MISSING`), a
       minted collision-checked id, both timestamps, and the correct zone folder — then lints it and
       refuses to leave a file that would not pass `validate`
@@ -73,8 +108,8 @@ it asks for does not exist. It is the LAST card that may be, and box 1 is what m
       shape differs
 - [ ] Every write path (`new`, `edit`, `fix`) lints AFTER the write and reports non-autofixable
       findings on stderr; a write that would leave the file invalid is refused, not warned about
-- [ ] A neuter recorded for each: break the post-write lint, confirm exactly one named test reds
-- [ ] The three tools' `help` states the mandate and points at `PRRD G12.1`
+- [x] A neuter recorded for each: break the post-write lint, confirm exactly one named test reds
+- [x] The three tools' `help` states the mandate and points at `PRRD G12.1`
 - [ ] `META-MISSING` reaches 0 on the corpus, or each remaining case is explained in place
 
 ### The model is `memgrep` — match its surface, not just its linter (USER, 2026-08-27)
@@ -88,7 +123,7 @@ memgrep's verbs, measured: `new-page` · `add-atom` · `add-lesson` · `edit` ·
 `validate` · `recall` · `find` · `overview` · `atom` · `links` · `index` · `reindex`. trddgrep has
 only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or MOVES is missing.
 
-- [ ] **`trddgrep move <id> <column>` performs the column edit AND the zone `git mv` as ONE
+- [x] **`trddgrep move <id> <column>` performs the column edit AND the zone `git mv` as ONE
       operation.** This is the sharpest case: a transition today is two hand steps — edit
       `column:`, then `git mv` between `design/proposals|tasks|archived|refused` — and doing one
       without the other is how a card ends terminal-in-the-open-zone (this session shipped exactly
@@ -105,7 +140,7 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 - [ ] **Structured field updates** (`set`, `add-box`, `check-box`, `append-state`) so an agent
       never regex-patches frontmatter — the failure that produced TWO silent no-ops on
       TRDD-GFX57106 this session
-- [ ] **The TRDD pre-write gate is a NO-OP today — make it real.** `pillarPreWriteCheck` early-
+- [x] **The TRDD pre-write gate is a NO-OP today — make it real.** `pillarPreWriteCheck` early-
       returns `() => {}` for any kind that is not `per-line` (`lib/pillar/edit-guard.ts:181`;
       `lintPillarLines` likewise at `:373`), and TRDD is `mode: 'per-document'`
       (`lib/pillar/kinds.ts:127`) while prrd and spec are `per-line` (`:162`, `:196`). So
@@ -120,3 +155,7 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 
 - 2026-08-27T19:07:35+0200 — MANDATE issued by the USER (min-approval-requirement: none; issuer authority >= approver).
   Pre-approved: no approval request was sent. The USER also set `PRRD G12.1` the same minute.
+- 2026-08-27T19:31:31+0200 — column → verify_assumptions. tooling half landed; see the LANDED block
+- 2026-08-27T19:31:31+0200 — column → plan. tooling half landed; see the LANDED block
+- 2026-08-27T19:31:31+0200 — column → dispatch. tooling half landed; see the LANDED block
+- 2026-08-27T19:31:32+0200 — column → dev. tooling half landed; see the LANDED block

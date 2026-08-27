@@ -224,13 +224,75 @@ describe('SPEC guard — stable clause ids, corpus-wide uniqueness, status: lega
   })
 })
 
-describe('scope — per-document pillars are not this gate\'s job', () => {
-  it('the TRDD kind gets a no-op check (its funnel is editTrdd + lib/trdd-edit-guard)', () => {
-    const check = pillarPreWriteCheck(TRDD_KIND, { filePath: prrdPath, corpusRecords: [] })
-    // Content that would be wildly illegal for a per-line pillar passes untouched.
+/**
+ * TRDD-I8UC56GZ — the per-document (TRDD) branch, which used to be a no-op.
+ *
+ * The old contract, asserted here until 2026-08-27, was "per-document pillars are not
+ * this gate's job — their funnel is editTrdd". True of `editTrdd`, false of the tool
+ * agents actually run: `trddgrep edit` goes through `replaceAtLines` directly, so it had
+ * the lock and the CAS staleness guard and no field validation whatsoever. Measured, it
+ * wrote `column: banana` and exited 0. `PRRD G12.1` mandates every TRDD write go through
+ * that tool, so the gate the mandate assumes has to exist.
+ *
+ * NEUTER (recorded per the card's acceptance): change the dispatch line in
+ * `pillarPreWriteCheck` from `=== 'per-document'` to a value no kind uses, so TRDD falls
+ * through to the old `return () => {}`. Exactly the first three tests below red; the
+ * fourth (an unrelated legal edit) stays green, which is what proves they are testing
+ * the refusal and not merely that the function throws.
+ */
+describe('per-document (TRDD) — the gate that used to be a no-op', () => {
+  const trddLines = (column: string) => [
+    '---',
+    'trdd-id: AAAA1111',
+    'title: a card',
+    `column: ${column}`,
+    'created: 2026-08-27T10:00:00+0200',
+    'updated: 2026-08-27T10:00:00+0200',
+    '---',
+    '',
+    '# a card',
+  ]
+  // The path decides the ZONE, and the zone is half of the zone⇄column clause.
+  // The file need not exist: the guard reads the path only to learn the ZONE.
+  const inTasks = () => join(designDir, 'tasks', 'TRDD-20260827_100000+0200-AAAA1111-a-card.md')
+  const trddGuard = () => pillarPreWriteCheck(TRDD_KIND, { filePath: inTasks(), corpusRecords: [] })
+
+  it('refuses a column outside the ratified vocabulary', () => {
     expect(() =>
-      check({ prevLines: ['- **G1.1** — x'], nextLines: ['- **G1,1** — x'], changedLines: [1] }),
+      trddGuard()({ prevLines: trddLines('dev'), nextLines: trddLines('banana'), changedLines: [4] }),
+    ).toThrow(/column "banana" is not one of the ratified values/)
+  })
+
+  it('refuses a terminal column that belongs in another zone', () => {
+    expect(() =>
+      trddGuard()({ prevLines: trddLines('dev'), nextLines: trddLines('completed'), changedLines: [4] }),
+    ).toThrow(/belongs in design\/archived\/ but this file is in design\/tasks\//)
+  })
+
+  it('refuses a date that is not ISO 8601 with a local offset', () => {
+    const bad = trddLines('dev').map((l) =>
+      l.startsWith('updated:') ? 'updated: 2026-08-27T08:00:00Z' : l,
+    )
+    expect(() =>
+      trddGuard()({ prevLines: trddLines('dev'), nextLines: bad, changedLines: [6] }),
+    ).toThrow(/is not ISO 8601 with a local offset/)
+  })
+
+  it('allows a legal column change — the gate discriminates, it does not just throw', () => {
+    expect(() =>
+      trddGuard()({ prevLines: trddLines('dev'), nextLines: trddLines('testing'), changedLines: [4] }),
     ).not.toThrow()
+  })
+
+  /**
+   * The half that keeps the gate USABLE. Judging the candidate absolutely would refuse
+   * every unrelated edit to any card with a pre-existing defect — including the repairs
+   * that fix those defects, which is how a write gate gets routed around.
+   */
+  it('does not refuse an unrelated edit to a card that ALREADY carried the violation', () => {
+    const prev = trddLines('banana')
+    const next = prev.map((l) => (l.startsWith('title:') ? 'title: a renamed card' : l))
+    expect(() => trddGuard()({ prevLines: prev, nextLines: next, changedLines: [3] })).not.toThrow()
   })
 })
 

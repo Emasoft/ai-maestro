@@ -58,6 +58,7 @@ import {
   AUTHORITY_RANK,
   TIER_TO_REQUIREMENT,
   defaultColumnForMissing,
+  expectedZone,
 } from './trdd-vocabulary'
 export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT, defaultColumnForMissing }
 
@@ -508,21 +509,10 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nod
   return { cards, unparsed, nodes }
 }
 
-/** Which zone a column belongs in. Returns null when the column implies no constraint. */
-export function expectedZone(column: string, fm: Record<string, unknown>): TrddZone | null {
-  if (column === 'proposal') return 'proposals'
-  if (column === 'refused') return 'refused'
-  if (['completed', 'cancelled', 'superseded', 'published', 'live'].includes(column)) return 'archived'
-  // `complete` is terminal ONLY when the TRDD ships nothing further. With
-  // `release-via: publish|deploy` it still has publish/deploy stages ahead of it,
-  // so it legitimately stays OPEN in design/tasks/.
-  if (column === 'complete') {
-    const via = String(fm['release-via'] ?? 'none').trim()
-    return via === 'none' || via === '' ? 'archived' : null
-  }
-  if (WORKING_COLUMNS.includes(column)) return 'tasks'
-  return null
-}
+// `expectedZone` MOVED to lib/trdd-vocabulary.ts (TRDD-I8UC56GZ) so the write-time gate
+// can ask it without importing this file — which imports trdd-store and trdd-graph, and
+// would put a corpus walker behind every write. Re-exported so every importer is unchanged.
+export { expectedZone }
 
 export function lintCorpus(designDir: string): DoctorReport {
   const { cards, unparsed, nodes } = loadCorpus(designDir)

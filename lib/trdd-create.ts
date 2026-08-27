@@ -79,6 +79,15 @@ export interface CreateTrddOpts {
   authorAuthority: string
   /** Who authored it (agent name or 'user') — current-owner + created-by. */
   author: string
+  /**
+   * The card's OWNER. Distinct from `author` (`created-by:`, authorship, set once) and
+   * from `current-owner:` (the write lock): `assignee:` is who is DOING it, and the D4
+   * watchdog asserts it is set on every card in tasks/ — its absence is the single
+   * biggest source of META-MISSING on this corpus (TRDD-I8UC56GZ). Defaults to the
+   * author for a mandate, and is omitted on a proposal, which has no owner until it is
+   * approved and dispatched.
+   */
+  assignee?: string
   parent?: string
   npt?: string[]
   eht?: string[]
@@ -159,6 +168,11 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     `task-type: ${opts.taskType}`,
     `min-approval-requirement: ${minApproval}`,
   ]
+  const assignee = (opts.assignee ?? (isMandate ? author : '')).trim()
+  if (assignee && /[\r\n\u0000-\u001f:]/.test(assignee)) {
+    throw new Error('assignee must be a one-line name without a colon')
+  }
+  if (assignee) lines.push(`assignee: ${assignee}`)
   if (isMandate) {
     lines.push('mandate: true', `mandated-by: ${opts.authorAuthority}`, 'approved: true',
       `approval-judge: ${author}`, `approval-datetime: ${iso}`)

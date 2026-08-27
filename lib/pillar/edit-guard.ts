@@ -31,6 +31,8 @@ import path from 'path'
 import type { PillarKind } from './kinds'
 import { walkDocuments, walkRecords, type PillarRecord } from './store'
 import { isPipelineStateValue } from '../trdd-vocabulary'
+import { TRDD_ZONES, type TrddZone } from './kinds'
+import { candidateFrontmatter, introducedViolations, validateTrddCandidate } from './trdd-candidate'
 
 /** A refused pillar edit — the CLIs print it as `BLOCKED <tool>: …` and exit 2. */
 export class GuardedEditError extends Error {
@@ -167,8 +169,15 @@ export interface PillarGuardOpts {
 }
 
 /**
- * Build the pre-write check for one edit of one document. Per-document pillars
- * (TRDD) return a no-op: their funnel is `editTrdd`, which has its own gate.
+ * Build the pre-write check for one edit of one document.
+ *
+ * PER-DOCUMENT (TRDD) USED TO RETURN A NO-OP HERE, on the reasoning that its funnel is
+ * `editTrdd`, which has its own gate. That reasoning was true of `editTrdd` and false of
+ * the tool agents actually run: `trddgrep edit` goes through `replaceAtLines` directly,
+ * so it had the lock and the CAS staleness guard and NO field validation — measured, it
+ * wrote `column: banana` and exited 0, while its two per-line siblings refused their
+ * equivalents. `PRRD G12.1` mandates that every TRDD write go through this tool, so the
+ * gate the mandate assumes has to actually be here (TRDD-I8UC56GZ).
  */
 export function pillarPreWriteCheck(
   kind: PillarKind,
@@ -178,6 +187,7 @@ export function pillarPreWriteCheck(
   nextLines: readonly string[]
   changedLines: readonly number[]
 }) => void {
+  if (kind.source.mode === 'per-document') return perDocumentCheck(kind, opts)
   if (kind.source.mode !== 'per-line') return () => {}
   const declIdAt = declIdReader(kind)
   // The kind's OWN declaration regex (never a second one — see the file header): it
@@ -356,6 +366,47 @@ export function pillarPreWriteCheck(
 // CAN be judged at rest is judged here, through the SAME finders the gate calls —
 // one predicate set, two call sites, so the checker and the gate cannot drift into
 // the fixer-vs-linter asymmetry (a repair the report never mentioned).
+
+/**
+ * The per-document gate: judge the CANDIDATE frontmatter, inside the lock, on the exact
+ * bytes that would land. Only TRDD is per-document, so the predicate is TRDD's — shared
+ * verbatim with `trddgrep new` and `trddgrep move` (`./trdd-candidate`), because a gate
+ * and a creator keyed on two predicates is how a linter and its fixer came to disagree
+ * in this same repo.
+ *
+ * It reports what the edit would INTRODUCE, never what the card already carried: judging
+ * absolutely would refuse an unrelated one-line edit to any card with a pre-existing
+ * defect — including, fatally, the repairs that fix those defects.
+ */
+function perDocumentCheck(
+  kind: PillarKind,
+  opts: PillarGuardOpts,
+): (ctx: { prevLines: readonly string[]; nextLines: readonly string[]; changedLines: readonly number[] }) => void {
+  if (kind.name !== 'trdd') return () => {}
+  // The zone is the file's parent directory. An unrecognised parent is not a fault here
+  // — the caller may be editing a corpus laid out some other way — but it does mean the
+  // zone⇄column clause has nothing to compare against, so it is skipped rather than
+  // guessed. Every other clause still applies.
+  const parent = path.basename(path.dirname(opts.filePath))
+  const zone = (TRDD_ZONES as readonly string[]).includes(parent) ? (parent as TrddZone) : null
+  return ({ prevLines, nextLines }) => {
+    const violations = zone
+      ? introducedViolations(
+          candidateFrontmatter(prevLines),
+          candidateFrontmatter(nextLines),
+          zone,
+        )
+      : validateTrddCandidate(candidateFrontmatter(nextLines), 'tasks').filter(
+          (v) => !v.includes('belongs in design/'),
+        )
+    if (violations.length) {
+      throw new GuardedEditError(
+        `refusing the edit — it would introduce ${violations.length} frontmatter violation(s):\n` +
+          violations.map((v) => `  • ${v}`).join('\n'),
+      )
+    }
+  }
+}
 
 export interface PillarLintFinding {
   filePath: string

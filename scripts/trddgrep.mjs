@@ -43,6 +43,7 @@
  *   trddgrep show <id>           the card + its STATE block (authoritative on resume)
  *   trddgrep <pattern>           ranked search over title, labels, id and body
  */
+import fs from 'fs'
 import path from 'path'
 import process from 'process'
 
@@ -214,7 +215,11 @@ const KNOWN_FLAGS = new Set([
   '--design-body',    // show | search — stripped above; listed so acceptance is not
   '--no-design-body', // a function of which filter ran first
 ])
-if (cmd !== 'edit') {
+// `new` and `move` join `edit` in the exemption for the same stated reason: a MUTATING
+// verb must never IGNORE a token, and an allowlist can only ever ignore. Each rejects
+// every token it did not consume, which is strictly stronger than this check.
+const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move'])
+if (!STRICT_PARSE_VERBS.has(cmd)) {
   const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
   if (unknownFlag) {
     console.error(`trddgrep: could not run — unknown option ${unknownFlag} — see \`trddgrep help\``)
@@ -964,6 +969,203 @@ switch (cmd) {
     break
   }
 
+  // ---- CREATE. The verb `PRRD G12.1` assumes exists (TRDD-I8UC56GZ).
+  //
+  // Every malformed card in this corpus was hand-written, and the failure is always the
+  // same shape: a `cat > file <<EOF` writes a plausible card missing the two or three
+  // fields no human remembers, and the linter's usual warning count is consistent with
+  // their absence, so running it confirms nothing. A create verb writes them in the
+  // first place.
+  //
+  // The MINTING, the mandate routing (authority >= floor ⇒ a self-approved mandate in
+  // tasks/, below it ⇒ a proposal awaiting the approver) and the frontmatter-injection
+  // guards are `lib/trdd-create.ts`, which the HTTP create route has used since
+  // TRDD-40DYBI4T. Nothing of that is reimplemented here — this verb is the CLI surface
+  // that library never had, which is why the tools looked like they had no create verb.
+  case 'new': {
+    const { createTrdd } = await import('../lib/trdd-create.ts')
+    const { candidateFrontmatter, validateTrddCandidate } = await import('../lib/pillar/trdd-candidate.ts')
+    const { parseTrddFile } = await import('../lib/trdd-store.ts')
+
+    let list = argv.slice(1)
+    const take = (name) => {
+      const i = list.indexOf(name)
+      if (i < 0) return undefined
+      const v = list[i + 1]
+      if (v === undefined) {
+        console.error(`trddgrep: ${name} needs a value`)
+        process.exit(2)
+      }
+      list = [...list.slice(0, i), ...list.slice(i + 2)]
+      return v
+    }
+    const title = take('--title')
+    const taskType = take('--task-type')
+    const author = take('--author')
+    const assignee = take('--assignee')
+    const minApproval = take('--min-approval')
+    const authority = take('--authority')
+    const parent = take('--parent')
+    const npt = take('--npt')
+    const eht = take('--eht')
+    const body = take('--body')
+    // STRAY TOKENS ARE A REFUSAL, never a silent drop — the same contract `edit` carries.
+    // A mutating verb that ignores a token performs a DIFFERENT write than the one asked
+    // for and reports success; `--titel "…"` would otherwise mint a card called
+    // "untitled" and exit 0.
+    if (list.length > 0) {
+      console.error(
+        `trddgrep: unrecognised argument(s) on \`new\`: ${list.join(' ')} — see \`trddgrep help\``,
+      )
+      process.exit(2)
+    }
+    if (!title) {
+      console.error('trddgrep: `new` needs --title (and --task-type); see `trddgrep help`')
+      process.exit(2)
+    }
+    if (!taskType) {
+      console.error('trddgrep: `new` needs --task-type (feature|bugfix|refactor|docs|infra|security|artifact|spike|audit)')
+      process.exit(2)
+    }
+    // AUTHORITY DEFAULTS TO `none`, deliberately. It decides whether the card is born a
+    // self-approved MANDATE or a proposal awaiting an approver, so a permissive default
+    // would let any caller mint a manager-floor mandate by omitting a flag. `none` can
+    // only ever route a card to the MORE gated of the two zones.
+    const splitIds = (v) => (v ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+    let result
+    try {
+      result = createTrdd(designDir, {
+        title,
+        taskType,
+        column: columnVal,
+        minApproval: minApproval ?? 'none',
+        authorAuthority: authority ?? 'none',
+        author: author ?? process.env.USER ?? 'unknown',
+        ...(assignee ? { assignee } : {}),
+        ...(parent ? { parent } : {}),
+        npt: splitIds(npt),
+        eht: splitIds(eht),
+        ...(body ? { body } : {}),
+      })
+    } catch (err) {
+      console.error(`trddgrep: refusing to create — ${err?.message ?? err}`)
+      process.exit(2)
+    }
+
+    // POST-WRITE GATE. The card was written by a function that means to write it
+    // correctly; this asks the SHARED predicate — the same one `trddgrep edit` is gated
+    // on — whether it did. A card that would not pass is DELETED rather than left for a
+    // human to find: nothing else references it yet, so the abort is clean, and a
+    // half-valid governance document that exists is worse than one that does not.
+    const written = fs.readFileSync(result.file, 'utf-8')
+    const violations = validateTrddCandidate(candidateFrontmatter(written.split('\n')), result.zone)
+    // The store's own parser is the second oracle: a file the predicate likes but the
+    // corpus reader cannot parse is invisible to every board query, which is the one
+    // failure a frontmatter check cannot see.
+    if (!parseTrddFile(result.file, result.zone)) {
+      violations.push('the TRDD store cannot parse the file just written — it would be invisible to every board query')
+    }
+    if (violations.length) {
+      fs.unlinkSync(result.file)
+      console.error(`trddgrep: refusing to leave an invalid TRDD — created and REMOVED ${result.file}:`)
+      for (const v of violations) console.error(`  • ${v}`)
+      process.exit(2)
+    }
+
+    console.log(C.g(`created ${C.b(result.id)}  ${path.relative(process.cwd(), result.file)}`))
+    console.log(C.d(`  zone=${result.zone}  column=${result.column}`))
+    console.log(C.y(`  git add ${path.relative(process.cwd(), result.file)} && git commit`))
+    process.exit(0)
+  }
+
+  // ---- MOVE. The column edit AND the zone `git mv`, as ONE operation.
+  //
+  // A transition is two hand steps today — edit `column:`, then `git mv` between
+  // design/proposals|tasks|archived|refused — and doing one without the other is how a
+  // card ends terminal in the OPEN zone, which makes the open count a lie. This session
+  // shipped exactly that defect once, and its own linter caught it.
+  //
+  // The four transitions are ALREADY implemented, with the git mv, the rollback and the
+  // lock, in `lib/trdd-store.ts` — they were reachable only through the HTTP API. This
+  // verb is a dispatcher over them, keyed on `expectedZone` so the CLI and the linter
+  // cannot disagree about where a column belongs. It writes no transition logic of its own.
+  case 'move': {
+    const targetColumn = argv[2]
+    if (!arg || !targetColumn) {
+      console.error('trddgrep: `move` needs an id and a target column — `trddgrep move <id> <column>`')
+      process.exit(2)
+    }
+    let mvRest = argv.slice(3)
+    const takeMv = (name) => {
+      const i = mvRest.indexOf(name)
+      if (i < 0) return undefined
+      const v = mvRest[i + 1]
+      if (v === undefined) { console.error(`trddgrep: ${name} needs a value`); process.exit(2) }
+      mvRest = [...mvRest.slice(0, i), ...mvRest.slice(i + 2)]
+      return v
+    }
+    const approver = takeMv('--approver')
+    const reason = takeMv('--reason')
+    const supersededBy = takeMv('--superseded-by')
+    if (mvRest.length > 0) {
+      console.error(`trddgrep: unrecognised argument(s) on \`move\`: ${mvRest.join(' ')} — see \`trddgrep help\``)
+      process.exit(2)
+    }
+
+    const { findTrdd, isoLocal, promoteTrdd, refuseTrdd, advanceColumn, archiveTrdd } =
+      await import('../lib/trdd-store.ts')
+    const { VALID_COLUMNS, expectedZone } = await import('../lib/trdd-vocabulary.ts')
+
+    const card = findTrdd(designDir, arg)
+    if (!card) {
+      console.error(`trddgrep: no TRDD ${JSON.stringify(arg)} under ${designDir}`)
+      process.exit(1)
+    }
+    if (!VALID_COLUMNS.includes(targetColumn)) {
+      console.error(`trddgrep: ${JSON.stringify(targetColumn)} is not a ratified column — one of: ${VALID_COLUMNS.join(' ')}`)
+      process.exit(2)
+    }
+    const { iso } = isoLocal()
+    const who = approver ?? process.env.USER ?? 'unknown'
+    // `expectedZone` is the arbiter, not a table local to this file. `null` means the
+    // column implies no zone constraint (a `complete` card with release-via publish
+    // still has stages ahead of it), which is an in-place advance.
+    const want = expectedZone(targetColumn, card.frontmatter ?? {}) ?? 'tasks'
+    let res
+    if (want === 'archived') {
+      res = await archiveTrdd(designDir, card.id, { approver: who, state: targetColumn, reason, supersededBy, iso })
+    } else if (want === 'refused') {
+      res = await refuseTrdd(designDir, card.id, { approver: who, reason, iso })
+    } else if (want === 'proposals') {
+      // Un-approving a card is not a transition any store verb performs, and inventing
+      // one here would be a write with no approval record. Say so rather than guess.
+      console.error(`trddgrep: moving a card BACK to column 'proposal' is not a supported transition — a card that left proposals/ was approved, and un-approving it is a governance decision, not a move`)
+      process.exit(2)
+    } else if (card.zone === 'proposals') {
+      // proposals/ → tasks/ IS the approval event, and `promoteTrdd` is the verb that
+      // writes the approval record for it. It lands on `planned` by definition, so a
+      // request for any other column is two transitions; asking for them separately
+      // keeps the approval honest instead of burying it inside an advance.
+      if (targetColumn !== 'planned') {
+        console.error(`trddgrep: ${card.id} is a proposal — approve it first with \`trddgrep move ${card.id} planned\`, then advance it to ${targetColumn}`)
+        process.exit(2)
+      }
+      res = await promoteTrdd(designDir, card.id, { approver: who, rationale: reason, iso })
+    } else {
+      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver })
+    }
+
+    if (!res.ok) {
+      console.error(`trddgrep: ${res.error}`)
+      process.exit(res.status === 404 ? 1 : 2)
+    }
+    const moved = res.from && res.to && res.from !== res.to
+    console.log(C.g(`${C.b(res.id)} → column ${res.column}${moved ? `  (design/${res.from}/ → design/${res.to}/)` : ''}`))
+    console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}`))
+    if (moved) console.log(C.y('  the rename is STAGED — commit it with the content in one commit'))
+    process.exit(0)
+  }
+
   // ---- which corpus am I, and why. The USER's mandate (2026-07-30) is that the tools
   // DETECT their environment rather than being configured per project, so that detection
   // has to be inspectable: an agent that cannot see what the tool concluded cannot tell
@@ -986,7 +1188,13 @@ switch (cmd) {
   case '--help':
   case '-h':
     console.log(`
-${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
+${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline; no server)
+
+  ${C.y('MANDATORY — PRRD G12.1 (GOLDEN).')} ${C.d('Every write to a TRDD goes through this tool:')}
+  ${C.d('  new · move · edit · fix. Hand edits (an editor, sed, a heredoc, a redirection) are')}
+  ${C.d('  forbidden — they bypass the lock, the staleness guard and the field gate, and every')}
+  ${C.d('  malformed card in this corpus was hand-written. If a verb you need is MISSING, FILE')}
+  ${C.d('  that as a TRDD; do not work around it. The sibling tools are prrdgrep and specgrep.')}
 
   ${C.c('trddgrep')}                  the board
   ${C.c('trddgrep next')}             what is workable RIGHT NOW, ranked by what it frees
@@ -1008,6 +1216,20 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.d('    No prose on stdout; a capped search says so on stderr. Exit codes unchanged:')}
   ${C.d('    0 match · 1 none · 2 could-not-run.')}
   ${C.c('trddgrep fix')}              write the mechanically-derivable repairs (--dry-run first)
+
+  ${C.c('trddgrep new --title T --task-type X')}   mint a card with EVERY mandatory field
+  ${C.d('  --author W --assignee W --column C --min-approval none|orchestrator|chief-of-staff|manager|user')}
+  ${C.d('  --authority W --parent ID --npt A,B --eht A,B --body TEXT')}
+  ${C.d('  The ZONE is decided by AUTHORITY vs the floor, never by a flag: at or above it the')}
+  ${C.d('  card is a self-approved MANDATE in tasks/, below it a proposal awaiting the approver.')}
+  ${C.d('  --authority defaults to none — the only default that can never over-grant.')}
+
+  ${C.c('trddgrep move <id> <column>')}   the column edit AND the zone git-mv, as ONE operation
+  ${C.d('  --approver W --reason TEXT --superseded-by ID')}
+  ${C.d('  Doing one half without the other is how a card ends terminal in the OPEN zone, which')}
+  ${C.d('  makes the open count a lie. The target zone comes from the same table the linter')}
+  ${C.d('  reads, so the two cannot disagree. Archiving as complete/published/live requires a')}
+  ${C.d('  finished acceptance checklist; a proposal must be approved (→ planned) before it advances.')}
 
   ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
   ${C.d('  AT LINE N, REPLACE X WITH Y — under the document lock. If X is not at line N the')}

@@ -411,6 +411,12 @@ function printHelp(kind: PillarKind, C: ReturnType<typeof palette>): void {
   console.log(`
 ${C.b(t)} — query and EDIT the ${kind.label} corpus (offline; no server)
 
+  ${C.y('MANDATORY — PRRD G12.1 (GOLDEN).')} Every write to a ${kind.label} goes through this
+  tool. Hand edits (an editor, sed, a heredoc, a redirection) are forbidden — they
+  bypass the document lock, the staleness guard and the pre-write field gate. If a
+  verb you need is MISSING, FILE that as a TRDD; do not work around it. The sibling
+  tools are trddgrep, prrdgrep and specgrep.
+
   ${C.c(`${t}`)}                      every ${kind.label} record
   ${C.c(`${t} show <id>`)}            one record, with where it lives
   ${C.c(`${t} <pattern>`)}            ranked search over id and text

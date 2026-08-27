@@ -13,6 +13,7 @@
  * existing importer keeps compiling unchanged — the move is invisible to them.
  */
 import { DEFAULT_STATUSES } from '@/types/task'
+import type { TrddZone } from './pillar/kinds'
 
 /**
  * v1 TRDDs predate `column:` and carry a six-value `status:` instead. The IND base
@@ -127,4 +128,32 @@ export const TIER_TO_REQUIREMENT: Record<string, string> = {
   '1': 'chief-of-staff',
   '2': 'manager',
   '3': 'user',
+}
+
+/**
+ * Which zone a column belongs in. `null` means the column implies no constraint.
+ *
+ * MOVED HERE from `lib/trdd-doctor.ts` (TRDD-I8UC56GZ) so the write-time gate can ask
+ * it without importing the 1725-line doctor — which imports `trdd-store` and
+ * `trdd-graph`, and would put a corpus walker behind every write. It is pure grammar:
+ * a column and one frontmatter field in, a zone out, no filesystem. The doctor
+ * re-exports it, so every existing importer is unchanged.
+ *
+ * `import type` for TrddZone on purpose: `lib/pillar/kinds.ts` imports only `path`, so
+ * even a value import would be acyclic — but the type is all this needs, and an erased
+ * import cannot become the seam through which the leaf grows a dependency.
+ */
+export function expectedZone(column: string, fm: Record<string, unknown>): TrddZone | null {
+  if (column === 'proposal') return 'proposals'
+  if (column === 'refused') return 'refused'
+  if (['completed', 'cancelled', 'superseded', 'published', 'live'].includes(column)) return 'archived'
+  // `complete` is terminal ONLY when the TRDD ships nothing further. With
+  // `release-via: publish|deploy` it still has publish/deploy stages ahead of it,
+  // so it legitimately stays OPEN in design/tasks/.
+  if (column === 'complete') {
+    const via = String(fm['release-via'] ?? 'none').trim()
+    return via === 'none' || via === '' ? 'archived' : null
+  }
+  if (WORKING_COLUMNS.includes(column)) return 'tasks'
+  return null
 }

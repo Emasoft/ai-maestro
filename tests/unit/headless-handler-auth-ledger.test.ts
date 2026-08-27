@@ -89,6 +89,11 @@ function enumerateHandlers(): Handler[] {
  * Handlers with NO auth of their own, re-derived from source 2026-08-23 (TRDD-8Q5EVGV1).
  * Guard one → delete its line here. Never add a line: that is the failure this test exists for.
  */
+// NEUTER (2026-08-27, direct insert then git checkout — file committed, restore verified): re-adding
+// the now-guarded `POST /api/v1/governance/requests` line reds exactly the no-stale-entries test,
+// 1 red / 3 green. That handler was verified guarded by READING it (live authenticateAgent( at body
+// line 42, non-comment), not by trusting the scanner — after r51, where the identical instruction
+// was a scanner defect (TRDD-ENFCF8O7).
 const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/config$/',
   'GET /^\\/api\\/organization$/',

@@ -658,7 +658,19 @@ export function lintCorpus(designDir: string): DoctorReport {
           : `the body claims "${c.bodyStateClaim}" while \`column: ${c.column}\` — the card asserts TWO states at once, and a reader nineteen lines in believes the body (3P-TRDD-10). Which is true is a judgement, so this is never auto-repaired`,
         // Only the AGREEING case is derivable: drop the redundant line. A disagreement must
         // never be auto-resolved — picking one silently is how a tool loses work.
-        autofixable: agrees,
+        //
+        // AND ONLY ON A CARD THAT IS NOT FROZEN (TRDD-I8UC56GZ). The fixer's own branch
+        // carries `!frozen` — deliberately, because IND step 12 freezes a terminal card's
+        // body and permits removing a body line only when it FALSELY contradicts the
+        // column, which is the disagreeing case, not this one. This flag did not carry
+        // that condition, so for a terminal card whose body claim AGREES the linter
+        // promised a repair the fixer correctly declines. Measured on this corpus: 3
+        // findings (70A521D9, EAC02238, EF0C6C0A — all terminal) declared autofixable
+        // that `trddgrep fix` has never touched and must never touch. Same defect class
+        // as APPROVAL-TIER-DEPRECATED earlier on this card, and subtler: that flag was
+        // unconditionally wrong, this one is wrong only on the frozen subset, so the
+        // corpus-wide `fix` run looked clean while the promise was live.
+        autofixable: agrees && !TERMINAL_DONE.includes(c.column),
       })
     }
 

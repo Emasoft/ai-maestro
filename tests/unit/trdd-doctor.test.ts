@@ -1294,3 +1294,37 @@ describe('checklist gate fails OPEN on an unparseable updated: (TRDD-PTFPGSLV)',
     expect(f?.message).toContain('failing open')
   })
 })
+
+/**
+ * TRDD-I8UC56GZ — the `autofixable` flag must agree with what `fixCorpus` will actually do.
+ *
+ * A linter that declares a repair its own fixer declines is the drift this card has now
+ * met twice: APPROVAL-TIER-DEPRECATED (unconditionally wrong) and BODY-STATE-CLAIM
+ * (wrong only on the frozen subset, which is why a corpus-wide `fix` run looked clean
+ * while the promise was live — measured, 3 findings on terminal cards).
+ *
+ * The invariant is one line and covers every future rule: the flag is a PROMISE, and the
+ * fixer is the thing that keeps it.
+ */
+describe('autofixable is a promise the fixer keeps', () => {
+  it('BODY-STATE-CLAIM is NOT autofixable on a FROZEN card, even when the claim agrees', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-af-'))
+    const write = (id: string, column: string, zone: string) => {
+      fs.mkdirSync(path.join(dir, zone), { recursive: true })
+      fs.writeFileSync(
+        path.join(dir, zone, `TRDD-20260101_000000+0100-${id}-x.md`),
+        `---\ntrdd-id: ${id}\ntitle: t\ncolumn: ${column}\ncreated: 2026-01-01T00:00:00+0100\nupdated: 2026-01-01T00:00:00+0100\n---\n\n# t\n\nStatus: ${column}\n\n## Acceptance\n\n- [x] done\n`,
+      )
+    }
+    // Same finding, same agreement, two columns: one frozen, one not.
+    write('FROZENAA', 'completed', 'archived')
+    write('OPENAAAA', 'dev', 'tasks')
+    const findings = lintCorpus(dir).findings.filter((f) => f.rule === 'BODY-STATE-CLAIM')
+    const frozen = findings.find((f) => f.id === 'FROZENAA')
+    const open = findings.find((f) => f.id === 'OPENAAAA')
+    expect(frozen?.autofixable).toBe(false)
+    // POSITIVE CONTROL: the flag is not simply always false — the non-frozen twin keeps it.
+    expect(open?.autofixable).toBe(true)
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+})

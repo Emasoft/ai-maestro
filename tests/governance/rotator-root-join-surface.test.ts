@@ -19,6 +19,7 @@
  * of a surface a regex cannot read.
  */
 import { execFileSync } from 'node:child_process'
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -74,7 +75,11 @@ function scan() {
   const dynamic: string[] = []
   let files = 0
   for (const f of sources()) {
-    const src = execFileSync('git', ['show', `:${f}`], { cwd: REPO, maxBuffer: 16 * 1024 * 1024 }).toString('utf-8')
+    // WORKTREE content, not `git show :<f>` (the INDEX). Read from the index this scan is blind
+    // to an edit you have not staged — it passed with a `join(rotatorRoot(), 'profiles')`
+    // sitting in the tree, which is a false clean in exactly the window a developer is in.
+    // `git ls-files` still decides WHICH paths; only the bytes come from disk.
+    const src = fs.readFileSync(path.join(REPO, f), 'utf-8')
     files++
     if (!src.includes('otatorRoot') && !/join\(\s*root\s*,/.test(src)) continue
     for (const m of src.matchAll(JOIN)) {

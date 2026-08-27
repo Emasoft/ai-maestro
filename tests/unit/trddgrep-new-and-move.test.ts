@@ -323,6 +323,16 @@ describe('trddgrep set', () => {
     // correct content — measured. The payload must be a line the card cannot already have.
     const id = seed()
     const r = cli('set', id, 'parent-trdd', 'AAAA1111\nsuperseded-by: [BBBB2222]')
+    // MESSAGE FIRST, deliberately. The assertion a test is NAMED for must come first or a
+    // weaker one ahead of it absorbs every neuter and the specific claim is never reached.
+    // WHICH BRANCH SPOKE. Exit 2 alone cannot tell the injection guard from the
+    // stray-token guard: if anything split that newline in argv, `superseded-by:` becomes
+    // argv[4], the strict parser refuses it, and the status, the absent fields and this
+    // test are all identical. This is the one refusal test that had dropped the message
+    // discriminator its siblings carry, on the claim where the wrong branch is most
+    // plausible. (Measured: the injection guard is the one that speaks.)
+    expect(r.stderr).toMatch(/must be one line/)
+    expect(r.stderr).not.toMatch(/unrecognised argument/)
     expect(r.status).toBe(2)
     const text = fs.readFileSync(only('tasks'), 'utf-8')
     expect(text).not.toMatch(/^superseded-by:/m)
@@ -342,6 +352,19 @@ describe('trddgrep set', () => {
     // The board sorts on `updated:`, so a MECHANICAL repair that bumped it would silently
     // reorder the whole board — the distinction the doctor's fixer already reports.
     expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^severity: major$/m)
+  })
+
+  /**
+   * SCOPE, because "the same gate as edit" is true and easy to over-read. It is the same
+   * PREDICATE, and that predicate polices seven things — column, a pipeline value in
+   * status:, trdd-id shape, a colon in title, the three ISO date fields, and
+   * min-approval-requirement. `set` writes ANY field, so a bad value in an unpoliced one
+   * lands; the doctor reports those, this gate does not refuse them.
+   */
+  it('does NOT police a field outside the candidate predicate — `severity` lands unvalidated', () => {
+    const id = seed()
+    expect(cli('set', id, 'severity', 'not-a-severity').status).toBe(0)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^severity: not-a-severity$/m)
   })
 
   it('is judged by the SAME candidate gate as edit — an illegal value is refused', () => {

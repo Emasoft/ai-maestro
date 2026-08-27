@@ -825,19 +825,32 @@ export function setTrddField(
     if (/[\r\n\u0000-\u001f]/.test(value) || /[\r\n\u0000-\u001f:\s]/.test(field)) {
       return { ok: false, status: 400, error: 'field and value must be one line, and a field name carries no colon or whitespace' }
     }
-    let content = fs.readFileSync(trdd.filePath, 'utf-8')
-    content = migrateLegacyApprovalTier(content).content
+    // ONE read, held as `before`. The first version re-read the file for the gate's
+    // "before" side — harmless inside the lock (no other writer) but it made the
+    // comparison look like it might be against a different state than the one edited.
+    const before = fs.readFileSync(trdd.filePath, 'utf-8')
+    let content = migrateLegacyApprovalTier(before).content
     content = setFrontmatterField(content, field, value)
     if (opts.bump !== false) content = setFrontmatterField(content, 'updated', opts.iso)
 
     // THE SAME GATE, on the same bytes, inside the same lock. A setter that skipped it
     // would be a second write path with a second (absent) predicate — the drift this
     // card exists to remove.
-    const zone = trdd.zone
+    // WHAT THIS GATE DOES AND DOES NOT COVER, stated because "the same gate as edit" is
+    // true and easy to over-read. It is the same PREDICATE, and that predicate polices
+    // seven things: column, a pipeline value in status:, trdd-id shape, a colon in title,
+    // the three ISO date fields, and min-approval-requirement. `set` can write ANY field,
+    // so `severity: not-a-severity` lands — measured. Field-value vocabularies beyond
+    // those seven are the doctor's to report, not this gate's to refuse.
+    //
+    // The "before" side is POST-migration, so a violation the migration itself introduced
+    // would be invisible here. It cannot happen today — the migration only ever writes a
+    // decoded ladder title, which the predicate accepts — so this is a latent coupling
+    // worth naming, not a defect.
     const violations = introducedViolations(
-      candidateFrontmatter(fs.readFileSync(trdd.filePath, 'utf-8').split('\n')),
+      candidateFrontmatter(before.split('\n')),
       candidateFrontmatter(content.split('\n')),
-      zone,
+      trdd.zone,
     )
     if (violations.length) {
       return { ok: false, status: 409, error: `refusing the set — it would introduce: ${violations.join('; ')}` }

@@ -205,6 +205,15 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
       silently — the GFX57106 failure), refuses `column` (half a transition; move owns it),
       refuses a newline in the value (the injection shape), and is judged by the SAME candidate
       gate as `edit`. `--no-bump` for a mechanical repair, because the board sorts on `updated:`.
+      SCOPE, because "the same gate as edit" is true and easy to over-read: it is the same
+      PREDICATE, and that predicate polices SEVEN things (column · a pipeline value in `status:` ·
+      trdd-id shape · a colon in `title` · the three ISO date fields · min-approval-requirement).
+      `set` writes ANY field, so `severity: not-a-severity` LANDS — measured, and now pinned by a
+      test that asserts it lands. Field vocabularies beyond those seven are the doctor`s to report.
+      Latent coupling, named rather than left implicit: the gate`s "before" side is POST-migration,
+      so a violation the tier migration itself introduced would be invisible to it. It cannot
+      happen today (the migration only ever writes a decoded ladder title, which the predicate
+      accepts), so it is a coupling to watch, not a defect.
       The three BODY setters are the remainder; this card was updated with `set` itself.
       (original box text) so an agent
       never regex-patches frontmatter — the failure that produced TWO silent no-ops on

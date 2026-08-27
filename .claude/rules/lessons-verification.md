@@ -21,6 +21,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Encode a guard at the granularity the BUG had — janitor#123 was COLUMN-granular and my per-table `since` could not express it, making the branch unreachable by construction, not merely untested.
 - When one ladder step is all that ships, a version-skew guard cannot be exercised end-to-end — export the pure check and inject a synthetic spec, or it stays unverified until the bug recurs.
 - A test that passes for an unknown reason is a failure: isolate it (`-t "<full name>"`) before believing it.
+- AND ITS MIRROR, MORE DANGEROUS: a test that FAILS for an unnamed reason is equally untrustworthy, because a red READS AS THE GUARD WORKING. Mine reddened on `replaceAtLines` refusing an empty `expect` — a precondition failing before the logic under test ran — so I read it as the approach being rejected. One non-empty trailing line in that fixture and it ships green; on the real document it corrupted it. Name the reason for a red.
 - `vi.clearAllMocks()` clears CALLS, not IMPLEMENTATIONS — a mock overridden in one test leaks into every test after it.
 - Route every mock through `(...a) => mockX(...a)` and restore it in `beforeEach`; an inline `vi.fn(async () => …)` in the factory cannot be restored.
 - Pinning only the SUCCESS path reads as coverage — assert what happens when the operation fails, or the suite is decorative.

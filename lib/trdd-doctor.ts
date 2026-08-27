@@ -33,6 +33,7 @@
 import fs from 'fs'
 import path from 'path'
 import { execFileSync } from 'child_process'
+import { bodyStartIndex, countAcceptanceBoxes } from './trdd-body'
 import { TRDD_ZONES, type TrddZone, listTrddFiles, parseTrddFile, isoLocal } from './trdd-store'
 import {
   toGraphNode,
@@ -194,11 +195,6 @@ export function findBodyStateClaim(body: string): string {
  * body, so the guard is only latent; a function that is correct only because of what one caller
  * passes is a trap with a due date.
  */
-function bodyStartIndex(lines: readonly string[]): number | null {
-  if (lines[0]?.trimEnd() !== '---') return 0
-  const close = lines.findIndex((l, i) => i > 0 && l.trimEnd() === '---')
-  return close === -1 ? null : close + 1
-}
 
 /**
  * The ONE line-walk behind the lint, the exported finder, and the auto-repair. It returns the
@@ -243,26 +239,11 @@ function scanStateClaimLines(lines: readonly string[]): { idx: number; claim: st
  * `[~]` counts toward `total` but not toward `open`: it is the corpus's "deliberately not
  * doing this" marker, which is a decision, not an outstanding obligation.
  */
-export function countAcceptanceBoxes(body: string): { total: number; open: number } {
-  const lines = body.split('\n')
-  const start = bodyStartIndex(lines)
-  if (start === null) return { total: 0, open: 0 }
-  let inFence = false
-  let total = 0
-  let open = 0
-  for (const line of lines.slice(start)) {
-    if (/^\s*(?:```|~~~)/.test(line)) {
-      inFence = !inFence
-      continue
-    }
-    if (inFence) continue
-    const m = line.match(/^\s*[-*]\s\[([ xX~])\]/)
-    if (!m) continue
-    total++
-    if (m[1] === ' ') open++
-  }
-  return { total, open }
-}
+// `bodyStartIndex` and `countAcceptanceBoxes` MOVED to lib/trdd-body.ts (TRDD-I8UC56GZ):
+// `checkTrddBox` in trdd-store needs the SAME walk to resolve an ordinal, and two copies
+// of this predicate had already diverged (start index, and unclosed frontmatter) before
+// either shipped. Re-exported so every importer of this module is unchanged.
+export { countAcceptanceBoxes }
 
 /**
  * The DAY part of a frontmatter date, as `YYYY-MM-DD`, or `''` when there is none.

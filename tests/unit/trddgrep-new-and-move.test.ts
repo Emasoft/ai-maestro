@@ -20,6 +20,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { spawnSync, execFileSync } from 'child_process'
+import { countAcceptanceBoxes } from '@/lib/trdd-body'
 
 const REPO = process.cwd()
 let root: string
@@ -469,6 +470,44 @@ describe('trddgrep append / check-box', () => {
     const text = fs.readFileSync(only('tasks'), 'utf-8')
     expect(text).toMatch(/^- \[ \] one$/m)
     expect(text).toMatch(/^- \[x\] two$/m)
+  })
+
+  /**
+   * THE DIFFERENTIAL. The claim is that two things AGREE, and until this existed the
+   * fenced test drove `checkTrddBox` alone — `countAcceptanceBoxes` was never called, so
+   * nothing compared the counts and a later divergence on either side would leave every
+   * test green while the ordinals silently disagreed. That surfaces as a card that will
+   * not archive with every visible box ticked.
+   *
+   * Both now derive from ONE walker (lib/trdd-body.ts), which is stronger than a
+   * differential over two implementations — but the assertion stays, because it is what
+   * would catch someone reintroducing a second one.
+   */
+  /**
+   * The OTHER divergence the two copies had: the gate's walker starts AFTER the closing
+   * `---`, the store's started at line 0. A `- [ ]` above the fence would have shifted
+   * every ordinal by one — and no fixture exercised it, so the shared-walker neuter that
+   * moves `start` to 0 reddened nothing until this existed. Library-level: this is a
+   * property of the walker, not of the CLI.
+   */
+  it('does not count a checkbox line inside the FRONTMATTER block', () => {
+    const withBoxInHead = ['---', 'trdd-id: AAAA1111', '- [ ] not an acceptance box', '---', '', '- [ ] a real one'].join('\n')
+    expect(countAcceptanceBoxes(withBoxInHead).total).toBe(1)
+    // And an UNCLOSED head yields nothing rather than guessing which half is the body.
+    expect(countAcceptanceBoxes('---\ntrdd-id: A\n- [ ] x\n').total).toBe(0)
+  })
+
+  it('DIFFERENTIAL — the gate counts exactly the boxes check-box can address', () => {
+    const id = seed('\n```md\n- [ ] a documented example box\n```\n')
+    const text = fs.readFileSync(only('tasks'), 'utf-8')
+    expect(countAcceptanceBoxes(text).total).toBe(2)
+    // The ordinal the gate cannot see is refused, and the one past the end is too.
+    expect(cli('check-box', id, '2').status).toBe(0)
+    const r = cli('check-box', id, '3')
+    expect(r.stderr).toMatch(/no acceptance box 3 — the card has 2/)
+    // Exit 2 (could-not-run), NOT 1: the card was FOUND, the request was unsatisfiable.
+    // Previously unasserted, so the mapping was correct and unpinned.
+    expect(r.status).toBe(2)
   })
 
   it('does not count a checkbox inside FENCED CODE — the gate does not either', () => {

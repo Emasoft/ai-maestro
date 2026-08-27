@@ -28,6 +28,7 @@ import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './
 import { validateTrddFieldEdits } from './trdd-edit-guard'
 import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT } from './trdd-vocabulary'
 import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
+import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
@@ -940,25 +941,22 @@ export function checkTrddBox(
     const content = fs.readFileSync(trdd.filePath, 'utf-8')
     const lines = content.split('\n')
     const mark = opts.check === false ? ' ' : 'x'
-    let seen = 0
-    let inFence = false
-    for (let i = 0; i < lines.length; i++) {
-      if (/^\s*(?:```|~~~)/.test(lines[i])) { inFence = !inFence; continue }
-      if (inFence) continue
-      const m = lines[i].match(/^(\s*[-*]\s\[)([ xX~])(\].*)$/)
-      if (!m) continue
-      seen++
-      if (seen !== ordinal) continue
-      if (m[2] === mark) {
-        return { ok: false, status: 409, error: `box ${ordinal} is already \`[${mark}]\` — refusing a write that changes nothing, because a no-op that reports success is how a card comes to claim a state it does not carry` }
-      }
-      lines[i] = `${m[1]}${mark}${m[3]}`
-      let next = lines.join('\n')
-      if (opts.bump !== false) next = setFrontmatterField(next, 'updated', opts.iso)
-      atomicWriteSync(trdd.filePath, next)
-      return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+    // ONE walker, shared with the terminal-column gate (lib/trdd-body.ts). The ordinal a
+    // caller passes here and the count that gate makes are now the SAME traversal, so
+    // they cannot drift into ticking one box while the gate counts another.
+    const boxes = acceptanceBoxes(lines)
+    const box = boxes[ordinal - 1]
+    if (!box) {
+      return { ok: false, status: 404, error: `no acceptance box ${ordinal} — the card has ${boxes.length} (fenced code is not counted, matching the terminal gate)` }
     }
-    return { ok: false, status: 404, error: `no acceptance box ${ordinal} — the card has ${seen} (fenced code is not counted, matching the terminal gate)` }
+    if (box.mark === mark) {
+      return { ok: false, status: 409, error: `box ${ordinal} is already \`[${mark}]\` — refusing a write that changes nothing, because a no-op that reports success is how a card comes to claim a state it does not carry` }
+    }
+    lines[box.index] = `${box.prefix}${mark}${box.suffix}`
+    let next = lines.join('\n')
+    if (opts.bump !== false) next = setFrontmatterField(next, 'updated', opts.iso)
+    atomicWriteSync(trdd.filePath, next)
+    return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
   })
 }
 

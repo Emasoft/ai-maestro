@@ -16,6 +16,11 @@
  *       actually drove the hook (guards against a vacuous exit 0)
  *       every case passes
  *
+ * NEUTER RUN 2 (2026-08-27 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   restoring the unquoted `printf '  %s\n' $ambiguous`
+ *   → harness PASS: 9 FAIL: 1, and the ONE failure is `spaced path` — the other nine hold, so
+ *     the tenth case is what pins the quoting and nothing else is standing in for it.
+ *
  * MIN_CASES is the non-vacuity floor. The harness's own exit condition is `FAIL -eq 0`, which a
  * harness that ran ZERO cases satisfies trivially — a `set -u` abort, a moved HOOK path, a mktemp
  * that failed. Asserting a minimum PASS count is what makes "exit 0" mean "it really drove the

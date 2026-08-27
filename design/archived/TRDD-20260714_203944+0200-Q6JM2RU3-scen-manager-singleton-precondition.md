@@ -1,14 +1,14 @@
 ---
 trdd-id: Q6JM2RU3
 title: Team-governance scenarios must detect the MANAGER-singleton precondition at setup
-column: ai_review
+column: complete
 min-approval-requirement: none
 priority: 1
 severity: medium
 effort: small
 task-type: infra
 created: 2026-07-14T20:39:44+0200
-updated: 2026-08-27T21:22:00+0200
+updated: 2026-08-27T22:53:28+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
@@ -139,3 +139,5 @@ exactly 20 of the 40 scenario files, and whole-file vs body-only was measured id
 ## Approval log
 
 - 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: still unimplemented — `tests/scenarios/scripts/scenario-setup.sh` has no pre-existing-MANAGER check, and no `assert-clean-governance.sh` / `list-governance-litter.sh` exists anywhere under `tests/scenarios/scripts/`. Premise still holds; approved.
+- 2026-08-27T22:53:28+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); re-measured: 10/10 boxes, guard verified live against the real MANAGER incumbent
+- 2026-08-27T22:53:28+0200 — COMPLETE by user. USER-delegated human review passed: setup guard + list-governance-litter present; live FAIL/SKIP/OK paths executed end-to-end; 5 neuters observed.

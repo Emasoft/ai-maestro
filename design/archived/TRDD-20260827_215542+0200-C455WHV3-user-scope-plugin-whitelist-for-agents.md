@@ -1,9 +1,9 @@
 ---
 trdd-id: C455WHV3
 title: A harness-enforced whitelist of the user-scope plugins an agent may use
-column: ai_review
+column: complete
 created: 2026-08-27T21:55:42+0200
-updated: 2026-08-27T22:08:28+0200
+updated: 2026-08-27T22:53:51+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -217,3 +217,5 @@ required its `SYSTEM_OWNER_ONLY_STRICT` declaration and a regenerated
   same session.
 - Filed 2026-08-27 on the USER's directive; the USER named the five members. Supersedes
   `TRDD-NT7D8GJN`.
+- 2026-08-27T22:53:51+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:51+0200 — COMPLETE by user. USER-delegated human review passed: R17.24 whitelist: store+API+dashboard live on the rebuilt server; 32/37 switched off on a real agent copy; 4 neuters.

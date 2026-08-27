@@ -1,9 +1,9 @@
 ---
 trdd-id: 3Q4G9ZK6
 title: Purging a cemetery archive orphans the agent workdir with no UI path left to remove it
-column: ai_review
+column: complete
 created: 2026-07-29T19:37:18+0200
-updated: 2026-08-27T20:58:01+0200
+updated: 2026-08-27T22:53:49+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:02:08+0200
@@ -145,3 +145,5 @@ gate. Adding it:
 - 2026-08-27T20:58:00+0200 — IMPLEMENTED by hub-claude, following the DESIGN FINDING and NOT the original Proposed fix. Both of the card's assumptions re-verified against live code first: the DELETE handler still did only `fs.unlinkSync` and returned, and `getAgentByNameAnyHost` still filters `!a.deletedAt`. Resolution is to a TOMBSTONE by id (`listAgents(true)` filtered on `deletedAt` + name); zero-or-ambiguous purges the zip and REPORTS what it left; the cascade runs only for `.zip` (a `.json` tombstone is a hard-delete audit record — that agent is already gone, so there is nothing to cascade, a distinction the card did not state). The filename grammar moved to the leaf `lib/cemetery-archive.ts` so the LISTING and the DELETION cannot disagree about whose file it is on a destructive path. Dialog copy now names the registry entry and session it removes, and the folder sits behind its own checkbox which RESETS after each use — otherwise a destructive default carries to the next archive's dialog pre-checked. `assignee`/`created-by` filled from the card's own data (`current-owner: scenario-runner`, the scen-001 label and report in `external-refs`), not invented.
 - 2026-08-27T20:58:01+0200 — column → testing. 6497 green, tsc 0, yarn lint clean of the touched files
 - 2026-08-27T20:58:01+0200 — column → ai_review. neuter recorded; awaiting review
+- 2026-08-27T22:53:49+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:49+0200 — COMPLETE by user. USER-delegated human review passed: cemetery purge cascade: 6/6, closed by measurement this session.

@@ -1,12 +1,12 @@
 ---
 trdd-id: W6PHZFC9
 title: two oauth-rotator alert producers share one active-alerts file and mutually evict each other
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T13:48:08+0200
-updated: 2026-08-23T15:03:40+0200
+updated: 2026-08-27T22:53:53+0200
 implementation-commits: [5f261c6c]
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
@@ -339,6 +339,8 @@ producer's beat, while a genuinely resolved code must still be cleared by its OW
   Pre-approved: Tier-0 self-mandate — in-scope bugfix in `lib/`, reversible and local, touching
   no credential material, no `.github/`, no governance file and no public API. No approval
   request was sent.
+- 2026-08-27T22:53:53+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:53+0200 — COMPLETE by user. USER-delegated human review passed: cross-producer alert scoping: neuter RE-RUN by the reviewer — 5 red, restored byte-identical.
 
 ## VERIFIED LIVE IN PRODUCTION — 2026-08-23T14:51 (owner authorised the restart)
 

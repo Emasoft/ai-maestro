@@ -1,9 +1,9 @@
 ---
 trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
-column: ai_review
+column: complete
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T13:42:14+0200
+updated: 2026-08-27T22:53:52+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -360,6 +360,8 @@ the scale of the whole file.
 ## Approval log
 
 - 2026-08-23T00:10:05+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-27T22:53:52+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:52+0200 — COMPLETE by user. USER-delegated human review passed: semantic headless gate: 54/54 incl. exact invalid_credential; live ledger is 139 not the card's 142 — mechanism holds, literal stale.
 
 ## RULING 2026-08-23 — the default, decided on verified facts (implementation NOT started)
 

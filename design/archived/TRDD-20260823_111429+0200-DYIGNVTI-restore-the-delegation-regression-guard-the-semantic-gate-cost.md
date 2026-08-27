@@ -1,9 +1,9 @@
 ---
 trdd-id: DYIGNVTI
 title: restore the delegation regression guard the semantic credential gate cost
-column: ai_review
+column: complete
 created: 2026-08-23T11:14:29+0200
-updated: 2026-08-23T13:42:14+0200
+updated: 2026-08-27T22:53:53+0200
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
 task-type: test
@@ -136,3 +136,5 @@ and an untested guard produce identically.
 - 2026-08-23T11:14:29+0200 — MANDATE issued by ai-maestro-00 (min-approval-requirement: none).
   Tier-0 derived task (EHT of TRDD-8Q5EVGV1): closes a hole opened by that card's own change,
   inside the same scope. Pre-approved; no approval request was sent.
+- 2026-08-27T22:53:52+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:53+0200 — COMPLETE by user. USER-delegated human review passed: delegation guard: neuter RE-RUN by the reviewer (not read from the docstring) — 2 red/1 green reproduced, anchor had drifted 3102->3173.

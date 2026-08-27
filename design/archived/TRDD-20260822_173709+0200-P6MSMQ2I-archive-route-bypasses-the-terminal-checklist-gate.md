@@ -1,9 +1,9 @@
 ---
 trdd-id: P6MSMQ2I
 title: archive route bypasses the terminal checklist gate
-column: ai_review
+column: complete
 created: 2026-08-22T17:37:09+0200
-updated: 2026-08-23T13:42:14+0200
+updated: 2026-08-27T22:53:51+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -112,3 +112,5 @@ count is indistinguishable from a measured one.
 ## Approval log
 
 - 2026-08-22T17:37:09+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-27T22:53:51+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:51+0200 — COMPLETE by user. USER-delegated human review passed: archive checklist gate: 8/8 falsifier; NOTE its corpus-wide claim is now stale — 39OPYXQ9 went terminal via direct git mv, a NEW defect, not this card's.

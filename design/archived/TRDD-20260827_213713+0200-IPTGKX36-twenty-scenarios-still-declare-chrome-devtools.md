@@ -1,9 +1,9 @@
 ---
 trdd-id: IPTGKX36
 title: Twenty scenario files still declare the deprecated chrome-devtools required_tools block instead of browser_stack dev-browser
-column: ai_review
+column: complete
 created: 2026-08-27T21:37:13+0200
-updated: 2026-08-27T21:44:37+0200
+updated: 2026-08-27T22:53:50+0200
 implementation-commits: [55e5c3f4]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -82,3 +82,5 @@ recorded; every worker claim was re-verified per file rather than tallied.
 
 - 2026-08-27T21:37:13+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement:
   none). Found while closing TRDD-JU6Y2V7X; a sibling of that card's item (1), not a child of it.
+- 2026-08-27T22:53:50+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:50+0200 — COMPLETE by user. USER-delegated human review passed: 22 scenario files migrated; 0/40 deprecated blocks remain, measured corpus-wide.

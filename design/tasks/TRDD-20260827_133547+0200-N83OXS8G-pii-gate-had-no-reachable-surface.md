@@ -1,9 +1,9 @@
 ---
 trdd-id: N83OXS8G
 title: The PII gate had no surface that fires before a commit, so it never ran
-column: dev
+column: complete
 created: 2026-08-27T13:35:47+0200
-updated: 2026-08-27T13:35:47+0200
+updated: 2026-08-27T13:40:00+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -24,7 +24,7 @@ release-via: none
 labels: [governance, security, tooling]
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [2a86cdb9]
 ---
 
 # The PII gate had no surface that fires before a commit, so it never ran
@@ -117,7 +117,7 @@ agree; that agreement is not evidence.
 - [x] The full address does not appear in the hook's own output
 - [x] CI triggers left untouched (TRDD-XGFJCCJ9 not re-opened)
 - [x] Seeded control artifact removed from index and worktree; tracked tree verified clean
-- [ ] Landed and the commit sha recorded in `implementation-commits:`
+- [x] Landed and the commit sha recorded in `implementation-commits:`
 
 ## Approval log
 

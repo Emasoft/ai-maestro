@@ -66,9 +66,18 @@ finding means an unguarded route reads as guarded:
 · `session-patch-sudo-gate` · `dangerous-primitive-authorization` ·
 `r51-multistore-scan-surface` · `r2-r8-team-registry-invariants`
 
-Each is blind over any region of any scanned file between a `/**` inside a line comment or
-string and the next `*/`. The trigger is ordinary prose — a glob (`app/api/**`), a doc
-reference, a markdown emphasis — so it is not exotic.
+**What is MEASURED vs INFERRED, because this card is the durable record.** Measured: all ten
+carry the identical strip (two independent needles — an escaped regex and a literal `grep -F` —
+both return 10, with r51 as positive control); two sampled at random (`chat-send-authorization`,
+`dangerous-primitive-authorization`) read real files via `readFileSync`/`execFileSync`, so they
+scan the corpus rather than fixtures; and r51 is measurably WRONG on a real file today.
+
+Inferred, not measured: that the other nine currently produce a wrong verdict. The exposure
+argument is a shared code shape plus corpus-reading, not nine observed misbehaviours — each is
+blind over any region between a `/**` inside a line comment or string and the next `*/`, and
+whether that region contains anything they look for is per-file. One instance of the trigger was
+observed (a glob, `app/api/**`); that it generalises to doc references and markdown emphasis is
+reasoning about the regex, not an observation.
 
 ## Why the existing controls did not catch it
 

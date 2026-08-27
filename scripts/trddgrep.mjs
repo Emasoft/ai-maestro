@@ -906,7 +906,11 @@ switch (cmd) {
     const dryRun = argv.includes('--dry-run')
     const results = fixCorpus(designDir, { dryRun })
     if (results.length === 0) {
-      console.log(C.g('nothing to repair — every TRDD already carries a valid frontmatter'))
+      // NARROWED (TRDD-I8UC56GZ): this used to read "every TRDD already carries a valid
+      // frontmatter", which is a claim about the CORPUS made by a tool that only knows what
+      // IT repairs. 82 cards carried a deprecated field the whole time it printed that line.
+      // `validate` is the verb that answers the corpus question; say so instead of implying it.
+      console.log(C.g('nothing for `fix` to repair — run `trddgrep validate` for the findings it does not own'))
       process.exit(0)
     }
     console.log(C.b(`\n${dryRun ? 'WOULD REPAIR' : 'REPAIRED'} ${results.length} file(s):\n`))

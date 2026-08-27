@@ -87,7 +87,27 @@ wrong reason, which is exactly why a count is not an attribution — the repo`s 
 ("run the complement before naming the cause"), violated here by its own author and caught only
 because something else went looking.
 
-STILL OPEN, and why each is not a hidden landmine: `split`/`supersede`/`merge`, `migrate`
+MIGRATION LANDED, and NOT as a `migrate` verb — the rules forbade the obvious shape. The approval
+rules say migrate `approval-tier:` "on next touch, never in a mass rewrite", and `trddgrep fix` IS
+a mass rewrite, so the repair lives on the WRITE paths (`migrateLegacyApprovalTier`, wired into
+BOTH `editAt` and `advanceColumn`) and a card migrates as work reaches it. It refuses the two
+ambiguous shapes rather than guessing: fields present and DISAGREEING is APPROVAL-FIELD-CONFLICT,
+an ERROR whose whole point is that picking a side silently hands two readers different required
+approvers, and an undecodable number is left for a human.
+
+Found while measuring it: `APPROVAL-TIER-DEPRECATED` declared `autofixable: Boolean(decoded)` —
+TRUE for 82 cards `fix` has never touched. A linter promising a repair its own fixer does not
+make, which is this repo`s lint-vs-fix predicate drift pointed the other way round. The flag now
+reads false and says where the repair actually happens. `fix`s all-clear also claimed "every TRDD
+already carries a valid frontmatter" — a claim about the CORPUS from a tool that knows only what
+IT repairs; narrowed to what it can actually assert.
+
+NEUTER (complement run BEFORE any claim this time): the migration is wired at TWO call sites, and
+killing them one at a time reds exactly one test each, a different one — `editAt` → the archive
+test, `advanceColumn` → the in-place test. The first draft of that test pinned only one site;
+removing both reddened one test, which would have read as full coverage.
+
+STILL OPEN, and why each is not a hidden landmine: `split`/`supersede`/`merge`
 (82 cards still carry `approval-tier:`), the structured setters, `fix` auto-invocation on the
 write paths, create verbs for prrdgrep/specgrep, and META-MISSING (154 warns — `assignee`/
 `created-by` on cards nobody can now attribute; `new` writes them, so the count stops GROWING).
@@ -159,7 +179,7 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
       hand-authoring: creating NPT/EHT children with `parent-trdd:` + the parent's `npt:`/`eht:`
       back-pointers written on BOTH ends (the depth-1 invariant the D4 watchdog checks), and
       `supersede` writing `superseded-by:` + archiving as itself
-- [ ] **`migrate`** — the on-next-touch field migrations the rules already mandate
+- [x] **`migrate`** — the on-next-touch field migrations the rules already mandate
       (`approval-tier:` → `min-approval-requirement:`, v1 `status:` → `column:`), applied by the
       tool instead of by each agent remembering
 - [ ] **Structured field updates** (`set`, `add-box`, `check-box`, `append-state`) so an agent

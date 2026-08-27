@@ -26,7 +26,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
-import { VALID_COLUMNS, expectedZone } from './trdd-vocabulary'
+import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT } from './trdd-vocabulary'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
@@ -517,8 +517,46 @@ export function withTrddLock<T>(designDir: string, id: string, fn: () => T | Pro
   return withJsonLock(trddLockKey(designDir, id), async () => fn())
 }
 
+
+/**
+ * The on-touch migration the approval rules mandate: `approval-tier: N` (retired) →
+ * `min-approval-requirement: <title>` (TRDD-I8UC56GZ).
+ *
+ * WHY ON TOUCH AND NOT IN `trddgrep fix`. The rule says migrate "on next touch, never in
+ * a mass rewrite", and `fix` is exactly a mass rewrite — it sweeps the whole corpus. So
+ * the migration lives on the WRITE paths instead: a card being transitioned is, by
+ * definition, being touched. 82 cards carried the legacy field at the time this landed
+ * and they migrate one at a time, as work reaches them, which is what the rule asks for.
+ *
+ * It REFUSES the ambiguous case rather than guessing. Both fields present and
+ * DISAGREEING is `APPROVAL-FIELD-CONFLICT`, an ERROR the doctor marks non-autofixable
+ * precisely because picking a side silently would hand two readers different required
+ * approvers for the same card; an undecodable number is left for a human. Only the two
+ * unambiguous shapes are rewritten: a lone legacy number, and a pair that already agree.
+ *
+ * `updated:` is deliberately NOT bumped by this — it changes no fact the card asserts,
+ * only the spelling of one, and the board sorts on `updated:`.
+ */
+export function migrateLegacyApprovalTier(content: string): { content: string; migrated: string | null } {
+  const end = content.indexOf('\n---', 4)
+  if (!content.startsWith('---') || end < 0) return { content, migrated: null }
+  const head = content.slice(0, end)
+  const tierLine = head.match(/^approval-tier:[ \t]*(.*)$/m)
+  if (!tierLine) return { content, migrated: null }
+  const decoded = TIER_TO_REQUIREMENT[tierLine[1].trim()]
+  if (!decoded) return { content, migrated: null }
+  const declared = (head.match(/^min-approval-requirement:[ \t]*(.*)$/m)?.[1] ?? '').trim()
+  if (declared && declared !== decoded) return { content, migrated: null }
+
+  // Drop the legacy line, keeping the rest of the block byte-identical.
+  let next = content.replace(/^approval-tier:[ \t]*.*\n/m, '')
+  if (!declared) next = setFrontmatterField(next, 'min-approval-requirement', decoded)
+  return { content: next, migrated: decoded }
+}
+
 function editAt(filePath: string, edits: Array<[string, string]>, logLine: string): void {
   let content = fs.readFileSync(filePath, 'utf-8')
+  content = migrateLegacyApprovalTier(content).content
   for (const [k, v] of edits) content = setFrontmatterField(content, k, v)
   content = appendApprovalLog(content, logLine)
   atomicWriteSync(filePath, content)
@@ -702,6 +740,10 @@ export function advanceColumn(
     }
   }
   let content = fs.readFileSync(trdd.filePath, 'utf-8')
+  // The same on-touch migration `editAt` runs — advanceColumn writes its own frontmatter
+  // rather than going through it, and a migration that fires on three of the four
+  // transition verbs is the drift this repo keeps finding in pairs of near-identical paths.
+  content = migrateLegacyApprovalTier(content).content
   content = setFrontmatterField(content, 'column', column)
   content = setFrontmatterField(content, 'updated', opts.iso)
   if (opts.note || opts.approver) {

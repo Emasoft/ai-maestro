@@ -770,7 +770,15 @@ export function lintCorpus(designDir: string): DoctorReport {
           id: c.id,
           filePath: c.filePath,
           message: `carries the deprecated \`approval-tier: ${c.fm['approval-tier']}\`${decoded ? ` (= '${decoded}')` : ''} — the overlay retired the number for a named rung. Decode-only on legacy cards; never written on a new one`,
-          autofixable: Boolean(decoded),
+          // NOT autofixable BY THIS TOOL, and the distinction is the whole point (TRDD-I8UC56GZ).
+          // It IS mechanically derivable — but the approval rules say migrate "on next touch,
+          // never in a mass rewrite", and `fix` is exactly a mass rewrite. So the repair lives on
+          // the WRITE paths (`migrateLegacyApprovalTier`, run by every transition verb) and a card
+          // migrates as work reaches it. This flag used to read `Boolean(decoded)` — true for 82
+          // cards `fix` has never touched, which is a linter promising a repair its own fixer does
+          // not make: the exact lint-vs-fix predicate drift this repo has been bitten by before,
+          // pointed the other way round.
+          autofixable: false,
         })
       }
     }

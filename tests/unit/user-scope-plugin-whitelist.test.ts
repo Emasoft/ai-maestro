@@ -39,13 +39,14 @@ import path from 'path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS } from '@/lib/ecosystem-constants'
+import { DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS } from '@/lib/ecosystem-constants'
+import { readAgentPluginWhitelist, writeAgentPluginWhitelist } from '@/lib/agent-plugin-whitelist-store'
 import { enforceUserScopePluginWhitelist } from '@/lib/user-scope-plugin-whitelist'
 
 const REPO = path.resolve(__dirname, '..', '..')
 
 /** The five the USER named, HARD-CODED — deliberately not derived from the TS constant. The first
- *  version built the fixture as `[...USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS, ...others]`, and the
+ *  version built the fixture as `[...<the defaults constant>, ...others]`, and the
  *  neuter run that EMPTIED the constant stayed green: the fixture shrank with it, 32 keys still
  *  went false, and every assertion held. A fixture derived from the thing under test cannot see
  *  that thing change. These five are the requirement; the constant is the implementation. */
@@ -86,13 +87,20 @@ function hostLikeUserScope(): Record<string, boolean> {
 let home: string
 let userFile: string
 let agentDir: string
+/** The whitelist STORE, injected everywhere. Absent by default = the five defaults apply. Never
+ *  the developer's real ~/.aimaestro/system-settings.json. */
+let storeFile: string
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-'))
   userFile = path.join(home, 'user-settings.json')
+  storeFile = path.join(home, 'system-settings.json')
   agentDir = path.join(home, 'agents', 'a1')
   fs.mkdirSync(path.join(agentDir, '.claude'), { recursive: true })
 })
+
+/** Every gate call in this file goes through here so no case can forget the store path. */
+const gate = (dir: string, user: string) => enforceUserScopePluginWhitelist(dir, user, storeFile)
 
 afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true })
@@ -109,7 +117,7 @@ describe('R17.24 — the user-scope plugin whitelist gate', () => {
     expect(Object.keys(userScope)).toHaveLength(37)
     fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: userScope }))
 
-    const r = await enforceUserScopePluginWhitelist(agentDir, userFile)
+    const r = await gate(agentDir,userFile)
     expect(r.ok).toBe(true)
     expect(r.wrote).toBe(true)
     expect(r.disabled).toHaveLength(32)
@@ -128,19 +136,19 @@ describe('R17.24 — the user-scope plugin whitelist gate', () => {
   it('never writes the user-scope file (the IRON rule, asserted by bytes, not intention)', async () => {
     fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: hostLikeUserScope() }, null, 2))
     const before = fs.readFileSync(userFile)
-    await enforceUserScopePluginWhitelist(agentDir, userFile)
+    await gate(agentDir,userFile)
     expect(fs.readFileSync(userFile).equals(before)).toBe(true)
   })
 
   it('is idempotent: a second pass over an already-enforced agent writes nothing', async () => {
     fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: hostLikeUserScope() }))
-    const first = await enforceUserScopePluginWhitelist(agentDir, userFile)
+    const first = await gate(agentDir,userFile)
     expect(first.wrote).toBe(true)
     const localPath = path.join(agentDir, '.claude', 'settings.local.json')
     const bytes = fs.readFileSync(localPath)
     const mtime = fs.statSync(localPath).mtimeMs
 
-    const second = await enforceUserScopePluginWhitelist(agentDir, userFile)
+    const second = await gate(agentDir,userFile)
     expect(second.wrote).toBe(false)
     expect(second.disabled).toEqual([])
     expect(second.alreadyDisabled).toHaveLength(32)
@@ -156,7 +164,7 @@ describe('R17.24 — the user-scope plugin whitelist gate', () => {
     }))
     fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: { 'ponytail@ponytail': true, 'ai-maestro-janitor@ai-maestro-plugins': true } }))
 
-    await enforceUserScopePluginWhitelist(agentDir, userFile)
+    await gate(agentDir,userFile)
     const local = JSON.parse(fs.readFileSync(localPath, 'utf8'))
     expect(local.enabledPlugins['ai-maestro-plugin@ai-maestro-plugins']).toBe(true)
     expect(local.enabledPlugins['ai-maestro-programmer-agent@ai-maestro-plugins']).toBe(true)
@@ -166,14 +174,14 @@ describe('R17.24 — the user-scope plugin whitelist gate', () => {
   })
 
   it('treats a MISSING user-scope file as a pristine host: ok, nothing to do, no local file created', async () => {
-    const r = await enforceUserScopePluginWhitelist(agentDir, path.join(home, 'does-not-exist.json'))
+    const r = await gate(agentDir,path.join(home, 'does-not-exist.json'))
     expect(r).toEqual({ ok: true, disabled: [], alreadyDisabled: [], wrote: false })
     expect(fs.existsSync(path.join(agentDir, '.claude', 'settings.local.json'))).toBe(false)
   })
 
   it('fails CLOSED on a corrupt user-scope file rather than reading it as "no plugins"', async () => {
     fs.writeFileSync(userFile, '{ this is not json')
-    const r = await enforceUserScopePluginWhitelist(agentDir, userFile)
+    const r = await gate(agentDir,userFile)
     expect(r.ok).toBe(false)
     expect(r.error).toMatch(/cannot read user-scope settings/)
     expect(r.wrote).toBe(false)
@@ -182,28 +190,88 @@ describe('R17.24 — the user-scope plugin whitelist gate', () => {
 
   it('leaves a plugin the user already disabled at user scope alone (only `true` is governed)', async () => {
     fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: { 'ponytail@ponytail': false, 'code-review@claude-plugins-official': true } }))
-    const r = await enforceUserScopePluginWhitelist(agentDir, userFile)
+    const r = await gate(agentDir,userFile)
     expect(r.disabled).toEqual(['code-review@claude-plugins-official'])
     expect(localEnabled()).not.toHaveProperty('ponytail@ponytail')
   })
 })
 
-describe('R17.24 — the TS constant and its shell mirror agree', () => {
-  it('scripts/ecosystem-config.sh USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS equals the TS array, in order', () => {
+describe('R17.24 — the DEFAULTS constant and its shell mirror agree', () => {
+  it('scripts/ecosystem-config.sh DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS equals the TS array, in order', () => {
     const sh = fs.readFileSync(path.join(REPO, 'scripts', 'ecosystem-config.sh'), 'utf8')
     // Parsed here, not sourced: sourcing would execute the script. The array is one quoted
     // stamp per line between `NAME=(` and the closing `)`.
-    const m = sh.match(/USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS=\(\n([\s\S]*?)\n\)/)
+    const m = sh.match(/DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS=\(\n([\s\S]*?)\n\)/)
     expect(m, 'shell mirror array not found').toBeTruthy()
     const shellList = (m as RegExpMatchArray)[1]
       .split('\n')
       .map(l => l.trim())
       .filter(Boolean)
       .map(l => l.replace(/^"|"$/g, ''))
-    expect(shellList).toEqual([...USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS])
+    expect(shellList).toEqual([...DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS])
     // Both copies are also pinned to the REQUIREMENT, so "TS and shell agree" cannot be
     // satisfied by both drifting the same way (e.g. both emptied).
-    expect([...USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS]).toEqual(THE_FIVE)
+    expect([...DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS]).toEqual(THE_FIVE)
     expect(shellList).toEqual(THE_FIVE)
+  })
+})
+
+/**
+ * The whitelist is a SETTING (USER correction 2026-08-27): the five are defaults, the effective
+ * list lives in the store, and the gate reads the store — never the constant. These cases pin
+ * the three semantics the store header promises: absent key → defaults; present key → verbatim,
+ * EVEN IF EMPTY (an operator who cleared it decided something); corrupt → refuse, never defaults.
+ */
+describe('R17.24 — the whitelist is configurable: the store, and the gate reading it', () => {
+  it('an absent key yields the five defaults, flagged as default', async () => {
+    const r = await readAgentPluginWhitelist(storeFile)
+    expect(r.isDefault).toBe(true)
+    expect(r.list).toEqual(THE_FIVE)
+  })
+
+  it('a written list is read back verbatim (deduped), flagged as configured', async () => {
+    await writeAgentPluginWhitelist([...THE_FIVE, 'ponytail@ponytail', 'ponytail@ponytail'], storeFile)
+    const r = await readAgentPluginWhitelist(storeFile)
+    expect(r.isDefault).toBe(false)
+    expect(r.list).toEqual([...THE_FIVE, 'ponytail@ponytail'])
+  })
+
+  it('an EMPTY configured list is honoured — it is not mistaken for "unconfigured"', async () => {
+    await writeAgentPluginWhitelist([], storeFile)
+    const r = await readAgentPluginWhitelist(storeFile)
+    expect(r.isDefault).toBe(false)
+    expect(r.list).toEqual([])
+  })
+
+  it('rejects a key that is not name@marketplace', async () => {
+    await expect(writeAgentPluginWhitelist(['not-a-key'], storeFile)).rejects.toThrow(/invalid plugin key/)
+    expect(fs.existsSync(storeFile)).toBe(false)
+  })
+
+  it('the GATE reads the configured list: a plugin ADDED via the store is no longer switched off', async () => {
+    fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: hostLikeUserScope() }))
+    await writeAgentPluginWhitelist([...THE_FIVE, 'ponytail@ponytail'], storeFile)
+
+    const r = await gate(agentDir, userFile)
+    expect(r.ok).toBe(true)
+    expect(r.disabled).toHaveLength(31)
+    expect(r.disabled).not.toContain('ponytail@ponytail')
+    expect(localEnabled()).not.toHaveProperty('ponytail@ponytail')
+  })
+
+  it('the GATE honours an EMPTY configured list: every user-scope plugin is switched off', async () => {
+    fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: hostLikeUserScope() }))
+    await writeAgentPluginWhitelist([], storeFile)
+    const r = await gate(agentDir, userFile)
+    expect(r.disabled).toHaveLength(37)
+  })
+
+  it('the GATE fails CLOSED on a corrupt store rather than silently using the defaults', async () => {
+    fs.writeFileSync(userFile, JSON.stringify({ enabledPlugins: hostLikeUserScope() }))
+    fs.writeFileSync(storeFile, '{ not json')
+    const r = await gate(agentDir, userFile)
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/cannot read .*system-settings\.json/)
+    expect(fs.existsSync(path.join(agentDir, '.claude', 'settings.local.json'))).toBe(false)
   })
 })

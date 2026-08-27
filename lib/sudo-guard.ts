@@ -222,6 +222,10 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'POST /api/governance/email/configure',
   'DELETE /api/governance/email',
   'PATCH /api/settings/security',
+  // R17.24 (TRDD-C455WHV3): edits which user-scope plugins every agent may load on its next
+  // wake. Owner-only for the same reason the security config is: an agent that could widen the
+  // whitelist could grant itself plugins the operator withheld.
+  'PATCH /api/settings/agent-plugin-whitelist',
   'DELETE /api/settings/marketplaces',
   'PATCH /api/settings/auto-update',
   'POST /api/settings/auto-update/run',

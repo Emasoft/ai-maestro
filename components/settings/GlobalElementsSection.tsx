@@ -133,6 +133,23 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
+  // R17.24 (TRDD-C455WHV3): the set of user-scope plugins AGENTS may use — a configurable
+  // setting, not a constant. Rendered as a second control on every plugin row ("Agents"),
+  // distinct from the enabled toggle: `enabled` is whether the HOST USER has the plugin on;
+  // `agentAllowed` is whether an agent process may load it. Absent key = the five defaults.
+  const [agentWhitelist, setAgentWhitelist] = useState<Set<string>>(new Set())
+  const [agentWhitelistDefault, setAgentWhitelistDefault] = useState(true)
+  const [whitelistToggling, setWhitelistToggling] = useState<string | null>(null)
+  const fetchAgentWhitelist = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/agent-plugin-whitelist')
+      if (!res.ok) return
+      const data = await res.json() as { list: string[]; isDefault: boolean }
+      setAgentWhitelist(new Set(data.list))
+      setAgentWhitelistDefault(data.isDefault)
+    } catch { /* leave the last known list; the control shows stale state, never a fabricated one */ }
+  }, [])
+  useEffect(() => { fetchAgentWhitelist() }, [fetchAgentWhitelist])
   const [expandedMarketplaces, setExpandedMarketplaces] = useState<Set<string>>(new Set())
 
   const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null) // accordion for plugin details
@@ -330,6 +347,33 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
       else next.add(marketplace)
       return next
     })
+  }
+
+  // R17.24: flip one plugin in or out of the agent whitelist. Sends the WHOLE resulting list —
+  // the API replaces wholesale, so two operators toggling at once cannot interleave into a list
+  // neither of them meant. Sudo-gated: this changes what every agent may load on its next wake.
+  const toggleAgentAllowed = async (key: string, currentlyAllowed: boolean) => {
+    setWhitelistToggling(key)
+    try {
+      const next = new Set(agentWhitelist)
+      if (currentlyAllowed) next.delete(key); else next.add(key)
+      const res = await sudoFetch(
+        '/api/settings/agent-plugin-whitelist',
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ list: [...next] }) },
+        (reason) => requestSudoToken(reason),
+      )
+      if (res.ok) {
+        const data = await res.json() as { list: string[]; isDefault: boolean }
+        setAgentWhitelist(new Set(data.list))
+        setAgentWhitelistDefault(data.isDefault)
+      } else {
+        fetchAgentWhitelist()
+      }
+    } catch {
+      fetchAgentWhitelist()
+    } finally {
+      setWhitelistToggling(null)
+    }
   }
 
   const togglePlugin = async (key: string, currentEnabled: boolean) => {
@@ -713,6 +757,32 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                     destructive toggle that bypassed ChangePlugin Gate 7. P2-PROP-001 then
                     consolidated the check into isCorePlugin() so a single helper governs
                     every "is this R17?" decision across the codebase. */}
+                {/* R17.24 "Agents" control — may an AGENT process load this user-scope plugin?
+                    Only meaningful while the plugin is enabled for the host user: a disabled
+                    plugin is loaded by nobody, so the control is hidden rather than shown
+                    inert. The whitelist store is ai-maestro's own; this never writes
+                    ~/.claude/settings.json. */}
+                {plugin.enabled && !isCorePlugin(plugin.name, plugin.marketplace) && (() => {
+                  const allowed = agentWhitelist.has(plugin.key)
+                  const busy = whitelistToggling === plugin.key
+                  return (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleAgentAllowed(plugin.key, allowed) }}
+                      disabled={busy}
+                      className={`flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${
+                        allowed
+                          ? 'text-sky-300 border-sky-500/60 bg-sky-500/10 hover:bg-sky-500/20'
+                          : 'text-gray-500 border-gray-700 hover:border-gray-500 hover:text-gray-300'
+                      }`}
+                      title={allowed
+                        ? `Agents may load this plugin${agentWhitelistDefault ? ' (default whitelist)' : ''} — click to remove it from the agent whitelist`
+                        : 'Agents may NOT load this plugin — click to add it to the agent whitelist'}
+                      aria-pressed={allowed}
+                    >
+                      {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : allowed ? 'AGENTS ✓' : 'AGENTS'}
+                    </button>
+                  )
+                })()}
                 {!isCorePlugin(plugin.name, plugin.marketplace) ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); togglePlugin(plugin.key, plugin.enabled) }}

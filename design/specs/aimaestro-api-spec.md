@@ -268,6 +268,8 @@ zod schemas at the top of each source file — the file column is the pointer.
 | GET | `/api/sessions-browser/timelines/[tid]/context-at` |  | app/api/sessions-browser/timelines/[tid]/context-at/route.ts |  |
 | GET | `/api/sessions-browser/timelines/[tid]/range` |  | app/api/sessions-browser/timelines/[tid]/range/route.ts |  |
 | GET | `/api/sessions-browser/timelines/[tid]/search` |  | app/api/sessions-browser/timelines/[tid]/search/route.ts |  |
+| GET | `/api/settings/agent-plugin-whitelist` |  | app/api/settings/agent-plugin-whitelist/route.ts | Agent plugin whitelist API (R17.24, TRDD-C455WHV3) |
+| PATCH | `/api/settings/agent-plugin-whitelist` | strict | app/api/settings/agent-plugin-whitelist/route.ts | Agent plugin whitelist API (R17.24, TRDD-C455WHV3) |
 | GET | `/api/settings/auto-update` |  | app/api/settings/auto-update/route.ts | Auto-update settings API. |
 | PATCH | `/api/settings/auto-update` | strict | app/api/settings/auto-update/route.ts | Auto-update settings API. |
 | POST | `/api/settings/auto-update/run` | strict | app/api/settings/auto-update/run/route.ts | Manual "Run now" trigger for the auto-update scheduler. |

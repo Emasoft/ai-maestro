@@ -291,17 +291,24 @@ export const ROLE_PLUGIN_ASSISTANT = 'ai-maestro-assistant-role-agent'
 
 // ── User-scope plugins agents may use (R17.24, TRDD-C455WHV3) ────
 //
-// The WHITELIST. The host user may have any number of plugins enabled at user
-// scope; an agent's Claude Code process may use ONLY these. Every other
+// The DEFAULT whitelist — a fallback, NOT the authority. The effective list is a
+// SETTING (`agentPluginWhitelist` in ~/.aimaestro/system-settings.json), read by
+// `lib/agent-plugin-whitelist-store.ts` and edited from the dashboard
+// (Settings → Extensions → Plugins, the "Agents" column). These five apply only
+// when that key is ABSENT. The USER's correction 2026-08-27: "stop treating the
+// whitelist as immutable — the first 5 are the defaults and will rarely change,
+// but more plugins can be added via the dashboard." Do not hard-code its length
+// anywhere; do not read this constant from the gate — read the store.
+//
+// The host user may have any number of plugins enabled at user scope; an
+// agent's Claude Code process may use only the effective list. Every other
 // user-scope plugin is switched off in the agent's own settings.local.json by
 // `lib/user-scope-plugin-whitelist.ts` (a `false` there overrides the user
 // scope `true` for that process alone — the one lever the platform offers
 // that touches nothing at user scope). Keys are the exact `name@marketplace`
-// stamps Claude Code uses in `enabledPlugins`. Named by the USER 2026-08-27.
-//
-// Adding a name here changes R17 → `manager` approval. Mirror:
-// scripts/ecosystem-config.sh USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS.
-export const USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS: readonly string[] = [
+// stamps Claude Code uses in `enabledPlugins`. Mirror:
+// scripts/ecosystem-config.sh DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS.
+export const DEFAULT_USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS: readonly string[] = [
   'ai-maestro-janitor@ai-maestro-plugins',
   'perfect-skill-suggester@emasoft-plugins',
   'claude-plugins-validation@emasoft-plugins',

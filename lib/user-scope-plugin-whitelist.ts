@@ -34,7 +34,7 @@ import { promises as fs } from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS } from '@/lib/ecosystem-constants'
+import { readAgentPluginWhitelist } from '@/lib/agent-plugin-whitelist-store'
 import { updateJson } from '@/lib/json-io'
 
 export interface WhitelistResult {
@@ -70,7 +70,7 @@ async function readUserScopeEnabled(userSettingsPath: string): Promise<Record<st
 
 /**
  * Enforce the whitelist for ONE agent: every plugin enabled at user scope that is not on
- * `USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS` gets `false` in that agent's
+ * the effective whitelist (the store; defaults when unconfigured) gets `false` in that agent's
  * `.claude/settings.local.json`. Merge-only, idempotent (no write when nothing differs),
  * atomic via `updateJson`. Whitelisted keys are never written — the agent may still
  * disable one of them itself, and that choice is left alone.
@@ -81,10 +81,21 @@ async function readUserScopeEnabled(userSettingsPath: string): Promise<Record<st
 export async function enforceUserScopePluginWhitelist(
   agentDir: string,
   userSettingsPath: string = path.join(os.homedir(), '.claude', 'settings.json'),
+  /** The whitelist store; injectable so a test never reads the developer's real one. */
+  whitelistStorePath?: string,
 ): Promise<WhitelistResult> {
   const resolvedDir = agentDir.startsWith('~') ? agentDir.replace('~', os.homedir()) : agentDir
   const localSettings = path.join(resolvedDir, '.claude', 'settings.local.json')
-  const allowed = new Set<string>(USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS)
+
+  // The whitelist is a SETTING read fresh on every call — never a constant captured at import.
+  // A corrupt store fails closed here for the same reason the user-scope read does below: the
+  // defaults would be a silent DOWNGRADE of whatever list the operator actually configured.
+  let allowed: Set<string>
+  try {
+    allowed = new Set((await readAgentPluginWhitelist(whitelistStorePath)).list)
+  } catch (err) {
+    return { ok: false, disabled: [], alreadyDisabled: [], wrote: false, error: (err as Error).message }
+  }
 
   let userEnabled: Record<string, boolean> | null
   try {

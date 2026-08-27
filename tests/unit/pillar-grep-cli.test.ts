@@ -357,15 +357,22 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * filter on the real thing.
  */
 describe('trddgrep validate — --min-severity and --rule actually filter', () => {
-  it('--min-severity error prints ONLY the two ERROR lines, not all 247', () => {
+  it('--min-severity error prints ONLY the five ERROR lines, not all 247', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'error'])
     const lines = r.stdout.trim().split('\n')
-    // The length is the FILTER assertion — 2 of 247 is what proves --min-severity filters at
-    // all. Both ids are then pinned individually, so a future third error cannot hide by
-    // arriving in a slot nobody names.
-    expect(lines).toHaveLength(2)
-    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
-    expect(lines[1]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
+    // The length is the FILTER assertion — 5 of 247 is what proves --min-severity filters at
+    // all. Every id is then pinned individually, in the CLI's own sort order (rule, then id —
+    // MEASURED 2026-08-27, not assumed), so a future sixth error cannot hide by arriving in a
+    // slot nobody names. Re-pinned 2→5 that day: three archived cards (DXJZM3BW, IBKR7F74,
+    // 39OPYXQ9) closed with an open box or no checklist AFTER the gate landed; they are
+    // terminal and frozen (IND rule 12), so they are evidence, not something to tick. The
+    // filter was never broken — this test was pinning a census that had moved.
+    expect(lines).toHaveLength(5)
+    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tDXJZM3BW\t/)
+    expect(lines[1]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tIBKR7F74\t/)
+    expect(lines[2]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
+    expect(lines[3]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\t39OPYXQ9\t/)
+    expect(lines[4]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
     expect(r.status).toBe(1)
   })
 

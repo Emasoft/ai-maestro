@@ -58,8 +58,11 @@ once the stripper was measured.
 
 ## Blast radius
 
-**10 files** carry the identical strip, most of them AUTHORIZATION scanners where a removed
-finding means an unguarded route reads as guarded:
+**10 files** carry the identical strip, and **all 10 feed it REAL TREE FILES** — measured, not
+inferred from names: every one calls `readFileSync`/`execFileSync`/`find app/api`/`ls-files`
+(1-7 sites each; r51 at 5 as the positive control). None is fixture-only, so none is exempt on
+corpus-exposure grounds. Several are authorization scanners, where a removed finding means an
+unguarded route reads as guarded; that DIRECTION is measured for r51 only (see below):
 
 `queue-cancel-authorization` · `portfolio-no-sudo` · `queue-enqueue-authorization` ·
 `wake-hibernate-authcontext-required` · `chat-send-authorization` · `email-address-authorization`

@@ -156,6 +156,13 @@ function nonJoinUses(files: string[]): string[] {
  *   s/fs\.mkdirSync\(root/fs.rmSync(root/  → 1 red / 4 green, the red being this assertion.
  *   The SAME mutation reddened 0 of 4 before this assertion existed.
  *
+ * SECOND BLIND SPOT, MEASURED not assumed: a root reaching a path by STRING CONCATENATION
+ *   (`root + '/profiles'`) after an already-reviewed binding is invisible to all three
+ *   assertions — neutered in, 0 red / 5 green. Deliberately NOT scaffolded against: there are
+ *   zero instances and this codebase uses `path.join` throughout, so a fourth assertion would
+ *   guard a shape that does not exist while adding a fourth allowlist to re-review on every
+ *   refactor. Named here so the next reader inherits the measurement, not the silence.
+ *
  * KNOWN BLIND SPOT, stated rather than left implicit: the regex needs an IDENTIFIER immediately
  * before `(root`, so an immediately-invoked expression — `(deps.tickAgeS ?? tickCompletedAgeS)(root,
  * now)` in supervisor.ts — is invisible to it. That one was read by hand and joins

@@ -243,7 +243,7 @@ true only when the root is unresolved AT LOAD. It says nothing about the root go
 MID-TICK, with slots already loaded — which is the reachable path. [^3]
 
 
-^ATOM-3S09-H2JS [desc: "Settled by code, not by an mtime experiment: ai-maestro never references the janitor's rotator cookie store — but the recorded REASON for that was wrong, and reauth does drive the owner's real browser", keywords: does_our_side_re-mint_cookies who_writes_the_shared_cookie_store cookie_store_mtime reauth_drives_a_real_browser_profile janitor_vault_untouched_by_ai-maestro, ocd: 2026-08-27, lmd: 2026-08-27]
+^ATOM-3S09-H2JS [desc: "ai-maestro never touches the rotator's profiles/ cookie store, and DOES write eight files into the surrounding root. Both halves are true; neither survives being quoted alone.", keywords: does_our_side_re-mint_cookies who_writes_the_shared_cookie_store cookie_store_mtime reauth_drives_a_real_browser_profile janitor_vault_untouched_by_ai-maestro, ocd: 2026-08-27, lmd: 2026-08-27]
 
 The question "does ai-maestro ever re-mint or write the shared cookie store the janitor's
 rotator keeps per account?" was carried for a while with an ARGUED negative: *`completeReauth`
@@ -271,10 +271,13 @@ very root this project writes into, exactly ONE path segment away. A single
 `path.join(rotatorRoot(), 'profiles', …)` anywhere in this codebase would write the real cookies
 for every account. The closed enumeration above is what says none exists — today.
 
-State the claim precisely, because the imprecise version is what a peer would act on. TRUE: this
-project never reads or writes the cookie store — and that rests on TWO enumerations, not one. The
-literal segments joined onto a rotator root (above) contain no `profiles`; and every use of a
-rotator root that is NOT a join was read by hand, because a join scan says nothing about them and
+**ai-maestro never touches the `profiles/` cookie store. It DOES write eight files into the
+surrounding rotator root.** Both halves are true and neither survives being quoted alone — the
+short form is deliberate, because a longer sentence is one a peer truncates at its first clause.
+
+The evidence is two enumerations, both pinned in
+tests/governance/rotator-root-join-surface.test.ts so neither can rot: no `profiles` among the
+segments joined onto a rotator root, and every non-join use of one read by hand — needed because
 `rotatorRoot()` can RETURN the legacy root, which physically CONTAINS the store. Exactly one is a
 whole-root operation: `fs.mkdirSync(root, { recursive: true })` in decision-log.ts, create-only and
 idempotent, so it cannot read, copy or remove anything. Both enumerations are pinned by

@@ -1115,6 +1115,15 @@ describe('deleteTeamDocument', () => {
 // ============================================================================
 
 describe('notifyTeamAgents', () => {
+  // Every id these cases notify. They must be MEMBERS of the seeded team: the service's second
+  // gate rejects any target outside `team.agentIds` as foreign, which is a distinct guarantee
+  // from checkTeamAccess — that one says the caller may act on this team and says nothing about
+  // the target list, so without it a legitimate member of team A could name team A and pass
+  // arbitrary agentIds. 'nonexistent' is a MEMBER whose agent record is missing, which is what
+  // that case is actually about; it must reach the per-agent loop rather than be turned away as
+  // foreign, or the test stops exercising the branch it names.
+  const MEMBERS = ['a1', 'a2', 'nonexistent']
+
   // TRDD-91TLL7DW (647a1044) moved the caller-authorization INTO this service: notifyTeamAgents
   // now resolves the team by name and 404s when it does not exist, then checkTeamAccess-es the
   // caller. That guard is load-bearing — the function terminates in a tmux send-keys primitive,
@@ -1126,8 +1135,8 @@ describe('notifyTeamAgents', () => {
   // was the only thing failing.
   beforeEach(async () => {
     mockTeams.loadTeams.mockReturnValue([
-      { id: 't-alpha', name: 'Team Alpha' },
-      { id: 't-plain', name: 'Team' },
+      { id: 't-alpha', name: 'Team Alpha', agentIds: MEMBERS },
+      { id: 't-plain', name: 'Team', agentIds: MEMBERS },
     ] as never)
     // Re-assert the ALLOW. The shared beforeEach uses vi.clearAllMocks(), which clears CALLS but
     // NOT a mockReturnValue an earlier test installed — so a denial set anywhere above this block

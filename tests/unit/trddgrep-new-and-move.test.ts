@@ -226,6 +226,38 @@ describe('trddgrep move — the on-touch approval-tier migration', () => {
     expect(text).toMatch(/^min-approval-requirement: none$/m)
   })
 
+  /**
+   * A REAL shape in this corpus, not a hypothetical: TRDD-Z3T7DVL4 carries
+   * `approval-tier: 2` at line 427, inside a YAML example in its BODY, while its
+   * frontmatter declares `min-approval-requirement: user` and no tier line. The doctor
+   * correctly never warned about it — which is why a WARN-row tally (82) undercounts the
+   * files containing the string (83), and why this case was invisible until the two
+   * numbers were compared.
+   *
+   * The migration must not touch it. It early-returns because the HEAD slice has no tier
+   * line, and that early return is the only thing standing between the body-wide
+   * `.replace()` and a silent edit to someone's documentation.
+   */
+  it('never touches an `approval-tier:` line in the BODY when the frontmatter has none', () => {
+    expect(cli('new', '--title', 'a card documenting the legacy field', '--task-type', 'docs',
+      '--author', 'probe').status).toBe(0)
+    const file = only('tasks')
+    // `0` decodes to `none`, which is what the minted card's frontmatter already declares.
+    // That is deliberate and load-bearing: with a DISAGREEING value (say `2` = manager) the
+    // conflict guard refuses the whole migration and the body line survives for a reason
+    // that has nothing to do with the head-slice guard — measured, the head-slice neuter
+    // reddened nothing under that fixture. Only an AGREEING value reaches the replace, so
+    // only this fixture can tell the two guards apart.
+    fs.appendFileSync(file, '\n## Acceptance\n\n- [x] done\n\n```yaml\napproval-tier: 0\n```\n')
+    git('add', '-A'); git('commit', '-qm', 'seed body-only tier')
+    const id = idOf(file)
+    expect(cli('move', id, 'testing').status).toBe(0)
+    const text = fs.readFileSync(only('tasks'), 'utf-8')
+    expect(text).toMatch(/^approval-tier: 0$/m)
+    // And the frontmatter's own requirement is untouched — no field invented from a body line.
+    expect(text).toMatch(/^min-approval-requirement: none$/m)
+  })
+
   it('leaves an UNDECODABLE tier number for a human', () => {
     const id = seedWithTier(['approval-tier: 9'])
     expect(cli('move', id, 'testing').status).toBe(0)

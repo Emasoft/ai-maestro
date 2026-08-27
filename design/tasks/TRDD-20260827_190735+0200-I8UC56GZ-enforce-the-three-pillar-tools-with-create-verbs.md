@@ -102,7 +102,24 @@ reads false and says where the repair actually happens. `fix`s all-clear also cl
 already carries a valid frontmatter" — a claim about the CORPUS from a tool that knows only what
 IT repairs; narrowed to what it can actually assert.
 
-NEUTER (complement run BEFORE any claim this time): the migration is wired at TWO call sites, and
+CORRECTION — "82 cards carry `approval-tier:`" was a COUNT standing in for an IDENTIFICATION, and
+comparing it to one settled a real gap. Identified: **83** files contain a line starting
+`approval-tier:`; **82** carry it in FRONTMATTER (all `APPROVAL-TIER-DEPRECATED`, and **zero**
+`APPROVAL-FIELD-CONFLICT`, so the migration declines none of them). The 83rd is
+**TRDD-Z3T7DVL4**, which carries `approval-tier: 2` at line 427 inside a YAML example in its
+BODY while its frontmatter declares `min-approval-requirement: user` and no tier line. The doctor
+was right never to warn about it; the tally simply could not see it.
+
+That shape now has a test, and the first version of that test was VACUOUS. It used a body value
+that DISAGREED with the frontmatter, so the conflict guard refused the migration and the body line
+survived for a reason that had nothing to do with the head-slice guard under test — the neuter
+reddened NOTHING, which is a finding about the test, not the code. Re-fixtured with an AGREEING
+value (`approval-tier: 0` beside `min-approval-requirement: none`), which is the only shape that
+reaches the replace; the same neuter now reds exactly that one test. The head-slice early return
+is the only thing standing between a document-wide `.replace()` and a silent edit to a card`s
+documentation, and until now nothing pinned it.
+
+NEUTER: the migration is wired at TWO call sites, and
 killing them one at a time reds exactly one test each, a different one — `editAt` → the archive
 test, `advanceColumn` → the in-place test. The first draft of that test pinned only one site;
 removing both reddened one test, which would have read as full coverage.

@@ -58,10 +58,18 @@ found the hub SERVER WEDGED (43h process, TCP accepted / HTTP timed out) — res
 redeployed — `verify_assumptions` verified present in 3 server chunks, /api/sessions answers
 <0.1s. Fleet-wide 3.0.0 prep directive broadcast to all live plugin sessions; replies logged.
 
-**CLOSED 2026-08-27T17:04:03+0200.** janitor#286 is CLOSED (2026-08-25T12:10Z) and the shipped rules on this
-host carry the fix (`universal-kanban.md` states 22 columns; `trdd-approval-tiers.md` carries the
-FIELD RENAME note) — re-derive: `gh issue view 286 --repo Emasoft/ai-maestro-janitor --json state`,
-`grep -c '22 columns' ~/.claude/rules/universal-kanban.md`. The two `[~]` boxes are ticked at their
+**CLOSED 2026-08-27T17:04:03+0200.** janitor#286 is CLOSED (2026-08-25T12:10Z). **CORRECTED the same hour by the review fork:** the
+first draft of this paragraph said "the shipped rules on this host carry the fix" — a phrase grep on
+the INSTALLED copy, which cannot tell shipped from hand-patched. Byte-compared: the installed
+`universal-kanban.md` is stamped `3.3.27`, DIFFERS from the newest cached 3.3.26, DIFFERS from janitor
+`origin/main` (still 17 columns), and the fix `69f93aa7` lives only in the local checkout
+`~/Code/AI-MAESTRO-JANITOR/ai-maestro-janitor` (3.4.0, **330 commits ahead of origin/main, 0 behind,
+unpushed**; latest release v3.3.26 of 2026-08-21). `trdd-approval-tiers.md` is NOT a janitor-shipped
+rule (404 upstream) — its FIELD RENAME box is a local user-scope correction. So: fixed and installed
+on THIS host, **not published**. That does not reopen this card (shipping was recorded as the
+janitor's own act from the start) — it is flagged on #286. Re-derive, never trust this paragraph:
+`gh release list --repo Emasoft/ai-maestro-janitor --limit 1`; `git -C ~/Code/AI-MAESTRO-JANITOR/ai-maestro-janitor rev-list --left-right --count origin/main...HEAD`;
+`cmp ~/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-janitor/<newest>/rules/universal-kanban.md ~/.claude/rules/universal-kanban.md`. The two `[~]` boxes are ticked at their
 honest extent (both refusers are content-free test agents; a cross-repo mandate is non-binding by
 design) rather than held open on halves this repo cannot act on.
 

@@ -35,6 +35,7 @@
  * prints `BLOCKED` as its first token — the third exit-2 class: the edit itself is
  * illegal, so unlike STALE, re-reading and retrying unchanged refuses identically.
  */
+import fs from 'fs'
 import path from 'path'
 import type { PillarKind } from './kinds'
 import { corpusRootFor } from './kinds'
@@ -164,7 +165,13 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
       throw new UsageError(`--limit takes a non-negative integer (0 = no limit), not ${JSON.stringify(limitVal)}`)
     }
 
-    const { edits: rawEdits, rest: positional } = parseEditFlags(rest)
+    const { edits: rawEdits, rest: withUser } = parseEditFlags(rest)
+    // `--user` is VALUELESS and is stripped before the unknown-option check, so it cannot
+    // be folded into a search pattern. It asserts "a human is at the keyboard", which is
+    // the only thing that may add a GOLDEN rule — the offline equivalent of the
+    // `$AID_AUTH` resolution `prrd-edit.py` performs against the server.
+    const userAuthority = withUser.includes('--user')
+    const positional = withUser.filter((t) => t !== '--user')
     const cmd = positional[0] ?? 'list'
     const arg = positional[1]
 
@@ -230,6 +237,116 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
           return process.exit(1)
         }
         console.log(C.g(`${tool}: ${documents} document(s), ${records} record(s) — clean`))
+        return process.exit(0)
+      }
+
+      // ---- ADD a rule. The verb the measured workaround makes necessary (TRDD-I8UC56GZ).
+      //
+      // A PRRD rule CAN be appended with `edit` today, but only by anchoring on a NON-RULE
+      // line: anchoring on the last rule — the obvious choice — is REFUSED, because
+      // replacing a rule line with itself-plus-a-new-rule reads to the gate as that rule's
+      // TEXT changing without a version bump. Measured. So the workaround exists, is
+      // proxy-shaped, and its most natural form is a trap.
+      //
+      // PRRD ONLY, and specgrep is not missing anything: a SPEC clause id encodes a FAMILY
+      // the author chooses (`3P-KAN-06`), so there is no next id to mint — and appending a
+      // clause off a CLAUSE anchor was measured to SUCCEED there, because SPEC's guard is
+      // clause-id stability and it has no version-bump clause. The trap is PRRD's alone.
+      case 'add': {
+        if (kind.name !== 'prrd') {
+          return die(
+            `${tool} has no \`add\`: a ${kind.label} id encodes a family the author chooses, so there is ` +
+              `no next id to mint. Append with \`${tool} edit <id> --at-line N --expect <line> --replace <line + the new one>\``,
+            2,
+          )
+        }
+        const tier = positional[1]
+        const text = positional.slice(2).join(' ').trim()
+        if (tier !== 'golden' && tier !== 'silver') {
+          throw new UsageError(`add needs a tier — \`${tool} add golden|silver "<rule text>"\``)
+        }
+        if (!text) throw new UsageError(`add needs the rule text — \`${tool} add ${tier} "<rule text>"\``)
+        if (/[\r\n\u0000-\u001f]/.test(text)) {
+          return die('the rule text must be ONE line — the PRRD is a flat bullet list and a newline would split the rule in two', 2)
+        }
+        // GOLDEN IS USER-ONLY, and this tool cannot tell who is running it. `prrd-edit.py`
+        // enforces the same split by resolving $AID_AUTH against the server; offline, the
+        // honest equivalent is an explicit claim by the caller. Without it a golden rule
+        // could be minted by any agent, which is precisely the authority the tier exists to
+        // reserve — and an agent that would type `--user` untruthfully has forged an
+        // approval, which is a governance violation with a name, not an accident.
+        if (tier === 'golden' && !userAuthority) {
+          return die(
+            'golden rules are USER-only — not even the MANAGER may add one. Re-run with `--user` if you ARE ' +
+              'the user at the keyboard; an agent files a proposal instead.',
+            2,
+          )
+        }
+
+        const recs = [...walkRecords(root, kind)]
+        if (recs.length === 0) return die(`no ${kind.label} records under ${root} — refusing to guess where a rule goes`, 2)
+        let maxNumber = 0
+        let anchor: (typeof recs)[number] | null = null
+        for (const r of recs) {
+          const m = /^([GS])(\d+)\.(\d+)$/.exec(r.id)
+          if (!m) continue
+          maxNumber = Math.max(maxNumber, Number(m[2]))
+          if (r.line !== null && (anchor === null || (anchor.line ?? 0) < r.line)) anchor = r
+        }
+        if (!anchor) return die(`no parseable ${kind.label} rule to compute the next number from`, 2)
+
+        // THE INSERTION POINT IS THE END OF THE TIER'S OWN SECTION — never proximity to a
+        // rule. Measured on the live PRRD, and both of the obvious anchors corrupt it:
+        //
+        //   - "after the last rule" puts a SILVER rule in the GOLDEN section, because the
+        //     tiers are separate sections (`## GOLDEN rules` … `---` … `## SILVER rules`);
+        //   - "the line after the declaration" lands INSIDE the previous rule's body,
+        //     because a PRRD rule is MULTI-LINE (G12.1 spans 146-172 and carries a blank
+        //     line at 161 of its own).
+        //
+        // An earlier build of this verb did exactly that: run against a copy of the real
+        // document it inserted `- **S13.1**` at line 147 — mid-body, wrong tier — while
+        // PASSING on a single-line fixture. That is why the anchor is a section boundary.
+        const docLines = fs.readFileSync(anchor.filePath, 'utf-8').split('\n')
+        const wanted = tier === 'golden' ? /GOLDEN/i : /SILVER/i
+        const headingIdx = docLines.findIndex((l) => /^##\s/.test(l) && wanted.test(l))
+        if (headingIdx < 0) {
+          return die(`no \`## … ${tier.toUpperCase()} …\` section heading in ${path.basename(anchor.filePath)} — refusing to guess where a ${tier} rule goes`, 2)
+        }
+        // The section ends at its trailing `---` divider or the next `## ` heading. That
+        // boundary line is also the ANCHOR, and it is never a declaration — which is what
+        // keeps the gate's version-bump clause out of the way (anchoring on a rule hands it
+        // a line that keeps its id and changes its text, and it correctly refuses).
+        let boundary = -1
+        for (let i = headingIdx + 1; i < docLines.length; i++) {
+          if (/^---\s*$/.test(docLines[i]) || /^##\s/.test(docLines[i])) { boundary = i; break }
+        }
+        if (boundary < 0) {
+          return die(
+            `the ${tier.toUpperCase()} section runs to end-of-file with no trailing \`---\` or following heading, so there is ` +
+              'no non-declaration line to anchor on — add a section divider and re-run',
+            2,
+          )
+        }
+        // NUMBERS ARE NEVER REUSED, even after a deletion, and they are unique across BOTH
+        // tiers — so the next one is max+1 over every declared rule, never a count and never
+        // a gap-filler. Version starts at 1.
+        const newId = `${tier === 'golden' ? 'G' : 'S'}${maxNumber + 1}.1`
+        const newLine = `- **${newId}** — ${text}`
+        const boundaryText = docLines[boundary]
+
+        await replaceAtLines(
+          anchor.filePath,
+          // Prepend INTO the section, ahead of its boundary: the rule lands after the
+          // section's existing content, with a blank line separating it from the divider.
+          [{ line: boundary + 1, expect: boundaryText, replace: `${newLine}\n\n${boundaryText}` }],
+          {
+            lockKey: documentLockKeyFor(root, kind, anchor),
+            preWriteCheck: pillarPreWriteCheck(kind, { filePath: anchor.filePath, corpusRecords: recs }),
+          },
+        )
+        console.log(C.g(`added ${C.b(newId)} to the ${tier.toUpperCase()} section of ${path.relative(root, anchor.filePath) || path.basename(anchor.filePath)} (line ${boundary + 1})`))
+        console.log(C.d(`  ${newLine}`))
         return process.exit(0)
       }
 

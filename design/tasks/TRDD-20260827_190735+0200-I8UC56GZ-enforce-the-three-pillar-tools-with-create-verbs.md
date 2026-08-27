@@ -77,6 +77,35 @@ it asks for does not exist. It is the LAST card that may be, and box 1 is what m
 - [ ] The three tools' `help` states the mandate and points at `PRRD G12.1`
 - [ ] `META-MISSING` reaches 0 on the corpus, or each remaining case is explained in place
 
+### The model is `memgrep` — match its surface, not just its linter (USER, 2026-08-27)
+
+*"take example from the memgrep tool from the janitor. it handles all: creating, updating,
+recalling, migrating, merging, splitting, etc. For TRDD the trddgrep must also handle the
+transition from the proposal folder to the tasks folder and finally the archived folder
+automatically."*
+
+memgrep's verbs, measured: `new-page` · `add-atom` · `add-lesson` · `edit` · `migrate` · `lint` ·
+`validate` · `recall` · `find` · `overview` · `atom` · `links` · `index` · `reindex`. trddgrep has
+only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or MOVES is missing.
+
+- [ ] **`trddgrep move <id> <column>` performs the column edit AND the zone `git mv` as ONE
+      operation.** This is the sharpest case: a transition today is two hand steps — edit
+      `column:`, then `git mv` between `design/proposals|tasks|archived|refused` — and doing one
+      without the other is how a card ends terminal-in-the-open-zone (this session shipped exactly
+      that defect once already, and its own linter caught it). The verb picks the zone from the
+      target column, bumps `updated:`, appends the `## Approval log` line where the transition
+      requires one, and refuses a transition the column state machine forbids
+- [ ] **`split` / `supersede` / `merge`** — the derived-TRDD operations, which today are pure
+      hand-authoring: creating NPT/EHT children with `parent-trdd:` + the parent's `npt:`/`eht:`
+      back-pointers written on BOTH ends (the depth-1 invariant the D4 watchdog checks), and
+      `supersede` writing `superseded-by:` + archiving as itself
+- [ ] **`migrate`** — the on-next-touch field migrations the rules already mandate
+      (`approval-tier:` → `min-approval-requirement:`, v1 `status:` → `column:`), applied by the
+      tool instead of by each agent remembering
+- [ ] **Structured field updates** (`set`, `add-box`, `check-box`, `append-state`) so an agent
+      never regex-patches frontmatter — the failure that produced TWO silent no-ops on
+      TRDD-GFX57106 this session
+
 ## Approval log
 
 - 2026-08-27T19:07:35+0200 — MANDATE issued by the USER (min-approval-requirement: none; issuer authority >= approver).

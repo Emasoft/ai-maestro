@@ -105,6 +105,16 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 - [ ] **Structured field updates** (`set`, `add-box`, `check-box`, `append-state`) so an agent
       never regex-patches frontmatter — the failure that produced TWO silent no-ops on
       TRDD-GFX57106 this session
+- [ ] **The TRDD pre-write gate is a NO-OP today — make it real.** `pillarPreWriteCheck` early-
+      returns `() => {}` for any kind that is not `per-line` (`lib/pillar/edit-guard.ts:181`;
+      `lintPillarLines` likewise at `:373`), and TRDD is `mode: 'per-document'`
+      (`lib/pillar/kinds.ts:127`) while prrd and spec are `per-line` (`:162`, `:196`). So
+      `trddgrep edit` gives the lock + CAS staleness guard and NO field validation: it writes
+      `column: banana` without complaint. `PRRD G12.1` carries a measured caveat saying so until
+      this box is done
+- [ ] **`fix` (the autofixer) is never invoked automatically by any write path** — the USER's
+      directive is "detect AND fix the autofixable"; today `fix` is a verb a human remembers to
+      run. Wire it into the write paths, or record why not
 
 ## Approval log
 

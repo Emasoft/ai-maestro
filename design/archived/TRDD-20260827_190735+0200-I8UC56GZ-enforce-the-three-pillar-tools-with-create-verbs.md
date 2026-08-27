@@ -1,12 +1,12 @@
 ---
 trdd-id: I8UC56GZ
 title: The 3-pillars tools have no create verb and no lint-on-write, so G12.1 cannot yet be obeyed
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-27T19:07:35+0200
-updated: 2026-08-27T20:45:28+0200
+updated: 2026-08-27T22:53:50+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -251,3 +251,5 @@ only the QUERY + `lint`/`validate`/`fix`/`edit` half; every verb that CREATES or
 - 2026-08-27T19:31:32+0200 — column → dev. tooling half landed; see the LANDED block
 - 2026-08-27T20:45:28+0200 — column → testing. all acceptance boxes closed; 6491 tests green
 - 2026-08-27T20:45:28+0200 — column → ai_review. self-reviewed across 9 adversarial fork passes; awaiting USER
+- 2026-08-27T22:53:49+0200 — column → human_review by user. Human review delegated to the hub session by the USER (2026-08-27, 'you can do the human review in my stead'); every acceptance box re-measured against the tree, not read
+- 2026-08-27T22:53:50+0200 — COMPLETE by user. USER-delegated human review passed: 3-pillars mandate: 23/23; the USER's own mandate, reviewed on delegation.

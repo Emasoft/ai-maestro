@@ -62,6 +62,10 @@ vi.mock('@/lib/validation', () => ({ isValidUuid: () => true }))
 import { POST } from '@/app/api/agents/[id]/portfolio/route'
 import { NextRequest } from 'next/server'
 import { requiresSudo } from '@/lib/security-registry'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -112,9 +116,7 @@ describe('R32 — static invariants', () => {
     // The doc comment legitimately MENTIONS requireSudoToken ("does NOT call
     // requireSudoToken"); the invariant is that it's never imported or invoked.
     // Strip block + line comments, then assert no import / no call survives.
-    const code = src
-      .replace(/\/\*[\s\S]*?\*\//g, '') // block comments
-      .replace(/^\s*\/\/.*$/gm, '') // line comments
+    const code = stripComments(src)
     expect(code).not.toMatch(/import[\s\S]*requireSudoToken/)
     expect(code).not.toMatch(/requireSudoToken\s*\(/)
   })

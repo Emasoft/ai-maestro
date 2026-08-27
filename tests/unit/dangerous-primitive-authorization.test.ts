@@ -48,6 +48,10 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 const apiRoot = path.join(process.cwd(), 'app', 'api')
 const servicesRoot = path.join(process.cwd(), 'services')
@@ -152,9 +156,6 @@ function walk(dir: string, out: string[] = []): string[] {
  * was counted as a call. That is precisely the trap `importedNames()` exists to
  * avoid, walked into one function further down.
  */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 /** Import specifiers only — a doc comment mentioning `sendKeys` must not match. */
 function importedNames(src: string): Set<string> {

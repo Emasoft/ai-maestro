@@ -34,6 +34,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { execFileSync } from 'child_process'
 import path from 'path'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 
@@ -76,7 +80,7 @@ export interface ScanRow {
 export function scanSource(file: string, src: string): ScanRow {
   // Strip comments: this file's own prose names every primitive it hunts, and a detector that
   // counts documentation is the self-match trap one layer up.
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const code = stripComments(src)
   const stores = Object.entries(STORE_WRITES)
     .filter(([, prims]) => prims.some((p) => new RegExp(`\\b${p}\\s*\\(`).test(code)))
     .map(([store]) => store)

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'fs'
 import path from 'path'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 /**
  * TRDD-FRRJ80YQ — every PRODUCTION call to wakeAgent/hibernateAgent passes an authContext.
@@ -71,9 +75,6 @@ function sourceFiles(): string[] {
  * (a URL). That can only ever cause the guard to MISS a call, never to invent one, and no call
  * site in this repo puts a wakeAgent call after a URL on the same line.
  */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
 
 /** Extract each call's argument text by counting bracket depth, so a MULTI-LINE call is read
  *  whole. Every real caller in this repo spans several lines, so a line-scoped needle would

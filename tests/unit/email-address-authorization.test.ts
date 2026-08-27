@@ -45,6 +45,10 @@ vi.mock('@/lib/validation', () => ({ isValidUuid: () => true }))
 
 import { PATCH, DELETE } from '@/app/api/agents/[id]/email/addresses/[address]/route'
 import { NextRequest } from 'next/server'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 const MEMBER = 'agent-member-1'
 const MANAGER = 'agent-manager-1'
@@ -118,7 +122,7 @@ describe('DELETE — removing an address', () => {
 
 describe('static invariants', () => {
   const read = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), 'utf-8')
-  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const strip = (s: string) => stripComments(s)
   const base = ['app', 'api', 'agents', '[id]']
 
   it('the route no longer relies on enforceAuth', () => {

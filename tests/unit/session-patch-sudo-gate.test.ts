@@ -45,6 +45,10 @@ vi.mock('@/lib/validation', () => ({ isValidUuid: () => true }))
 
 import { PATCH } from '@/app/api/agents/[id]/session/route'
 import { NextRequest } from 'next/server'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 const AGENT = '00000000-0000-0000-0000-000000000001'
 
@@ -116,7 +120,7 @@ describe('#54 — static wiring invariants', () => {
     'utf-8',
   )
   // Strip comments so we assert on the CODE, not the explanation.
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const code = stripComments(src)
 
   it('the PATCH handler calls requireSudoToken for this exact route', () => {
     expect(code).toMatch(/requireSudoToken\(\s*request\s*,\s*'PATCH'\s*,\s*'\/api\/agents\/\[id\]\/session'\s*\)/)

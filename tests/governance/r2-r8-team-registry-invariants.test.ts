@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { stripComments } from '../helpers/strip-comments'
+// Comments are stripped by the shared context-aware tokenizer (tests/helpers/strip-comments.ts,
+// TRDD-ENFCF8O7). The block-first regex pair this file used to carry went blind over any region
+// between a `/**` inside a line comment and the next block-close — 43% of headless-router.ts.
 
 /**
  * lib/team-registry.ts — R2.2 + R8.1. One guard FILE, two rules.
@@ -68,8 +72,7 @@ function exportedFunctionRanges(): Array<{ name: string; start: number; end: num
 const bodyOf = (r: { start: number; end: number }) =>
   LINES.slice(r.start, r.end)
     .join('\n')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/[\s\S]*/, (all) => stripComments(all))
 
 describe('R2.2 — a duplicate team name is refused server-side with 409', () => {
   it('rejects a case-insensitive duplicate, and says 409 rather than a generic 400', async () => {

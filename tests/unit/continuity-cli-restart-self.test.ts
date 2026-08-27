@@ -32,6 +32,15 @@ beforeAll(() => {
   script = join(dir, 'aimaestro-continuity.sh')
   copyFileSync(REAL_SCRIPT, script)
   mkdirSync(join(dir, 'shell-helpers'), { recursive: true })
+  // NEUTERS (2026-08-27, scripts/dev/neuter, restore verified by blob hash), proving the curl
+  // shadow observes the REAL request rather than a copy of it:
+  //   A. s#/api/sessions/me/restart#/api/sessions/OTHER/restart# in the script (3 lines: 2 help
+  //      + 1 code, same literal, --expect-lines 3) → 2 red / 2 green, exactly the two
+  //      request-shape tests; the help and target-rejection tests untouched.
+  //   B. sever `--force) qs="?force=true"` → `qs=""` → 1 red / 3 green, exactly the --force test.
+  //   (B's first attempt matched NOTHING: `?` is a perl metachar and `#` was the delimiter. The
+  //   tool aborts on a no-op mutation rather than reporting a vacuous green — that refusal is the
+  //   only reason a broken neuter did not read as a passing one.)
   // Stub the sourced helpers ONE LAYER DOWN from where this file used to stub them.
   //
   // It used to define `_api` here, on the theory that "the script sources common.sh

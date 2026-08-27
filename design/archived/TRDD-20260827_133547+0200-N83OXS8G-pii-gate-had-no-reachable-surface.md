@@ -3,7 +3,7 @@ trdd-id: N83OXS8G
 title: The PII gate had no surface that fires before a commit, so it never ran
 column: complete
 created: 2026-08-27T13:35:47+0200
-updated: 2026-08-27T14:05:00+0200
+updated: 2026-08-27T14:04:20+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -144,3 +144,17 @@ agree; that agreement is not evidence.
   Also settled since: the corpus-scanning tests used for the no-regressions claim resolve their
   root via `process.cwd`/`__dirname`, which is worktree-local — not the `git worktree list` idiom
   that would have returned the MAIN checkout and voided that comparison.
+- 2026-08-27T14:04:20+0200 — SECOND correction. A second adversarial pass found that the first correction's
+  replacement needle repeated the defect it corrected: it omitted `profiles` (so "zero profiles
+  hits" named a term the instrument never carried) and `rotatorRoot` (the accessor that RETURNS
+  the legacy root), and the same file uses the blind `path.join(rotatorRoot(), <seg>)` form in
+  plain sight. Re-run uncapped: 80 hits, not 17, and the CLOSED set joined onto a rotator root is
+  state.json, slots/, live-identity.json, active-alerts.json, opt-in.flag, cookie-leg-since.json,
+  tick-completed.ts, rotator.log — no `profiles`, zero Cookies/chrome-profile in the tree. The
+  fact held; three successive needles did not. Recorded in project memory, commit 14651ff1.
+  Also settled properly, at the layer the question actually lives on: NO tool resolves its corpus
+  via the main-rooted `git worktree list --porcelain` idiom — `trdd-doctor` uses `process.cwd()`,
+  `lib/pillar/freshness.ts` uses `git rev-parse --show-toplevel`, both worktree-local. The earlier
+  check grepped the TEST files, which was a proxy for the tools; the conclusion survives it.
+  And the two `updated:` values above this line were TYPED, not read from a clock — the third
+  instance in one day of a lesson already written down. This one is pasted from `date`.

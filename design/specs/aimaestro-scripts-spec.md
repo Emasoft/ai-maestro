@@ -63,6 +63,7 @@ Commands:
   export      Export agent to file
   import      Import agent from file
   presence    Print the human user's presence (last input + idle window)
+  probe       Aggregate status + block-state + hook chat-state for one agent
   help        Show this help
 
 Version: Sync with bump-version.sh - currently v1.0.1

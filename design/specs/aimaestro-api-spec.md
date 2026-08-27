@@ -59,6 +59,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | GET | `/api/agents/[id]/portfolio` |  | app/api/agents/[id]/portfolio/route.ts |  |
 | DELETE | `/api/agents/[id]/portfolio` |  | app/api/agents/[id]/portfolio/route.ts |  |
 | GET | `/api/agents/[id]/portfolio/verify` |  | app/api/agents/[id]/portfolio/verify/route.ts |  |
+| GET | `/api/agents/[id]/probe` | strict | app/api/agents/[id]/probe/route.ts |  |
 | POST | `/api/agents/[id]/prompt/answer` | strict | app/api/agents/[id]/prompt/answer/route.ts |  |
 | GET | `/api/agents/[id]/prompt` |  | app/api/agents/[id]/prompt/route.ts |  |
 | DELETE | `/api/agents/[id]/queue/[entryId]` |  | app/api/agents/[id]/queue/[entryId]/route.ts |  |

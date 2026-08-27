@@ -159,6 +159,18 @@ spec disagree, the golden rule is what must be amended into the spec — never t
   (`markdown-memory-recall.md`: never hand-author wikimem markdown, use the write verbs); the
   3-pillars system had the linters but never the mandate.
 
+  **MEASURED CAVEAT, 2026-08-27 — the "refuses a malformed write" clause is TRUE for the PRRD and
+  spec pillars and NOT YET TRUE for TRDDs.** `pillarPreWriteCheck` early-returns a no-op for any
+  kind that is not `per-line` (`lib/pillar/edit-guard.ts:181`, and `lintPillarLines` likewise at
+  `:373`), and TRDD is `mode: 'per-document'` (`lib/pillar/kinds.ts:127`) while prrd and spec are
+  `per-line` (`:162`, `:196`). So `trddgrep edit` today gives the document lock and the CAS
+  staleness guard — real protections, and the ones a hand edit lacks — but no field or grammar
+  validation: it will write `column: banana` without complaint, and only a later `validate` says
+  so. The MANDATE stands unchanged and is unaffected; what is deferred is one of its four
+  justifications, on one pillar. Closing that gap is TRDD-I8UC56GZ. **This caveat is stated rather
+  than left implicit because a rule that advertises a protection it does not yet provide stops its
+  readers from checking — which is the failure this very rule exists to prevent.**
+
 ---
 
 ## 🥈 SILVER rules

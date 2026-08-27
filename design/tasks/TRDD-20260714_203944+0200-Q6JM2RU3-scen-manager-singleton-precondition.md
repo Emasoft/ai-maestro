@@ -15,7 +15,7 @@ approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 created-by: scenario-runner
 assignee: ai-maestro-hub-session
-implementation-commits: [1649efad]
+implementation-commits: [1649efad, 30e17c9a]
 labels: [scenario-improvement, scen-030]
 relevant-rules: [7]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]

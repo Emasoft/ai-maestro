@@ -62,8 +62,9 @@ plugin API. A plugin must never call them."*
 
 ### DECIDED 2026-08-27T18:50 — build nothing; park on a runnable probe
 
-**Advisor consulted and did not return within 24 min** (fable-advisor, still running when this was
-written) — recorded per advisor-rules rather than blocking the board further. The decision is the
+**Advisor consulted; it never returned — the run was KILLED by the user at ~25 min** (fable-advisor).
+So no advisor verdict exists for this decision and none is coming: recorded per advisor-rules,
+which requires an explicit note when the advisor path fails. The decision is the
 CONSERVATIVE one, which is the direction an advisor would be least likely to overturn: no new
 runtime writer.
 

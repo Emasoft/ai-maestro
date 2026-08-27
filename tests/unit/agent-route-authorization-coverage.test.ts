@@ -427,8 +427,19 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
  *  client-supplied param, and `trdd/create` uses `isSystemOwner` to compute an authority RANK.
  *  Neither refuses anything. A 50%-wrong needle that moves routes OUT of a debt ledger is worse
  *  than no needle, because its errors are silent and in the reassuring direction. The inline-gated
- *  routes therefore stay counted here, and the count overstates the debt in a way that is safe. */
-const NON_AGENTS_FORWARD_ONLY_COUNT = 15
+ *  routes therefore stay counted here, and the count overstates the debt in a way that is safe.
+ *
+ *  16 ON 2026-08-27, deliberately, and this one is the case the caveat above exists for.
+ *  `teams/notify/route.ts` READ AS STRONG until `647a1044` (TRDD-91TLL7DW) removed its
+ *  `checkTeamAccess` and moved authorization INTO `notifyTeamAgents` — because the headless
+ *  router reimplements routes, so a route-only guard left that path wide open. From the route the
+ *  needle now sees only a forward; the RECEIVER decides. Verified by READING the receiver, not
+ *  inferred: `services/teams-service.ts` `notifyTeamAgents` resolves the team (404), calls
+ *  `checkTeamAccess` (403), then rejects any target outside `team.agentIds` (403) — a second gate
+ *  the route never had. The debt this count measures went DOWN at that commit; the count went UP
+ *  because this tier cannot see through a forward, which is precisely why it pins rather than
+ *  trusts. A route that moves its guard one layer down MUST land here, and must say so. */
+const NON_AGENTS_FORWARD_ONLY_COUNT = 16
 
 const STRONG_AUTHZ =
   /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\benforceActiveMaestro\(|\bcheckTeamAccess\(/

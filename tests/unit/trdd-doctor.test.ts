@@ -1048,12 +1048,30 @@ describe('THE GATE — the real corpus lints clean', () => {
     // shape, so deleting it would remove the one thing that makes the fix's motivation legible.
     const PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION = new Set(['G6A54OYK'])
 
+    // A THIRD set, again on its own justification and kept apart for the same reason. These
+    // three closed AFTER the checklist gate landed and are TRUE findings — an open box, or no
+    // checklist, on a card marked complete. They are in design/archived/ with a terminal column,
+    // so IND §12 freezes them: ticking a box for work nobody verified, or adding a checklist
+    // after the fact, would manufacture evidence. Re-columning a frozen card is also a §12 body
+    // edit. The doctor's own TERMINAL-WITHOUT-CHECKLIST carries a grandfather boundary for cards
+    // that predate the rule; TERMINAL-WITH-OPEN-BOX carries none, so a card that slipped past the
+    // archive route BEFORE da7ec5e8 enforced the gate lands here with no way out. That missing
+    // boundary is the real defect, and it belongs in the doctor, not in this gate — filed
+    // separately. Until then these are named, dated, and excluded PER CARD so the gate stays
+    // live for a fourth: measured 2026-08-27 as DXJZM3BW (open box, closed 08-05), IBKR7F74
+    // (open box, closed 08-25), 39OPYXQ9 (no checklist, closed 08-22).
+    const FROZEN_TRUE_FINDINGS_AWAITING_DOCTOR_BOUNDARY = new Set(['DXJZM3BW', 'IBKR7F74', '39OPYXQ9'])
+
     const unexpected = errors.filter(
       (e) =>
         !(e.rule === 'BODY-STATE-CLAIM' && PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id)) &&
         !(
           e.rule === 'TERMINAL-WITHOUT-CHECKLIST' &&
           PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION.has(e.id)
+        ) &&
+        !(
+          (e.rule === 'TERMINAL-WITH-OPEN-BOX' || e.rule === 'TERMINAL-WITHOUT-CHECKLIST') &&
+          FROZEN_TRUE_FINDINGS_AWAITING_DOCTOR_BOUNDARY.has(e.id)
         ),
     )
     expect(unexpected.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])

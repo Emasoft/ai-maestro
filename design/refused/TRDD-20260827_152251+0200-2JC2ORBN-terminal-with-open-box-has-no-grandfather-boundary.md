@@ -1,9 +1,9 @@
 ---
 trdd-id: 2JC2ORBN
 title: TERMINAL-WITH-OPEN-BOX has no grandfather boundary so pre-gate archived cards are permanently red
-column: todo
+column: refused
 created: 2026-08-27T15:22:51+0200
-updated: 2026-08-27T15:22:51+0200
+updated: 2026-08-27T15:32:08+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -14,7 +14,7 @@ task-type: bugfix
 min-approval-requirement: none
 mandate: true
 mandated-by: self
-approved: true
+approved: rejected
 approval-judge: hub-claude
 approval-datetime: 2026-08-27T15:22:51+0200
 priority: 2
@@ -59,3 +59,14 @@ about what "before the gate" means. Then retire the third exclusion set in
 ## Approval log
 
 - 2026-08-27T15:22:51+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Tier-0 self-mandate.
+- 2026-08-27T15:32:08+0200 — REFUSED by hub-claude (the author; min-approval-requirement: none). PREMISE FALSE,
+  measured against `lib/trdd-doctor.ts`: the boundary check `if (!day || day >= CHECKLIST_GATE_SINCE)`
+  encloses BOTH branches — `boxes.total === 0` → TERMINAL-WITHOUT-CHECKLIST, else →
+  TERMINAL-WITH-OPEN-BOX. The open-box rule already carries the grandfather boundary. The three
+  cards this was filed for are dated 2026-08-05/-22/-25, all past the 2026-07-31 boundary, and
+  are legitimately flagged. The boundary is normative (§D4 step 5b fixes the date in its own text)
+  and is not this card's to move to the archive-route date. The gate test's per-card exclusion
+  stands on a corrected justification: post-boundary TRUE findings on frozen cards (IND §12),
+  unrepairable, excluded so the gate stays live for a fourth. Filed on an inference from a
+  sibling rule's DOCSTRING (which mentions only WITHOUT-CHECKLIST) without reading the branch —
+  the same proxy error this session recorded twice already.

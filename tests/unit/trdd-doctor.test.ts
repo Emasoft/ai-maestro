@@ -1049,18 +1049,16 @@ describe('THE GATE — the real corpus lints clean', () => {
     const PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION = new Set(['G6A54OYK'])
 
     // A THIRD set, again on its own justification and kept apart for the same reason. These
-    // three closed AFTER the checklist gate landed and are TRUE findings — an open box, or no
-    // checklist, on a card marked complete. They are in design/archived/ with a terminal column,
-    // so IND §12 freezes them: ticking a box for work nobody verified, or adding a checklist
-    // after the fact, would manufacture evidence. Re-columning a frozen card is also a §12 body
-    // edit. The doctor's own TERMINAL-WITHOUT-CHECKLIST carries a grandfather boundary for cards
-    // that predate the rule; TERMINAL-WITH-OPEN-BOX carries none, so a card that slipped past the
-    // archive route BEFORE da7ec5e8 enforced the gate lands here with no way out. That missing
-    // boundary is the real defect, and it belongs in the doctor, not in this gate — filed
-    // separately. Until then these are named, dated, and excluded PER CARD so the gate stays
-    // live for a fourth: measured 2026-08-27 as DXJZM3BW (open box, closed 08-05), IBKR7F74
-    // (open box, closed 08-25), 39OPYXQ9 (no checklist, closed 08-22).
-    const FROZEN_TRUE_FINDINGS_AWAITING_DOCTOR_BOUNDARY = new Set(['DXJZM3BW', 'IBKR7F74', '39OPYXQ9'])
+    // three closed AFTER the 2026-07-31 grandfather boundary with an open box or no checklist —
+    // TRUE findings, and the boundary already covers BOTH rules (the `day >=` check in
+    // trdd-doctor.ts encloses both branches; measured, and a card filed on the opposite premise
+    // was refused as TRDD-2JC2ORBN). They are in design/archived/ with a terminal column, so
+    // IND §12 freezes them: ticking a box for work nobody verified, or adding a checklist after
+    // the fact, would manufacture evidence, and re-columning is itself a body edit. So they
+    // are unrepairable BY RULE, not by a missing feature. Named, dated, and excluded PER CARD
+    // so the gate stays live for a fourth: DXJZM3BW (open box, closed 08-05), IBKR7F74 (open
+    // box, closed 08-25), 39OPYXQ9 (no checklist, closed 08-22). Measured 2026-08-27.
+    const FROZEN_POST_BOUNDARY_TRUE_FINDINGS = new Set(['DXJZM3BW', 'IBKR7F74', '39OPYXQ9'])
 
     const unexpected = errors.filter(
       (e) =>
@@ -1071,7 +1069,7 @@ describe('THE GATE — the real corpus lints clean', () => {
         ) &&
         !(
           (e.rule === 'TERMINAL-WITH-OPEN-BOX' || e.rule === 'TERMINAL-WITHOUT-CHECKLIST') &&
-          FROZEN_TRUE_FINDINGS_AWAITING_DOCTOR_BOUNDARY.has(e.id)
+          FROZEN_POST_BOUNDARY_TRUE_FINDINGS.has(e.id)
         ),
     )
     expect(unexpected.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])

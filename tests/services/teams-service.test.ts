@@ -1115,6 +1115,28 @@ describe('deleteTeamDocument', () => {
 // ============================================================================
 
 describe('notifyTeamAgents', () => {
+  // TRDD-91TLL7DW (647a1044) moved the caller-authorization INTO this service: notifyTeamAgents
+  // now resolves the team by name and 404s when it does not exist, then checkTeamAccess-es the
+  // caller. That guard is load-bearing — the function terminates in a tmux send-keys primitive,
+  // and guarding only the Next.js route left the headless router wide open.
+  //
+  // These cases predate the gate and seeded no team, so every one of them 404'd. Seeding the
+  // fixture is the correct fix; relaxing the lookup or its status code would re-open the hole.
+  // checkTeamAccess is already mocked to allow (see the module mock above), so the team lookup
+  // was the only thing failing.
+  beforeEach(async () => {
+    mockTeams.loadTeams.mockReturnValue([
+      { id: 't-alpha', name: 'Team Alpha' },
+      { id: 't-plain', name: 'Team' },
+    ] as never)
+    // Re-assert the ALLOW. The shared beforeEach uses vi.clearAllMocks(), which clears CALLS but
+    // NOT a mockReturnValue an earlier test installed — so a denial set anywhere above this block
+    // leaks forward and every case here 403s. Pinning it makes this block independent of file
+    // order rather than of the tests that happen to precede it today.
+    const { checkTeamAccess } = await import('@/lib/team-acl')
+    ;(checkTeamAccess as unknown as { mockReturnValue: (v: unknown) => void }).mockReturnValue({ allowed: true })
+  })
+
   it('notifies all agents successfully', async () => {
     const agent = makeAgent({ id: 'a1', name: 'backend' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)

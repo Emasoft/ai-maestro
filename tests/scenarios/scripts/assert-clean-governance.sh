@@ -21,6 +21,10 @@ NNN="${1:?usage: assert-clean-governance.sh <NNN> <scenario-file>}"
 SCEN_FILE="${2:?usage: assert-clean-governance.sh <NNN> <scenario-file>}"
 [ -f "$SCEN_FILE" ] || { echo "SETUP_FAIL governance-audit: scenario file not found: $SCEN_FILE" >&2; exit 1; }
 
+# HOME-scoped, NOT CLAUDE_PROJECT_DIR-scoped like the sibling scripts here, and that is
+# deliberate: the ai-maestro store belongs to the host user, and getManagerId() reads exactly
+# these paths. The tests depend on the property too -- they drive this script with a redirected
+# HOME so no branch ever touches the developer's real state. Do not "fix" it to a project path.
 GOV="${HOME}/.aimaestro/governance.json"
 REG="${HOME}/.aimaestro/agents/registry.json"
 

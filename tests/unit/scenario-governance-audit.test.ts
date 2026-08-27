@@ -28,8 +28,16 @@
  *   3. `grep -qE` skip branch removed (`if false`, i.e. audit every scenario)
  *      → 4 reds: the SKIP case plus all three live-corpus 'leaves the gate off for SCEN-0xx'.
  * Run 3 was predicted to redden one test and reddened four; the prediction was wrong and the
- * observation is what is recorded. That it takes down the corpus cases too is the point of them —
- * they are the only assertions that watch the predicate against files nobody wrote as a fixture.
+ * observation is what is recorded. Removing a whole BRANCH gives one cause four symptoms, which
+ * says nothing about whether the four are four pins, so a fourth run probed the PREDICATE instead:
+ *   4. verb requirement dropped (`MANAGER_VERB='\bMANAGER\b'`, so a bare mention arms the gate)
+ *      → 2 reds: the fixture SKIP and 'leaves the gate off for SCEN-020'. SCEN-019 and SCEN-027
+ *      stayed GREEN.
+ * So the corpus cases are not one assertion wearing three names — but the same run shows SCEN-019
+ * and SCEN-027 are WEAK pins: neither file contains the word MANAGER at all, so they survive any
+ * predicate that requires it. SCEN-020 is the load-bearing one, because it names MANAGER in a bare
+ * prose list of every title and so is the only real file that discriminates on the VERB. Keep
+ * SCEN-020 in this list even if the other two are ever dropped.
  * Runs 1 and 2 each reddened exactly one test, so neither is carried by another assertion.
  */
 import { spawnSync } from 'child_process'

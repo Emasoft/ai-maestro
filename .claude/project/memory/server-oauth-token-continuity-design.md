@@ -2,7 +2,7 @@
 name: server-oauth-token-continuity-design
 description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes / did a guard land in front of the bookkeeping instead of the mutation / keychain says one account and state.json says another / split-brain after a rotation / the live-identity beacon disagrees with the state index / evidence answers only the question you point it at / I wrote a claim into memory that the source I had just read disproves / host state leaked into a pushed project memory page"
 ocd: 2026-07-16
-lmd: 2026-08-26
+lmd: 2026-08-27
 metadata:
   node_type: memory
   type: project
@@ -241,6 +241,31 @@ Any consumer must abstain when `state` is newer than the beacon rather than cry 
 `defaultState()` ⇒ zero slots ⇒ the candidate loop never runs ⇒ `switchLiveTo` unreachable" is
 true only when the root is unresolved AT LOAD. It says nothing about the root going unresolved
 MID-TICK, with slots already loaded — which is the reachable path. [^3]
+
+
+^ATOM-3S09-H2JS [desc: "Settled by code, not by an mtime experiment: ai-maestro never references the janitor's rotator cookie store — but the recorded REASON for that was wrong, and reauth does drive the owner's real browser", keywords: does_our_side_re-mint_cookies who_writes_the_shared_cookie_store cookie_store_mtime reauth_drives_a_real_browser_profile janitor_vault_untouched_by_ai-maestro, ocd: 2026-08-27, lmd: 2026-08-27]
+
+The question "does ai-maestro ever re-mint or write the shared cookie store the janitor's
+rotator keeps per account?" was carried for a while with an ARGUED negative: *`completeReauth`
+takes a pasted code, so a slot re-file cannot imply the shared profile changed.* That reasoning
+is about the wrong code path and must not be relied on.
+
+`completeReauth` is not the only route. `lib/oauth-rotator/reauth-drive.ts` drives a LIVE browser
+to obtain the code, and `discoverBrowserProfiles()` enumerates the owner's REAL Chromium-family
+profiles under `~/Library/Application Support/` (seven browsers, `Default` / `Profile N`). Driving
+a real profile against claude.ai does update THAT profile's cookies — Chrome's behaviour, not
+ours. So the premise "we never touch a cookie store" is false as stated.
+
+The conclusion nevertheless holds for the janitor's store, and for a stronger reason than the one
+recorded: that store lives under the rotator's own per-account profiles directory, and `lib/`,
+`services/` and `app/` contain ZERO references to that path. Not one write, not one read. A
+path-reference measurement settles this better than the proposed mtime experiment would, because
+an mtime test is confounded — the janitor's own daemon may touch the store during the window, so
+a moved mtime would not have implicated us anyway.
+
+Two things follow. The janitor may treat its rotator cookie store as untouched by this project.
+And a reauth run CAN mutate the owner's real browser cookies as a side effect of driving them,
+which is a different store and was not previously written down.
 
 ## See also
 

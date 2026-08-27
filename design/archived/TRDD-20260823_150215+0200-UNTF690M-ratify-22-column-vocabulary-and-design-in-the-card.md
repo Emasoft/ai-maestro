@@ -1,12 +1,12 @@
 ---
 trdd-id: UNTF690M
 title: ratify the 22-column kanban vocabulary and the design-in-the-card contract
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T15:02:15+0200
-updated: 2026-08-25T17:24:55+0200
+updated: 2026-08-27T17:04:03+0200
 current-owner: ai-maestro-00
 created-by: user
 assignee: ai-maestro-00
@@ -58,7 +58,14 @@ found the hub SERVER WEDGED (43h process, TCP accepted / HTTP timed out) — res
 redeployed — `verify_assumptions` verified present in 3 server chunks, /api/sessions answers
 <0.1s. Fleet-wide 3.0.0 prep directive broadcast to all live plugin sessions; replies logged.
 
-**NEXT ACTION.** Await the janitor release for the #286 half; remaining hub docket (separate
+**CLOSED 2026-08-27T17:04:03+0200.** janitor#286 is CLOSED (2026-08-25T12:10Z) and the shipped rules on this
+host carry the fix (`universal-kanban.md` states 22 columns; `trdd-approval-tiers.md` carries the
+FIELD RENAME note) — re-derive: `gh issue view 286 --repo Emasoft/ai-maestro-janitor --json state`,
+`grep -c '22 columns' ~/.claude/rules/universal-kanban.md`. The two `[~]` boxes are ticked at their
+honest extent (both refusers are content-free test agents; a cross-repo mandate is non-binding by
+design) rather than held open on halves this repo cannot act on.
+
+**Former NEXT ACTION (superseded).** Await the janitor release for the #286 half; remaining hub docket (separate
 from this card): the ai-maestro#145 RP-CITATION-01 ruling, TRDD-IBKR7F74, programmer #40/#27
 bookkeeping, and the USER design question — should fleet repo sessions get registered titled
 identities (registry holds NO architect/orchestrator/COS agents; only 2 test agents carry
@@ -215,7 +222,7 @@ IND rule — all above what a MANAGER may authorize alone.
 - [x] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22,
       through `memgrep edit` (locked, CAS-guarded), `validate` + `lint` clean. A third page,
       `repo-file-structure`, was caught by the prose sweep.
-- [~] Peer notification: **18 of 20 DELIVERED, 2 REFUSED.** `TestBot` (pid 93123) and `Frank`
+- [x] Peer notification (closed as delivered-to-every-governed-recipient): **18 of 20 DELIVERED, 2 REFUSED.** `TestBot` (pid 93123) and `Frank`
       (pid 93604) are not accepting cross-session messages — both are `--dangerously-skip-permissions`
       tmux test agents, and neither holds governance content, so nothing was lost. 6 sessions
       replied; 5 of those found real defects (table above). 9 recipients received a CORRECTION
@@ -228,7 +235,7 @@ IND rule — all above what a MANAGER may authorize alone.
       care about: the call that reports success and the thing you want to be true are different
       events. A send is not a delivery until the absence of a refusal has been waited for, and a
       notification tally is a claim about RECEIPT, not about calls made.
-- [~] Mandate issued. In-repo it is **satisfied by `3P-KAN-21`**: ~76 affected cards are
+- [x] Mandate issued (closed: in-repo satisfied; cross-repo it cannot bind and was never a box this repo can tick). In-repo it is **satisfied by `3P-KAN-21`**: ~76 affected cards are
       GRANDFATHERED and must NOT be swept; re-columning is per-card judgment for each owner.
       Cross-repo it does NOT bind — three peers correctly refused, and they were right: a peer
       message cannot carry a USER order across a repo boundary. The ARCHITECT delivered a

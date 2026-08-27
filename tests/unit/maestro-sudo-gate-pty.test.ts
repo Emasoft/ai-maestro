@@ -17,8 +17,10 @@
  * `history` is not driven: a non-interactive bash writes none, and the secret never
  * forms part of a command line (P2), so there is nothing for history to record.
  *
- * Neuter: in common.sh::maestro_sudo_ensure replace `if [ -z "$_tok" ]; then` with
- * `if false; then` → P1 must red (a DELETE arrives with an empty token), P3 stays green.
+ * Neuters (2026-08-27, observed):
+ *   common.sh empty-token refusal → `if false` ⇒ exactly P1 red.
+ *   RETURN trap `eval prior` → `trap - INT`  ⇒ exactly P5 red.
+ *   INT handler without `stty echo`          ⇒ exactly P6 red (prior trap saw `-echo`).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn as ptySpawn } from 'node-pty'
@@ -168,6 +170,37 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     const out = await runGate('trap "echo PRIOR-INT" INT', 'trap -p INT')
     expect(out).toMatch(/RC=1/)
     expect(out).toMatch(/trap -- ['"]echo PRIOR-INT['"] (SIG)?INT/) // bash prints SIGINT
+  })
+
+  // P6/P7 drive the Ctrl-C path — the one path P4/P5 never executed. Measured first
+  // (2026-08-27, four bounded probes): a NON-exiting prior INT trap hangs the interrupted
+  // `read` in bash ITSELF (a bare `read -rs` with `trap 'echo x' INT` hangs identically, and so
+  // did the pre-hardening gate) — pre-existing, not this gate's, so the prior trap here EXITS,
+  // as a real caller's does. It runs AFTER the gate's handler, so it can read the tty flag.
+  function runGateCtrlC(prelude: string): Promise<{ code: number; signal: number | undefined; out: string }> {
+    return new Promise((resolve) => {
+      const p = ptySpawn('bash', ['-c', `${prelude}; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+      })
+      let out = ''
+      let sent = false
+      p.onData((d) => { out += d; if (!sent && out.includes('MAESTRO password')) { sent = true; setTimeout(() => p.write('\x03'), 300) } })
+      const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+      p.onExit(({ exitCode, signal }) => { clearTimeout(killer); resolve({ code: exitCode, signal, out: out.replace(/\r/g, '') }) })
+    })
+  }
+
+  it('P6: Ctrl-C mid-prompt hands off to the caller\'s prior INT trap, AFTER echo is restored', async () => {
+    const r = await runGateCtrlC(`trap 'echo PRIOR-INT; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"; exit 130' INT`)
+    expect(r.out).toMatch(/PRIOR-INT\necho\n/) // prior trap ran, and saw `echo` (restored), not `-echo`
+    expect(r.out).not.toMatch(/RC=/)            // the caller's trap exited — the gate did not swallow the interrupt
+    expect(r.code).toBe(130)
+  })
+
+  it('P7: Ctrl-C with NO prior trap kills the script by SIGINT (default disposition re-raised)', async () => {
+    const r = await runGateCtrlC('true')
+    expect(r.out).not.toMatch(/RC=/)
+    expect(r.signal ?? (r.code === 130 ? 2 : r.code)).toBe(2)
   })
 
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {

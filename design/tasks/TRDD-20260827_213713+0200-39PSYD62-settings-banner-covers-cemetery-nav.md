@@ -58,16 +58,26 @@ below requires. It needs a logged-in dev-browser session at the runner's viewpor
 session declined to reach for the governance credential to get one. Parked here rather than
 closed on a reading.
 
-## Proposed fix
+## Proposed fix — contingent on the first acceptance box
 
-Render the banner above the nav flow rather than over it, or otherwise ensure it cannot cover a
-nav target. Split from `TRDD-JU6Y2V7X` because its verification is a LIVE `elementFromPoint`
-probe in the dashboard — a browser job, unlike that card's scenario-authoring items.
+Two candidate fixes, mutually exclusive, and the live measurement picks one:
+
+- **If the item is below the fold** (the code-derived expectation): fix the scenario helpers —
+  `scrollIntoView` the target before every nav click in
+  `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`, so a computed centre is always an
+  on-screen centre. No app change.
+- **If the item is in view and the footer still wins**: the original claim — render the badge
+  where it cannot cover a nav target — and record what in the layout reading above was wrong.
+
+Split from `TRDD-JU6Y2V7X` because its verification is a LIVE `elementFromPoint` probe in the
+dashboard — a browser job, unlike that card's scenario-authoring items. (The first draft of this
+section prescribed the layout fix unconditionally; that was the parent card's claim carried
+forward unread.)
 
 ## Verification
 
 `document.elementFromPoint()` at the Cemetery item's centre resolves inside that item, with the
-banner visible.
+Update Available badge rendered — via dev-browser at 1280×800, never asserted from CSS.
 
 ## Acceptance
 

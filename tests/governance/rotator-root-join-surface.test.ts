@@ -87,7 +87,6 @@ function scan() {
     // `git ls-files` still decides WHICH paths; only the bytes come from disk.
     const src = fs.readFileSync(path.join(REPO, f), 'utf-8')
     files++
-    if (!src.includes('otatorRoot') && !/join\(\s*root\s*,/.test(src)) continue
     for (const m of src.matchAll(JOIN)) {
       const arg = m[2].trim()
       const lit = arg.match(/^'([^']+)'|^"([^"]+)"/)
@@ -96,6 +95,50 @@ function scan() {
     }
   }
   return { literal: [...literal].sort(), dynamic, files }
+}
+
+/**
+ * Uses of a rotator root that are NOT a join. This set is the one the join scan says NOTHING about,
+ * and it is where the real risk lives: `rotatorRoot()` can RETURN the legacy root (the opt-in
+ * branch in slots.ts), and the legacy root is the directory that PHYSICALLY CONTAINS the cookie
+ * store — the canonical root reaches it through a symlink, the legacy one just holds it. So a
+ * whole-root operation touches the store while joining no segment at all, and `not.toContain
+ * ('profiles')` cannot see it.
+ *
+ * Every entry below was read by hand. Exactly one is a whole-root operation:
+ * decision-log.ts's `fs.mkdirSync(root, { recursive: true })` — CREATE-ONLY and idempotent, so it
+ * cannot read, copy or remove anything. It is listed rather than excused: the day it becomes a
+ * read, a copy or a clear, this line is what makes someone say so.
+ */
+const NON_JOIN_REVIEWED = [
+  // The accessors themselves.
+  'lib/oauth-rotator/slots.ts:  const canonical = canonicalRotatorRoot()',
+  'lib/oauth-rotator/slots.ts:  const legacy = legacyRotatorRoot()',
+  'lib/oauth-rotator/slots.ts:export function canonicalRotatorRoot(): string {',
+  'lib/oauth-rotator/slots.ts:export function legacyRotatorRoot(): string {',
+  'lib/oauth-rotator/slots.ts:export function rotatorRoot(): string {',
+  // Bare calls that DISCARD the value — they exist only to refresh lastRootFallbackRefusal.
+  'lib/oauth-rotator/rotate.ts:  rotatorRoot() // refresh lastRootFallbackRefusal',
+  'lib/oauth-rotator/slots.ts:  rotatorRoot() // refresh lastRootFallbackRefusal for this call',
+  // Default params / aliases. Each is then JOINED (covered above) or passed on.
+  'lib/oauth-rotator/decision-log.ts:export function rotatorLogPath(root: string = rotatorRoot()): string {',
+  'lib/oauth-rotator/decision-log.ts:    const root = opts.root ?? rotatorRoot()',
+  'lib/oauth-rotator/supervisor.ts:export function optInPresent(root: string = rotatorRoot()): boolean {',
+  'lib/oauth-rotator/supervisor.ts:  const root = opts.root ?? rotatorRoot()',
+].sort()
+
+/** Lines mentioning a rotator root that are not a direct join and not a comment. */
+function nonJoinUses(files: string[]): string[] {
+  const out: string[] = []
+  for (const f of files) {
+    for (const line of fs.readFileSync(path.join(REPO, f), 'utf-8').split('\n')) {
+      if (!line.includes('otatorRoot()')) continue
+      if (/(?:path\.)?join\(\s*(?:canonical|legacy)?[rR]otatorRoot\(\)/.test(line)) continue
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue
+      out.push(`${f}:${line.replace(/\s+$/, '')}`)
+    }
+  }
+  return out.sort()
 }
 
 describe('what this project joins onto the rotator root', () => {
@@ -118,5 +161,14 @@ describe('what this project joins onto the rotator root', () => {
         'by hand and either add the literal to ALLOWED or stop it; if it joins onto some other ' +
         `root, add it to DYNAMIC_REVIEWED with what it resolves to:\n${dynamic.join('\n')}`,
     ).toEqual(DYNAMIC_REVIEWED)
+  })
+  it('every NON-join use of a rotator root has been reviewed', () => {
+    // The join scan certifies nothing here, and this is where a whole-root operation would live.
+    expect(
+      nonJoinUses(sources()),
+      'a rotator root is being used in a way the join scan cannot see. Read it: does the value ' +
+        'reach anything operating on a TREE rather than a file? If so it can touch the cookie ' +
+        'store without joining `profiles`. Then add it to NON_JOIN_REVIEWED with what it does.',
+    ).toEqual(NON_JOIN_REVIEWED)
   })
 })

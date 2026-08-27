@@ -272,7 +272,13 @@ very root this project writes into, exactly ONE path segment away. A single
 for every account. The closed enumeration above is what says none exists — today.
 
 State the claim precisely, because the imprecise version is what a peer would act on. TRUE: this
-project never reads or writes the cookie store. NOT TRUE: that the store's tree is "untouched" —
+project never reads or writes the cookie store — and that rests on TWO enumerations, not one. The
+literal segments joined onto a rotator root (above) contain no `profiles`; and every use of a
+rotator root that is NOT a join was read by hand, because a join scan says nothing about them and
+`rotatorRoot()` can RETURN the legacy root, which physically CONTAINS the store. Exactly one is a
+whole-root operation: `fs.mkdirSync(root, { recursive: true })` in decision-log.ts, create-only and
+idempotent, so it cannot read, copy or remove anything. Both enumerations are pinned by
+tests/governance/rotator-root-join-surface.test.ts so neither can rot silently. NOT TRUE: that the store's tree is "untouched" —
 this project writes eight files into the directory containing that symlink (state.json, slots/,
 live-identity.json, active-alerts.json, opt-in.flag, cookie-leg-since.json, tick-completed.ts,
 rotator.log), plus an atomic temp sibling per write. That co-tenancy is the shared substrate by

@@ -97,7 +97,10 @@ describe('switchLiveTo', () => {
  * SAFETY: this inherits the file's harness — CLAUDE_SAFE_STORAGE_BACKEND=none forces the file
  * backend (the keychain is never reached, `security` is never spawned) and HOME is a temp dir with
  * the escape guard in beforeEach. Both roots are HOME-derived, so seeding the legacy one cannot
- * touch anything real.
+ * touch anything real. That containment is not merely asserted from the env var: the third case
+ * below asserts `fs.existsSync(credFile)` is TRUE after a successful switch, and the keychain
+ * backend would not produce that file — so the suite passing is itself empirical proof the FILE
+ * backend was in use.
  */
 describe('switchLiveTo — refuses an unresolved root BEFORE the credential write', () => {
   /** Canonical state.json ABSENT + legacy state.json PRESENT + no opt-in ⇒ rotatorRoot refuses. */

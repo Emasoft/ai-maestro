@@ -3,7 +3,7 @@ trdd-id: N83OXS8G
 title: The PII gate had no surface that fires before a commit, so it never ran
 column: complete
 created: 2026-08-27T13:35:47+0200
-updated: 2026-08-27T13:40:00+0200
+updated: 2026-08-27T14:05:00+0200
 current-owner: hub-claude
 assignee: hub-claude
 created-by: hub-claude
@@ -124,3 +124,23 @@ agree; that agreement is not evidence.
 - 2026-08-27T13:35:47+0200 — MANDATE issued by hub-claude (min-approval-requirement: none).
   Pre-approved: Tier-0 self-mandate — reversible, local, no baseline deviation, no
   governance or `.github/` surface touched. No approval request was sent.
+- 2026-08-27T14:05:00+0200 — CORRECTION, appended under the terminal-freeze exemption for this
+  section (the body above is frozen and is left as written). An adversarial review found two
+  defects in the work this card closed.
+  1. OVERREACH. The evidence establishes that NO AUTOMATED SURFACE could have fired the gate. It
+     does NOT establish "the gate never ran": a manual `yarn test` leaves no trace, so whether a
+     human ran it and committed anyway is unfalsifiable from what was measured. Both stories
+     produce exactly the observations recorded above. The fix is correct under either. The card
+     spent its length correcting one overreaching framing and should not have replaced it with a
+     second.
+  2. A FALSE NEGATIVE, in the dangerous direction, in the hook this card shipped. The scan reads
+     the WORKTREE while the commit writes the INDEX: `git add` a file carrying an address, edit it
+     out of the worktree, and the gate passed over clean bytes while the index carried the address
+     into history. Recorded above as a one-line "known limit" about `git add -p`; the severe case
+     was the ordinary one. Reproduced, then closed in ddfd0d32 by refusing when the worktree is not
+     authoritative for a staged path — not by scanning staged blobs with a second copy of the
+     pattern, which would go blind the moment the first is edited. That commit also adds the nine
+     behavioural cases the hook shipped without, wired into the suite with a PASS-count floor.
+  Also settled since: the corpus-scanning tests used for the no-regressions claim resolve their
+  root via `process.cwd`/`__dirname`, which is worktree-local — not the `git worktree list` idiom
+  that would have returned the MAIN checkout and voided that comparison.

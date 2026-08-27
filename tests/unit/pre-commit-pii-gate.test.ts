@@ -10,6 +10,12 @@
  * This file is the wiring, not a second implementation: the harness owns the cases (it is what a
  * human runs while editing the hook) and the suite owns making them run.
  *
+ * NEUTER RUN (2026-08-27 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \[ -n "\$ambiguous" \]; then/if false; then/
+ *   → 2 red / 0 green:
+ *       actually drove the hook (guards against a vacuous exit 0)
+ *       every case passes
+ *
  * MIN_CASES is the non-vacuity floor. The harness's own exit condition is `FAIL -eq 0`, which a
  * harness that ran ZERO cases satisfies trivially — a `set -u` abort, a moved HOOK path, a mktemp
  * that failed. Asserting a minimum PASS count is what makes "exit 0" mean "it really drove the

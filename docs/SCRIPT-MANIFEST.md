@@ -538,7 +538,10 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ## 4. Tier C — operator / dev scripts (29) — **not** a plugin API
 
-`install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too.
+`install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too — but
+only **when that installer is re-run**. Nothing re-runs it and nothing checks, so being listed
+here is not evidence of being installed: measured 2026-08-27, 7 of these were absent from
+`~/.local/bin` on the dev host and 3 Tier A scripts were stale (TRDD-GFX57106).
 Being on `PATH` does **not** make them a contract. A plugin must never call them.
 
 | Script | What it is |

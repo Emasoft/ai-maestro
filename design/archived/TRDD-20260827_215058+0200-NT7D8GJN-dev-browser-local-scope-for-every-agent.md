@@ -1,15 +1,16 @@
 ---
 trdd-id: NT7D8GJN
 title: Install dev-browser at local scope for every agent through the pipeline instead of by hand
-column: proposal
+column: superseded
 created: 2026-08-27T21:50:58+0200
-updated: 2026-08-27T21:50:58+0200
+updated: 2026-08-27T21:55:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 task-type: feature
 min-approval-requirement: manager
 approved: false
+superseded-by: [C455WHV3]
 priority: 2
 severity: minor
 effort: medium
@@ -112,6 +113,10 @@ LOW-MED. B touches only the creation pipeline and a back-fill; A touches R17's g
 every test that pins "core is exactly ai-maestro-plugin".
 
 ## Approval log
+
+- 2026-08-27T21:55:42+0200 — SUPERSEDED by TRDD-C455WHV3 (same author). The USER redirected the
+  problem from "push dev-browser down to local" to "whitelist the user-scope set agents may use";
+  this card attacked it from the wrong end. Archived with no judge: nobody declined it.
 
 - (pending) — needs `manager`. Filed 2026-08-27 after the USER left the judgment to this session;
   the session judged that a change to what "core" means is not its to make alone.

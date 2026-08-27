@@ -1,15 +1,18 @@
 ---
 trdd-id: C455WHV3
 title: A harness-enforced whitelist of the user-scope plugins an agent may use
-column: proposal
+column: ai_review
 created: 2026-08-27T21:55:42+0200
-updated: 2026-08-27T21:55:42+0200
+updated: 2026-08-27T22:08:28+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 task-type: feature
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: user
+approval-datetime: 2026-08-27T22:08:28+0200
+implementation-commits: [a0ad67ab]
 priority: 1
 severity: medium
 effort: medium
@@ -137,7 +140,62 @@ settings being lenient — a corrupt or missing `~/.claude/settings.json` must f
 CLOSED (skip with a logged WARN), never be read as "no user-scope plugins" and silently write
 nothing. The env-key enforcer's fail-closed contract is the model.
 
+## Implemented — 2026-08-27, on the USER's "just implement the whitelist"
+
+- `lib/ecosystem-constants.ts` — `USER_SCOPE_PLUGINS_ALLOWED_FOR_AGENTS` (the five ids) and its
+  shell mirror in `scripts/ecosystem-config.sh`; a test asserts the two are identical AND that both
+  equal the hard-coded requirement, so they cannot satisfy each other by drifting together.
+- `lib/user-scope-plugin-whitelist.ts` — reads user-scope `enabledPlugins` directly (fail-CLOSED:
+  ENOENT is a pristine host, anything else refuses; the existing `listUserScopePluginInstalls`
+  returns `[]` on any error and would have made a corrupt file read as "nothing to do"); writes
+  `false` for every non-whitelisted `true` into the agent's `.claude/settings.local.json` via
+  `updateJson`, whose serialize-and-compare short-circuit is what makes it idempotent — `wrote`
+  reports the primitive's `changed`, not a flag of our own.
+- `services/agents-core-service.ts` `wakeAgent` (`:2307-2318`) — runs the gate beside the R17 core
+  heal on every wake, Claude clients only; an unreadable user scope refuses the wake (500). Every
+  existing agent is covered on its next start, no back-fill loop (R17.18).
+- `docs/GOVERNANCE-RULES.md` — **R17.24** (R17.20 already existed; the first draft would have
+  collided). `docs/GOVERNANCE-ENFORCEMENT-MAP.md` — the row the coverage ratchet demands.
+
+**Confirmed against the platform, not assumed:** the key is `enabledPlugins` with a boolean value —
+there is no separate `disabled` key — and project-local sits above user scope in the precedence
+ladder, so a local `false` beats a user-scope `true` for that process alone. The plugin body is
+never copied; only enablement is per-scope, which is why one `false` line suffices.
+
+**One deliberate difference from the USER's sketch:** whitelisted keys are NOT written `true`;
+they are left absent so user scope's `true` stands. Same visible result, and it leaves the
+operator free to disable one of the five for a specific agent by hand without the harness
+flipping it back.
+
+**Verified live, not only on fixtures:** against this host's REAL `~/.claude/settings.json` (37
+enabled) and a COPY of a real agent's local file, the gate switched off exactly 32, left the
+agent's own local plugins (core, role, dev-browser, janitor) untouched, and the real user file
+was byte-identical before and after (sha256).
+
+## Acceptance
+
+- [x] The five USER-named plugins are the whitelist, under their exact `name@marketplace` ids.
+- [x] Every other user-scope `true` becomes `false` in the agent's own local file — 32 of 37 on
+      this host, measured live on a copy.
+- [x] `~/.claude/settings.json` is never written (asserted by bytes in the test AND in the live
+      run).
+- [x] Whitelisted keys are not written; the agent's pre-existing local plugins survive a merge.
+- [x] Idempotent: a second pass writes nothing (bytes and mtime unchanged).
+- [x] Fail-closed: a corrupt user-scope file refuses; a MISSING one is a pristine host and passes.
+- [x] Wired into `wakeAgent`, pinned by a wiring test AND a fail-closed wake test — the gate's
+      default mock returns a clean pass, so an unwired wake would look identical without them.
+- [x] Neuters observed (4): whitelist emptied → 4 reds; lenient read → 1; constant `wrote` → 1;
+      one member dropped from TS only → 3 incl. the mirror. Two earlier "8/8 green" emptied-runs
+      were instrument bugs (a fixture derived from the constant; a neuter matching the `]` in the
+      type annotation) and are recorded in the test docstring as such.
+- [x] Gates: tsc 0 · lint 0 · pillars:lint 0 · `trddgrep validate` 266 · enforcement ratchet green
+      after the R17.24 map row · full suite green (the r20 file's 10 s hook timeout in one run was
+      load from a concurrent background suite — 13/13 alone).
+
 ## Approval log
 
-- (pending) — needs `manager`. Filed 2026-08-27 on the USER's directive; the USER named the five
-  members. Supersedes `TRDD-NT7D8GJN`.
+- 2026-08-27T22:08:28+0200 — APPROVED by the USER ("just implement the whitelist and make sure
+  ai-maestro enforces it in every agent"), which outranks the `manager` floor. Implemented the
+  same session.
+- Filed 2026-08-27 on the USER's directive; the USER named the five members. Supersedes
+  `TRDD-NT7D8GJN`.

@@ -114,7 +114,11 @@ exactly 20 of the 40 scenario files, and whole-file vs body-only was measured id
       REAL incumbent `testbot`. Live coverage is the foreign-holder and skip paths only; the
       leftover-`scen<NNN>`, unregistered-id and corrupt-file branches are fixture-driven, since
       reaching them live would mean mutating the host's governance state.
-- [x] On a free singleton, it exits 0 with `GOVERNANCE_AUDIT_OK` and setup proceeds (fixture).
+- [x] On a free singleton, it exits 0 with `GOVERNANCE_AUDIT_OK` and setup proceeds — observed
+      END-TO-END, not inferred from the two halves: `env HOME=<tmp> setup-SCEN-030.sh` with a
+      seeded free singleton prints `GOVERNANCE_AUDIT_OK` then `SETUP_BEGIN` then `SETUP_OK`, exit
+      0. Redirecting HOME is what makes this reachable without freeing the real singleton; the
+      host's `managerId` was re-read afterwards and is unchanged.
 - [x] A scenario that never assigns the MANAGER title is skipped and setup runs on normally —
       `setup-SCEN-027.sh` end-to-end reaches `SETUP_OK` and writes its backup dir — and the skip
       line still names the incumbent, so a future unmatched phrasing leaves evidence in the log.
@@ -123,11 +127,12 @@ exactly 20 of the 40 scenario files, and whole-file vs body-only was measured id
       `manager*` marking the singleton holder).
 - [x] Failure modes are closed, not lenient: corrupt `governance.json` fails setup rather than
       reading as "no manager"; a `managerId` no registry row carries fails as `<unregistered id>`.
-- [x] Pinned by tests, with four neuters observed: allowlist restored → 1 red; lenient corrupt-read
-      → 1 red; predicate skip branch removed → 4 reds (predicted 1 — the observation is what is
-      recorded); verb requirement dropped from the predicate → 2 reds, SCEN-019/SCEN-027 staying
-      green. That last run is what shows the corpus cases are separable rather than one assertion
-      wearing three names — and also that SCEN-020 is the only load-bearing one of the three.
+- [x] Pinned by tests, with five neuters observed: allowlist restored → 1 red; lenient corrupt-read
+      → 1 red; skip branch removed → 4 reds (predicted 1); and one run per half of the predicate —
+      verb half dropped → fixture + SCEN-020; MANAGER half dropped → all three corpus cases, with
+      the fixture GREEN. Every corpus case has now been seen reddening, so none is inert, and
+      SCEN-020 has been seen failing without the fixture. The full matrix and the reasoning error
+      it corrects live in the test file's docstring.
 - [x] Gates green: `tsc --noEmit` 0 · `yarn lint` 0 · `yarn test` 6511 passed / 492 files ·
       `yarn pillars:lint` 0 · `trddgrep validate` unchanged at its 271 pre-session findings.
 

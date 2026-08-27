@@ -28,16 +28,28 @@
  *   3. `grep -qE` skip branch removed (`if false`, i.e. audit every scenario)
  *      → 4 reds: the SKIP case plus all three live-corpus 'leaves the gate off for SCEN-0xx'.
  * Run 3 was predicted to redden one test and reddened four; the prediction was wrong and the
- * observation is what is recorded. Removing a whole BRANCH gives one cause four symptoms, which
- * says nothing about whether the four are four pins, so a fourth run probed the PREDICATE instead:
- *   4. verb requirement dropped (`MANAGER_VERB='\bMANAGER\b'`, so a bare mention arms the gate)
- *      → 2 reds: the fixture SKIP and 'leaves the gate off for SCEN-020'. SCEN-019 and SCEN-027
- *      stayed GREEN.
- * So the corpus cases are not one assertion wearing three names — but the same run shows SCEN-019
- * and SCEN-027 are WEAK pins: neither file contains the word MANAGER at all, so they survive any
- * predicate that requires it. SCEN-020 is the load-bearing one, because it names MANAGER in a bare
- * prose list of every title and so is the only real file that discriminates on the VERB. Keep
- * SCEN-020 in this list even if the other two are ever dropped.
+ * observation is what is recorded. Removing a whole BRANCH gives one cause four symptoms and says
+ * nothing about whether four tests are four pins, so runs 4 and 5 mutate the PREDICATE instead.
+ * The predicate has two halves — a MANAGER token AND a verb — so there is one run per half:
+ *
+ *   |  neuter                                          | fixture | 019 | 020 | 027 |
+ *   |  3. skip branch removed entirely                 |   RED   | RED | RED | RED |
+ *   |  4. verb half dropped   (`\bMANAGER\b` alone)    |   RED   |  .  | RED |  .  |
+ *   |  5. MANAGER half dropped (bare verb alternation) |    .    | RED | RED | RED |
+ *
+ * What that matrix establishes, and what it does not:
+ *   - EVERY corpus case has been observed reddening, so none is inert. Keep all three.
+ *   - SCEN-020 reddens in run 5 while the fixture stays GREEN — the one observation of either
+ *     failing without the other. SCEN-020 is therefore NOT redundant with the fixture.
+ *   - The fixture has never reddened without SCEN-020 also reddening. On the evidence, the
+ *     SYNTHETIC case is the subsumed one, not the real file. It is kept anyway: it is two lines,
+ *     it names the shape under test, and it fails fast — but do not cite it as an independent pin.
+ *
+ * An earlier version of this comment drew the opposite ranking from run 4 alone — that SCEN-019
+ * and SCEN-027 were weak because they stayed green. That was a proxy read: run 4 can only flip a
+ * file CONTAINING the word MANAGER, and neither of those files contains it even once, so the
+ * mutation could not reach them. "Did not redden under this mutation" was taken as a stand-in for
+ * "cannot redden under any mutation." Run 5 was built specifically to reach them, and it does.
  * Runs 1 and 2 each reddened exactly one test, so neither is carried by another assertion.
  */
 import { spawnSync } from 'child_process'

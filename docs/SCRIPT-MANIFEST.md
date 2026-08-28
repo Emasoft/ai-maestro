@@ -754,7 +754,11 @@ cited as current). So `--version` also carries `verbs=<N> fingerprint=<12 hex>`,
 from the script's own dispatch table at call time, and `--capabilities` lists the arms. A
 consumer decides "runnable on this host" by comparing the deployed `fingerprint=` with the
 source's — never by reading the dispatch table, and never from the semver alone. A mismatch
-means "re-run `install-agent-cli.sh`", not "file a defect".
+means "re-run `install-agent-cli.sh`", not "file a defect". The fingerprint is a hash of the
+`dispatch()` text, so a comment edit INSIDE that function moves it (intended: "this table text")
+while an edit anywhere else does not; and it FAILS CLOSED — if the table cannot be located in
+the running file, `--version` exits non-zero with `dispatch table not found` rather than print a
+plausible `verbs=0`.
 
 ---
 

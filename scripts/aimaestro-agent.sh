@@ -133,7 +133,21 @@ trap 'cleanup; exit 143' TERM
 # of that region — it changes when a verb is added, removed or renamed and NOT when a comment
 # elsewhere in the file is edited. `shasum` (macOS) with `sha256sum` (Linux) as the fallback.
 _dispatch_table() {
-    sed -n '/^dispatch() {$/,/^        \*) return 1 ;;$/p' "${BASH_SOURCE[0]}"
+    local table
+    table="$(sed -n '/^dispatch() {$/,/^        \*) return 1 ;;$/p' "${BASH_SOURCE[0]}")"
+    # FAIL CLOSED. The range is anchored on exact source text; if either anchor is ever
+    # reformatted the range is EMPTY, and an empty table would print `verbs=0
+    # fingerprint=e3b0c44298fc` (the sha256 of nothing) with exit 0 — a signal that reads as
+    # "this copy has no verbs" while every verb still runs. Measured before this guard existed.
+    # Two anchors, two failure shapes: START missing ⇒ empty range; END missing ⇒ the range
+    # runs to EOF, which is NON-empty, so `-z` alone would pass it and the fingerprint would
+    # then move on every comment edit anywhere below dispatch(). So the closing arm must be
+    # present in what was captured, not merely something.
+    if [ -z "$table" ] || ! printf '%s\n' "$table" | grep -q '^        \*) return 1 ;;$'; then
+        echo "aimaestro-agent.sh: dispatch table not found in ${BASH_SOURCE[0]} — the dispatch()/'*)' anchors moved; fix _dispatch_table" >&2
+        return 2
+    fi
+    printf '%s\n' "$table"
 }
 _dispatch_verbs() {
     _dispatch_table | sed -n -E 's/^        ([a-z][a-z0-9-]*)\).*/\1/p'
@@ -213,8 +227,15 @@ main() {
         # also carries a signal that moves WITH the verb set: the arm count and a hash of the
         # dispatch table, read from this very file. A consumer compares `fingerprint=` against
         # the source's to know "runnable on this host", without parsing the table itself.
-        --version|-v)   echo "aimaestro-agent.sh v1.0.1 verbs=$(_dispatch_verbs | wc -l | tr -d ' ') fingerprint=$(_dispatch_fingerprint)"; return 0 ;;
-        --capabilities) _dispatch_verbs; return 0 ;;
+        # Computed BEFORE the echo, each with an explicit failure: a `$(…)` inside an echo
+        # argument cannot fail the echo, so a broken table would still print `fingerprint=`
+        # (empty) with exit 0 — measured; the guard in _dispatch_table only helps if its
+        # non-zero status is actually consulted here.
+        --version|-v)   local verbs fp
+                        verbs="$(_dispatch_verbs | wc -l | tr -d ' ')" || return 2
+                        fp="$(_dispatch_fingerprint)" || return 2
+                        echo "aimaestro-agent.sh v1.0.1 verbs=$verbs fingerprint=$fp"; return 0 ;;
+        --capabilities) _dispatch_verbs || return 2; return 0 ;;
     esac
 
     # RECOGNITION IS LOCAL — an unknown verb is answerable with no server, so it

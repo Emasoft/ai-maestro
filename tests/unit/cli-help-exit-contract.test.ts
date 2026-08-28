@@ -24,7 +24,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'child_process'
-import { readdirSync, existsSync } from 'fs'
+import { readdirSync, existsSync, mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
 import { join } from 'path'
 
 const SCRIPTS = join(process.cwd(), 'scripts')
@@ -219,10 +220,40 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     expect(verbs.length).toBe(counted)
   })
 
+  // The fingerprint is read from the script's own text between two exact anchors. Break either
+  // anchor and, without the guard, `--version` prints a plausible WRONG signal with exit 0:
+  // START broken → `verbs=0 fingerprint=e3b0c44298fc` (sha256 of nothing); END broken → the
+  // range runs to EOF, so the hash moves on every comment below dispatch(). Both measured before
+  // the guard existed. Each case is driven on a temp copy of scripts/ (the modules are sourced
+  // from the CLI's own dir), and both must fail CLOSED: non-zero, no `fingerprint=` printed.
+  it.each([
+    ['START anchor', /^dispatch\(\) \{$/m, 'dispatch()  {'],
+    ['END anchor', /^ {8}\*\) return 1 ;;$/m, '        *) return 1;;'],
+  ])('a broken %s makes `--version` fail closed instead of printing an empty-table fingerprint', (_label, anchor, replacement) => {
+    const tmp = mkdtempSync(join(tmpdir(), 'aim-cli-anchor-'))
+    try {
+      cpSync(SCRIPTS, tmp, { recursive: true })
+      const p = join(tmp, 'aimaestro-agent.sh')
+      const src = readFileSync(p, 'utf8')
+      expect(src).toMatch(anchor) // positive control: the anchor exists to be broken
+      writeFileSync(p, src.replace(anchor, replacement))
+      const r = runCli(p, ['--version'])
+      expect(r.status).not.toBe(0)
+      expect(r.output).not.toMatch(/fingerprint=/)
+      expect(r.output).toMatch(/dispatch table not found/)
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
   /** Run `aimaestro-agent.sh <args>` with no credential; return status + combined output. */
   function runAgentCli(args: string[]): { status: number; output: string } {
+    return runCli(join(SCRIPTS, 'aimaestro-agent.sh'), args)
+  }
+  /** Same, for a CLI copy at an explicit path (the anchor-break cases drive a temp copy). */
+  function runCli(script: string, args: string[]): { status: number; output: string } {
     try {
-      const out = execFileSync('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), ...args], {
+      const out = execFileSync('bash', [script, ...args], {
         stdio: 'pipe',
         timeout: 20_000,
         env: { ...process.env, AID_AUTH: '', AIMAESTRO_SESSION: '', AIMAESTRO_SUDO_TOKEN: '' },

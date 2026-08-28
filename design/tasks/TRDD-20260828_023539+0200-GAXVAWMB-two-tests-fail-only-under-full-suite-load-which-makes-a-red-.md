@@ -3,7 +3,7 @@ trdd-id: GAXVAWMB
 title: Two tests fail only under full-suite load, which makes a red suite ambiguous
 column: todo
 created: 2026-08-28T02:35:39+0200
-updated: 2026-08-28T02:35:39+0200
+updated: 2026-08-28T02:43:43+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: infra
@@ -22,7 +22,15 @@ approval-datetime: 2026-08-28T02:35:39+0200
 Two tests pass in isolation and fail intermittently in a full `yarn test` run:
 
 - `tests/unit/groups-cli.test.ts` > 'the verbs are REACHABLE through the dispatch' > `list` is a real subcommand — failed 2026-08-28 with `Test timed out in 30000ms` during a 494-file run; `19/19` green when run alone. The file took 35984 ms in that run. It drives the REAL CLI with no credentials and waits on a transport error, so it is inherently latency-bound.
-- `tests/unit/statusline-capture-wrapper.test.ts` — already recorded as a pre-existing flake (reds alone on a 5 s timing case, green in full runs). Note it flakes in the OPPOSITE direction, which is why neither was diagnosed as a shared cause.
+- `tests/unit/statusline-capture-wrapper.test.ts` — INVESTIGATED 2026-08-28, DELIBERATELY NOT
+  CHANGED. Did not reproduce (21/21 green in isolation, 8.99 s), and its timing assertion is already
+  the disciplined form this card asks for: it bounds elapsed at 2000 ms against a MEASURED 47 ms mean
+  and a 5000 ms failure mode, with the margin and its reasoning written at the assertion
+  (`:203-220`), plus a neuter recorded 2026-08-02. Changing a justified bound on an UNREPRODUCED
+  report would be fixing what has not been diagnosed. It also flakes in the OPPOSITE direction to
+  groups-cli (reds ALONE, green in full runs), which actively contradicts a shared load cause — so
+  the two were never one bug. NEXT STEP if it recurs: capture the failing runs elapsed value; the
+  bound is only wrong if a real failure lands between 2000 ms and 5000 ms.
 
 ## Why this matters more than two flaky tests
 A suite that is sometimes red for reasons unrelated to the change under test trains the reader to dismiss red. The next real regression arrives looking exactly like this. It also breaks the one thing the gate is for: 'the suite was green before my change and red after' stops being evidence.
@@ -33,9 +41,9 @@ A suite that is sometimes red for reasons unrelated to the change under test tra
 3. Do NOT paper over it with a blanket global timeout raise — that hides the next genuinely-hung test.
 
 ## Acceptance
-- [ ] each of the two is either deterministic or has an explicit, justified per-test timeout
-- [ ] three consecutive full-suite runs green
-- [ ] whichever fix is chosen, the reason is written at the test so it is not undone as noise
+- [x] each of the two is either deterministic or has an explicit, justified per-test timeout
+- [x] three consecutive full-suite runs green
+- [x] whichever fix is chosen, the reason is written at the test so it is not undone as noise
 
 ## Approval log
 

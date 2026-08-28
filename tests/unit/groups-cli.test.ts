@@ -181,8 +181,29 @@ describe('the verbs are REACHABLE through the dispatch, not merely defined', () 
     // Discriminates on WHICH error returns, since this drives the real CLI with no credentials:
     // a dispatched verb reaches the transport (HTTP 401) or its own arg check; an undispatched one
     // dies at `unknown command` before either.
-    const r = spawnSync('bash', [CLI, verb], { encoding: 'utf8', timeout: 60_000 })
+    // AIMAESTRO_API_BASE points at a port nothing listens on, so curl gets
+    // ECONNREFUSED in ~50ms instead of spending up to its `--max-time 30`
+    // (scripts/aimaestro-groups.sh:76,81) waiting on a real host. The
+    // ASSERTION IS UNCHANGED and so is what it proves: the verb still runs the
+    // real CLI and still has to get PAST the command table into the transport,
+    // which is the whole discriminator — an undispatched verb dies at `unknown
+    // command` before any network call is attempted, refused or not.
+    //
+    // Without this the test was UNWINNABLE under load: curl's 30s budget and
+    // vitest's 30s per-test timeout are the same number, so vitest always kills
+    // first and the inner `timeout: 60_000` below can never fire. Measured
+    // 2026-08-28 — 35984ms for this file inside a 494-file run, one timeout;
+    // 19/19 green in isolation (TRDD-GAXVAWMB). A flaky gate is worse than a
+    // slow one: it teaches the reader to dismiss red.
+    const r = spawnSync('bash', [CLI, verb], {
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: { ...process.env, AIMAESTRO_API_BASE: 'http://127.0.0.1:1' },
+    })
     const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
     expect(out).not.toMatch(/unknown command/i)
+    // Positive control: without it the assertion above passes on EMPTY output,
+    // so a CLI that failed to start at all would read as "dispatched fine".
+    expect(out.trim()).not.toBe('')
   })
 })

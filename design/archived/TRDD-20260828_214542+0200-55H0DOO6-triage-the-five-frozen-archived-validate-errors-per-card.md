@@ -114,3 +114,4 @@ LOW. Every edit is an append to `## Approval log`, a checkbox tick with cited ev
   `trdd-doctor` gate: JANITOR_139 set emptied, 7123D51A now asserted as WARN). The two remaining
   ERRORs are frozen and owned by TRDD-3OS166YI (its gate/allowlist box now names both). `todo →
   complete` directly: a one-session hygiene card with no dev/testing hand-offs.
+- 2026-08-28T22:23:12+0200 — implementation commit: `fa4b9564` (recorded in a follow-up, never inside the commit that carries it).

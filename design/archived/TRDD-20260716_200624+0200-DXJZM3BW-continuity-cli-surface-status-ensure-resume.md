@@ -3,7 +3,7 @@ trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
 column: complete
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-28T22:50:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -171,3 +171,4 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
   status <id>` now reaches the server (HTTP 401 without auth — never exit 127). The box's
   inline "returns to `todo`" note is the 2026-08-22 history, superseded by that commit.
 - 2026-08-28T22:41:00+0200 — Review challenged the tick above: a 401 proves only the AUTH layer. Settled by the LIVE authenticated run the box actually names — `aimaestro-governance.sh login` then `aimaestro-continuity.sh status <id>` → exit 0, all 5 fields returned (`accountHealthy, window5hPct, window7dPct, cacheTtlMinutes, nextAction`). The tick now rests on the route, not the middleware.
+- 2026-08-28T22:50:00+0200 — Precision on the line above (review): the caller was the HUMAN OWNER (`aimaestro-governance.sh login`), whom `route.ts:30` exempts from R42 — so a non-self id also answers 200 (probed: it does). What the run proves: the route DISPATCHED and COMPOSED the 5-key object (the middleware cannot emit that body). What it does not prove: the R42 refusal path for an AGENT caller (unit-pinned), nor non-null observables — all four were null because no AgentlensPro metadata exists for that agent, the documented absent-upstream shape. Schema + auth + route dispatch verified; observables not.

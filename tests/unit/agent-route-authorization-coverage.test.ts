@@ -67,7 +67,13 @@ const MUTATING = /^export async function (POST|PUT|PATCH|DELETE)/m
  * these (portfolio/route.ts explains at length why it does not call
  * requireSudoToken) does not read as a call.
  */
-const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
+// `enforceSystemOwner(` added 2026-08-28 (TRDD-CAVCTULL): it authenticates AND refuses every
+// caller that is not the system owner (403, `lib/route-auth.ts`) — a real authorization step,
+// strictly stronger than `authorize()` for the owner-only maintenance routes that use it. It
+// sat invisible to this regex the way `buildAuthContext(` once did, so four routes that had
+// been owner-gated all along were carried as debt. Contrast `enforceAuth(`, which is NOT
+// listed on purpose: it only proves the caller is authenticated, not that it may do this.
+const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
 
 /**
  * Agent-scoped mutating routes with NO authorization step, as of 2026-07-09.
@@ -240,11 +246,16 @@ const COLLECTION_UNREVIEWED: string[] = [
   'creation-helper/publish-plugin/route.ts',
   'creation-helper/raw-materials/route.ts',
   'creation-helper/session/route.ts',
-  'directory/sync/route.ts',
+  // ── 15 → 11, TRDD-CAVCTULL (2026-08-28) ───────────────────────────────────────────────
+  // `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults` and `startup` are gone
+  // because they call `enforceSystemOwner(`, which the regex could not see (see AUTHORIZES).
+  // They were never holes — owner-gated all along, carried as debt by a needle that did not
+  // know the spelling. `health` STAYS: it takes only `enforceAuth(` (authenticated, not
+  // authorized); it mutates nothing (an SSRF-guarded outbound probe), so it is low-risk, but
+  // the invariant this test pins is "authorizes the CALLER", and it does not. The ten
+  // `creation-helper/*` entries are one decision, owned by TRDD-DQVPODKW's open follow-up
+  // (enforceSystemOwner on the wizard-only helpers once Haephestos has a credential).
   'health/route.ts',
-  'normalize-hosts/route.ts',
-  'role-plugins/sync-defaults/route.ts',
-  'startup/route.ts',
 ]
 
 describe('collection-scope mutation routes authorize the caller (TRDD-CAVCTULL)', () => {
@@ -309,7 +320,7 @@ const FORWARD_ONLY_UNVERIFIED_COUNT = 12
 
 describe('routes whose only authorization evidence is a pipeline forward (TRDD-CAVCTULL)', () => {
   it('the forward-only set is pinned and does not grow unnoticed', () => {
-    const STRONG = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(/
+    const STRONG = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(/
     const FORWARD = /\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
     const all = [...findRouteFiles(agentScopedRoot), ...collectionRouteFiles()]
     const forwardOnly = all.filter((f) => {

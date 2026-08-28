@@ -3,7 +3,7 @@ trdd-id: CAVCTULL
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200
-updated: 2026-08-22T22:20:46+0200
+updated: 2026-08-28T23:31:46+0200
 current-owner: main
 created-by: main
 task-type: security
@@ -126,6 +126,11 @@ loudly instead of reporting clean.
 - [x] `POST /api/agents` pinned BY NAME to `authorize(auth, 'create-agent')` — the one route whose
       missing authorization was a live hole should regress loudly, not as a ledger diff
 - [ ] the 19 decided one at a time, shrinking the ledger (each its own card if it turns out real)
+      **2026-08-28 pass: 15 → 11.** Per-route grep of the 15 then in the ledger (`authorize|requireSudoToken|enforceSystemOwner|canIssue|buildAuthContext|authenticateAgent` × mutating methods):
+      - DECIDED COVERED (4): `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults`, `startup` — all call `enforceSystemOwner(` (`lib/route-auth.ts:161`, 403 unless `isSystemOwner`), a real authorization the needle could not see. Added `\benforceSystemOwner\(` to AUTHORIZES + STRONG; removed the 4 from `COLLECTION_UNREVIEWED`. Neuter: dropping the needle reds exactly `every mutating collection route either authorizes or is a declared debt` + `the collection ledger contains no route that has since been fixed` (2 red / 10 green); 12/12 restored. `[id]` unaffected (0 uses).
+      - DECIDED STAYS, reason written in the ledger (1): `health` — `enforceAuth(` only (authenticated ≠ authorized); mutates nothing (SSRF-guarded probe). Low risk, but not the invariant.
+      - DEFERRED TO ITS OWNER (10): every `creation-helper/*` route — one policy decision, TRDD-DQVPODKW's open follow-up (Haephestos credential first, then `enforceSystemOwner` on the wizard-only helpers). Deciding them here would fork that card's decision.
+      Box stays open until the 10 land through DQVPODKW; nothing else on this card is undecided.
 - [x] the 12 forward-only routes verified against their pipelines' Gate 0 — **all 12 done**, see
       the section below. 1 was a live hole (TRDD-JWE3CFLV, fixed), 11 are covered, and the sweep
       turned up one latent finding one layer down (TRDD-FRRJ80YQ)
@@ -193,3 +198,4 @@ Reports (gitignored): `reports/cavctull-forward-only/20260822_2216*`, `…_2217*
 - 2026-08-22T21:47:44+0200 — Guard landed by main. Ledger seeded, not enforced-from-empty; the two
   open boxes are per-route review work and are deliberately NOT swept.
 - 2026-08-22T21:34:26+0200 — MANDATE issued by main (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T23:31:46+0200 — ledger 15 → 11 by hub-claude; the 4 removed were owner-gated all along (needle blind to `enforceSystemOwner`). Remaining: `health` (decided, stays) + 10 creation-helper (DQVPODKW).

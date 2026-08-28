@@ -1,9 +1,9 @@
 ---
 trdd-id: AGHPMRVI
 title: Create Team dialog shows a binary spinner for 30-60s while the auto-COS and its role-plugin are built
-column: planned
+column: testing
 created: 2026-08-27T21:37:13+0200
-updated: 2026-08-27T21:37:13+0200
+updated: 2026-08-28T02:11:26+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -57,8 +57,8 @@ Create Team's dialog text changes at least twice before it closes.
 ## Acceptance
 
 - [ ] The dialog's status text changes at least twice during a real CreateTeam.
-- [ ] The stages named correspond to real pipeline gates, not a timer.
-- [ ] A test pins that the status is sourced from the pipeline (a stub pipeline emitting two
+- [x] The stages named correspond to real pipeline gates, not a timer.
+- [x] A test pins that the status is sourced from the pipeline (a stub pipeline emitting two
       stages produces two distinct labels), with a neuter run recorded.
 
 ## Approval log
@@ -66,3 +66,4 @@ Create Team's dialog text changes at least twice before it closes.
 - 2026-08-27T21:37:13+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement:
   none). Split out of TRDD-JU6Y2V7X on implementation: that card's items (1)+(2) were scenario
   authoring and landed; this item is a feature with a pipeline seam and is scoped on its own.
+- 2026-08-28T02:11:26+0200 — column → testing by ai-maestro-hub-session. implementation + tests landed in a5aba784; box (a) needs a live governance-authenticated UI run

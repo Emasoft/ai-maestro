@@ -28,8 +28,12 @@
 
 import type { MessageUsage } from '@/types/sessions-browser'
 
-/** The three Claude pricing families. Unknown ids resolve to `sonnet`. */
-export type ModelFamily = 'opus' | 'sonnet' | 'haiku'
+/**
+ * The four Claude pricing families. `sonnet` is Sonnet 4.x; `sonnet5` is
+ * Sonnet 5, which lists at half the 4.x rate (Claude Code changelog 2.1.243
+ * — standard list price, not a promo). Unknown ids resolve to `sonnet`.
+ */
+export type ModelFamily = 'opus' | 'sonnet' | 'sonnet5' | 'haiku'
 
 /** Per-million-token USD rates for one model family. */
 export interface FamilyPrices {
@@ -78,7 +82,8 @@ export interface FamilyPrices {
  *
  * Base list rates used (per 1M tokens):
  *   opus    ≈ $15 in  / $75 out
- *   sonnet  ≈ $3  in  / $15 out
+ *   sonnet  ≈ $3  in  / $15 out   (Sonnet 4.x)
+ *   sonnet5 ≈ $2  in  / $10 out   (Sonnet 5 — half the 4.x rate)
  *   haiku   ≈ $0.80 in / $4 out
  */
 export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
@@ -96,6 +101,13 @@ export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
     cacheWrite1h: 6, // 3 × 2.00
     cacheRead: 0.3, // 3 × 0.10
   },
+  sonnet5: {
+    input: 2,
+    output: 10,
+    cacheWrite: 2.5, // 2 × 1.25
+    cacheWrite1h: 4, // 2 × 2.00
+    cacheRead: 0.2, // 2 × 0.10
+  },
   haiku: {
     input: 0.8,
     output: 4,
@@ -106,10 +118,15 @@ export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
 } as const
 
 /**
- * Family used when a model id matches none of opus/sonnet/haiku. Surfaced as
- * a named constant so callers can label the fallback in the UI ("assuming
- * sonnet-tier rates") rather than silently presenting numbers as if the
- * model were known.
+ * Family used when a model id matches none of opus/sonnet/sonnet5/haiku.
+ * Surfaced as a named constant so callers can label the fallback in the UI
+ * ("assuming sonnet-tier rates") rather than silently presenting numbers as
+ * if the model were known.
+ *
+ * Deliberately still `'sonnet'` (4.x), not `'sonnet5'`: repointing the
+ * fallback would silently re-price every already-recorded unknown-model
+ * figure onto a different tier, which is a separate decision nobody has
+ * made — this rule only adds a NEW, more specific match for Sonnet 5 ids.
  */
 export const FALLBACK_FAMILY: ModelFamily = 'sonnet'
 
@@ -117,21 +134,25 @@ export const FALLBACK_FAMILY: ModelFamily = 'sonnet'
  * Resolve a Claude model id to its pricing family by substring.
  *
  * Version-proof: `claude-opus-4-8`, the 1M variant `claude-opus-4-8[1m]`,
- * a hypothetical `claude-opus-5`, and the bare alias `opus` all collapse to
- * `opus`. A null / empty / unrecognized id returns {@link FALLBACK_FAMILY}
- * (sonnet tier) — the most representative mid-tier so an unknown model never
- * over- or under-states cost wildly.
+ * a hypothetical `claude-opus-6`, and the bare alias `opus` all collapse to
+ * `opus`. Sonnet 5 (`claude-sonnet-5`, `claude-sonnet-5[1m]`, …) is matched
+ * BEFORE the generic `sonnet` check so it resolves to `sonnet5` and not the
+ * 4.x tier; every other sonnet id (`claude-sonnet-4-6`, `claude-sonnet-4-5`,
+ * bare `sonnet`, …) still resolves to `sonnet`. A null / empty / unrecognized
+ * id returns {@link FALLBACK_FAMILY} (sonnet tier) — the most representative
+ * mid-tier so an unknown model never over- or under-states cost wildly.
  *
  * @param model The model id from the JSONL line/session, or `null`.
  */
 export function modelFamily(model: string | null | undefined): ModelFamily {
   if (!model) return FALLBACK_FAMILY
   const m = model.toLowerCase()
-  // Order: most-specific check first. Each family alias is a distinct
-  // substring so order only matters if Anthropic ever ships a compound
-  // name; today these are mutually exclusive.
+  // Order: most-specific check first. `sonnet-5` must be checked before the
+  // bare `sonnet` substring, or every Sonnet-5 id would be mispriced at the
+  // 4.x rate.
   if (m.includes('opus')) return 'opus'
   if (m.includes('haiku')) return 'haiku'
+  if (m.includes('sonnet-5') || m.includes('sonnet5')) return 'sonnet5'
   if (m.includes('sonnet')) return 'sonnet'
   return FALLBACK_FAMILY
 }

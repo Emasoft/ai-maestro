@@ -40,6 +40,16 @@ describe('token-cost: modelFamily', () => {
     expect(modelFamily('claude-sonnet-4-6')).toBe('sonnet')
     expect(modelFamily('claude-haiku-4-5')).toBe('haiku')
   })
+  it('resolves Sonnet 5 ids (incl [1m] and case variants) to the sonnet5 tier, not the 4.x tier', () => {
+    expect(modelFamily('claude-sonnet-5')).toBe('sonnet5')
+    expect(modelFamily('claude-sonnet-5[1m]')).toBe('sonnet5')
+    expect(modelFamily('Claude-Sonnet-5')).toBe('sonnet5')
+    expect(modelFamily('CLAUDE-SONNET-5[1M]')).toBe('sonnet5')
+  })
+  it('still resolves Sonnet 4.x ids to the sonnet (not sonnet5) tier', () => {
+    expect(modelFamily('claude-sonnet-4-6')).toBe('sonnet')
+    expect(modelFamily('claude-sonnet-4-5')).toBe('sonnet')
+  })
   it('falls back to sonnet for unknown / empty / null / undefined', () => {
     expect(modelFamily('gpt-5')).toBe(FALLBACK_FAMILY)
     expect(modelFamily('')).toBe(FALLBACK_FAMILY)
@@ -76,6 +86,15 @@ describe('token-cost: approxCostUsd (per-MTok rates)', () => {
   })
   it('an unrecognized model id is priced at the sonnet fallback tier', () => {
     expect(approxCostUsd(usage(1_000_000), 'mystery-model')).toBeCloseTo(PRICES.sonnet.input, 6)
+  })
+  it('prices Sonnet 5 at exactly 2/3 of the same usage priced at the 4.x sonnet rate', () => {
+    const u = usage(1_000_000, 1_000_000, 1_000_000, 1_000_000)
+    const sonnet5Usd = approxCostUsd(u, 'claude-sonnet-5')
+    const sonnet4Usd = approxCostUsd(u, 'claude-sonnet-4-6')
+    expect(sonnet5Usd).toBeCloseTo((2 / 3) * sonnet4Usd, 10)
+    // Concrete numbers, not just the ratio: 2+10+0.2+2.5 = $14.70 vs $3+15+0.3+3.75 = $22.05.
+    expect(sonnet5Usd).toBeCloseTo(14.7, 6)
+    expect(sonnet4Usd).toBeCloseTo(22.05, 6)
   })
 })
 

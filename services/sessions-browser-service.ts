@@ -42,7 +42,22 @@ export function slugifyWorkingDirectory(workingDirectory: string): string | null
   // Normalize: trim trailing slashes, then replace path separators.
   // Accept either Unix-style or Windows-style absolute paths defensively,
   // but Claude Code on macOS/Linux always uses '/'.
-  const normalized = workingDirectory.replace(/\\+/g, '/').replace(/\/+$/g, '')
+  // path.posix.normalize collapses interior `//` and resolves `.` / `..` the
+  // way Claude Code itself resolves a project path, so `/a/b/../c` and `/a/c`
+  // — the SAME project — can no longer derive two different slugs. Without it
+  // the divergent slug matches no real directory and the agent silently shows
+  // ZERO SESSIONS, which is exactly the failure this function's leading-dash
+  // note already warns about, reached by a different route.
+  //
+  // normalize(), NOT resolve(): resolve() anchors a relative path to the
+  // process cwd and would mangle the defensive Windows branch below
+  // (`C:\Users\e` is not POSIX-absolute). This function's contract is to
+  // normalize whatever string it is handed, never to invent a base for it —
+  // that is why it stays separate from lib/claude-conversation.ts's
+  // conversationSlug(), which resolves a known-good absolute POSIX dir.
+  const normalized = path.posix
+    .normalize(workingDirectory.replace(/\\+/g, '/'))
+    .replace(/\/+$/g, '')
   if (normalized.length === 0) return null
   // Replace each '/' with '-'. Claude Code keeps the leading dash that
   // results from an absolute path — do NOT strip it, or the slug will

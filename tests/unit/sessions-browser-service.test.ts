@@ -59,6 +59,21 @@ describe('slugifyWorkingDirectory', () => {
     expect(slugifyWorkingDirectory('/a/b')).toBe('-a-b')
   })
 
+  it('collapses interior double slashes so one project cannot get two slugs', () => {
+    // `/a//b` and `/a/b` are the SAME project to Claude Code. Deriving
+    // `-a--b` for one of them matches no real ~/.claude/projects/ directory,
+    // so the agent silently reports zero sessions.
+    expect(slugifyWorkingDirectory('/a//b')).toBe('-a-b')
+    expect(slugifyWorkingDirectory('/Users//alice/proj')).toBe('-Users-alice-proj')
+  })
+
+  it('resolves . and .. segments before slugifying', () => {
+    // Same failure as above by another route: `/a/b/../c` is `/a/c`, and the
+    // unresolved form would slugify to `-a-b---c`, matching nothing.
+    expect(slugifyWorkingDirectory('/a/b/../c')).toBe('-a-c')
+    expect(slugifyWorkingDirectory('/a/./b')).toBe('-a-b')
+  })
+
   it('returns null for empty input or a bare root slash', () => {
     expect(slugifyWorkingDirectory('')).toBeNull()
     expect(slugifyWorkingDirectory('/')).toBeNull()

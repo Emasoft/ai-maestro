@@ -8,8 +8,8 @@
  *
  * Exit: 0 clean · 1 findings · 2 could-not-run.
  */
-import { readdirSync, statSync, unlinkSync, existsSync } from 'fs'
-import { homedir } from 'os'
+import { readdirSync, statSync, unlinkSync, existsSync, copyFileSync, mkdtempSync, rmSync } from 'fs'
+import { homedir, tmpdir } from 'os'
 import path from 'path'
 import Database from 'better-sqlite3'
 
@@ -28,6 +28,15 @@ try {
   process.exit(2)
 }
 
+// Every index is read from a COPY in a scratch dir, never in place. `readonly: true` is NOT
+// enough: these indexes are in WAL mode (`applyPragmas`), and SQLite creates `-shm`/`-wal`
+// sidecars on ANY open of a WAL db, read-only included. Measured 2026-08-28: one report-only
+// run minted 147 `-shm` + 147 `-wal` beside the 147 indexes — the observer TRIPLED the inode
+// count of the directory it exists to bound, and the "N files before and after" check was
+// blind to it because it counted `*.sqlite` only. The card's own §2 said "read from a copy";
+// the first cut did not. The scratch dir is removed at the end of the sweep.
+const scratch = mkdtempSync(path.join(tmpdir(), 'pillar-index-reap-'))
+
 const rows = files.map((f) => {
   const file = path.join(dir, f)
   let bytes = 0
@@ -39,10 +48,10 @@ const rows = files.map((f) => {
   let targets = []
   let readFailed = false
   try {
-    // readonly: never take the WAL pragma write on a file we are only inspecting.
-    // fileMustExist: `new Database(p)` CREATES an empty db otherwise, so a typo'd path would
-    // have this observer LITTER the very directory it audits.
-    const db = new Database(file, { readonly: true, fileMustExist: true })
+    const copy = path.join(scratch, f)
+    copyFileSync(file, copy)
+    // fileMustExist: `new Database(p)` CREATES an empty db otherwise; belt-and-braces on the copy.
+    const db = new Database(copy, { readonly: true, fileMustExist: true })
     try {
       // A handful is enough: one surviving target keeps the index, and reading every row of a
       // 70 MB corpus to answer a yes/no would cost more than the whole sweep.
@@ -59,6 +68,7 @@ const rows = files.map((f) => {
   }
   return { file, targets, readFailed, bytes }
 })
+rmSync(scratch, { recursive: true, force: true })
 
 const report = classifyIndexes(rows, existsSync)
 console.log(formatReapReport(report))
@@ -68,8 +78,11 @@ if (doReap && report.orphans.length > 0) {
   for (const r of report.orphans) {
     try {
       unlinkSync(r.file)
-      // The heal sidecar rides with its index; leaving it behind orphans the orphan's orphan.
-      if (existsSync(`${r.file}.heal.json`)) unlinkSync(`${r.file}.heal.json`)
+      // The sidecars ride with their index; leaving them behind orphans the orphan's orphan.
+      // `-shm`/`-wal` exist wherever an earlier (in-place) open touched a WAL-mode index.
+      for (const s of ['.heal.json', '-shm', '-wal']) {
+        if (existsSync(`${r.file}${s}`)) unlinkSync(`${r.file}${s}`)
+      }
       removed++
     } catch (err) {
       console.error(`  FAILED to remove ${r.file}: ${err.message}`)

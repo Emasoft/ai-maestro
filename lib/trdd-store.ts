@@ -26,7 +26,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
-import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT } from './trdd-vocabulary'
+import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE } from './trdd-vocabulary'
 import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
@@ -731,18 +731,63 @@ export function refuseTrdd(
   })
 }
 
+/**
+ * Strip a `TRDD-` prefix, upcase, and take the first 8 chars — the corpus-wide join key.
+ * Re-derived locally (not imported from `./trdd-graph`) to avoid a store→graph→store
+ * cycle: `trdd-graph.ts` imports THIS module to read the corpus (same reason
+ * `trdd-edit-guard.ts` re-derives its own trivial ref-parsing instead of importing it).
+ */
+function normalizeBlockerRef(ref: string): string {
+  return ref.trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
+}
+
+/** Parsed `blocked-by:` value (array or scalar string) → normalized ids, `[]` on empty/null. */
+function blockedByRefs(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => normalizeBlockerRef(String(x))).filter(Boolean)
+  if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'null') return [normalizeBlockerRef(v)]
+  return []
+}
+
 /** ADVANCE an in-flight TRDD's column within tasks/ (no folder move); bumps `updated`. */
 export function advanceColumn(
   designDir: string,
   id: string,
   column: string,
-  opts: { iso: string; note?: string; approver?: string },
+  opts: { iso: string; note?: string; approver?: string; clearBlocker?: boolean },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   if (trdd.zone !== 'tasks') {
     return { ok: false, error: `Only an open (tasks/) TRDD can be advanced; ${trdd.id} is in ${trdd.zone}`, status: 409 }
+  }
+  // TRDD-ISGUYYLN: moving OUT of `blocked` used to leave `blocked-by:` populated, so the
+  // board invariant (`blocked-by` non-empty <=> `column: blocked`) broke the instant the
+  // card left. This verb owns BOTH halves of that transition — set the column AND clear
+  // the reason — the same way every other advanceColumn caller expects. Refuse by default
+  // when a named blocker is still open or unresolvable (moving on would assert the card is
+  // workable when it is not); `clearBlocker` is the explicit override.
+  let clearBlockedBy = false
+  if (trdd.column === 'blocked' && column !== 'blocked') {
+    const refs = blockedByRefs(trdd.frontmatter?.['blocked-by'])
+    if (refs.length > 0) {
+      if (opts.clearBlocker) {
+        clearBlockedBy = true
+      } else {
+        const stillOpen = refs.filter((ref) => {
+          const blocker = findTrdd(designDir, ref)
+          return !blocker || !TERMINAL_DONE.has(blocker.column)
+        })
+        if (stillOpen.length > 0) {
+          return {
+            ok: false,
+            error: `Cannot leave blocked — still open or unresolvable: ${stillOpen.join(', ')} (use --clear-blocker to override)`,
+            status: 409,
+          }
+        }
+        clearBlockedBy = true
+      }
+    }
   }
   // THE COLUMN IS VALIDATED HERE, not only in the callers (TRDD-I8UC56GZ). This verb
   // never moves folders, so an unvalidated column reaches disk two ways that both look
@@ -768,9 +813,22 @@ export function advanceColumn(
   content = migrateLegacyApprovalTier(content).content
   content = setFrontmatterField(content, 'column', column)
   content = setFrontmatterField(content, 'updated', opts.iso)
+  let clearNote = ''
+  if (clearBlockedBy) {
+    content = setFrontmatterField(content, 'blocked-by', '[]')
+    if (trdd.frontmatter?.['pre-block-column'] !== undefined) {
+      content = setFrontmatterField(content, 'pre-block-column', '')
+    }
+    clearNote = opts.clearBlocker
+      ? ' Cleared blocked-by (--clear-blocker override).'
+      : ' Cleared blocked-by (all blockers terminal).'
+  }
   if (opts.note || opts.approver) {
     const who = opts.approver ? ` by ${opts.approver}` : ''
-    content = appendApprovalLog(content, `- ${opts.iso} — column → ${column}${who}. ${opts.note ?? ''}`.trimEnd())
+    content = appendApprovalLog(
+      content,
+      `- ${opts.iso} — column → ${column}${who}. ${opts.note ?? ''}${clearNote}`.trimEnd(),
+    )
   }
   atomicWriteSync(trdd.filePath, content)
   return { ok: true, id: trdd.id, column, filePath: trdd.filePath }

@@ -1201,6 +1201,8 @@ switch (cmd) {
     const approver = takeMv('--approver')
     const reason = takeMv('--reason')
     const supersededBy = takeMv('--superseded-by')
+    const clearBlocker = mvRest.includes('--clear-blocker')
+    mvRest = mvRest.filter((t) => t !== '--clear-blocker')
     if (mvRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`move\`: ${mvRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
@@ -1246,7 +1248,7 @@ switch (cmd) {
       }
       res = await promoteTrdd(designDir, card.id, { approver: who, rationale: reason, iso })
     } else {
-      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver })
+      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver, clearBlocker })
     }
 
     if (!res.ok) {
@@ -1330,11 +1332,13 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  refuses a tick that changes nothing rather than reporting a no-op as success.')}
 
   ${C.c('trddgrep move <id> <column>')}   the column edit AND the zone git-mv, as ONE operation
-  ${C.d('  --approver W --reason TEXT --superseded-by ID')}
+  ${C.d('  --approver W --reason TEXT --superseded-by ID --clear-blocker')}
   ${C.d('  Doing one half without the other is how a card ends terminal in the OPEN zone, which')}
   ${C.d('  makes the open count a lie. The target zone comes from the same table the linter')}
   ${C.d('  reads, so the two cannot disagree. Archiving as complete/published/live requires a')}
   ${C.d('  finished acceptance checklist; a proposal must be approved (→ planned) before it advances.')}
+  ${C.d('  Leaving `blocked` also owns `blocked-by`: it clears when every blocker is terminal,')}
+  ${C.d('  else the move is REFUSED (409) naming the ids still open — pass --clear-blocker to force it.')}
 
   ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
   ${C.d('  AT LINE N, REPLACE X WITH Y — under the document lock. If X is not at line N the')}

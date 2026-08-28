@@ -54,7 +54,7 @@ Some searchable content about widgets.
   return file
 }
 
-function writeTask(id: string, slug: string, column = 'dev', root = designDir): string {
+function writeTask(id: string, slug: string, column = 'dev', root = designDir, extra = ''): string {
   const dir = path.join(root, 'tasks')
   fs.mkdirSync(dir, { recursive: true })
   const file = path.join(dir, `TRDD-20260709_102705+0200-${id}-${slug}.md`)
@@ -66,7 +66,7 @@ title: ${slug} title
 column: ${column}
 created: 2026-07-09T10:27:08+0200
 updated: 2026-07-09T10:27:08+0200
----
+${extra}---
 
 # ${id} — body
 
@@ -261,6 +261,69 @@ describe('trdd-store lifecycle transitions', () => {
     const t = findTrdd(designDir, id)!
     expect(t.zone).toBe('tasks')
     expect(t.column).toBe('testing')
+  })
+
+  // TRDD-ISGUYYLN: leaving `blocked` used to leave `blocked-by:` populated, breaking the
+  // board invariant (`blocked-by` non-empty <=> `column: blocked`).
+  it('advanceColumn out of blocked clears blocked-by + pre-block-column when every blocker is terminal', async () => {
+    writeTask('DONE0001', 'the-blocker', 'complete')
+    writeTask(
+      'BLKD0001',
+      'leaving-blocked',
+      'blocked',
+      designDir,
+      'blocked-by: [TRDD-DONE0001]\npre-block-column: dev\n',
+    )
+    const r = await advanceColumn(designDir, 'BLKD0001', 'planned', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'BLKD0001')!
+    expect(t.column).toBe('planned')
+    expect(t.frontmatter['blocked-by']).toEqual([])
+    expect(t.frontmatter['pre-block-column']).toBeFalsy()
+  })
+
+  it('advanceColumn out of blocked REFUSES (409) while a blocker is still open, and writes nothing', async () => {
+    writeTask('OPEN0001', 'still-open', 'dev')
+    writeTask('BLKD0002', 'leaving-blocked-early', 'blocked', designDir, 'blocked-by: [TRDD-OPEN0001]\n')
+    const before = fs.readFileSync(findTrdd(designDir, 'BLKD0002')!.filePath, 'utf-8')
+    const r = await advanceColumn(designDir, 'BLKD0002', 'planned', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toContain('OPEN0001')
+    }
+    const t = findTrdd(designDir, 'BLKD0002')!
+    expect(t.column).toBe('blocked')
+    expect(fs.readFileSync(t.filePath, 'utf-8')).toBe(before)
+  })
+
+  it('advanceColumn --clear-blocker (clearBlocker: true) overrides a still-open blocker', async () => {
+    writeTask('OPEN0002', 'still-open-2', 'dev')
+    writeTask('BLKD0003', 'leaving-blocked-forced', 'blocked', designDir, 'blocked-by: [TRDD-OPEN0002]\n')
+    const r = await advanceColumn(designDir, 'BLKD0003', 'planned', { iso: ISO, approver: 'orch', clearBlocker: true })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'BLKD0003')!
+    expect(t.column).toBe('planned')
+    expect(t.frontmatter['blocked-by']).toEqual([])
+  })
+
+  it('advanceColumn out of blocked REFUSES (409) when a blocked-by ref does not resolve at all', async () => {
+    writeTask('BLKD0004', 'leaving-blocked-dangling', 'blocked', designDir, 'blocked-by: [TRDD-GHOST999]\n')
+    const r = await advanceColumn(designDir, 'BLKD0004', 'planned', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toContain('GHOST999')
+    }
+  })
+
+  it('advanceColumn on a card NOT in blocked leaves an existing blocked-by untouched', async () => {
+    writeTask('NORM0001', 'not-blocked', 'dev', designDir, 'blocked-by: [TRDD-OPEN0001]\n')
+    const r = await advanceColumn(designDir, 'NORM0001', 'testing', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'NORM0001')!
+    expect(t.column).toBe('testing')
+    expect(t.frontmatter['blocked-by']).toEqual(['TRDD-OPEN0001'])
   })
 
   it('archive moves a task → archived/ with the terminal state + superseded-by', async () => {

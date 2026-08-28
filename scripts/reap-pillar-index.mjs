@@ -37,7 +37,7 @@ try {
 // the first cut did not. The scratch dir is removed at the end of the sweep.
 const scratch = mkdtempSync(path.join(tmpdir(), 'pillar-index-reap-'))
 
-const rows = files.map((f) => {
+function readRow(f) {
   const file = path.join(dir, f)
   let bytes = 0
   try {
@@ -67,8 +67,15 @@ const rows = files.map((f) => {
     readFailed = true
   }
   return { file, targets, readFailed, bytes }
-})
-rmSync(scratch, { recursive: true, force: true })
+}
+
+const rows = []
+try {
+  for (const f of files) rows.push(readRow(f))
+} finally {
+  // Not conditional on success: a throw mid-sweep must not leave a copy of the corpus in tmp.
+  rmSync(scratch, { recursive: true, force: true })
+}
 
 const report = classifyIndexes(rows, existsSync)
 console.log(formatReapReport(report))

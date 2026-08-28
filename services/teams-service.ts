@@ -76,6 +76,18 @@ function rejectMismatchedRequestingAgentId(
   return null
 }
 
+/**
+ * Narration sink for {@link createNewTeam}'s slow phases (TRDD-AGHPMRVI).
+ *
+ * It is a SECOND ARGUMENT and deliberately NOT a field of {@link CreateTeamParams}:
+ * `services/headless-router.ts` spreads an UNVALIDATED request body into the params
+ * object (`createNewTeam({ ...body, ... })`, no zod schema, unlike the Next.js routes'
+ * `.strict()`), so a params field named `onProgress` would let a headless caller send
+ * `{"onProgress": "x"}` and make the pipeline throw on a string. Out of the params
+ * object, that collision cannot be expressed.
+ */
+export type CreateTeamProgress = (stage: string) => void
+
 export interface CreateTeamParams {
   name: string
   description?: string
@@ -260,8 +272,15 @@ export function listAllTeams(): ServiceResult<{ teams: Team[] }> {
  * Governance: passes managerId and agentNames to createTeam for business rule enforcement.
  * All teams are closed — the type parameter is ignored.
  */
-export async function createNewTeam(params: CreateTeamParams): Promise<ServiceResult<{ team: any; needsChiefOfStaff?: boolean }>> {
+export async function createNewTeam(
+  params: CreateTeamParams,
+  onProgress?: CreateTeamProgress,
+): Promise<ServiceResult<{ team: any; needsChiefOfStaff?: boolean }>> {
   const { name, description, agentIds } = params
+  // A progress sink must never be able to fail the create it is only narrating,
+  // so every call goes through this wrapper: it swallows a throwing sink (an
+  // aborted SSE stream is the normal case) and it is a no-op when absent.
+  const stage = (label: string) => { try { onProgress?.(label) } catch { /* narration is never load-bearing */ } }
 
   if (!name || typeof name !== 'string') {
     return { error: 'Team name is required', status: 400 }
@@ -350,6 +369,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     // Pass governance context (managerId + agent names for collision checks) to createTeam
     const managerId = getManagerId()
     const agentNames = loadAgents().map(a => a.name).filter(Boolean)
+    stage('Creating team')
     const team = await createTeam(
       { name, description, agentIds: agentIds || [], type: 'closed', chiefOfStaffId: cosId || undefined },
       managerId,
@@ -367,6 +387,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
       // registry entry, confusing users into thinking the agent existed.
       let cosWorkDir: string | null = null
       let cosWorkDirCreated = false
+      stage('Creating chief-of-staff agent')
       try {
         const { createAgent: createCosAgent } = await import('@/lib/agent-registry')
         const teamSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30)
@@ -433,6 +454,9 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
 
     // Assign COS title + role-plugin via ChangeTitle pipeline.
     if (cosId) {
+      // The single slowest phase on a real host: ChangeTitle installs the
+      // chief-of-staff role-plugin at the new agent's local scope.
+      stage('Installing chief-of-staff role-plugin')
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
         await ChangeTitle(cosId, 'chief-of-staff', { authContext: systemOwnerAuthContext })
@@ -478,6 +502,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     //     creation. The team is fully usable; the user just needs to retry
     //     the project linkage later (or run `gh auth refresh -s project`).
     if (params.githubProject) {
+      stage('Linking GitHub project')
       try {
         await updateTeam(team.id, { githubProject: params.githubProject }, managerId)
         try {

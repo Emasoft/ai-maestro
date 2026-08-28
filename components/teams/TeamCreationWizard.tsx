@@ -173,6 +173,7 @@ export default function TeamCreationWizard({
   // Step 5 state
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [createStage, setCreateStage] = useState<string | null>(null)
 
   // ── Reset on open ─────────────────────────────────────────────────
   useEffect(() => {
@@ -182,6 +183,7 @@ export default function TeamCreationWizard({
       setNameValidation({ error: null })
       setSubmitError(null)
       setSubmitting(false)
+      setCreateStage(null)
     }
   }, [isOpen])
 
@@ -349,6 +351,7 @@ export default function TeamCreationWizard({
   const handleCreate = async () => {
     setSubmitting(true)
     setSubmitError(null)
+    setCreateStage(null)
     try {
       // SCEN-003 BUG-001 fix (2026-04-19):
       // /api/teams/create-with-project uses a .strict() Zod schema that
@@ -406,9 +409,69 @@ export default function TeamCreationWizard({
       // retry-with-token loop (same pattern as TeamListView's POST /api/teams).
       const res = await sudoFetch('/api/teams/create-with-project', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify(payload),
       }, requestSudoToken)
+
+      // TRDD-AGHPMRVI: the server streams progress ("Creating team", "Creating
+      // chief-of-staff agent", ...) as SSE when we ask for it via the Accept
+      // header. It stays HTTP 200 for the whole stream, so the real outcome
+      // lives in the final `{done:true, status, payload}` frame — never in
+      // res.ok. Non-streaming responses (e.g. a proxy that strips the Accept
+      // header) fall back to the original JSON handling untouched.
+      if (res.body && (res.headers.get('content-type') || '').includes('text/event-stream')) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        type CreatePayload = { team?: { id?: string }; id?: string; error?: string; issues?: { path: string; message: string }[] }
+        let finalStatus: number | null = null
+        let finalPayload: CreatePayload | null = null
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const frames = buffer.split('\n\n')
+          buffer = frames.pop() ?? ''
+          for (const frame of frames) {
+            const line = frame.split('\n').find(l => l.startsWith('data: '))
+            if (!line) continue
+            // A frame that will not parse is DROPPED, never thrown: by the time
+            // any frame arrives the team may already exist on the host, so
+            // failing the whole submit on unreadable NARRATION would report a
+            // successful create as an error. A lost `done` frame is still
+            // caught below — finalStatus stays null and that IS the error.
+            let evt: { stage?: string; done?: boolean; status?: number; payload?: CreatePayload }
+            try {
+              evt = JSON.parse(line.slice('data: '.length))
+            } catch {
+              continue
+            }
+            if (evt.done) {
+              // A `done` frame missing either half is malformed. Leaving these
+              // null routes it to the "closed before the team was created"
+              // error below rather than to a false success.
+              finalStatus = evt.status ?? null
+              finalPayload = evt.payload ?? null
+            } else if (evt.stage) {
+              setCreateStage(evt.stage)
+            }
+          }
+        }
+
+        if (finalStatus === null || finalPayload === null) {
+          throw new Error('Connection closed before the team was created')
+        }
+        if (finalStatus < 200 || finalStatus >= 300) {
+          const issuesMsg = Array.isArray(finalPayload.issues) && finalPayload.issues.length > 0
+            ? ` (${finalPayload.issues.map(i => `${i.path}: ${i.message}`).join('; ')})`
+            : ''
+          throw new Error((finalPayload.error || 'Failed to create team') + issuesMsg)
+        }
+        onCreated(finalPayload.team?.id || finalPayload.id || '')
+        return
+      }
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: 'Failed to create team' }))
         const issuesMsg = Array.isArray(errData.issues) && errData.issues.length > 0
@@ -422,6 +485,7 @@ export default function TeamCreationWizard({
       setSubmitError(err instanceof Error ? err.message : 'Failed to create team')
     } finally {
       setSubmitting(false)
+      setCreateStage(null)
     }
   }
 
@@ -1056,7 +1120,7 @@ export default function TeamCreationWizard({
                 {submitting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Creating...
+                    {createStage || 'Creating...'}
                   </>
                 ) : (
                   <>

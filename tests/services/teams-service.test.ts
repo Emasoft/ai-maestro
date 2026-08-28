@@ -255,6 +255,76 @@ describe('createNewTeam', () => {
 })
 
 // ============================================================================
+// createNewTeam — progress callback (TRDD-AGHPMRVI acceptance item (c))
+// The wizard's staged status must be sourced from the REAL pipeline, not a
+// timer — pin that createNewTeam narrates its own real stage labels through
+// the optional onProgress sink, that the sink is never load-bearing (absent
+// or throwing, the create still succeeds), and that createTeam still fires
+// exactly as before regardless.
+//
+// NEUTER RUN (recorded per task instructions): deleted the
+// `stage('Creating team')` call at services/teams-service.ts:372 and
+// re-ran only these 3 new tests —
+//   "reports at least two distinct real pipeline stages…" -> RED
+//     (seen stages dropped to just 'Creating chief-of-staff agent';
+//      distinct.size === 1, and toContain('Creating team') failed)
+//   "creates the team identically with NO progress sink…" -> GREEN (unaffected)
+//   "a progress sink that THROWS never fails the create…" -> GREEN (unaffected,
+//      onProgress still called once for the surviving stage)
+// File was restored byte-identically afterward (git diff clean) and all 3
+// tests re-ran GREEN.
+// ============================================================================
+
+describe('createNewTeam — progress callback (TRDD-AGHPMRVI)', () => {
+  const REAL_STAGES = new Set([
+    'Creating team',
+    'Creating chief-of-staff agent',
+    'Installing chief-of-staff role-plugin',
+    'Linking GitHub project',
+  ])
+
+  it('reports at least two distinct real pipeline stages to the progress sink', async () => {
+    const team = makeTeam({ name: 'Staged Team' })
+    mockTeams.createTeam.mockResolvedValue(team)
+    const seen: string[] = []
+    const onProgress = vi.fn((stage: string) => { seen.push(stage) })
+
+    await createNewTeam({ name: 'Staged Team', agentIds: [] }, onProgress)
+
+    const distinct = new Set(seen)
+    expect(distinct.size).toBeGreaterThanOrEqual(2)
+    expect(seen).toContain('Creating team')
+    expect(seen).toContain('Creating chief-of-staff agent')
+    // Every emitted value must be a documented pipeline stage — never an
+    // invented/animated label.
+    for (const s of seen) expect(REAL_STAGES.has(s)).toBe(true)
+  })
+
+  it('creates the team identically with NO progress sink — the sink is optional and never load-bearing', async () => {
+    const team = makeTeam({ name: 'No Sink Team' })
+    mockTeams.createTeam.mockResolvedValue(team)
+
+    const result = await createNewTeam({ name: 'No Sink Team', agentIds: [] })
+
+    expect(result.status).toBe(201)
+    expect(result.data?.team.name).toBe('No Sink Team')
+    expect(mockTeams.createTeam).toHaveBeenCalled()
+  })
+
+  it('a progress sink that THROWS never fails the create — narration is swallowed', async () => {
+    const team = makeTeam({ name: 'Throwy Team' })
+    mockTeams.createTeam.mockResolvedValue(team)
+    const onProgress = vi.fn(() => { throw new Error('sink exploded') })
+
+    const result = await createNewTeam({ name: 'Throwy Team', agentIds: [] }, onProgress)
+
+    expect(result.status).toBe(201)
+    expect(result.data?.team.name).toBe('Throwy Team')
+    expect(onProgress).toHaveBeenCalled()
+  })
+})
+
+// ============================================================================
 // createNewTeam — R40 create_team foreign-user gate (M3, R26-R40 audit)
 // ============================================================================
 

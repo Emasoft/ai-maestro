@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:48:23+0200
+updated: 2026-08-28T21:05:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -228,22 +228,39 @@ contract moves; a purely server-side latch/classification change does not need t
       3 tests, complementary neuter pair (`if (false)` -> 2 red / 18 green; `if (true)` -> 1 red /
       19 green), so each test falls to exactly one mutation and none is vacuous. Observation only:
       the latch, its cooldown and every verdict are untouched.
-- [ ] **The stall CHARACTERISED from that instrumentation** — still open, and it is a WAIT, not
-      work: the log is armed but NOT DEPLOYED, and at ~7.6 latches/day the first sample may be
-      hours after it is. **NEXT: `bash scripts/with-node.sh yarn build` FIRST, THEN
-      `pm2 restart ai-maestro`** (the restart is the owner's call — it drops every live PTY
-      stream), then `grep -a "SLOW \`security\` op" logs/pm2-error.log`. A line naming one item
-      repeatedly points at an ACL prompt on that item; lines across all six point at something
-      process-wide.
+- [x] **The stall CHARACTERISED from that instrumentation — DONE 2026-08-28, and it REFUTES the
+      card's own leading hypothesis.** The instrumentation was already deployed (a prior session
+      built + restarted; first sample 02:11) and had been collecting ~12.5 h unattended.
+      **29 slow ops, 02:11 → 14:42:**
 
-      > **The build step is load-bearing and I nearly omitted it — on the card that documents this
-      > exact trap.** `safe-storage.ts` lives under `lib/`, so it is BUNDLED into `.next`, not
-      > runtime-imported the way `server-tick.ts` is. Measured: `grep -c 'server-tick' server.mjs`
-      > = **1**, `grep -c 'safe-storage' server.mjs` = **0**. A `pm2 restart` alone therefore keeps
-      > running the OLD bundle, the instrumentation never fires, and the result presents as *"no
-      > slow ops were recorded"* — an absence read as a result, which is the same failure this
-      > whole card is about. X4RK1NUW's own STATE block records the identical "landed, undeployed"
-      > trap from 2026-08-21; it recurred here four days later.
+      | axis | result |
+      |---|---|
+      | accounts | **4 distinct** — 13 / 10 / 5 / 1 |
+      | services | **2** — `Claude Code-rotator-slot` (24), `Claude Code-credentials` (5) |
+      | verb | all 29 `find-generic-password` |
+      | outcome | **26 RECOVERED**, only 3 timed out |
+      | elapsed | p50 3041 ms, max 11062 ms (vs the measured p95 of **59 ms** — 50-190x) |
+      | by hour | 13 @02h · 6 @03h · 3 @06h · 3 @07h · 4 @14h — **bursty, not a steady tax** |
+
+      **The ACL-prompt hypothesis is dead, on two independent grounds.** (a) The card predicted
+      "one item repeatedly ⇒ ACL prompt on that item; across all six ⇒ process-wide" — it is
+      spread over 4 accounts and 2 services. (b) Stronger: **26 of 29 recovered on their own.** An
+      ACL/unlock prompt blocks until a human answers it; it does not clear itself at 3 s. So the
+      banner's parenthetical was a guess printed as a diagnosis (the card's own original charge),
+      and it stays wrong even now that the reads really are slow.
+      What remains is **transient process-wide keychain contention**, bursty and self-clearing.
+      The 02-03h burst coincides with heavy concurrent session activity on this host, which is a
+      HYPOTHESIS from co-occurrence, not a measured cause — do not promote it without a test.
+      (An interval-gap statistic was attempted and its `date -j` pipeline returned n=0; the
+      per-hour histogram above is the surviving measurement. Nothing is inferred from the failed
+      one.)
+
+      **Consequence for the fix:** #1 and #2 are now BOTH clearly right and their justification
+      changes. A 5 s timeout against a p95 of 59 ms is not too tight (box 1), but real ops DO
+      reach 11 s, so timeouts will keep happening — which makes separating TIMEOUT from DENIAL
+      (#1) the load-bearing fix rather than a nicety, and makes the ACL wording in the banner
+      actively misleading rather than merely unsupported.
+
 - [ ] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
 - [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`
@@ -263,3 +280,12 @@ contract moves; a purely server-side latch/classification change does not need t
 
 - 2026-08-26T11:12:21+0200 — MANDATE (self, min-approval-requirement: none). Carded from an
   adversarial review of `2b7dc8e7`; every number above re-measured first-hand before filing.
+- 2026-08-28T21:05:00+0200 — characterisation box TICKED by ai-maestro-hub-session from 29 slow-op
+  samples the already-deployed instrumentation had collected over 12.5 h. No code changed; this is
+  a measurement, not a fix. The ACL-prompt hypothesis this card had promoted to "leading" is
+  REFUTED (spread across 4 accounts / 2 services, and 26 of 29 recovered unaided — a prompt does
+  not clear itself). Card stays `todo`: three acceptance boxes remain and the next one needs a
+  code change to the latch. Also note the deploy was NOT mine to claim — a prior session had
+  already built and restarted; I nearly recorded "instrumentation is undeployed" from a grep whose
+  needle mis-escaped the backticks in `SLOW \`security\` op`, and only a positive control on the
+  real literal (`safe-storage] SLOW`) showed 1 hit in `.next` and corrected it.

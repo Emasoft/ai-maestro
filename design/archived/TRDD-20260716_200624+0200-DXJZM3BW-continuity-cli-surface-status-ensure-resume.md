@@ -170,3 +170,4 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
   `~/.local/bin` copies `cmp`-identical, and the bare PATH command `aimaestro-continuity.sh
   status <id>` now reaches the server (HTTP 401 without auth — never exit 127). The box's
   inline "returns to `todo`" note is the 2026-08-22 history, superseded by that commit.
+- 2026-08-28T22:41:00+0200 — Review challenged the tick above: a 401 proves only the AUTH layer. Settled by the LIVE authenticated run the box actually names — `aimaestro-governance.sh login` then `aimaestro-continuity.sh status <id>` → exit 0, all 5 fields returned (`accountHealthy, window5hPct, window7dPct, cacheTtlMinutes, nextAction`). The tick now rests on the route, not the middleware.

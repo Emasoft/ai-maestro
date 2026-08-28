@@ -44,7 +44,26 @@ import { contextLimitForModel, DEFAULT_CONTEXT_LIMIT } from '@/lib/context-limit
 /** Built-in Claude Code system prompt (non-cached static portion). Approximate. */
 const CLAUDE_CODE_SYSTEM_PROMPT_TOKENS = 8_200
 
-/** Reserved buffer Claude Code holds back for auto-compaction. */
+/**
+ * Reserved buffer Claude Code holds back for auto-compaction.
+ *
+ * FLAT ON PURPOSE, and only correct since 2026 — do NOT "fix" it to branch per
+ * model the way `contextLimitForModel` does. Claude Code auto-compacts a 200K
+ * window at ~167K and a 1M window at ~967K, so the RESERVE is ~33K in both
+ * cases even though the windows differ 5x. One number covers both.
+ *
+ * It was NOT always right, which is why this note exists: the 1M window used to
+ * compact at ~934K (a ~66K reserve), so this constant under-reserved by half and
+ * over-reported free space by ~33K on every `[1m]` session — the same failure
+ * class `contextLimitForModel`'s own docstring records for the `claude-opus-4*`
+ * heuristic. Claude Code 2.1.247 moved Sonnet 5's 1M threshold to ~967K, which
+ * is what made a single flat value correct.
+ *
+ * So the coincidence is a fact about the CURRENT upstream, not an invariant. If
+ * a future release moves either threshold again, this becomes wrong SILENTLY —
+ * nothing here can detect it, because the number is not derived from anything.
+ * The tell would be free space reported ~33K too high on one window size.
+ */
 const CLAUDE_CODE_AUTOCOMPACT_BUFFER_TOKENS = 33_000
 
 /** Claude's own ~chars/token heuristic. Used for all on-disk tokenization. */

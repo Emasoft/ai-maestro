@@ -1,9 +1,9 @@
 ---
 trdd-id: ISGUYYLN
 title: trddgrep move out of blocked leaves blocked-by populated
-column: todo
+column: complete
 created: 2026-08-28T01:56:46+0200
-updated: 2026-08-28T01:56:46+0200
+updated: 2026-08-28T02:54:49+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: bugfix
@@ -25,10 +25,11 @@ Measured on HNJ3T3W0 (2026-08-27): `trddgrep move HNJ3T3W0 planned` set the colu
 When the source column is `blocked` and the target is not, either clear `blocked-by` or refuse without `--clear-blocker`. Refusing is the safer default when a named blocker is still open; clearing is right when every blocker is terminal.
 
 ## Acceptance
-- [ ] moving a blocked card whose blockers are ALL terminal clears blocked-by
-- [ ] moving a blocked card with an OPEN blocker is refused (exit 2) unless --clear-blocker
-- [ ] tests in tests/unit/trddgrep-new-and-move.test.ts cover both, with a recorded neuter
+- [x] moving a blocked card whose blockers are ALL terminal clears blocked-by
+- [x] moving a blocked card with an OPEN blocker is refused (exit 2) unless --clear-blocker
+- [x] tests in tests/unit/trddgrep-new-and-move.test.ts cover both, with a recorded neuter
 
 ## Approval log
 
 - 2026-08-28T01:56:46+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T02:54:49+0200 — COMPLETE by ai-maestro-hub-session. advanceColumn owns both halves of leaving blocked; neuter re-executed independently (4 red, correct one green); 69/69.

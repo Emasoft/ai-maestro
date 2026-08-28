@@ -1,12 +1,11 @@
 ---
 trdd-id: JU6Y2V7X
 title: SCEN-001 carries deprecated chrome-devtools frontmatter and two steps that cannot be run through the UI
-column: blocked
-pre-block-column: ai_review
-blocked-by: [39PSYD62]
+column: complete
+blocked-by: []
 eht: [AGHPMRVI, 39PSYD62]
 created: 2026-07-29T19:37:20+0200
-updated: 2026-08-28T06:30:12+0200
+updated: 2026-08-28T06:33:20+0200
 created-by: scenario-runner
 assignee: ai-maestro-hub-session
 implementation-commits: [78ee9ef6]
@@ -53,6 +52,16 @@ time or forced a DEFERRED.
 
 (1) and (2) predate the current rules; (3) is a synchronous create path doing network work
 with a binary spinner; (4) is a z-order/layout overlap in the Settings sidebar.
+
+> **CORRECTION 2026-08-28 — item (4)'s root cause above is WRONG, measured live in `TRDD-39PSYD62`.**
+> There is no z-order or layout overlap, and none is possible: the footer holding the banner is
+> `position: static`, `z-index: auto`, and occupies 763-800 — it *begins* exactly where the nav's
+> visible box (129-763) ends. The real mechanism is that the nav is CLIPPED (`scrollHeight` 1164
+> vs `clientHeight` 634): a below-the-fold item's *computed* centre lands in the footer's band, and
+> `elementFromPoint` returns whatever is painted at that coordinate. Reproduced live on
+> `Plugin Updates` (centre 128,775 → `v0.37.2`); Cemetery itself now clears the fold by 30 px and
+> resolves correctly. Consequently item (4)'s proposed fix — "render the banner above the nav flow"
+> — would have changed nothing, and no app change was made.
 
 ## Proposed fix
 
@@ -110,8 +119,10 @@ installed when dev-browser is the dependency — it is not; the stale declaratio
 - [x] (2) The steps' commands were run as written and produce the counts the Verify lines state.
 - [x] The frontmatter still parses through the real setup path (`assert-clean-governance.sh 001`
       reads it and proceeds to its own verdict; `rewipe-list` still yields 4 entries).
-- [ ] (3) staged Create Team status — `TRDD-AGHPMRVI` terminal.
-- [ ] (4) banner/Cemetery overlap — `TRDD-39PSYD62` terminal.
+- [x] (3) staged Create Team status — `TRDD-AGHPMRVI` terminal (`complete`, archived 2026-08-28;
+      box (a) verified live: three distinct pipeline-sourced labels).
+- [x] (4) banner/Cemetery overlap — `TRDD-39PSYD62` terminal (`complete`, archived 2026-08-28;
+      measured live — see the correction to item (4) above).
 
 ## Approval log
 
@@ -124,3 +135,9 @@ installed when dev-browser is the dependency — it is not; the stale declaratio
   still shows only a single "Creating..." label, no staged status. (4) no `z-index`/`z-[` styling
   found in `VersionChecker.tsx`/`SettingsSidebar.tsx` — no evidence of an overlap fix. All four
   frictions stand unaddressed.
+- 2026-08-28T06:33:20+0200 — column → complete by ai-maestro-hub-session. Both remaining boxes are
+  mechanical ("the child TRDD is terminal") and both are now objectively true and greppable:
+  AGHPMRVI and 39PSYD62 are `complete` in `design/archived/`. The flock is closed, so the parent
+  is no longer blocked on itself. Item (4)'s stated root cause is corrected in the body rather
+  than left standing: it was refuted by the live measurement, and a terminal card must not keep
+  asserting a cause its own EHT disproved.

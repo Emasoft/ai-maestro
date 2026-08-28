@@ -2,6 +2,12 @@
 name: parallel-worker-agent
 description: Implements a bounded code-change request in an isolated git worktree. Runs type-check + build after every logical unit of work, commits when clean, pushes its feature branch to fork. Returns a 2-line summary. Spawned by the orchestrator during the sibling-feature workflow documented at docs_dev/2026-04-20-agent-execution-containers.md §15. The orchestrator keeps its long-running 25-scenario batch on the parent branch; this worker lands features asynchronously without disturbing the scenario server. Worker prompts are tight specs containing file scope, feature description, acceptance criteria, and the smoke-test that will later verify the merge. Quality matters over speed — no retry limits, no time caps, no rushing.
 model: opus[1m]
+# Per-agent prompt-cache TTL (TRDD-6HWKE3FJ). Shape verified in the 2.1.251 frontmatter schema:
+# a NESTED `experimental:` map (`.loose()`, unknown keys ignored). Precedence: env
+# CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL > setting subagentPromptCacheTtl > THIS > ENABLE_PROMPT_CACHING_1H
+# > subscriber allowlist > 5m; "1h" is skipped while the subscription is in overage.
+experimental:
+  cacheTtl: "1h"
 effort: high
 isolation: worktree
 memory: project

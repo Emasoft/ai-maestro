@@ -1,9 +1,9 @@
 ---
 trdd-id: 6HWKE3FJ
 title: Verify the experimental cacheTtl agent-frontmatter shape before adopting a 1h prompt-cache TTL
-column: todo
+column: complete
 created: 2026-08-28T02:26:57+0200
-updated: 2026-08-28T02:26:57+0200
+updated: 2026-08-28T23:23:01+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: spike
@@ -38,10 +38,12 @@ A WRONG shape is SILENTLY IGNORED. Shipping it would read as a token win in the 
 `maxTurns` IS a documented frontmatter field and `.claude/agents/scenario-runner.md` sets none, so it inherits the default. Not a defect — but it is the cap that makes a truncated PARTIAL return possible, which commit 9400ad02 now teaches the Rule 13 cron to handle.
 
 ## Acceptance
-- [ ] the correct YAML shape established from a source, not inferred
-- [ ] a runtime observation showing the TTL took effect, or an explicit note that none is available
-- [ ] the key applied to the four many-turn agents, or a written reason not to
+- [x] shape from the SOURCE — the installed CLI bundle (`~/.local/share/claude/versions/2.1.251`, string-extracted): the agent frontmatter schema declares `experimental: { cacheTtl: <'5m'|'1h'>.optional() }` as a NESTED map with `.loose().nullable().optional()` and the describe text *"Experimental per-agent options; unknown keys are ignored"* — so Q1 = nested map (a dotted `experimental.cacheTtl:` key would be an unknown top-level key, ignored). Q2: it is the shared file-agent schema (the loader spreads `...cacheTtl` for file-loaded agents; a project `.claude/agents/ttlprobe.md` with the key loaded and ran — `[API REQUEST] source=agent:custom:ttlprobe`, no parse warning). Q3 precedence, from the resolver (`aIt`): env `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` → setting `subagentPromptCacheTtl` (`promptCacheTtl` for the main thread) → agent frontmatter (**`"1h"` skipped when `isUsingOverage`**) → `ENABLE_PROMPT_CACHING_1H` env → subscriber allowlist (`tengu_prompt_cache_1h_config`, reason `subscriber`) → `5m` default
+- [x] NONE AVAILABLE locally, stated explicitly: probe (agent with `cacheTtl: "1h"`) vs control, both under `--debug-file`, haiku — 0 lines mention a TTL/1h in either log; the chosen TTL surfaces only as the `cache_control.ttl` field of the API request body (not logged) and telemetry. Note also that on this host `subagentPromptCacheTtl` is unset and no cache env var is set, so the frontmatter value IS the effective rung unless the subscriber allowlist already grants 1h
+- [x] applied to all four (`scenario-runner`, `scenario-improvement-implementer`, `parallel-worker-agent`, `parallel-tester-agent`) with a 4-line comment carrying the precedence — safe by construction: schema-validated shape, unknown-key-tolerant, overridden by any setting/env, and a no-op in overage
 
 ## Approval log
 
 - 2026-08-28T02:26:57+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T23:23:01+0200 — COMPLETED by hub-claude. 3/3; shape from the bundle schema, precedence from the resolver, runtime unobservable (stated).
+- 2026-08-28T23:23:01+0200 — COMPLETE by emanuelesabetta. archived → complete.

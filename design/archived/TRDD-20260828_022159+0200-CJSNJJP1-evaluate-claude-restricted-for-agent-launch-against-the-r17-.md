@@ -63,3 +63,4 @@ server's job (TRDD-9SEQ4QI9 ruling: containment is server-provisioned).
 - 2026-08-28T02:21:59+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-08-28T22:57:26+0200 — COMPLETED by hub-claude. Spike measured; recommendation DECLINE; 3/3 boxes.
 - 2026-08-28T22:57:26+0200 — COMPLETE by emanuelesabetta. archived → complete.
+- 2026-08-28T22:59:48+0200 — review-fork settle: the "0 plugins" debug counter was corroborated BEHAVIOURALLY. Rollout line `tengu_plugin_hooks_modules` present in BOTH logs (hook axis not confounded). Probe: "is `git:commit` in your skills list?" — normal → HAS-SKILL, `--restricted` → NO-SKILL (positive control passes; a first probe using the janitor skill returned NO-SKILL in both runs because the scratch settings.local.json disabled it — instrument error, replaced).

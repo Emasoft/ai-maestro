@@ -195,6 +195,30 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     expect(output, 'and it must say what was actually wrong').toMatch(/Unknown command/i)
   })
 
+  // TRDD-JY6IDFFC — the hand-bumped version says nothing about which verbs a COPY can run
+  // (install-agent-cli.sh `cp`s the file; nothing re-runs it), so `--version` also carries a
+  // signal derived from the dispatch table itself. Both are offline operations (exit 0, no
+  // server), and the fingerprint is pinned to the TABLE, not the file: a comment edit elsewhere
+  // must not move it, an arm change must (both measured by hand when landed).
+  it('`--version` carries a verb count and a dispatch-table fingerprint, offline', () => {
+    const { status, output } = runAgentCli(['--version'])
+    expect(status).toBe(0)
+    expect(output).toMatch(/^aimaestro-agent\.sh v\d+\.\d+\.\d+ verbs=(\d+) fingerprint=[0-9a-f]{12}\s*$/)
+    const verbs = Number(/verbs=(\d+)/.exec(output)![1])
+    expect(verbs).toBeGreaterThanOrEqual(20)
+  })
+
+  it('`--capabilities` lists the dispatch arms, one per line, offline — and agrees with the count', () => {
+    const { status, output } = runAgentCli(['--capabilities'])
+    expect(status).toBe(0)
+    const verbs = output.trim().split('\n')
+    expect(verbs).toContain('wake')
+    expect(verbs).toContain('list')
+    expect(new Set(verbs).size).toBe(verbs.length) // one dispatch site per verb
+    const counted = Number(/verbs=(\d+)/.exec(runAgentCli(['--version']).output)![1])
+    expect(verbs.length).toBe(counted)
+  })
+
   /** Run `aimaestro-agent.sh <args>` with no credential; return status + combined output. */
   function runAgentCli(args: string[]): { status: number; output: string } {
     try {

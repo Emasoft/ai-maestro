@@ -126,6 +126,26 @@ trap 'cleanup; exit 143' TERM
 # and the CLI already knows it (agent-commands.sh::validate_status_value). Most verbs have no
 # local grammar and simply return 0; a verb that grows one adds its validator on its own arm,
 # so the verb list still exists exactly once.
+# The dispatch table below is the ONE place a verb exists (see the comment above), so the
+# capability signal is derived from it rather than from a second list that could drift:
+# `_dispatch_table` prints the text of dispatch() from its header to its `*)` arm, read from
+# this file itself; the verbs are the `word)` arm labels in it, and the fingerprint is a hash
+# of that region — it changes when a verb is added, removed or renamed and NOT when a comment
+# elsewhere in the file is edited. `shasum` (macOS) with `sha256sum` (Linux) as the fallback.
+_dispatch_table() {
+    sed -n '/^dispatch() {$/,/^        \*) return 1 ;;$/p' "${BASH_SOURCE[0]}"
+}
+_dispatch_verbs() {
+    _dispatch_table | sed -n -E 's/^        ([a-z][a-z0-9-]*)\).*/\1/p'
+}
+_dispatch_fingerprint() {
+    if command -v shasum >/dev/null 2>&1; then
+        _dispatch_table | shasum -a 256 | cut -c1-12
+    else
+        _dispatch_table | sha256sum | cut -c1-12
+    fi
+}
+
 dispatch() {
     local mode="$1"; shift
     local verb="$1"; shift
@@ -186,7 +206,15 @@ main() {
     # server, and nothing above it needs one.
     case "${1:-help}" in
         help|--help|-h) cmd_help; return 0 ;;
-        --version|-v)   echo "aimaestro-agent.sh v1.0.1"; return 0 ;;
+        # The version string is hand-bumped and therefore says NOTHING about which verbs THIS
+        # copy can run: install-agent-cli.sh `cp`s the file to ~/.local/bin and nothing re-runs
+        # it on a source change, so a stale copy reports the same v1.0.1 as a fresh one
+        # (TRDD-JY6IDFFC — two consumers drew opposite wrong conclusions from it). So the line
+        # also carries a signal that moves WITH the verb set: the arm count and a hash of the
+        # dispatch table, read from this very file. A consumer compares `fingerprint=` against
+        # the source's to know "runnable on this host", without parsing the table itself.
+        --version|-v)   echo "aimaestro-agent.sh v1.0.1 verbs=$(_dispatch_verbs | wc -l | tr -d ' ') fingerprint=$(_dispatch_fingerprint)"; return 0 ;;
+        --capabilities) _dispatch_verbs; return 0 ;;
     esac
 
     # RECOGNITION IS LOCAL — an unknown verb is answerable with no server, so it

@@ -121,6 +121,11 @@ hibernate · wake · restart · skill · plugin · export · import · presence
 hibernation · subconscious · help
 ```
 
+Offline introspection (no server, no credential, exit 0 — §6.4): `--version` prints
+`aimaestro-agent.sh v<semver> verbs=<N> fingerprint=<12 hex>`, and `--capabilities` prints the
+dispatch arms one per line. `verbs=`/`fingerprint=` are derived from the script's OWN dispatch
+table (§6.5), so they move with the verb set and NOT with the hand-bumped semver.
+
 - `create <name> [--dir <path>] [options] [-- <program-args>…]` — `--dir` is OPTIONAL and
   defaults to `~/agents/<name>/`, the only location the server accepts for an agent folder
   (the Wizard's G03 guard rejects any other, and `DeleteAgent` refuses `alsoDeleteFolder`
@@ -731,6 +736,25 @@ list rather than being quietly exempted.
 source time, so `--help` requires an identity it should never need. That is deliberately a
 separate change (**TRDD-3KJW8P6R**): the abort it must not weaken is security code that
 purposefully refuses to print a pickable uuid list.
+
+### 6.5 Deployment propagation — the contract (TRDD-JY6IDFFC, ai-maestro#116)
+
+**The deployed CLI is a COPY, and propagation is MANUAL.** `install-agent-cli.sh` (run by
+`install.sh` when `INSTALL_AGENT_CLI=true`, or by hand) `cp`s the Tier-A scripts to `~/.local/bin`.
+Nothing re-runs it on a source change — not `bump-version.sh`, not a git hook, not the server.
+This is the ruling, not an omission: an automatic trigger would make a `git pull` silently
+change what every agent shell on the host can run, and a symlink would make the deployed CLI
+track an unbuilt, uncommitted working tree. **After changing any Tier-A script, the operator
+re-runs `./install-agent-cli.sh`.** That is the whole propagation contract.
+
+**Because propagation is manual, the CLI must say which verbs THIS copy has.** The semver in
+`--version` is hand-bumped and cannot: a stale copy and a fresh one both said `v1.0.1`, and two
+consumers drew opposite wrong conclusions from it (a false "verb missing" defect; a stale line
+cited as current). So `--version` also carries `verbs=<N> fingerprint=<12 hex>`, both derived
+from the script's own dispatch table at call time, and `--capabilities` lists the arms. A
+consumer decides "runnable on this host" by comparing the deployed `fingerprint=` with the
+source's — never by reading the dispatch table, and never from the semver alone. A mismatch
+means "re-run `install-agent-cli.sh`", not "file a defect".
 
 ---
 

@@ -181,6 +181,7 @@
         "wake"
       ],
       "flags": [
+        "--capabilities",
         "--help",
         "--version",
         "-h",

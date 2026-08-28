@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-21T21:58:50+0200
+updated: 2026-08-28T23:44:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -81,11 +81,12 @@ Per the issue's own framing, this needs a **ruling**, then implementation:
 
 ## Acceptance
 
-- [ ] Deployment-propagation contract stated (manual-with-doc, or automated trigger)
-- [ ] Version/capability signal that moves with the actual verb set, deployed
+- [x] Deployment-propagation contract stated — **manual-with-doc**, as `docs/SCRIPT-MANIFEST.md` §6.5 (2026-08-28): `install-agent-cli.sh` `cp`s; nothing re-runs it; after any Tier-A change the operator re-runs it. Reason an automatic trigger was refused: it would let a `git pull` silently change every agent shell's runnable verb set, and a symlink would track an unbuilt working tree
+- [x] Capability signal, in source: `--version` now prints `verbs=<N> fingerprint=<12 hex>` derived at call time from the script's OWN dispatch table (`_dispatch_table`/`_dispatch_verbs`/`_dispatch_fingerprint`, sed over `${BASH_SOURCE[0]}`), and `--capabilities` lists the arms. Measured: 20 verbs, `fingerprint=02fd9bddbf1d`; renaming one arm in a copy → `afd8a9819077`; appending a comment elsewhere → unchanged. Tests in `cli-help-exit-contract.test.ts` (2 new; 79/79 with the manifest check). **NOT yet deployed** — the installed `~/.local/bin` copy is now stale by exactly this change, which is the contract's own demonstration; the owner re-runs `./install-agent-cli.sh` (writes to `$HOME`, not run unasked)
 - [ ] Ruling given on core's #69 adoption-gate question (hold-until-deployed vs teach-with-prerequisite)
 - [ ] `hibernation.json` scope question answered (server-local by design, or repo not a registered agent workdir)
 - [ ] Lockdir expression for `ai-maestro-plugin#54` given literally
 - [ ] Comment posted on Emasoft/ai-maestro#116 confirming the card and status
 
 ## Approval log
+- 2026-08-28T23:44:38+0200 — boxes 1-2 delivered by hub-claude (contract §6.5 + fingerprint signal). Boxes 3-6 are rulings/comments for the owner or outward-facing (#116 comment).

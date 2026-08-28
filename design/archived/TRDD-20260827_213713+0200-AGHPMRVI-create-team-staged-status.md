@@ -260,3 +260,23 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   most recently STARTED stage — i.e. the one currently running. Batching can therefore only drop
   labels for phases that have ALREADY FINISHED, and can never leave a stale label on screen. Still
   no fix needed, now for a reason that is actually true.
+- 2026-08-28T07:04:00+0200 — FIFTH correction by ai-maestro-hub-session, fork-caught. Both
+  outstanding claims were TRUE but INFERRED; both are now verified, and nothing they asserted
+  changes.
+  **(a) The terminal link.** Reading `:400-475` established the chain only as far as the CALL
+  `onCreated(...)`. What the dialog DOES on that call lives in the parent — outside the file — so
+  "the dialog closes because the client processed the `done` frame" still rested on the callee's
+  body standing in for the caller's effect. The parent is `app/teams/page.tsx:211-216`:
+  `isOpen={creating}` and `onCreated={(teamId) => { setCreating(false); router.push(...) }}`. The
+  chain is therefore complete and verified END TO END: `done` → `finalStatus` (:454) → loop exits →
+  null + 2xx checks pass (:462, :465) → `onCreated` (:471) → `setCreating(false)` → `isOpen=false`
+  → unmount.
+  **(b) "The server emits a stage frame when a phase STARTS"** was carried over from the label
+  names and the 27 s gap, never read in the server. Verified: `services/teams-service.ts:459`
+  emits `stage('Installing chief-of-staff role-plugin')` and the `await ChangeTitle(...)` it
+  narrates is at `:462` — emission precedes the awaited work. The batching argument in the
+  previous entry therefore rests on a verified premise.
+  **On closing the chain (from the fourth entry): that was declared one costume early.** The
+  honest stopping condition is not "the findings feel smaller" but "the findings stop changing
+  what is true". This entry moved two claims from inferred to verified, so it earned its place;
+  the fourth entry's declaration did not.

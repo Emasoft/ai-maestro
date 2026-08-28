@@ -1,9 +1,9 @@
 ---
 trdd-id: ZA8GMJJB
 title: Adopt CLAUDE_CODE_PROJECT_DIR_NAME and converge the second documented project-slug implementation
-column: todo
+column: complete
 created: 2026-08-28T02:21:59+0200
-updated: 2026-08-28T02:29:14+0200
+updated: 2026-08-28T22:53:57+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: refactor
@@ -45,9 +45,35 @@ Commit 5fb974db converged three ad-hoc copies onto `lib/claude-conversation.ts::
 
 ## Acceptance
 - [x] the two remaining derivations are either one function or documented as deliberately different, with the reason
-- [ ] a written decision on whether to set the env var, including what happens to existing transcripts if we do
+- [x] a written decision on whether to set the env var — DECIDED 2026-08-28: **NO, ai-maestro does not set `CLAUDE_CODE_PROJECT_DIR_NAME`.** See `## Decision` below
 - [x] a test pins that a workdir with a doubled slash resolves to the same slug as without
+
+## Decision — do NOT set `CLAUDE_CODE_PROJECT_DIR_NAME` (2026-08-28)
+
+The slug is not one reader's convention; it is the shared key of every consumer of
+`~/.claude/projects/<slug>/`, and most of them are NOT this repo:
+
+- in-repo: 7 files derive or consume it (`conversationSlug` / `slugifyWorkingDirectory` sites, the
+  restart-continuity probe, the sessions browser, agents-chat) — `services/agents-chat-service.ts:59`
+  already names the one-place adoption point, so the IN-REPO cost is small;
+- out-of-repo, and the reason to refuse: the janitor plugin (a different project) derives the same slug
+  on its own for the LOCAL memory scope (`~/.claude/projects/<slug>/memory/`), the LOCAL TRDD scope
+  (`…/design/`), `token_report.py`, `fleet_status.py`; the harness's own auto-memory dir uses it too.
+  Setting the var per agent would make Claude Code write transcripts under the SHORT name while every
+  other reader keeps looking under the LONG slug — the silent "no transcript / no memory / no local
+  cards" failure this card exists to avoid, delivered by us on purpose.
+
+Benefit: cosmetic (shorter directory names). Cost: a migration or dual-read of every existing agent's
+transcripts, plus cross-project coordination with the janitor. Nothing is broken today. So: not set.
+
+Existing transcripts: untouched — no migration, no dual-read, because nothing changes.
+
+Revisit trigger (named so the refusal is not forever): Claude Code makes the var the ONLY derivation,
+or the janitor adopts it first. Either way the adoption is `conversationSlug()` + the janitor in the
+same change, never one side alone.
 
 ## Approval log
 
 - 2026-08-28T02:21:59+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T22:53:57+0200 — COMPLETED by hub-claude. 3/3 boxes; the decision is recorded in `## Decision`.
+- 2026-08-28T22:53:57+0200 — COMPLETE by emanuelesabetta. archived → complete.

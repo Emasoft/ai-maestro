@@ -112,7 +112,23 @@ spinner and read as "the fix does not work". Rebuilt, re-grepped (1 hit in
    run simply never answered the sudo modal. Handling it (structural detect → fill → Confirm) made
    the same click succeed. **Any future live check of this dialog must answer that modal.**
 
-### Correction to this card's premise
+### ~~Correction to this card's premise~~ — RETRACTED 2026-08-28T06:41+0200
+
+> **THIS SECTION IS WRONG AND IS KEPT ONLY AS THE RECORD OF THE ERROR. The card's 30-60 s figure
+> was RIGHT.** Measured from the server log after an adversarial review challenged it:
+> `06:22:57 Auto-created COS agent` → `06:23:24 Installed ai-maestro-chief-of-staff` — **27 s for
+> the install phase alone**, on a host where the plugin was already cached.
+>
+> The `~0.4 s` below is not a completion time. It is the timestamp of the **last label CHANGE**.
+> Stages are emitted at each phase's START, so the third label appeared at 402 ms and then
+> correctly never changed again while the install ran for the next 27 seconds. My collector only
+> appended on change, and I had dropped the `closedAt` field the failed run had carried — so no
+> completion timestamp existed anywhere in the successful run. I read "no further change" as
+> "finished". A proxy read in place of the thing.
+>
+> The consequence runs the other way from what this section claimed: the staged status is worth
+> MORE, not less. A user watching this create sits on `Installing chief-of-staff role-plugin` for
+> 27 s, which is exactly the window a binary spinner makes indistinguishable from a hang.
 
 The card says the pipeline takes **30-60 s**. On this host, with the role-plugin already cached and
 no GitHub linking, the whole create completed in **~0.4 s** — so on a warm host the staged status
@@ -131,3 +147,10 @@ entries, identical to the pre-run count), `~/agents/cos-aghpmrvi-stage-probe/` g
 entry, no persisted session, no tmux session. One intermediate read showed the team still present
 with the agent's title already reverted to `autonomous` — the delete pipeline simply outlived a
 20 s wait, and reporting from that read would have been a false "delete failed".
+
+- 2026-08-28T06:41:00+0200 — RETRACTION appended by ai-maestro-hub-session (Approval log is the
+  append-only channel a terminal card keeps; the body section above is marked superseded in place,
+  not deleted). The `~0.4 s` completion figure in `## Live verification of box (a)` is FALSE and the
+  premise it "corrected" was sound. Box (a) itself is UNAFFECTED — three distinct pipeline-sourced
+  labels were observed and that is all box (a) asserts. Only the timing claim, which box (a) never
+  required, is withdrawn. Caught by an adversarial review fork, not by me.

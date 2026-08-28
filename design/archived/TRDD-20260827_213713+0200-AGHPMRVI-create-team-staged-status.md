@@ -280,3 +280,21 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   honest stopping condition is not "the findings feel smaller" but "the findings stop changing
   what is true". This entry moved two claims from inferred to verified, so it earned its place;
   the fourth entry's declaration did not.
+- 2026-08-28T07:12:00+0200 — SIXTH correction by ai-maestro-hub-session, fork-caught. Three claims
+  were TRUE but under-established; all three now rest on reads. No measurement changes.
+  **(a) "Exactly one call site" was a claim about my SEARCH, not the code** — the grep covered
+  `app` and `components` only and matched a literal opening tag, so it could not see a re-export,
+  an alias, or a `dynamic()` load. Re-run unscoped over the whole repo across `.ts/.tsx/.js/.jsx`:
+  exactly ONE production render (`app/teams/page.tsx:211`), one TEST render
+  (`tests/governance/r2-duplicate-name-both-sides.test.tsx:85`), and no dynamic/lazy load of it.
+  This is exhaustive because any re-export or alias must still import the symbol by name, and the
+  search was for that name.
+  **(b) `isOpen` gating rendering was inferred from the prop's NAME.** Now read:
+  `TeamCreationWizard.tsx:505` is `if (!isOpen) return null`.
+  **(c) Stage-at-phase-START was generalised from ONE of four sites.** All four now read, and all
+  four emit before the work they narrate: `:372` → `await createTeam`; `:390` → `createAgent`;
+  `:459` → `await ChangeTitle`; `:505` → `await updateTeam`. The general form is supported 4/4.
+  **The finding worth keeping:** the grep in the previous entry was costume #4 committed *inside
+  the commit documenting costume #4*. Knowing the failure, naming it, and writing the lesson did
+  not stop me using the method one paragraph later — which is the strongest argument that the
+  lesson belongs somewhere enforced rather than somewhere remembered.

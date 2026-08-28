@@ -327,6 +327,67 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     expect(run.spawned).toBe(false)
     expect(run.denied).toBe(true)
   })
+
+  // TRDD-MFTDMSJY — a TIMEOUT is not a DENIAL. The shipped code latched the whole machine on the
+  // FIRST timeout and blamed "a keychain unlock/ACL prompt" it had never observed: 350 latches in
+  // 46 days, ZERO of them matching any denial marker, each blocking every `security` op for 600s
+  // and publishing a false `reauth-needed`. The instrumentation then measured 29 slow ops in 12.5h
+  // of which 26 RECOVERED — so the transient IS the common case and must cost one failed read.
+  //
+  // `consecutiveTimeouts` is module state, so each test below ZEROES it first by spawning `true`
+  // (a real, instant, successful spawn — the same thing that resets it in production). Without
+  // that, a test's verdict would depend on the order the file ran in.
+  //
+  // NEUTER (2026-08-28 — OBSERVED, restored + re-run green). The mutation restores the EXACT
+  // shipped bug rather than disabling a guard:
+  //   TIMEOUT_LATCH_THRESHOLD = 3 → 1   → 3 red / 57 green, all three below:
+  //       a SINGLE timeout does NOT latch and is NOT reported as a denial
+  //       a RUN of timeouts DOES latch, and the banner names a timeout instead of an ACL prompt
+  //       a keychain answer BREAKS the run, so scattered timeouts never latch
+  // Its COMPLEMENT lives in oauth-rotator-tick.test.ts (the suppressed-probe half) and its red
+  // set is DISJOINT from this one — 1 red there, 0 here — which is what shows the two halves of
+  // the fix are pinned independently rather than by one shared assertion.
+  const zeroTheRun = () => expect(runSecurity(['true']).ok).toBe(true)
+
+  it('a SINGLE timeout does NOT latch and is NOT reported as a denial', () => {
+    zeroTheRun()
+    const run = runSecurity(['sleep', '30'], { timeoutMs: 120 })
+    expect(run.spawned).toBe(true)
+    expect(run.ok).toBe(false) // still a failed op — callers fail closed exactly as before
+    expect(run.denied).toBe(false) // …but NOT a denial
+    expect(keychainDeniedLatched()).toBe(false) // and the machine is NOT blinded
+  })
+
+  it('a RUN of timeouts DOES latch, and the banner names a timeout instead of an ACL prompt', () => {
+    zeroTheRun()
+    const seen: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((m?: unknown) => { seen.push(String(m)) })
+    let last
+    try {
+      for (let i = 0; i < 3; i++) last = runSecurity(['sleep', '30'], { timeoutMs: 120 })
+    } finally {
+      spy.mockRestore()
+    }
+    expect(last?.denied).toBe(true)
+    expect(keychainDeniedLatched()).toBe(true)
+    const set = seen.filter(l => l.includes('DENIED-LATCH SET'))
+    expect(set).toHaveLength(1) // the first two timeouts said nothing
+    expect(set[0]).toContain('3 consecutive')
+    expect(set[0]).toContain('TIMED OUT')
+    // The whole defect in one assertion: it must not assert the cause it cannot observe.
+    expect(set[0]).not.toContain('a keychain unlock/ACL prompt')
+  })
+
+  it('a keychain answer BREAKS the run, so scattered timeouts never latch', () => {
+    zeroTheRun()
+    runSecurity(['sleep', '30'], { timeoutMs: 120 })
+    runSecurity(['sleep', '30'], { timeoutMs: 120 }) // 2 in a row — one short of the threshold
+    zeroTheRun() // the keychain answers → the run is broken
+    runSecurity(['sleep', '30'], { timeoutMs: 120 })
+    runSecurity(['sleep', '30'], { timeoutMs: 120 })
+    // 4 timeouts total, never 3 CONSECUTIVE — this is the measured bursty-but-recovering shape.
+    expect(keychainDeniedLatched()).toBe(false)
+  })
 })
 
 describe('public API with no backend (no spawn, no keychain)', () => {

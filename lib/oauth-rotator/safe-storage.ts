@@ -56,6 +56,22 @@ const KEYCHAIN_LATCH_NAME = 'keychain-denied.latch'
 // informative sample there is, and the timeout path throws it away.
 const SLOW_SECURITY_LOG_MS = 2_500
 
+// TRDD-MFTDMSJY: how many CONSECUTIVE timeouts before one latches the machine. MEASURED
+// 2026-08-28 over 29 slow ops in 12.5h of instrumentation: **26 RECOVERED, only 3 timed out**,
+// arriving in bursts spread over 4 accounts and 2 services. So a SINGLE timeout is a transient,
+// and latching on it is exactly what produced 350 ten-minute machine-wide blackouts in 46 days —
+// every one of them logged as a denial that never happened. A PERSISTENT block still latches,
+// which is the one case the latch was ever built for.
+const TIMEOUT_LATCH_THRESHOLD = 3
+
+// The consecutive-timeout count, PER PROCESS. The rotator's beat runs in the long-lived pm2
+// server, so that is where a persistent block accumulates; a one-shot CLI invocation can never
+// reach the threshold, which is the behaviour we want — one CLI timeout must not blind the
+// machine. ponytail: in-memory, not a state file — a cross-process counter would need locked
+// file I/O on the credential path to buy a case (many short-lived writers, all stalling) that
+// nobody has observed.
+let consecutiveTimeouts = 0
+
 // Substrings that mark a `security` result as a DENIAL worth latching on (case-insensitive).
 // Deliberately NARROW: an ACL/unlock/interaction denial or a user-canceled prompt — NEVER
 // "item could not be found" (a normal not-found must not latch and deny everything).
@@ -293,13 +309,27 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
       // `security` absent → not really macOS. NOT a denial; caller may try another backend.
       return { ok: false, stdout: '', stderr: '', spawned: false, denied: false, returncode: null }
     }
-    // Any other spawn error (a timeout kill sets ETIMEDOUT) is treated as a hung/blocked op —
-    // latch it so the next op short-circuits. This is the Python TimeoutExpired branch, widened
-    // to "never raise" for any non-ENOENT spawn failure (a permission error on the binary etc.).
-    setKeychainDenied(
-      `a \`security\` op hung past ${timeoutMs / 1000}s (a keychain unlock/ACL prompt)`,
-    )
-    return { ok: false, stdout: '', stderr: '', spawned: true, denied: true, returncode: null }
+    // A TIMEOUT IS NOT A DENIAL (TRDD-MFTDMSJY). This branch used to treat them identically:
+    // it set the machine-wide latch on the FIRST timeout and printed "(a keychain unlock/ACL
+    // prompt)" — a cause it never observed. A timeout cannot distinguish a hung prompt from a
+    // blocked keychain, because a prompt that hangs never returns a denial string; asserting one
+    // of the two aimed every reader at an ACL problem, and the wording is now what was actually
+    // seen. Latch only on a RUN of timeouts, so the measured transients (26 of 29 recovered)
+    // cost one failed read instead of a ten-minute blackout that also produced a false call for
+    // a human re-login.
+    consecutiveTimeouts += 1
+    if (consecutiveTimeouts >= TIMEOUT_LATCH_THRESHOLD) {
+      const n = consecutiveTimeouts
+      consecutiveTimeouts = 0
+      setKeychainDenied(
+        `${n} consecutive \`security\` ops TIMED OUT past ${timeoutMs / 1000}s — cause NOT ` +
+          'observed (a timeout cannot tell a hung prompt from a blocked keychain)',
+      )
+      return { ok: false, stdout: '', stderr: '', spawned: true, denied: true, returncode: null }
+    }
+    // Sub-threshold: a failed op, NOT a denial. `spawned: true` keeps `macosStore` from reading
+    // this as "no backend" (that is the ENOENT branch above) — it fails closed, as before.
+    return { ok: false, stdout: '', stderr: '', spawned: true, denied: false, returncode: null }
   }
 
   const stderr = res.stderr ?? ''
@@ -310,6 +340,9 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
   }
   // Spawned and NOT denied → the keychain answered without prompting. If this was the
   // half-open probe, the transient cleared: drop the latch so normal ops resume.
+  // The keychain answered, so any run of timeouts is broken — reset the counter here rather
+  // than only on success, because a plain not-found is equally proof the keychain is reachable.
+  consecutiveTimeouts = 0
   if (halfOpen) clearKeychainDenied()
   return {
     ok: returncode === 0,

@@ -27,7 +27,7 @@ const VALID_REASON: ReadonlySet<string> = new Set<TickReason>(['refresh-dead', '
  *  VALID_REASON: this set and that type must be widened together, because an unrecognised value is
  *  DROPPED on write and REJECTS the whole stamp on read. */
 const VALID_STUCK: ReadonlySet<string> = new Set<StuckReason>([
-  'all-maxed', 'cannot-rotate-offline', 'drain-guard-hold',
+  'all-maxed', 'cannot-rotate-offline', 'drain-guard-hold', 'keychain-latched',
 ])
 
 /** On-disk shape: the last tick's cascade conclusion, WHY, plus when it was written (ISO 8601).

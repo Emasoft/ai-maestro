@@ -47,6 +47,9 @@ import {
 } from './slots'
 import { readLiveBlobWithSource } from './live'
 import { switchLiveTo } from './rotate'
+// TRDD-MFTDMSJY — the survey must know whether it ASKED the keychain or was DECLINED by the
+// latch; a suppressed read is not an unreadable slot. safe-storage imports nothing from here.
+import { keychainDeniedLatched } from './safe-storage'
 // Runtime-safe despite model-fallback importing from this module: that import is `import type`
 // (NextAction/StuckReason, erased at compile), so the value edge below closes no cycle.
 import { modelFamily, SCOPED_SWITCH_AT_PCT, ACCOUNT_HEADROOM_PCT } from './model-fallback'
@@ -190,7 +193,7 @@ export type TickReason = 'refresh-dead' | 'slot-unreadable'
  * `rotator-stuck:drain-guard-hold`, and alert-delivery's per-code escalating backoff is what keeps
  * a condition that can hold for many ticks from becoming a 60-second siren.
  */
-export type StuckReason = 'all-maxed' | 'cannot-rotate-offline' | 'drain-guard-hold'
+export type StuckReason = 'all-maxed' | 'cannot-rotate-offline' | 'drain-guard-hold' | 'keychain-latched'
 
 /**
  * PURE. The beat's one-line verdict. Extracted from `runTick` (TRDD-RFQFCCU4) because this is the
@@ -269,6 +272,14 @@ export function deriveDecision(f: {
   }
   if (f.stuck === 'cannot-rotate-offline') {
     return 'STUCK: live credential is locally expired and the API is unreachable — cannot rotate; manual re-auth needed'
+  }
+  if (f.stuck === 'keychain-latched') {
+    // TRDD-MFTDMSJY. This is a BLIND beat, not a fault report: the denied-latch was set, so no
+    // `security` op spawned and every slot read null. Saying `slot-unreadable` here claimed the
+    // keychain had answered "no" when we never asked — and sent a human to re-login for a block
+    // on the SERVER's side. Naming the suppression is the whole point; it is also self-clearing
+    // (the latch's half-open probe re-opens it), so the honest verdict is "wait", not "act".
+    return 'STUCK: the keychain denied-latch is set, so this beat did not read any slot — the alternates were NOT probed and their state is UNKNOWN (this is credential ACCESS from this process, not a re-login; it clears itself on the latch half-open probe)'
   }
   if (f.stuck === 'drain-guard-hold') {
     return 'HOLDING: the live account still has headroom and a working token, but its stored copy is expiring and at most one healthy alternate remains — not spending the last one on a local expiry; re-login the live account before its stored copy dies'
@@ -1341,6 +1352,13 @@ export interface AlternateSurvey {
   /** Slots whose refresh token is absent or has failed MAX_REFRESH_FAILURES times running AND
    *  whose access token is expired. This is the ONE class a re-capture actually repairs. */
   refreshDead: string[]
+  /** TRDD-MFTDMSJY. True iff the keychain denied-latch was set for this sweep, so the reads were
+   *  SUPPRESSED (no `security` op spawned) rather than attempted and refused. When true, BOTH
+   *  arrays above are empty and mean UNKNOWN, never "clean": this process declined to ask, so it
+   *  has no evidence about any slot. Reporting a declined ask as `slot-unreadable` is what made
+   *  the tick publish `reauth-needed` — a call for a human re-login — for a fault entirely on
+   *  this side of the keychain. */
+  probeSuppressed: boolean
 }
 
 /** Survey EVERY alternate rather than breaking on the first fault. One unreadable slot is a slot
@@ -1367,7 +1385,16 @@ export function surveyAlternates(): AlternateSurvey {
     const refreshIsDead = !hasRefresh || failures >= MAX_REFRESH_FAILURES
     if (refreshIsDead && blobLocallyExpired(b)) refreshDead.push(email)
   }
-  return { unreadable, refreshDead }
+  // TRDD-MFTDMSJY: ONE check, AFTER the loop, and that placement is the whole design. While the
+  // latch is set `runSecurity` short-circuits without spawning, so every `readSlot` returns null
+  // and the loop above cannot tell "the keychain refused" from "we never asked" — it classified
+  // both as `unreadable`. Checking after the loop covers BOTH orderings with one call: a latch
+  // already set stays set (unless a half-open probe cleared it, in which case the reads were
+  // real), and a latch that a mid-loop timeout sets is still set here. It is deliberately
+  // CONSERVATIVE — some slots may genuinely have been read before the latch closed — because a
+  // missed `unreadable` costs one quiet beat while a false one costs a human a re-login.
+  if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true }
+  return { unreadable, refreshDead, probeSuppressed: false }
 }
 
 // ── The composed tick (cmd_tick)─────────────────────────────────────────────────────────────
@@ -1403,8 +1430,13 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
     const survey = surveyAlternates()
     unreadable = survey.unreadable.length
     deadRefresh = survey.refreshDead.length
-    // Precedence: OUR fault before THEIRS — see the TickReason doc comment.
-    if (unreadable > 0) { nextAction = 'reauth-needed'; reason = 'slot-unreadable' }
+    // Precedence: OUR fault before THEIRS — see the TickReason doc comment. A SUPPRESSED probe
+    // outranks both, and is deliberately NOT a `reauth-needed` (TRDD-MFTDMSJY): the beat has no
+    // evidence about any slot, so it must not name a credential fault, and `ok` would read as
+    // health. `stuck` is the existing verdict for "wanted to act, could not" and it rides the
+    // `rotator-stuck:` alert prefix's escalating backoff, which a self-clearing latch needs.
+    if (survey.probeSuppressed) { nextAction = 'stuck'; rotateOut.stuck = 'keychain-latched' }
+    else if (unreadable > 0) { nextAction = 'reauth-needed'; reason = 'slot-unreadable' }
     else if (deadRefresh > 0) { nextAction = 'reauth-needed'; reason = 'refresh-dead' }
     // A tick that WANTED to rotate and could not is not `ok`. This is last in the chain on
     // purpose: `reauth-needed` names something a human can act on right now (re-login), while

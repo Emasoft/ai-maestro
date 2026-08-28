@@ -16,7 +16,9 @@ import {
   runTick,
   type Candidate,
   type TickDeps,
+  surveyAlternates,
 } from '@/lib/oauth-rotator/tick'
+import { setKeychainDenied, keychainDeniedLatched } from '@/lib/oauth-rotator/safe-storage'
 import { loadState, saveState, writeSlot, readSlot, fingerprint, type RotatorState } from '@/lib/oauth-rotator/slots'
 import { writeLiveBlob, readLiveBlob } from '@/lib/oauth-rotator/live'
 
@@ -25,7 +27,11 @@ import { writeLiveBlob, readLiveBlob } from '@/lib/oauth-rotator/live'
 // real keychain / `Claude Code-credentials` are never touched and `security` is never spawned. All
 // network is a stub `fetch` keyed on the bearer token — no real OAuth endpoint is called.
 
-const ENV_KEYS = ['HOME', 'USER', 'CLAUDE_SAFE_STORAGE_BACKEND', 'CLAUDE_PLUGIN_DATA'] as const
+// JANITOR_GLOBAL_STATE_DIR is CONTAINMENT, not decoration: `surveyAlternates` now reads the
+// keychain denied-latch, whose file lives in the global state dir. Left unset, every tick in this
+// file would read the DEVELOPER'S real latch (so the suite's verdict would depend on the machine's
+// keychain history) and the one test that SETS the latch would write into it.
+const ENV_KEYS = ['HOME', 'USER', 'CLAUDE_SAFE_STORAGE_BACKEND', 'CLAUDE_PLUGIN_DATA', 'JANITOR_GLOBAL_STATE_DIR'] as const
 let saved: Record<string, string | undefined>
 let tmpDir: string
 
@@ -35,6 +41,7 @@ beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-tick-'))
   process.env.HOME = tmpDir
   process.env.CLAUDE_SAFE_STORAGE_BACKEND = 'none'
+  process.env.JANITOR_GLOBAL_STATE_DIR = tmpDir
   delete process.env.CLAUDE_PLUGIN_DATA
   const credFile = path.join(os.homedir(), '.claude', '.credentials.json')
   if (!credFile.startsWith(tmpDir)) throw new Error(`refusing to run: credentials path ${credFile} escaped tmp ${tmpDir}`)
@@ -551,6 +558,40 @@ describe('tick — runTick (compose)', () => {
     expect(res.reason).toBe('slot-unreadable')
     expect(res.decision).toContain('UNREADABLE')
     expect(res.decision).not.toContain('no action needed') // the line that read as health
+  })
+
+  // TRDD-MFTDMSJY. The SAME registered-but-unreadable slot as the test above — the ONLY difference
+  // is that the denied-latch is set, so `readSlot` returned null because nothing spawned rather
+  // than because the keychain refused. Before this, both produced `reauth-needed: slot-unreadable`,
+  // i.e. a call for a human re-login for a block entirely on the SERVER's side, ~7.6 times a day
+  // for 46 days. Pairing the two tests is the point: they differ in one precondition and must
+  // differ in the verdict.
+  //
+  // NEUTER (2026-08-28 — OBSERVED, restored + re-run green):
+  //   s/if \(keychainDeniedLatched\(\)\) return \{ unreadable: \[\].../if (false) return {.../
+  //     → 1 red / 59 green: this test, and only this test.
+  // The COMPLEMENT is in oauth-rotator-safe-storage.test.ts (TIMEOUT_LATCH_THRESHOLD 3 → 1,
+  // 3 red / 57 green). Neither mutation reaches the other's tests, so each half of the fix is
+  // pinned on its own — a single shared neuter would have certified one half it never touched.
+  it('does NOT call for a re-login when the reads were SUPPRESSED by the keychain latch', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    const st = loadState()
+    st.slots = { ...(st.slots ?? {}), 'ghost@x': { captured_at: 'now', fp: 'deadbeef', expires_at: null, via: 'test' } }
+    saveState(st)
+    setKeychainDenied('test: pretend a prior op latched the machine')
+    expect(keychainDeniedLatched()).toBe(true) // the premise, asserted — not assumed
+    expect(fs.existsSync(path.join(tmpDir, 'keychain-denied.latch'))).toBe(true) // and CONTAINED
+
+    const survey = surveyAlternates()
+    expect(survey.probeSuppressed).toBe(true)
+    expect(survey.unreadable).toEqual([]) // we declined to ask, so we claim nothing
+
+    const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }) })
+    expect(res.nextAction).toBe('stuck')
+    expect(res.stuck).toBe('keychain-latched')
+    expect(res.reason).toBeUndefined() // NOT slot-unreadable, NOT refresh-dead
+    expect(res.decision).not.toContain('no action needed') // blind must not read as health
+    expect(res.decision).not.toContain('reauth')
   })
 
   it('attributes reauth-needed to refresh-dead when a readable alternate has no refresh and is expired', async () => {

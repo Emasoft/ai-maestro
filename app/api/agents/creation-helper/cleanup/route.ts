@@ -3,6 +3,7 @@ import { enforceAuth } from '@/lib/route-auth'
 import { rm, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { conversationSlug } from '@/lib/claude-conversation'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
   const workDir = join(home, 'agents', 'haephestos')
   // Claude stores per-project state using absolute path with / replaced by -
   // e.g. /Users/foo/agents/haephestos -> -Users-foo-agents-haephestos
-  const claudeCacheDir = join(home, '.claude', 'projects', workDir.replace(/\//g, '-'))
+  const claudeCacheDir = join(home, '.claude', 'projects', conversationSlug(workDir))
 
   const cleaned: string[] = []
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
   if (existsSync(claudeCacheDir)) {
     // existsSync guard ensures the path exists; any error here is real (permissions, I/O) and must propagate
     await rm(claudeCacheDir, { recursive: true })
-    cleaned.push(`.claude/projects/${workDir.replace(/\//g, '-')}/`)
+    cleaned.push(`.claude/projects/${conversationSlug(workDir)}/`)
   }
 
   return NextResponse.json({ cleaned: true, files: cleaned })

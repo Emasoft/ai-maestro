@@ -9,6 +9,7 @@
  * Falls back to simple ANSI stripping if no ANTHROPIC_API_KEY is available.
  */
 
+import { conversationSlug } from '@/lib/claude-conversation'
 import type { Subsystem, SubsystemContext, SubsystemStatus, ActivityState } from './types'
 import type { TerminalOutputBuffer } from './terminal-buffer'
 import {
@@ -252,9 +253,11 @@ export class VoiceSubsystem implements Subsystem {
         || registryAgent?.sessions?.[0]?.workingDirectory
       if (!workingDir) return []
 
-      // Derive the Claude projects directory path (same as chat route.ts)
+      // Derive the Claude projects directory path through the ONE canonical
+      // helper (it path.resolve()s first, so `/a//b` and `/a/b` cannot derive
+      // two different slugs for the same project).
       const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects')
-      const projectDirName = workingDir.replace(/\//g, '-')
+      const projectDirName = conversationSlug(workingDir)
       const conversationDir = path.join(claudeProjectsDir, projectDirName)
 
       if (!fs.existsSync(conversationDir)) return []

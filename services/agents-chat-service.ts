@@ -13,6 +13,7 @@ import * as fsp from 'fs/promises'
 import * as path from 'path'
 import os from 'os'
 import { chatStateFileFor } from '@/lib/chat-state-path'
+import { conversationSlug } from '@/lib/claude-conversation'
 
 // SF-047: Maximum conversation file size to prevent OOM (50 MB)
 const MAX_CONVERSATION_FILE_SIZE = 50 * 1024 * 1024
@@ -50,7 +51,14 @@ export async function getConversationMessages(
 
   // Find the Claude conversation directory for this project
   const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects')
-  const projectDirName = workingDir.replace(/\//g, '-')
+  // conversationSlug, not an inline replace: it path.resolve()s first, so
+  // `/a//b` and `/a/b` — which Claude resolves to the SAME project — cannot
+  // derive two different slugs and silently report "no conversation". This was
+  // the last of the ad-hoc copies lib/claude-conversation.ts's docstring warns
+  // about; every reader of ~/.claude/projects now goes through one function,
+  // which is also what makes adopting CLAUDE_CODE_PROJECT_DIR_NAME a one-place
+  // change rather than a hunt.
+  const projectDirName = conversationSlug(workingDir)
   const conversationDir = path.join(claudeProjectsDir, projectDirName)
 
   // SF-048: Use async file I/O instead of sync to avoid blocking the event loop

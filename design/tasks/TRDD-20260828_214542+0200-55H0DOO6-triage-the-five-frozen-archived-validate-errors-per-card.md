@@ -32,9 +32,11 @@ relevant-rules: [12]
 
 ## Problem
 
-`yarn trddgrep validate` has exited **1 with the same 5 ERRORs for at least three sessions**
-(re-measured 2026-08-28T21:40+0200 — exact same five ids as the 18:31 run recorded in the
-handoff). Every one is an ARCHIVED card, so rule 12 freezes its body, and every session since has
+`yarn trddgrep validate` has exited **1 with the same 5 ERRORs at every measurement taken**:
+18:31 (handoff rev 30.1), 21:40 and 21:47 (this session, first-hand), and the server's own
+`[trdd-watchdog] sweep ran: 595 scanned, 5 error(s)` at 21:45:44 — four readings over ~3 h,
+one session, same five ids. How long before 18:31 they stood is NOT measured here; the
+watchdog's report dir would say. Every one is an ARCHIVED card, so rule 12 freezes its body, and every session since has
 correctly refused to mass-repair them — and then left them. A red gate nobody may touch and
 nobody owns is a gate that trains everyone to read `exit 1` as background noise, which is how the
 next REAL finding gets ignored.

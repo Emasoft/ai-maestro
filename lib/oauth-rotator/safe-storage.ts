@@ -335,6 +335,11 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
   const stderr = res.stderr ?? ''
   const returncode = res.status // null if killed by a signal (handled by res.error above)
   if (returncode !== 0 && isDenial(stderr)) {
+    // NOT resetting `consecutiveTimeouts` here is deliberate: a denial is the keychain
+    // refusing, not answering, so it is no evidence the run of timeouts is over — a denial
+    // followed by two timeouts latches at three rather than starting a fresh count. (The
+    // latch is being set anyway on this branch, so the counter's value is moot until the
+    // half-open probe; leave it.) Do not "fix" this into a reset.
     setKeychainDenied('`security` returned an ACL/auth/user-canceled denial')
     return { ok: false, stdout: res.stdout ?? '', stderr, spawned: true, denied: true, returncode }
   }

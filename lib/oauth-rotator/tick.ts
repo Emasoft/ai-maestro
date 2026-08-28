@@ -1390,9 +1390,13 @@ export function surveyAlternates(): AlternateSurvey {
   // and the loop above cannot tell "the keychain refused" from "we never asked" — it classified
   // both as `unreadable`. Checking after the loop covers BOTH orderings with one call: a latch
   // already set stays set (unless a half-open probe cleared it, in which case the reads were
-  // real), and a latch that a mid-loop timeout sets is still set here. It is deliberately
-  // CONSERVATIVE — some slots may genuinely have been read before the latch closed — because a
-  // missed `unreadable` costs one quiet beat while a false one costs a human a re-login.
+  // real), and a latch that a mid-loop timeout sets is still set here. In that second ordering
+  // the k slots read BEFORE the latch closed were classified correctly and this line ERASES
+  // them — the sweep's findings are not preserved, they are discarded wholesale. That is the
+  // deliberate trade, stated as a trade: an erased genuine `unreadable` costs one quiet beat
+  // (the next sweep, ≤60 s away, re-finds it once the latch half-opens), while a false one
+  // costs a human a re-login. Keeping a MIXED array under a `probeSuppressed` flag would make
+  // every consumer decide which half to believe; an empty one cannot be misread.
   if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true }
   return { unreadable, refreshDead, probeSuppressed: false }
 }

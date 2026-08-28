@@ -340,7 +340,11 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
   //
   // NEUTER (2026-08-28 — OBSERVED, restored + re-run green). The mutation restores the EXACT
   // shipped bug rather than disabling a guard:
-  //   TIMEOUT_LATCH_THRESHOLD = 3 → 1   → 3 red / 57 green, all three below:
+  //   TIMEOUT_LATCH_THRESHOLD = 3 → 1   → 3 red / 57 green on the 2-file selection (this file +
+  //   oauth-rotator-tick.test.ts), and RE-RUN AGAINST THE FULL 494-FILE SUITE 2026-08-28 22:05:
+  //   the SAME 3 red plus 5 unrelated wall-clock timeouts (statusline-capture-wrapper, r20
+  //   installer beforeAll hook) under a load average of 30 — reproduced with the threshold
+  //   RESTORED, so they are load, not this. All three below:
   //       a SINGLE timeout does NOT latch and is NOT reported as a denial
   //       a RUN of timeouts DOES latch, and the banner names a timeout instead of an ACL prompt
   //       a keychain answer BREAKS the run, so scattered timeouts never latch

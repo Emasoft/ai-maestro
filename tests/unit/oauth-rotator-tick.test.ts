@@ -569,7 +569,8 @@ describe('tick — runTick (compose)', () => {
   //
   // NEUTER (2026-08-28 — OBSERVED, restored + re-run green):
   //   s/if \(keychainDeniedLatched\(\)\) return \{ unreadable: \[\].../if (false) return {.../
-  //     → 1 red / 59 green: this test, and only this test.
+  //     → 1 red / 59 green on the 2-file selection (this file + oauth-rotator-safe-storage.test.ts):
+  //     this test, and only this test. NOT re-run against the full suite; the complement was.
   // The COMPLEMENT is in oauth-rotator-safe-storage.test.ts (TIMEOUT_LATCH_THRESHOLD 3 → 1,
   // 3 red / 57 green). Neither mutation reaches the other's tests, so each half of the fix is
   // pinned on its own — a single shared neuter would have certified one half it never touched.

@@ -218,6 +218,7 @@ import {
 
 import { handleGovernanceSyncMessage, buildLocalGovernanceSnapshot } from '@/lib/governance-sync'
 import { getHosts } from '@/lib/hosts-config'
+import { capabilitiesResponse } from '@/lib/capabilities'
 import { statePath, isCorePlugin } from '@/lib/ecosystem-constants'
 import { verifyHostAttestation } from '@/lib/host-keys'
 // Imports for chief-of-staff endpoint (mirrors app/api/teams/[id]/chief-of-staff/route.ts)
@@ -1945,6 +1946,10 @@ const routes: Route[] = [
   }},
   { method: 'GET', pattern: /^\/api\/v1\/info$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, getProviderInfo())
+  }},
+  // Public capability set (TRDD-TLSE2FEF) — same body as app/api/capabilities/route.ts, no auth.
+  { method: 'GET', pattern: /^\/api\/capabilities$/, paramNames: [], handler: async (_req, res) => {
+    sendJson(res, 200, capabilitiesResponse())
   }},
   { method: 'POST', pattern: /^\/api\/v1\/register$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
@@ -4491,6 +4496,7 @@ const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/auth\/setup-verify\/?$/,
   /^\/api\/v1\/health\/?$/,
   /^\/api\/v1\/info\/?$/,
+  /^\/api\/capabilities\/?$/, // public capability set (TRDD-TLSE2FEF) — mirrors middleware.ts
   /^\/api\/v1\/register\/?$/,
   // AID proof-of-possession challenge (TRDD-15ff13ae) — anonymous bootstrap
   // (mirrors middleware.ts WHITELIST). Returns only a random single-use nonce;

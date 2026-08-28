@@ -56,6 +56,9 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   // Public health + capability reporting (no secrets leaked, safe to probe)
   /^\/api\/v1\/health(\/|$)/,
   /^\/api\/v1\/info(\/|$)/,
+  // The capability set — `{verb: revision}`, names + integers only (TRDD-TLSE2FEF, #88).
+  // Mirrored in services/headless-router.ts HEADLESS_AUTH_WHITELIST.
+  /^\/api\/capabilities(\/|$)/,
   // AMP agent registration — bootstrap credential for new agents
   /^\/api\/v1\/register(\/|$)/,
   // AID proof-of-possession challenge (TRDD-15ff13ae) — anonymous bootstrap,

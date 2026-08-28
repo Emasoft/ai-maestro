@@ -123,6 +123,24 @@ describe('headless-router auth mirror — forged structural credential is reject
     expect(res.bodyJson()?.error).toBeUndefined()
   })
 
+  // TRDD-TLSE2FEF: the capability set is public by design, in BOTH server modes. The headless
+  // router reimplements every route, so a whitelist entry that exists only in middleware.ts
+  // would leave headless answering 401 here. Asserted on the BODY, not just the status: names
+  // plus positive integers, nothing else. Neuter: drop the HEADLESS_AUTH_WHITELIST entry → 401.
+  it('whitelist: a CREDENTIAL-LESS GET /api/capabilities returns the {verb: revision} map', async () => {
+    const res = await call('GET', '/api/capabilities')
+    expect(res.statusCode).toBe(200)
+    const body = res.bodyJson() as { capabilities?: Record<string, unknown>; error?: unknown }
+    expect(body.error).toBeUndefined()
+    expect(Object.keys(body)).toEqual(['capabilities']) // no version, no host, no environment
+    const caps = body.capabilities ?? {}
+    expect(Object.keys(caps).length).toBeGreaterThanOrEqual(20)
+    for (const [verb, rev] of Object.entries(caps)) {
+      expect(verb).toMatch(/^[a-z][a-z0-9-]*$/)
+      expect(Number.isInteger(rev) && (rev as number) >= 1, `${verb} revision`).toBe(true)
+    }
+  })
+
   it('control: the FORGED token PASSES the structural gate but is rejected by handler auth (not auth_required)', async () => {
     // This is the load-bearing premise of the whole test: the forged token is
     // shape-valid, so it reaches the per-handler auth. If it were bounced by

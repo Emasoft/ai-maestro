@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-21T21:58:50+0200
+updated: 2026-08-28T23:58:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -66,10 +66,11 @@ Per core's answered design questions in the issue thread (already resolved, read
 
 ## Acceptance
 
-- [ ] Unauthenticated `/api/capabilities`-shaped endpoint implemented
-- [ ] Per-capability integer revision, not a global version string
-- [ ] Reports the running process, not an installed artifact or git ref
-- [ ] At least one existing consumer (core's skill-gating logic) verified to work against it
-- [ ] Comment posted on Emasoft/ai-maestro#88 confirming the card and status
+- [x] `GET /api/capabilities` — `app/api/capabilities/route.ts` (Next) + `services/headless-router.ts` handler (headless), whitelisted in BOTH `middleware.ts` and `HEADLESS_AUTH_WHITELIST`; body `{capabilities: {verb: revision}}` only (2026-08-28)
+- [x] `lib/capabilities.ts` — per-verb integers, all at 1; header says bump ONE integer when THAT verb's contract changes; test pins positive integers and that keys == the CLI's own dispatch verbs (`--capabilities`)
+- [x] the map is compiled into the running bundle (Next `.next` / headless tsx) — no git/artifact read anywhere on the path
+- [ ] consumer verification — needs a change in `Emasoft/ai-maestro-plugin` (core has no `/api/capabilities` reader yet; grep of its skills/scripts: 0 hits). Other repo → issue/PR route; not done here
+- [ ] #88 comment — outward-facing; waits for the owner's go
 
 ## Approval log
+- 2026-08-28T23:58:42+0200 — boxes 1-3 delivered by hub-claude. Tests: `tests/unit/capabilities.test.ts` (4) + headless mirror case; neuter (drop the headless whitelist entry) reds exactly the mirror case. tsc 0.

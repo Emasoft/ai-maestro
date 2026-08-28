@@ -2,7 +2,7 @@
 name: agent-launch-preconditions
 description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve — or it runs a live but GENERIC claude (role persona never loads, e.g. a MANAGER builds solo) because --agent was DROPPED at the launch chokepoint"
 ocd: 2026-07-12
-lmd: 2026-08-20
+lmd: 2026-08-28
 metadata:
   node_type: memory
   type: project
@@ -145,6 +145,10 @@ NOT in the arguments — a fake-adapter test at the boundary cannot see this.
 
 ^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc:"role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude", keywords:"titled_agent_runs_generic_claude_persona_never_loads MANAGER_builds_the_project_solo_instead_of_creating_a_fleet agent_is_logged_in_and_alive_but_not_running_its_role_persona --agent_missing_from_ps_argv_though_registry_programArgs_has_it fresh_Wizard-created_titled_agent_has_no_--agent_in_its_process", ocd:2026-07-22, lmd:2026-07-30]
 ⚠ **SUPERSEDED by `^agent-launch-agent-flag-dropped-v2` — do NOT apply; preserved as history.** This block over-generalized ("the launch chokepoints" plural) — only the fresh-CREATE path drops `--agent`; `wakeAgent`/restart read the registry which already carries it. Why it was wrong: `[^6]`.
+
+
+^ATOM-SED3-K5Y7 [desc: "claude --restricted loads ZERO plugins (enabledPlugins is in the ignored user settings) — never launch a managed agent with it; TRDD-CJSNJJP1 declined it", keywords: claude_--restricted CLAUDE_CODE_RESTRICTED restricted_mode agent_has_no_plugins plugins_not_loading Found_0_plugins no_skills_loaded R17.24_whitelist enabledPlugins_ignored settings_files_ignored bypassPermissions_refused dangerously-skip-permissions AutoContinue_skipped --tools_allowlist TRDD-CJSNJJP1, trdd: TRDD-CJSNJJP1, ocd: 2026-08-28, lmd: 2026-08-28]
+Claude Code `--restricted` (2.1.248+, `CLAUDE_CODE_RESTRICTED=1`) loads ZERO plugins — measured 2026-08-28 on 2.1.251 with `--debug-file` in one scratch workdir, with and without the flag: `Found 77 plugins (38 enabled, 39 disabled)` → `Found 0 plugins (0 enabled, 0 disabled)`, `Registered 20 hooks` → `0`, 214 plugin skills → 0, 493 user skill-dir commands → 0. Cause: the flag ignores user/project/local settings files and `enabledPlugins` lives in user settings, so nothing is enabled — the R17.24 whitelist is not "redundant" or "bypassed", the whole plugin layer (core plugin, role plugin, AMP hooks, janitor) is absent. It also refuses `bypassPermissions` (every claude launch path emits `--dangerously-skip-permissions`, and `server.mjs` AutoContinue REQUIRES it) and removes Bash, which the whole `amp-*.sh` script layer needs. Never launch a managed agent with it. Ruling: TRDD-CJSNJJP1 (DECLINE).
 
 ## Governed by
 

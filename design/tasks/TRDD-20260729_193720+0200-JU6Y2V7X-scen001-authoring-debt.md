@@ -3,10 +3,10 @@ trdd-id: JU6Y2V7X
 title: SCEN-001 carries deprecated chrome-devtools frontmatter and two steps that cannot be run through the UI
 column: blocked
 pre-block-column: ai_review
-blocked-by: [AGHPMRVI, 39PSYD62]
+blocked-by: [39PSYD62]
 eht: [AGHPMRVI, 39PSYD62]
 created: 2026-07-29T19:37:20+0200
-updated: 2026-08-27T21:37:13+0200
+updated: 2026-08-28T06:30:12+0200
 created-by: scenario-runner
 assignee: ai-maestro-hub-session
 implementation-commits: [78ee9ef6]

@@ -6,7 +6,8 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-28T21:22:00+0200
+updated: 2026-08-28T21:36:28+0200
+implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -290,9 +291,23 @@ contract moves; a purely server-side latch/classification change does not need t
       (#1) the load-bearing fix rather than a nicety, and makes the ACL wording in the banner
       actively misleading rather than merely unsupported.
 
-- [ ] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
+- [x] A TIMEOUT no longer produces the same machine-wide suppression + ACL-worded banner as a real
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
-- [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`
+      — **DONE 2026-08-28T21:36+0200, `bda75f7d`.** Shape chosen: the consecutive-timeout
+      threshold (fix #1, second candidate), `TIMEOUT_LATCH_THRESHOLD = 3`, per-process, reset by
+      ANY keychain answer. Chosen over a soft-latch because the measurement said the transient
+      RECOVERS (26 of 29) — a shorter cooldown still blinds the machine for its duration, a
+      threshold blinds it for nothing. The banner now reads "N consecutive ops TIMED OUT — cause
+      NOT observed"; the ACL wording is gone. Pinned by 3 tests in
+      `tests/unit/oauth-rotator-safe-storage.test.ts`; neuter `3 → 1` reddens exactly those 3.
+- [x] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable` — **DONE,
+      same commit.** `surveyAlternates` returns `probeSuppressed: true` with EMPTY arrays when the
+      latch is set (checked AFTER the loop, so it covers a latch set mid-sweep too); `runTick` maps
+      it to `stuck: 'keychain-latched'` — not `reauth-needed`, not `ok`. Pinned by one paired test
+      in `oauth-rotator-tick.test.ts` (same ghost slot as the `slot-unreadable` test, latch set,
+      opposite verdict); neuter `keychainDeniedLatched() → false` reddens exactly it. The two
+      neuters' red sets are disjoint. `JANITOR_GLOBAL_STATE_DIR` is now redirected in that test
+      file — without it every tick test read the developer's REAL latch.
 - [ ] ≥24 h with zero false `reauth-needed` beats attributable to a latch, measured from the logs
       **AND a coverage floor: ≥95 % of that window's beats non-`slot-unreadable`.** The floor is
       not decoration — WITHOUT it this box has the same proxy defect the window criterion had:

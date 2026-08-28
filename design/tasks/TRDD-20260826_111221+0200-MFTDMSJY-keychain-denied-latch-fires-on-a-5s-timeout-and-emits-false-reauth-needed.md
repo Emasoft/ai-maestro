@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-28T21:05:00+0200
+updated: 2026-08-28T21:12:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -239,13 +239,24 @@ contract moves; a purely server-side latch/classification change does not need t
       | services | **2** — `Claude Code-rotator-slot` (24), `Claude Code-credentials` (5) |
       | verb | all 29 `find-generic-password` |
       | outcome | **26 RECOVERED**, only 3 timed out |
-      | elapsed | p50 3041 ms, max 11062 ms (vs the measured p95 of **59 ms** — 50-190x) |
+      | elapsed | p50 3041 ms, max 11062 ms — **but see the caveat below; this is the TAIL's median, not latency's** |
       | by hour | 13 @02h · 6 @03h · 3 @06h · 3 @07h · 4 @14h — **bursty, not a steady tax** |
 
-      **The ACL-prompt hypothesis is dead, on two independent grounds.** (a) The card predicted
+      **The ACL-prompt hypothesis is dead, on two MEASURED grounds.** (a) The card predicted
       "one item repeatedly ⇒ ACL prompt on that item; across all six ⇒ process-wide" — it is
-      spread over 4 accounts and 2 services. (b) Stronger: **26 of 29 recovered on their own.** An
-      ACL/unlock prompt blocks until a human answers it; it does not clear itself at 3 s. So the
+      spread over 4 accounts and 2 services. (b) **No keychain prompt was ever DISPLAYED in the
+      window: `log show --last 24h --predicate 'process == "SecurityAgent"'` returns ZERO rows**,
+      while the same query for `loginwindow` returns 27,512 and the log reaches back to
+      2026-08-27 21:09 — so the window containing all 29 samples is covered and the absence is
+      real, not an unreachable query. SecurityAgent is the process that draws the unlock/ACL
+      dialog; no rows means no dialog.
+      ~~(b-old) 26 of 29 recovered on their own, and an ACL prompt blocks until a human answers
+      it.~~ **WITHDRAWN as evidence — that was an ASSUMPTION about macOS `security` semantics I
+      never verified, and I had ranked it "Stronger" than the measurement above it.** A
+      SecurityAgent dialog can be dismissed or time out, and a non-interactive session returns
+      `errSecInteractionNotAllowed` immediately without prompting at all — which is exactly why
+      that string is in `DENIAL_MARKERS`. The recovery split is still a fact about the samples;
+      it is simply not evidence about prompts. So the
       banner's parenthetical was a guess printed as a diagnosis (the card's own original charge),
       and it stays wrong even now that the reads really are slow.
       What remains is **transient process-wide keychain contention**, bursty and self-clearing.
@@ -254,6 +265,17 @@ contract moves; a purely server-side latch/classification change does not need t
       (An interval-gap statistic was attempted and its `date -j` pipeline returned n=0; the
       per-hour histogram above is the surviving measurement. Nothing is inferred from the failed
       one.)
+
+      **Caveat on the elapsed figures, and it is not cosmetic.** Every one of the 29 lines exists
+      only because it crossed the 2500 ms log floor, so "p50 3041 ms" is the median OF THE TAIL,
+      not of read latency — the denominator (all reads in the window, the overwhelming majority
+      fast) was never observed. For the same reason "26 recovered" means *slow enough to log, fast
+      enough not to time out*, not a recovery rate. And the 59 ms p95 it was originally printed
+      against came from an INTERACTIVE SHELL, which box 1 itself flags as "a PROXY for the
+      server's context; sufficient to kill #3, not to characterise the stall". Comparing the two
+      is comparing two populations through a proxy, so the "50-190x" is withdrawn as a statistic.
+      What survives is the shape, which is what the box asked for: reads that normally finish in
+      tens of ms do sometimes take seconds, and at least one took 11 s.
 
       **Consequence for the fix:** #1 and #2 are now BOTH clearly right and their justification
       changes. A 5 s timeout against a p95 of 59 ms is not too tight (box 1), but real ops DO
@@ -289,3 +311,11 @@ contract moves; a purely server-side latch/classification change does not need t
   already built and restarted; I nearly recorded "instrumentation is undeployed" from a grep whose
   needle mis-escaped the backticks in `SLOW \`security\` op`, and only a positive control on the
   real literal (`safe-storage] SLOW`) showed 1 hit in `.next` and corrected it.
+- 2026-08-28T21:12:00+0200 — characterisation CORRECTED by ai-maestro-hub-session after a
+  ninth adversarial fork. The conclusion is unchanged and now rests on measurement rather than
+  assumption: leg (b) of the ACL refutation was an unverified claim about macOS prompt semantics
+  that I had explicitly ranked "Stronger" than the measured spread. Replaced with a real
+  measurement (zero SecurityAgent rows in a demonstrably-covered 24 h window) and the assumption
+  struck through. The elapsed statistics are now qualified as tail-truncated, and the "50-190x vs
+  p95" comparison is withdrawn — it compared a server-context tail against an interactive-shell
+  proxy the card had already declared insufficient for exactly this purpose.

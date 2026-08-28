@@ -361,3 +361,4 @@ Two things this pins that the card previously left open:
 
 Still no code written. This is a measurement; the three containment-strategy boxes remain
 correctly unticked, and the next step is unchanged: implement the reaper.
+- 2026-08-28T23:10:00+0200 — POST-CLOSE FINDING (frozen; log-only). The report-only run cited above MINTED 294 sidecars (147 `-shm` + 147 `-wal`, all 22:39:57): a readonly open of a WAL-mode index still creates them on first read and cannot remove them on close. The observer tripled the directory's inode count and the card's '147 before and after' counted `*.sqlite` only — a blind census. Fixed in `2610aa9d` (read a COPY in a mkdtemp scratch; `--reap` also removes sidecars), pinned by two spawn-level tests that list the WHOLE directory. The 294 artifacts my own run created were removed the same minute (regeneratable, mine); the 147 indexes are untouched: still 5 live / 116 orphaned, still the owner's `--reap`.

@@ -1,12 +1,12 @@
 ---
 trdd-id: IMCEYV9F
 title: The pillar-index state dir still collects test litter — YN8EQWYP fixed one suite, other writers were never contained
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-28T21:25:00+0200
+updated: 2026-08-28T22:55:00+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -256,9 +256,18 @@ This card contains the *source*; it reports the residue and stops.
       **Not yet done, and deliberately separate:** the confirming BEFORE/AFTER count around a
       run of that suite. The chain is decisive on its own, but a count is what would make it
       unfalsifiable — leave it for whoever does the containment.
-- [ ] The writer of `scratchpad-*` (2026-08-22 02:59) is identified and contained.
-- [ ] Every writer reachable from this repo is contained at its own layer.
-- [ ] One run-level assertion exists that reddens for a writer it was not written for.
+- [x] The writer of `scratchpad-*` (2026-08-22 02:59) is identified and contained.
+      **TICKED 2026-08-28T22:55** — identified by reading a COPY of `scratchpad-09ae74b8cb1c.sqlite`:
+      its `files.path` rows are `…/<hub-session 6b03916a…>/scratchpad/fixture-design/tasks/TRDD-…AAAA1111-anchor.md`
+      — a HAND-BUILT fixture corpus in an earlier hub session's scratchpad, i.e. the hub Claude
+      itself running `trddgrep`/`pillars:lint` on a probe corpus 32 s after its own lint run. No
+      repo test writes it (`grep scratchpad tests/ scripts/` → only a comment), so there is no
+      layer to contain; the scratchpad is gone and the reaper classifies it `orphan`.
+- [~] Every writer reachable from this repo is contained at its own layer. — STRUCK 2026-08-28:
+      superseded by §FORK RESOLVED (reap, not per-writer containment); the live writer is in a repo
+      we do not own, which per-writer containment cannot reach by construction.
+- [~] One run-level assertion exists that reddens for a writer it was not written for. — STRUCK
+      2026-08-28 for the same reason; the reaper bounds the directory regardless of writer.
       **⚠ THESE THREE ARE CONTAINMENT-STRATEGY BOXES, AND THE FORK RESOLUTION SUPERSEDED THE
       STRATEGY — but they are NOT ticked, because "no longer required" is not "done".** They
       were written when the plan was to contain each writer at its own layer. The resolution
@@ -313,6 +322,16 @@ matter, which it has not been.
 - 2026-08-22T03:30:50+0200 — MANDATE issued by ai-maestro-hub (min-approval-requirement:
   none). Pre-approved: Tier 0 — in-scope test containment, reversible, no governance,
   baseline, or release surface. No approval request was sent.
+- 2026-08-28T22:55:00+0200 — COMPLETE by ai-maestro-hub-session (`todo → complete`). The
+  deliverable (`yarn pillar:reap`, `ec2177f8` + `93337a22`) shipped on 08-22; what kept the
+  card open was three containment boxes the fork resolution had already superseded. Resolved
+  per the linter's own rule — an obsolete box is STRUCK with its reason (`- [~]`), never
+  silently ticked: two struck, one (the `scratchpad-*` writer) ticked with measured evidence.
+  Live report-only run at 22:39: **147 scanned — 5 live, 116 orphaned, 26 empty, 0
+  unreadable, 69.7 MB reclaimable**; 147 files before and after. Removal stays the OWNER's:
+  `bash scripts/with-node.sh yarn pillar:reap --reap` deletes ONLY the 116 orphan rows
+  (`never_free_space.md`). Prevention (a `trddgrep` write-time guard) remains unmeasured-as-needed
+  and is not filed.
 
 ## Re-measured 2026-08-28T21:25+0200 — the leak is LIVE and the rate is now known
 

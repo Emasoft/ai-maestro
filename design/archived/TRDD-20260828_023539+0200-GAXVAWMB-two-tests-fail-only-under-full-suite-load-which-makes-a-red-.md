@@ -1,9 +1,9 @@
 ---
 trdd-id: GAXVAWMB
 title: Two tests fail only under full-suite load, which makes a red suite ambiguous
-column: todo
+column: complete
 created: 2026-08-28T02:35:39+0200
-updated: 2026-08-28T02:43:43+0200
+updated: 2026-08-28T02:44:05+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: infra
@@ -48,3 +48,4 @@ A suite that is sometimes red for reasons unrelated to the change under test tra
 ## Approval log
 
 - 2026-08-28T02:35:39+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T02:44:05+0200 — COMPLETE by ai-maestro-hub-session. groups-cli made deterministic (36s -> 769ms, neuter re-executed); statusline investigated and deliberately unchanged with reasoning recorded; 3 consecutive full suites green.

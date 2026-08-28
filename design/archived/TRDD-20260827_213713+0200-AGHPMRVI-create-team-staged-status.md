@@ -127,8 +127,27 @@ spinner and read as "the fix does not work". Rebuilt, re-grepped (1 hit in
 > "finished". A proxy read in place of the thing.
 >
 > The consequence runs the other way from what this section claimed: the staged status is worth
-> MORE, not less. A user watching this create sits on `Installing chief-of-staff role-plugin` for
-> 27 s, which is exactly the window a binary spinner makes indistinguishable from a hang.
+> MORE, not less — the pipeline really does spend tens of seconds in a single phase, which is the
+> window a binary spinner makes indistinguishable from a hang.
+>
+> **SECOND CORRECTION, same day, same failure axis — separating what was MEASURED from what was
+> INFERRED.** A review challenged the retraction itself, correctly:
+> - **MEASURED (server-side, two log lines):** `06:22:57 Auto-created COS agent` →
+>   `06:23:24 Installed …` = 27 s. This is solid and is what refutes the `~0.4 s` claim.
+> - **A FLOOR, NOT A TOTAL:** 06:22:57 is the COS-creation phase, i.e. the *second* of the
+>   pipeline's phases. The team-creation phase before it was never bounded, so the create took
+>   **at least** 27 s. "~27-30 s for the whole create" was an assumption and is withdrawn.
+> - **INFERRED, NOT OBSERVED:** that the dialog *displayed* `Installing chief-of-staff role-plugin`
+>   for those 27 s. Nothing observed the DOM after t=402 ms — the screenshot loop only fired on a
+>   stage-count change and `closedAt` was not recorded in this run. Reading the client code says
+>   the label persists until `onCreated` closes the dialog, but that is a code reading, not a
+>   measurement, and an early `done` frame or a `setCreateStage(null)` would produce the identical
+>   captured array. Treat the dwell as unmeasured.
+>
+> Settling it would need a re-run that samples the label until the dialog closes and records
+> `closedAt`. Deliberately NOT re-run: the dwell is not load-bearing — box (a) does not depend on
+> it, and neither does the refutation of the `~0.4 s` claim — so it does not justify creating and
+> deleting another live team. The gap is recorded instead of quietly closed.
 
 The card says the pipeline takes **30-60 s**. On this host, with the role-plugin already cached and
 no GitHub linking, the whole create completed in **~0.4 s** — so on a warm host the staged status
@@ -154,3 +173,9 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   premise it "corrected" was sound. Box (a) itself is UNAFFECTED — three distinct pipeline-sourced
   labels were observed and that is all box (a) asserts. Only the timing claim, which box (a) never
   required, is withdrawn. Caught by an adversarial review fork, not by me.
+- 2026-08-28T06:48:00+0200 — SECOND correction appended by ai-maestro-hub-session. The retraction
+  above overstated in the opposite direction: it asserted a 27 s on-screen DWELL that was inferred
+  from client code, never observed, and called 27 s the whole create when it bounds only the
+  COS-creation→install span. Both are now marked as floor/inferred in place. The measured refutation
+  of `~0.4 s` is unchanged and stands. Caught by a second adversarial review fork — the same proxy
+  shape, wearing the correction as its costume.

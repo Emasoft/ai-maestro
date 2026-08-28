@@ -1,9 +1,9 @@
 ---
 trdd-id: 3OS166YI
 title: Archived zone accepts a terminal card with zero acceptance boxes when it bypasses the move verb
-column: todo
+column: complete
 created: 2026-08-27T23:02:44+0200
-updated: 2026-08-28T22:23:12+0200
+updated: 2026-08-28T22:52:44+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: bugfix
@@ -33,8 +33,8 @@ THE BLOCKER THAT MAKES THIS NON-TRIVIAL, and the reason this card is not just "a
 ## Acceptance
 - [x] a terminal card with 0 boxes produces an ERROR-level finding — ALREADY TRUE before this card was filed, `lib/trdd-doctor.ts:895-912`
 - [x] the live corpus finding on 39OPYXQ9 is reported, not auto-fixed — VERIFIED: exactly one ERROR, `autofixable: false`
-- [ ] a GATE exists that fails on a NEW terminal-without-checklist card, designed around 39OPYXQ9 AND G6A54OYK being frozen and un-repairable (allowlist naming BOTH ids with their reasons, or a baseline diff) — this is the only remaining work
-- [ ] the gate does NOT blanket-fail on the 261 pre-existing corpus findings
+- [x] a GATE exists that fails on a NEW terminal-without-checklist card, designed around 39OPYXQ9 AND G6A54OYK being frozen and un-repairable — MEASURED 2026-08-28: it ALREADY EXISTED. `tests/unit/trdd-doctor.test.ts` "corpus" half (`lintCorpus('design')`, exact-zero unexpected ERRORs) allowlists exactly `G6A54OYK` (`PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION`) and `39OPYXQ9` (`FROZEN_POST_BOUNDARY_TRUE_FINDINGS`), each with its reason, and CI runs it (`.github/workflows/ci.yml:46 yarn test`). The Problem section's "nothing gates on it" grepped hooks/workflows for `trddgrep` and missed that the gate is a vitest test. The one real gap: the 39OPYXQ9 entry had no self-retire pin (G6A54OYK's did) — added `toHaveLength(1)`; neuter A (id dropped from set) reds `unexpected`, neuter B (card hidden) reds the new line, disjoint
+- [x] the gate does NOT blanket-fail on the 261 pre-existing corpus findings — it filters `severity === 'error'` only (2 live, both allowlisted); the 259 WARNs never reach it. 86/86 green on the live corpus
 
 ## Approval log
 
@@ -44,3 +44,5 @@ THE BLOCKER THAT MAKES THIS NON-TRIVIAL, and the reason this card is not just "a
   beside `39OPYXQ9`. The gate box above now names both; an allowlist naming only 39OPYXQ9
   would leave `validate` red on a card nobody may repair. Neither gets a retro-authored
   checklist (that manufactures evidence).
+- 2026-08-28T22:52:44+0200 — COMPLETED by hub-claude. Gate pre-existed as a vitest corpus test; card's "no gate" premise was a scan-shape miss (hooks/workflows grepped, tests not). Delivered the missing self-retire pin for the 39OPYXQ9 allowlist entry.
+- 2026-08-28T22:52:44+0200 — COMPLETE by emanuelesabetta. archived → complete.

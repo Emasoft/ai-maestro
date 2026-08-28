@@ -1114,6 +1114,14 @@ describe('THE GATE — the real corpus lints clean', () => {
     expect(
       errors.filter((e) => PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION.has(e.id)),
     ).toHaveLength(1)
+
+    // And the third set (TRDD-3OS166YI): the frozen-card exclusion was the ONLY one of the three
+    // with no self-retire pin, so a repaired (or deleted, or re-columned) 39OPYXQ9 would have left
+    // a dead entry able to hide a future finding under the same id. Exactly ONE error, so an
+    // allowlist entry cannot outlive the finding that earned it. Neuter measured 2026-08-28:
+    // removing '39OPYXQ9' from the set reds the `unexpected` assertion above; keeping it in the
+    // set while the card stopped erroring reds THIS line — disjoint red sets, both halves pinned.
+    expect(errors.filter((e) => FROZEN_POST_BOUNDARY_TRUE_FINDINGS.has(e.id))).toHaveLength(1)
   })
 })
 

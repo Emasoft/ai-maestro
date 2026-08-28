@@ -219,3 +219,25 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   adversarial review fork rather than by me, and both were the same shape — a client-side proxy
   standing in for an interval nobody observed. A correction is exactly when that scrutiny is least
   likely to be applied, because it arrives feeling like the careful move.
+- 2026-08-28T06:52:00+0200 — THIRD correction by ai-maestro-hub-session, again from an adversarial
+  fork. **The "independent corroboration" in the section above is WITHDRAWN.** Client `closedAt`
+  and the server's `Installed …` log line are NOT two records sharing no mechanism — they are one
+  event observed twice. Verified in `components/teams/TeamCreationWizard.tsx`: `evt.done` sets
+  `finalStatus` (:450) and `onCreated(...)` closes the dialog (:471), and the server sends `done`
+  only after the pipeline it just logged. Their agreement is guaranteed by construction. Both
+  server stamps are 1-second resolution too, so "within one second" is the resolution floor, not a
+  precision result. Same failure family as the first two, third costume: a downstream CONSEQUENCE
+  promoted to a corroborating WITNESS.
+  **What survives, unchanged:** the dwell of ~31.5 s (`lastSeen` 31901 is a direct observation) and
+  the continuity check (a `setInterval` cannot outrun its period, so a stall shows as a poll
+  DEFICIT; 322 against an expected ~320 shows none).
+  **What is weakened:** "the create is ~32 s end-to-end" is n=1, and the two runs measured **27 s**
+  and **32 s**. So the card's 30-60 s premise is the right ORDER OF MAGNITUDE and my "~0.4 s" is
+  definitively dead — but "CONFIRMED" was too strong, since 27 s sits below the stated range.
+  **One real product finding, deliberately NOT filed as a card:** `setCreateStage(evt.stage)`
+  (:457) runs inside the per-frame loop, so several SSE frames arriving in one read chunk collapse
+  into a single render and only the LAST is displayed — the missing `Creating chief-of-staff agent`
+  may never have been shown at all, rather than merely missed by a 100 ms sampler. This is
+  self-limiting and needs no fix: a stage that gets batched away is by definition one that lasted
+  less than a frame, while a SLOW stage — the only kind the binary spinner made painful — arrives
+  alone and always renders. Recorded so the next reader does not re-derive it as a bug.

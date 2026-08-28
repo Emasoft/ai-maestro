@@ -344,7 +344,9 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
   //   oauth-rotator-tick.test.ts), and RE-RUN AGAINST THE FULL 494-FILE SUITE 2026-08-28 22:05:
   //   the SAME 3 red plus 5 unrelated wall-clock timeouts (statusline-capture-wrapper, r20
   //   installer beforeAll hook) under a load average of 30 — reproduced with the threshold
-  //   RESTORED, so they are load, not this. All three below:
+  //   RESTORED — a different failing subset each run, all wall-clock timeouts, one subprocess-heavy
+  //   file, green in the 6548-test run 30 min earlier: CONSISTENT WITH load, not re-run at low
+  //   load (that would be the proof). All three below:
   //       a SINGLE timeout does NOT latch and is NOT reported as a denial
   //       a RUN of timeouts DOES latch, and the banner names a timeout instead of an ACL prompt
   //       a keychain answer BREAKS the run, so scattered timeouts never latch

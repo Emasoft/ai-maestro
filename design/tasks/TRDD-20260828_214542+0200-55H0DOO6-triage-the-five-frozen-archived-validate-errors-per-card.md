@@ -36,7 +36,9 @@ relevant-rules: [12]
 18:31 (handoff rev 30.1), 21:40 and 21:47 (this session, first-hand), and the server's own
 `[trdd-watchdog] sweep ran: 595 scanned, 5 error(s)` at 21:45:44 — four readings over ~3 h,
 one session, same five ids. How long before 18:31 they stood is NOT measured here; the
-watchdog's report dir would say. Every one is an ARCHIVED card, so rule 12 freezes its body, and every session since has
+watchdog's sweep reports (gitignored `reports/trdd-watchdog/<ts>-d4-sweep.md`, one per sweep —
+the 21:45:44 one is `20260828T194544Z-d4-sweep.md`) carry the per-sweep error ids and would
+date the onset. Every one is an ARCHIVED card, so rule 12 freezes its body, and every session since has
 correctly refused to mass-repair them — and then left them. A red gate nobody may touch and
 nobody owns is a gate that trains everyone to read `exit 1` as background noise, which is how the
 next REAL finding gets ignored.

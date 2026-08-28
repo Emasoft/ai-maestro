@@ -1393,9 +1393,12 @@ export function surveyAlternates(): AlternateSurvey {
   // real), and a latch that a mid-loop timeout sets is still set here. In that second ordering
   // the k slots read BEFORE the latch closed were classified correctly and this line ERASES
   // them — the sweep's findings are not preserved, they are discarded wholesale. That is the
-  // deliberate trade, stated as a trade: an erased genuine `unreadable` costs one quiet beat
-  // (the next sweep, ≤60 s away, re-finds it once the latch half-opens), while a false one
-  // costs a human a re-login. Keeping a MIXED array under a `probeSuppressed` flag would make
+  // deliberate trade, stated as a trade: an erased genuine `unreadable` stays erased until the
+  // latch HALF-OPENS — `LATCH_COOLDOWN_DEFAULT_S` (600 s) plus one beat (`TICK_ATTEMPT_FLOOR_MS`
+  // 60 s), so ~11 min, NOT one beat; and if the half-open probe itself times out the latch
+  // re-stamps and the erasure runs another cooldown, so under a PERSISTENT block it is unbounded.
+  // A false `unreadable` costs a human a re-login. (First written as "≤60 s" — the tick clock,
+  // when the gating clock is the cooldown; caught by review, 10× wrong.) Keeping a MIXED array under a `probeSuppressed` flag would make
   // every consumer decide which half to believe; an empty one cannot be misread.
   if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true }
   return { unreadable, refreshDead, probeSuppressed: false }

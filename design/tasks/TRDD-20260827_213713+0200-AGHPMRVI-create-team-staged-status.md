@@ -35,12 +35,16 @@ up mid-wait leaves a half-built team on the host (SCEN-001, 2026-07-29 run).
 ## Root cause
 
 A synchronous create path doing network work behind a binary spinner. The pipeline already
-emits a per-gate ops log; nothing carries it to the dialog.
+emits NO ops log at all — CORRECTED 2026-08-28 by measurement: `grep -c "ops.push"
+services/teams-service.ts` = 0, against 558 in `services/element-management-service.ts`. Those 558
+belong to the AIO pipelines; CreateTeam lives in teams-service and instruments nothing. So the fix
+must CREATE the stage signal, not merely route one that already exists — strictly more work than
+this card assumed when it was written.
 
 ## Proposed fix
 
 Give the dialog a staged status ("creating team… creating chief-of-staff… installing
-role-plugin…") sourced from the same pipeline the ops log already emits. This needs a progress
+role-plugin…") sourced from the create pipeline's own phases. This needs a progress
 channel from the create pipeline to the dialog — the reason it is a separate card from
 `TRDD-JU6Y2V7X` rather than a line in it: the parent card's other two items were pure scenario
 authoring and shipped in one commit; this one touches the pipeline/UI seam and its own risk

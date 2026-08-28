@@ -128,7 +128,7 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
       (`:141-142`) and is auto-installed by the `scripts/*.sh` glob — no installer edit (R23)
 - [x] registered in `docs/SCRIPT-LAYER.md` so CORE can teach its skills against the surface
 - [x] `next_action` gains the cascade states once [[1GGQ4HWY]] lands — landed and wired
-- [ ] the LIVE end-to-end route test — needs an authenticated caller, deferred by this card to a
+- [x] the LIVE end-to-end route test — needs an authenticated caller, deferred by this card to a
       scenario or the USER. Unit-pinned only; that is the half that ships.
       **↳ RUN 2026-08-22 with an authenticated caller — and it FAILED. The box was right to exist.**
       Dev-mode login gave this session a real authenticated caller, so the deferral no longer held.
@@ -163,3 +163,10 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
   unit-pinned and fine; the SHELL surface this card ships has never worked. Recorded on the box and
   filed as `TRDD-39OPYXQ9`. Closing this card would have shipped a documented, taught CLI that
   cannot run — which is the exact failure the box was written to prevent.
+- 2026-08-28T22:23:12+0200 — LATE CLOSING EDIT (TRDD-55H0DOO6). `e7832ee6` archived this card as
+  `complete` and left the box above unticked; `validate` reported TERMINAL-WITH-OPEN-BOX since.
+  Ticked now with the evidence the close relied on: `_api()` is defined at
+  `scripts/aimaestro-continuity.sh:72` (commit `20f44bad`, TRDD-39OPYXQ9), repo and
+  `~/.local/bin` copies `cmp`-identical, and the bare PATH command `aimaestro-continuity.sh
+  status <id>` now reaches the server (HTTP 401 without auth — never exit 127). The box's
+  inline "returns to `todo`" note is the 2026-08-22 history, superseded by that commit.

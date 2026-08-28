@@ -246,3 +246,8 @@ Todo item `#208`. UUID `7123d51a-9da8-4886-a000-af6359f08e1e` links back.
   eligible for the narrow falsely-contradicts exemption, so not edited under freeze. (This is a
   v1-frontmatter-only card with no `implementation-commits:` field — that gap is real but is a
   META-MISSING class finding, out of this unit's scope.)
+- 2026-08-28T22:23:12+0200 — TRDD-55H0DOO6 triage. The 2026-08-16 audit above stands: the claim
+  is true and un-mirrored, not a contradiction, and the freeze carve-out permits no edit. The
+  linter was the wrong side: a v1 UUID-named card's body status was its ONLY state field, so
+  `BODY-STATE-CLAIM` now reports WARN (not ERROR) on v1 filenames — `lib/trdd-doctor.ts`, pinned
+  by `tests/unit/trdd-doctor.test.ts` ("v1 UUID-named card … WARN"). Body untouched.

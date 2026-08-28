@@ -139,6 +139,23 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   // The frontmatter boundary is COMPUTED, never assumed. Without that, this rule would reach a
   // frontmatter `status:` and double-report what STATUS-HOLDS-COLUMN-VALUE already owns — two
   // rules, two messages, one defect each.
+  // TRDD-55H0DOO6: 7123D51A (a v1 UUID-named card, `column: completed`, body `**Status:**
+  // Implemented …`) stood as an ERROR for 3 months that rule 12 forbids anyone to repair. A v1
+  // card's body status was its ONLY state field, so the mismatch is history, not two live
+  // claims — WARN, still visible, never autofixable. Positive control beside it: the SAME body
+  // on a v2-named card stays ERROR, so the downgrade is keyed on the filename and nothing else.
+  it('BODY-STATE-CLAIM — a v1 UUID-named card that CONTRADICTS is WARN (history), a v2 card ERROR', () => {
+    const body = (id: string) => `${good(id, { column: 'completed' })}\n**Status:** Implemented 2026-04-20\n`
+    write('archived', 'TRDD-cccccccf-1111-4222-8333-444444444444-x.md', body('CCCCCCCF'))
+    write('archived', 'TRDD-20260101_000000+0100-CCCCCCD0-x.md', body('CCCCCCD0'))
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'BODY-STATE-CLAIM')
+    const v1 = f.find((x) => x.id.toUpperCase() === 'CCCCCCCF')
+    const v2 = f.find((x) => x.id === 'CCCCCCD0')
+    expect(v1?.severity).toBe('warn')
+    expect(v1?.autofixable).toBe(false)
+    expect(v2?.severity).toBe('error')
+  })
+
   it('BODY-STATE-CLAIM — a FRONTMATTER `status:` is the sibling rule\'s job, not this one\'s', () => {
     write('tasks', 'TRDD-20260101_000000+0100-CCCCCCD0-x.md', good('CCCCCCD0', { status: 'not-started' }))
     const rules = lintCorpus(tmp).findings.filter((x) => x.id === 'CCCCCCD0').map((x) => x.rule)
@@ -1019,11 +1036,11 @@ describe('THE GATE — the real corpus lints clean', () => {
     //             is in fact TRUE, and merely unparseable, because "Implemented" names an ACTION
     //             that can predate the column and a date follows the verb.
     //
-    // So this entry is NOT a backlog item waiting on anyone. Removing it would require either
-    // deleting a true, informative line from a frozen card, or teaching the predicate to accept
-    // `implemented` — which the rule deliberately refuses (`done` is the one inflection allowed,
-    // being the past participle of the terminal set itself, not a synonym guess).
-    const PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set(['7123D51A'])
+    // RETIRED 2026-08-28 (TRDD-55H0DOO6): the predicate did NOT learn `implemented`; instead
+    // BODY-STATE-CLAIM reports WARN on v1 UUID-named cards, whose body status was their only
+    // state field. 7123D51A therefore no longer errors and the self-retiring count below is 0.
+    // The set stays, empty, so the exclusion cannot be silently re-populated without a reason.
+    const PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set<string>([])
 
     // A SECOND exclusion, on a completely different justification — kept in its own set rather
     // than appended to the one above, because merging them would let one entry's reasoning stand
@@ -1056,9 +1073,12 @@ describe('THE GATE — the real corpus lints clean', () => {
     // IND §12 freezes them: ticking a box for work nobody verified, or adding a checklist after
     // the fact, would manufacture evidence, and re-columning is itself a body edit. So they
     // are unrepairable BY RULE, not by a missing feature. Named, dated, and excluded PER CARD
-    // so the gate stays live for a fourth: DXJZM3BW (open box, closed 08-05), IBKR7F74 (open
-    // box, closed 08-25), 39OPYXQ9 (no checklist, closed 08-22). Measured 2026-08-27.
-    const FROZEN_POST_BOUNDARY_TRUE_FINDINGS = new Set(['DXJZM3BW', 'IBKR7F74', '39OPYXQ9'])
+    // so the gate stays live for a fourth. Measured 2026-08-27 as DXJZM3BW, IBKR7F74, 39OPYXQ9;
+    // re-measured 2026-08-28 (TRDD-55H0DOO6): DXJZM3BW and IBKR7F74 received their LATE CLOSING
+    // TICK — the work HAD landed (`_api` at 20f44bad; COS card 8E8D6618 `complete` 08-25) and only
+    // the tick was missed, which rule 12 permits as the closing edit made late — so they lint
+    // clean. 39OPYXQ9 (no checklist) is genuinely unrepairable and stays.
+    const FROZEN_POST_BOUNDARY_TRUE_FINDINGS = new Set(['39OPYXQ9'])
 
     const unexpected = errors.filter(
       (e) =>
@@ -1079,7 +1099,13 @@ describe('THE GATE — the real corpus lints clean', () => {
     // failed. It keeps doing that job for the remaining entry — if 7123D51A ever stops erroring
     // (someone edits it, or the predicate changes), the gate fails and the exclusion must be
     // re-justified rather than outliving its reason and starting to hide new findings.
-    expect(errors.filter((e) => PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id))).toHaveLength(1)
+    expect(errors.filter((e) => PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id))).toHaveLength(0)
+    // …and the retirement is itself pinned: 7123D51A must still be REPORTED, as a WARN. If it
+    // vanishes entirely, someone edited a frozen card or the rule stopped looking.
+    const v1Claim = report.findings.find(
+      (e) => e.rule === 'BODY-STATE-CLAIM' && e.id === '7123D51A',
+    )
+    expect(v1Claim?.severity).toBe('warn')
 
     // Same self-retiring property for the second entry, and it matters MORE here: G6A54OYK is
     // retained by a card that is still open. If it ever stops erroring — someone edits the frozen

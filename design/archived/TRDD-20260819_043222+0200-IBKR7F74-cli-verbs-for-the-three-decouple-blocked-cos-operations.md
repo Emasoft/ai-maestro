@@ -89,4 +89,13 @@ the COS repoints once, not three times.
 - [x] The verbs land in the `aimaestro-*` script layer (never a raw API bypass), with `--help`
       exercised through the bare command name on PATH. `aimaestro-governance.sh help` via PATH
       shows the AID-path contract; deployed copy `cmp`-identical to the repo (2026-08-25).
-- [ ] COS confirms their three DECOUPLE-BLOCKED sites repoint cleanly and 8E8D6618 closes.
+- [x] COS confirms their three DECOUPLE-BLOCKED sites repoint cleanly and 8E8D6618 closes.
+
+## Approval log
+
+- 2026-08-28T22:23:12+0200 — LATE CLOSING EDIT (TRDD-55H0DOO6). The card was archived
+  `complete` with the box above open; `validate` reported TERMINAL-WITH-OPEN-BOX since. Evidence
+  read now: the COS repo's `design/archived/TRDD-20260615_221837+0200-8e8d6618-remove-direct-api-calls.md`
+  carries `column: complete`, `updated: 2026-08-25T23:20:00+0200`, and its closing log names the
+  three repointed sites (approval-coordinator, teams agents, transfer-agent) plus "tests + CPV
+  strict + lint green; published". The box's condition is met; ticked.

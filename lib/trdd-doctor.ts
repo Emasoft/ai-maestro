@@ -648,9 +648,15 @@ export function lintCorpus(designDir: string): DoctorReport {
     // is true; a duplicate is merely a second copy waiting to go stale.
     if (c.bodyStateClaim) {
       const agrees = bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)
+      // A v1-era card (UUID filename) predates the `column:` vocabulary: its `**Status:**` line
+      // was the ONLY state field it ever had, so a mismatch there is history, not two live
+      // claims. And rule 12 freezes it once archived, so ERROR names a defect nobody may repair
+      // (7123D51A stood red for 3 months). WARN keeps the finding visible; ERROR is reserved for
+      // cards that could carry the column and chose to contradict it (TRDD-55H0DOO6).
+      const v1Filename = /TRDD-[0-9a-f]{8}-[0-9a-f]{4}-/i.test(path.basename(c.filePath))
       add({
         rule: 'BODY-STATE-CLAIM',
-        severity: agrees ? 'warn' : 'error',
+        severity: agrees || v1Filename ? 'warn' : 'error',
         id: c.id,
         filePath: c.filePath,
         message: agrees

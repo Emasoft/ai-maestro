@@ -357,25 +357,25 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * filter on the real thing.
  */
 describe('trddgrep validate — --min-severity and --rule actually filter', () => {
-  it('--min-severity error prints ONLY the five ERROR lines, not all 247', () => {
+  it('--min-severity error prints ONLY the two ERROR lines, not all ~247', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'error'])
     const lines = r.stdout.trim().split('\n')
-    // The length is the FILTER assertion — 5 of 247 is what proves --min-severity filters at
+    // The length is the FILTER assertion — 2 of ~247 is what proves --min-severity filters at
     // all. Every id is then pinned individually, in the CLI's own sort order (rule, then id —
-    // MEASURED 2026-08-27, not assumed), so a future sixth error cannot hide by arriving in a
-    // slot nobody names. Re-pinned 2→5 that day: three archived cards (DXJZM3BW, IBKR7F74,
-    // 39OPYXQ9) closed with an open box or no checklist AFTER the gate landed; they are
-    // terminal and frozen (IND rule 12), so they are evidence, not something to tick. The
-    // filter was never broken — this test was pinning a census that had moved.
+    // MEASURED, not assumed), so a future third error cannot hide by arriving in a slot nobody
+    // names. History of this census: 2→5 on 2026-08-27 (three archived cards closed with an
+    // open box or no checklist after the gate landed); 5→2 on 2026-08-28 under TRDD-55H0DOO6 —
+    // DXJZM3BW and IBKR7F74 got their late closing tick with cited evidence (Approval log),
+    // and 7123D51A dropped to WARN because BODY-STATE-CLAIM now reports v1 UUID-named cards
+    // as history, not contradiction. The two that remain are frozen and unrepairable by rule;
+    // TRDD-3OS166YI owns the gate that must allowlist both. The filter was never broken — this
+    // test pins a census, and the census moves.
     // EXPECTED FUTURE MOVE (TRDD-CV5KDCB7): 22 parked cards carry a WARN BLOCKED-WITHOUT-PROBE;
     // the next routine edit of any of them flips it to ERROR (the `updated:` boundary is the
     // ratchet working, not this test breaking). Add the card's probe, or re-pin here.
-    expect(lines).toHaveLength(5)
-    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tDXJZM3BW\t/)
-    expect(lines[1]).toMatch(/^ERROR\tTERMINAL-WITH-OPEN-BOX\tIBKR7F74\t/)
-    expect(lines[2]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
-    expect(lines[3]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\t39OPYXQ9\t/)
-    expect(lines[4]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
+    expect(lines[1]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\t39OPYXQ9\t/)
     expect(r.status).toBe(1)
   })
 

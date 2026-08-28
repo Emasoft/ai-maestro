@@ -1,12 +1,12 @@
 ---
 trdd-id: 55H0DOO6
 title: Triage the five frozen archived-card validate ERRORs one card at a time
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-28T21:45:42+0200
-updated: 2026-08-28T21:45:42+0200
+updated: 2026-08-28T22:23:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -100,12 +100,17 @@ LOW. Every edit is an append to `## Approval log`, a checkbox tick with cited ev
 
 ## Acceptance
 
-- [ ] `DXJZM3BW` decided: box ticked with evidence, OR card un-archived to `dev` — log line cites why
-- [ ] `IBKR7F74` decided the same way
-- [ ] 3OS166YI's allowlist names `G6A54OYK` as well as `39OPYXQ9` (or 3OS166YI's log says why not)
-- [ ] `7123D51A` decided; if a doctor-rule exemption is the answer it is a ≤5-line change with a test
-- [ ] `validate` re-run recorded here: exit code + remaining ids, every one owned by a named card
+- [x] `DXJZM3BW` decided: box ticked with evidence, OR card un-archived to `dev` — log line cites why — TICKED: `_api()` at `scripts/aimaestro-continuity.sh:72` (commit `20f44bad`), bare PATH command reaches the server (401, never 127)
+- [x] `IBKR7F74` decided the same way — TICKED: COS repo `design/archived/…8e8d6618-remove-direct-api-calls.md` is `column: complete`, updated 2026-08-25
+- [x] 3OS166YI's allowlist names `G6A54OYK` as well as `39OPYXQ9` (or 3OS166YI's log says why not) — its gate box now names BOTH; log line added
+- [x] `7123D51A` decided; if a doctor-rule exemption is the answer it is a ≤5-line change with a test — `lib/trdd-doctor.ts`: BODY-STATE-CLAIM is WARN on a v1 UUID-named file (2 code lines + comment); pinned by a new test with a v2 positive control (neuter run reddened exactly that test)
+- [x] `validate` re-run recorded here: exit code + remaining ids, every one owned by a named card — BEFORE: exit 1, 5 ERROR (DXJZM3BW, IBKR7F74, G6A54OYK, 39OPYXQ9, 7123D51A). AFTER: exit 1, 2 ERROR (G6A54OYK, 39OPYXQ9 — both TERMINAL-WITHOUT-CHECKLIST, both owned by TRDD-3OS166YI); 7123D51A now a WARN
 
 ## Approval log
 
 - 2026-08-28T21:45:42+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement: none). Self-mandate: in-scope governance hygiene, reversible, no other team touched. No approval request was sent.
+- 2026-08-28T22:23:12+0200 — COMPLETE by ai-maestro-hub-session. All five decided per card (see the
+  boxes). Two census tests that pinned the old red state were re-pinned (`pillar-grep-cli` 5→2,
+  `trdd-doctor` gate: JANITOR_139 set emptied, 7123D51A now asserted as WARN). The two remaining
+  ERRORs are frozen and owned by TRDD-3OS166YI (its gate/allowlist box now names both). `todo →
+  complete` directly: a one-session hygiene card with no dev/testing hand-offs.

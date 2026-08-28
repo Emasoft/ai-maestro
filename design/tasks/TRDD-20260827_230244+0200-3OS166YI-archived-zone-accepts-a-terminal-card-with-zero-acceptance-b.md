@@ -3,7 +3,7 @@ trdd-id: 3OS166YI
 title: Archived zone accepts a terminal card with zero acceptance boxes when it bypasses the move verb
 column: todo
 created: 2026-08-27T23:02:44+0200
-updated: 2026-08-27T23:02:44+0200
+updated: 2026-08-28T22:23:12+0200
 current-owner: hub-claude
 created-by: hub-claude
 task-type: bugfix
@@ -33,9 +33,14 @@ THE BLOCKER THAT MAKES THIS NON-TRIVIAL, and the reason this card is not just "a
 ## Acceptance
 - [x] a terminal card with 0 boxes produces an ERROR-level finding — ALREADY TRUE before this card was filed, `lib/trdd-doctor.ts:895-912`
 - [x] the live corpus finding on 39OPYXQ9 is reported, not auto-fixed — VERIFIED: exactly one ERROR, `autofixable: false`
-- [ ] a GATE exists that fails on a NEW terminal-without-checklist card, designed around 39OPYXQ9 being frozen and un-repairable (allowlist with its reason, or a baseline diff) — this is the only remaining work
+- [ ] a GATE exists that fails on a NEW terminal-without-checklist card, designed around 39OPYXQ9 AND G6A54OYK being frozen and un-repairable (allowlist naming BOTH ids with their reasons, or a baseline diff) — this is the only remaining work
 - [ ] the gate does NOT blanket-fail on the 261 pre-existing corpus findings
 
 ## Approval log
 
 - 2026-08-27T23:02:44+0200 — MANDATE issued by hub-claude (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T22:23:12+0200 — TRDD-55H0DOO6 triage: the live corpus carries TWO frozen
+  TERMINAL-WITHOUT-CHECKLIST cards, not one — `G6A54OYK` (`completed`, archived 2026-08-22)
+  beside `39OPYXQ9`. The gate box above now names both; an allowlist naming only 39OPYXQ9
+  would leave `validate` red on a card nobody may repair. Neither gets a retro-authored
+  checklist (that manufactures evidence).

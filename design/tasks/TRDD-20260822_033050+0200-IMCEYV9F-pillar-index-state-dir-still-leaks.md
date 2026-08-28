@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T14:08:39+0200
+updated: 2026-08-28T21:25:00+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -313,3 +313,32 @@ matter, which it has not been.
 - 2026-08-22T03:30:50+0200 — MANDATE issued by ai-maestro-hub (min-approval-requirement:
   none). Pre-approved: Tier 0 — in-scope test containment, reversible, no governance,
   baseline, or release surface. No approval request was sent.
+
+## Re-measured 2026-08-28T21:25+0200 — the leak is LIVE and the rate is now known
+
+The card's figures were 6 days old. Re-measured from `~/.aimaestro/pillar-index/`:
+
+| | card @ 2026-08-22 | now @ 2026-08-28 | delta |
+|---|---|---|---|
+| `.sqlite` files | 102 | **147** | **+45 in 6 days ≈ 7.5/day** |
+| size | 70 MB | 73 MB | +3 MB — the new files are SMALL |
+| created since 2026-08-22 | — | **47** | — |
+
+**The writer this card already identified is still writing.** Four more
+`test-find-trdd-*` / `test-issue-title-citation-*` files landed at **02:20 today** — the
+`ai-maestro-orchestrator-agent` suite named in box 1, in a repo we do not own. That is
+precisely the case §FORK RESOLVED says per-writer containment can never reach, so the
+re-measurement CONFIRMS the reap strategy rather than reopening the question.
+
+Two things this pins that the card previously left open:
+
+- **A rate.** 7.5 files/day, essentially all small. So the urgency is file COUNT and inode
+  churn, not disk — 73 MB after six weeks is not a space problem, and a reaper can be sized
+  on count/age alone. Anyone arguing this from megabytes is arguing the wrong axis.
+- **A control.** `ai-maestro-e916c2513721.sqlite` was touched at 21:16 today by my own
+  `pillars:lint` runs — a LEGITIMATE peer corpus, and the proof that the directory is in
+  active real use. A reaper must therefore key on corpus-still-exists / age, never on
+  "delete everything", or it will evict the live indexes it is there to protect.
+
+Still no code written. This is a measurement; the three containment-strategy boxes remain
+correctly unticked, and the next step is unchanged: implement the reaper.

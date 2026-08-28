@@ -74,3 +74,4 @@ Per core's answered design questions in the issue thread (already resolved, read
 
 ## Approval log
 - 2026-08-28T23:58:42+0200 — boxes 1-3 delivered by hub-claude. Tests: `tests/unit/capabilities.test.ts` (4) + headless mirror case; neuter (drop the headless whitelist entry) reds exactly the mirror case. tsc 0.
+- 2026-08-28T23:59:16+0200 — precision on box 3: "the running process" = the code the process is EXECUTING. In headless mode that is the tree via tsx (live); in FULL mode the API route comes from the prebuilt `.next`, so after editing `lib/capabilities.ts` the endpoint reports the LAST BUILD until `yarn build` + restart — which is still the process's own served set (not a git ref, not an install manifest), and CLAUDE.md's "a restart does NOT rebuild" rule is the operator side of it. Verify a bump by its EFFECT (`curl -s :23000/api/capabilities`), never by `git log`.

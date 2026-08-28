@@ -154,6 +154,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | DELETE | `/api/auth/webauthn/credentials` |  | app/api/auth/webauthn/credentials/route.ts | WebAuthn Credentials Management |
 | GET | `/api/auth/webauthn/register` |  | app/api/auth/webauthn/register/route.ts | WebAuthn Registration Endpoints |
 | POST | `/api/auth/webauthn/register` |  | app/api/auth/webauthn/register/route.ts | WebAuthn Registration Endpoints |
+| GET | `/api/capabilities` |  | app/api/capabilities/route.ts | UNAUTHENTICATED BY DESIGN: whitelisted in `middleware.ts` (and mirrored in |
 | GET | `/api/config` |  | app/api/config/route.ts |  |
 | POST | `/api/conversations/parse` |  | app/api/conversations/parse/route.ts |  |
 | GET | `/api/debug/pty` |  | app/api/debug/pty/route.ts |  |

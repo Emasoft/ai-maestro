@@ -26,6 +26,9 @@ priority: 2
 severity: medium
 effort: M
 labels: [fleet-ask, hub-blocked]
+blocker-probe: gh issue view 88 --repo Emasoft/ai-maestro --json state -q .state
+blocker-holds-if: match:OPEN
+blocker-probe-canary: match:OPEN|CLOSED
 external-refs: [Emasoft/ai-maestro#88, Emasoft/ai-maestro#81, Emasoft/ai-maestro#80, Emasoft/ai-maestro#114, Emasoft/ai-maestro#116]
 ---
 

@@ -112,6 +112,40 @@ spinner and read as "the fix does not work". Rebuilt, re-grepped (1 hit in
    run simply never answered the sudo modal. Handling it (structural detect → fill → Confirm) made
    the same click succeed. **Any future live check of this dialog must answer that modal.**
 
+## Second measurement — 2026-08-28T06:39-06:40, the dwell MEASURED rather than inferred
+
+The retraction above replaced a false claim with an unverified one: it asserted "a user sits on
+`Installing chief-of-staff role-plugin` for 27 s", which was **inferred** by joining a client-side
+label array (last entry t=402 ms) to two server log lines 27 s apart. Nothing had observed the DOM
+after 402 ms. Three different behaviours produce that identical array — the label holding, the
+dialog closing early, or `setCreateStage(null)` reverting it — so the claim was a proxy again, in a
+new costume. A second adversarial fork named it.
+
+Re-ran the create with a collector that records each label's LAST-SEEN time and the dialog's close
+time, both of which the first run lacked (team `aghpmrvi-dwell-probe`, same path, then deleted):
+
+| label | first seen | last seen | dwell |
+|---|---|---|---|
+| `Creating...` | 101 ms | 302 ms | 0.2 s |
+| `Installing chief-of-staff role-plugin` | 402 ms | 31901 ms | **31.5 s** |
+
+`closedAt` **32001 ms**; 322 polls at 100 ms ≈ 32.2 s, so the collector ran continuously and the
+window is fully observed rather than sampled at its ends.
+
+**Independent corroboration.** The server log for the same run reads
+`06:39:43 Auto-created COS agent` → `06:40:15 Installed ai-maestro-chief-of-staff` = **32 s**. The
+client-observed dialog lifetime and the server-side pipeline span agree to within one second, from
+two records that share no mechanism.
+
+So the dwell claim is now MEASURED and true at ~31.5 s, and the whole create is **~32 s
+end-to-end** — no longer a floor assumed to be a total. The card's original **30-60 s premise is
+directly CONFIRMED**, not merely unrefuted.
+
+**One honest difference between the runs:** this one captured only TWO labels, not three —
+`Creating chief-of-staff agent` fell entirely inside a sub-100 ms gap between polls. Box (a) asks
+for at least two changes and is satisfied either way, but a 100 ms sampler is not guaranteed to see
+every stage, and a future run that sees two labels instead of three has not regressed.
+
 ### ~~Correction to this card's premise~~ — RETRACTED 2026-08-28T06:41+0200
 
 > **THIS SECTION IS WRONG AND IS KEPT ONLY AS THE RECORD OF THE ERROR. The card's 30-60 s figure
@@ -179,3 +213,9 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   COS-creation→install span. Both are now marked as floor/inferred in place. The measured refutation
   of `~0.4 s` is unchanged and stands. Caught by a second adversarial review fork — the same proxy
   shape, wearing the correction as its costume.
+- 2026-08-28T06:45:00+0200 — SECOND correction appended by ai-maestro-hub-session. The retraction
+  itself carried an unmeasured claim (the 27 s dwell) and has now been measured: dwell 31.5 s,
+  dialog closed at 32.0 s, corroborated by a server span of 32 s. Both errors were caught by an
+  adversarial review fork rather than by me, and both were the same shape — a client-side proxy
+  standing in for an interval nobody observed. A correction is exactly when that scrutiny is least
+  likely to be applied, because it arrives feeling like the careful move.

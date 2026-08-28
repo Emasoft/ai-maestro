@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-28T21:12:00+0200
+updated: 2026-08-28T21:22:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -242,29 +242,36 @@ contract moves; a purely server-side latch/classification change does not need t
       | elapsed | p50 3041 ms, max 11062 ms — **but see the caveat below; this is the TAIL's median, not latency's** |
       | by hour | 13 @02h · 6 @03h · 3 @06h · 3 @07h · 4 @14h — **bursty, not a steady tax** |
 
-      **The ACL-prompt hypothesis is dead, on two MEASURED grounds.** (a) The card predicted
-      "one item repeatedly ⇒ ACL prompt on that item; across all six ⇒ process-wide" — it is
-      spread over 4 accounts and 2 services. (b) **No keychain prompt was ever DISPLAYED in the
-      window: `log show --last 24h --predicate 'process == "SecurityAgent"'` returns ZERO rows**,
-      while the same query for `loginwindow` returns 27,512 and the log reaches back to
-      2026-08-27 21:09 — so the window containing all 29 samples is covered and the absence is
-      real, not an unreachable query. SecurityAgent is the process that draws the unlock/ACL
-      dialog; no rows means no dialog.
-      ~~(b-old) 26 of 29 recovered on their own, and an ACL prompt blocks until a human answers
-      it.~~ **WITHDRAWN as evidence — that was an ASSUMPTION about macOS `security` semantics I
-      never verified, and I had ranked it "Stronger" than the measurement above it.** A
-      SecurityAgent dialog can be dismissed or time out, and a non-interactive session returns
-      `errSecInteractionNotAllowed` immediately without prompting at all — which is exactly why
-      that string is in `DENIAL_MARKERS`. The recovery split is still a fact about the samples;
-      it is simply not evidence about prompts. So the
-      banner's parenthetical was a guess printed as a diagnosis (the card's own original charge),
-      and it stays wrong even now that the reads really are slow.
-      What remains is **transient process-wide keychain contention**, bursty and self-clearing.
-      The 02-03h burst coincides with heavy concurrent session activity on this host, which is a
-      HYPOTHESIS from co-occurrence, not a measured cause — do not promote it without a test.
-      (An interval-gap statistic was attempted and its `date -j` pipeline returned n=0; the
-      per-hour histogram above is the surviving measurement. Nothing is inferred from the failed
-      one.)
+      **The ACL-prompt hypothesis is dead, and ONE measurement carries it.** The card predicted
+      "one item repeatedly ⇒ ACL prompt on that item; across all six ⇒ process-wide" — the stall
+      is spread over **4 accounts and 2 services**, so by the card's own written predicate it is
+      process-wide. That leg is a measurement against a pre-registered criterion and it stands
+      alone; everything below is corroboration, ranked beneath it deliberately.
+
+      ~~Second leg: zero `SecurityAgent` rows in 24 h ⇒ no dialog was displayed.~~ **WITHDRAWN AS
+      STATED — the query was insufficient and I called it a measurement because it produced
+      output.** It ran at DEFAULT log level and named only `SecurityAgent`; re-run with
+      `--info --debug` across `security`/`authd`/`securityd` it returns **1,503,601 rows** in the
+      same window, including 166,239 from `authd` and 97,160 from `securityd` — processes in the
+      auth path that my predicate excluded. A `loginwindow` positive control proved the log had
+      DATA, not that it had SecurityAgent's data; coverage for one process is not coverage for
+      another. This was the same error as the assumption it replaced, one layer along.
+
+      **What the wider query actually shows, recorded as a LEAD and not a cause (n=1):**
+      `SecurityAgent` is absent even at info+debug (0 rows), consistent with no dialog being
+      drawn. But there is exactly ONE prompt-shaped event in 24 h, and it is a SUPPRESSION:
+
+      ```
+      2026-08-28 07:00:56 securityd[607]: suppressing keychain prompt
+      /usr/bin/security(4076); code signing check failed rc=-67065
+      ```
+
+      That is `securityd` declining to prompt for **`/usr/bin/security`** — the exact binary the
+      rotator spawns — after a code-signing check failed. It is one event against 29 slow ops, so
+      it explains at most one of them and may be unrelated; it is written here because it is the
+      only direct evidence in the window about the keychain's prompting behaviour toward our own
+      caller, and because `rc=-67065` is a concrete string a future session can search on. **Do
+      not promote it to the cause without a second instance correlated to a slow op.**
 
       **Caveat on the elapsed figures, and it is not cosmetic.** Every one of the 29 lines exists
       only because it crossed the 2500 ms log floor, so "p50 3041 ms" is the median OF THE TAIL,
@@ -319,3 +326,10 @@ contract moves; a purely server-side latch/classification change does not need t
   struck through. The elapsed statistics are now qualified as tail-truncated, and the "50-190x vs
   p95" comparison is withdrawn — it compared a server-context tail against an interactive-shell
   proxy the card had already declared insufficient for exactly this purpose.
+- 2026-08-28T21:22:00+0200 — evidence RE-RANKED by ai-maestro-hub-session after a tenth fork.
+  The SecurityAgent leg is withdrawn as stated: it queried one process at default level and I
+  read its emptiness as a fact about the platform. The wider query returns 1.5 M rows including
+  authd and securityd, so the original zero was a property of my predicate. The measured spread
+  (4 accounts / 2 services) now carries the refutation alone, which is where it should have been
+  ranked from the start. One genuine new lead recorded (securityd suppressing a keychain prompt
+  for /usr/bin/security, code-signing rc=-67065), explicitly n=1 and not promoted.

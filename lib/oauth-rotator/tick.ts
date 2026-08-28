@@ -1394,11 +1394,17 @@ export function surveyAlternates(): AlternateSurvey {
   // the k slots read BEFORE the latch closed were classified correctly and this line ERASES
   // them — the sweep's findings are not preserved, they are discarded wholesale. That is the
   // deliberate trade, stated as a trade: an erased genuine `unreadable` stays erased until the
-  // latch HALF-OPENS — `LATCH_COOLDOWN_DEFAULT_S` (600 s) plus one beat (`TICK_ATTEMPT_FLOOR_MS`
-  // 60 s), so ~11 min, NOT one beat; and if the half-open probe itself times out the latch
-  // re-stamps and the erasure runs another cooldown, so under a PERSISTENT block it is unbounded.
-  // A false `unreadable` costs a human a re-login. (First written as "≤60 s" — the tick clock,
-  // when the gating clock is the cooldown; caught by review, 10× wrong.) Keeping a MIXED array under a `probeSuppressed` flag would make
+  // latch HALF-OPENS — `LATCH_COOLDOWN_DEFAULT_S` (600 s) plus AT MOST one tick interval (the
+  // `setInterval` period in `startOauthRotatorTick`, default `intervalMs` 60 s — NOT
+  // `TICK_ATTEMPT_FLOOR_MS`, which is the rate floor between attempts and only coincidentally
+  // equal), so ≤ ~11 min, NOT one beat. "At most" because the half-open probe is whichever
+  // `security` op runs FIRST after the cooldown — if that is the keepalive refresh or a read
+  // earlier in the same beat, THIS beat's survey already sees a cleared latch (cooldown + 0).
+  // If the half-open probe itself times out the latch re-stamps and the erasure runs another
+  // cooldown, so under a PERSISTENT block it is unbounded. A false `unreadable` costs a human a
+  // re-login. (First written as "≤60 s" — the tick clock, when the gating clock is the cooldown;
+  // caught by review, 10× wrong. Then cited the wrong 60 s constant; caught again.)
+  // Keeping a MIXED array under a `probeSuppressed` flag would make
   // every consumer decide which half to believe; an empty one cannot be misread.
   if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true }
   return { unreadable, refreshDead, probeSuppressed: false }

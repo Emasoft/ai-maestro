@@ -4,7 +4,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
 import { globalStateDir } from '@/lib/oauth-rotator/global-state'
-import { oauthTickEnabled, runOneTick, alertableTick } from '@/lib/oauth-rotator/server-tick'
+import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP } from '@/lib/oauth-rotator/server-tick'
 import type { RepairResult } from '@/lib/oauth-rotator/reauth-repair'
 import { deriveDecision } from '@/lib/oauth-rotator/tick'
 
@@ -256,6 +256,44 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
       deliverImpl,
     })
     expect(deliverImpl).not.toHaveBeenCalled()
+  })
+
+  // TRDD-JDXTJXE7. The tick's alert used to be the decision line VERBATIM, so the one alert a
+  // human must act on named a COUNT and never an account — "2 slots need a re-login" with no
+  // "which". The decision line stays counts-only (it is the 60 s append-only log); the ALERT
+  // carries the identities and the human step. Both halves are asserted: the decision line is
+  // still inside the message unchanged, and the accounts + command follow it.
+  it('the delivered alert names the account(s) and the re-login step, with the decision line intact', async () => {
+    const sent: Array<ReadonlyArray<{ code: string; message: string }>> = []
+    const decision = 'reauth-needed: 1 alternate slot(s) UNREADABLE — the server cannot open them; re-login is the only repair'
+    await runOneTick({
+      ...armed,
+      runTickImpl: async () => ({
+        nextAction: 'reauth-needed', reason: 'slot-unreadable', refreshed: [], switched: false, decision,
+        identities: { unreadable: ['ghost@example.test'], refreshDead: [] },
+      }),
+      deliverImpl: (f) => { sent.push(f) },
+    })
+    expect(sent).toHaveLength(1)
+    const msg = sent[0][0].message
+    expect(msg).toContain(decision)
+    expect(msg).toContain('ghost@example.test')
+    expect(msg).toContain(REAUTH_HUMAN_STEP)
+    expect(msg).toContain('/api/oauth-rotator/reauth/start')
+  })
+
+  it('composeTickAlert picks the identities that match the REASON, and degrades to the bare line without them', () => {
+    const base = { nextAction: 'reauth-needed' as const, stuck: undefined, decision: 'D' }
+    const ids = { unreadable: ['u@x'], refreshDead: ['d@x'] }
+    expect(composeTickAlert({ ...base, reason: 'slot-unreadable', identities: ids })).toContain('u@x')
+    expect(composeTickAlert({ ...base, reason: 'slot-unreadable', identities: ids })).not.toContain('d@x')
+    expect(composeTickAlert({ ...base, reason: 'refresh-dead', identities: ids })).toContain('d@x')
+    // No identities (a stuck verdict, a shapeless stub): the message IS the decision line, as before.
+    expect(composeTickAlert({ ...base, reason: 'refresh-dead', identities: undefined })).toBe('D')
+    expect(composeTickAlert({ nextAction: 'stuck', reason: undefined, stuck: 'keychain-latched', decision: 'S', identities: ids })).toBe('S')
+    // alertableTick tolerates a malformed identities shape rather than throwing (the stub contract).
+    const a = alertableTick({ nextAction: 'reauth-needed', reason: 'refresh-dead', decision: 'D', identities: { unreadable: 'not-an-array', refreshDead: [1, 'ok@x'] } })
+    expect(a?.identities).toEqual({ unreadable: [], refreshDead: ['ok@x'] })
   })
 
   it('a THROWING delivery never takes the beat down', async () => {

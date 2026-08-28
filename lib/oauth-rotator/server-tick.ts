@@ -52,12 +52,37 @@ export function ownsTickAlert(code: string): boolean {
   return TICK_ALERT_PREFIXES.some(p => code.startsWith(p))
 }
 
-export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision'> | null {
+export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision' | 'identities'> | null {
   if (result === null || typeof result !== 'object') return null
   const r = result as Partial<TickResult>
   if (typeof r.decision !== 'string') return null // no human-readable line ⇒ nothing worth sending
   if (r.nextAction !== 'reauth-needed' && r.stuck === undefined) return null
-  return { nextAction: r.nextAction as TickResult['nextAction'], reason: r.reason, stuck: r.stuck, decision: r.decision }
+  // Same tolerance for the identities as for the rest: a stub without them (or with a wrong
+  // shape) yields `undefined`, never a throw — the alert then carries the counts-only line.
+  const ids = r.identities
+  const strs = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  const identities = ids && typeof ids === 'object' ? { unreadable: strs(ids.unreadable), refreshDead: strs(ids.refreshDead) } : undefined
+  return { nextAction: r.nextAction as TickResult['nextAction'], reason: r.reason, stuck: r.stuck, decision: r.decision, identities }
+}
+
+/** The one human step, named as the human reaches it (TRDD-JDXTJXE7 / RFQFCCU4: "name the ACTION,
+ *  not the condition"). The dashboard button is `Re-login` in Settings → Claude accounts; it calls
+ *  the route below with the account as `email`. */
+export const REAUTH_HUMAN_STEP = 'Settings → Claude accounts → Re-login (POST /api/oauth-rotator/reauth/start {"email": "<account>"})'
+
+/**
+ * The ALERT message: the decision line, verbatim, PLUS which accounts and what to run
+ * (TRDD-JDXTJXE7). The decision line is not modified — it is the counts-only LOG line and stays
+ * so; the identities are appended here and only here, on the bounded self-clearing alert channel
+ * that already carries emails from the supervisor beat. A tick whose identities are absent (a
+ * `stuck` verdict, a shapeless stub) delivers the decision line alone, exactly as before.
+ */
+export function composeTickAlert(a: NonNullable<ReturnType<typeof alertableTick>>): string {
+  const accounts = a.reason === 'slot-unreadable' ? a.identities?.unreadable
+    : a.reason === 'refresh-dead' ? a.identities?.refreshDead
+    : undefined
+  if (!accounts || accounts.length === 0) return a.decision
+  return `${a.decision} — account(s): ${accounts.join(', ')} — re-login: ${REAUTH_HUMAN_STEP}`
 }
 import { repairOneDeadSlot, type RepairResult } from './reauth-repair'
 
@@ -235,7 +260,9 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
           .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
       })
       try {
-        deliver([{ code, message: alertable.decision }])
+        // The message is the decision line PLUS the identities and the command — never the bare
+        // decision line, which is counts-only for the LOG's sake, not the alert's (TRDD-JDXTJXE7).
+        deliver([{ code, message: composeTickAlert(alertable) }])
       } catch (derr) {
         // Its OWN catch, NOT the outer one. The outer catch reports "server tick failed", which
         // would be a FALSE attribution when the tick succeeded and only the notifier threw — and a

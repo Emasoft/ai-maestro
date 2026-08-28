@@ -1,9 +1,9 @@
 ---
 trdd-id: JDXTJXE7
 title: Tick alerts name the account and the command without putting an email in the decision log
-column: todo
+column: complete
 created: 2026-08-22T18:26:30+0200
-updated: 2026-08-22T18:26:30+0200
+updated: 2026-08-28T23:05:40+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -76,17 +76,15 @@ implemented wrongly.
 
 ## Acceptance
 
-- [ ] `TickResult` carries the surveyed identities; `deriveDecision`'s output is byte-identical for
-      every existing test (i.e. no test of it needed changing)
-- [ ] a tick alert for `reason: 'refresh-dead'` / `'slot-unreadable'` names the account(s) and the
-      command, delivered through the existing `deliverAlerts`
-- [ ] the decision line written to the rotator log still contains NO email — pinned by a test that
-      fails if one appears there
-- [ ] at least ONE recorded neuter, by name, with its red set pasted verbatim — deleting the
-      identity from the alert message must redden a test. An alert-content change with no neuter is
-      exactly the shape that produced the original 4 506-line incident: detection that looks wired
-      and delivers nothing
-- [ ] `tsc` 0 and the full suite green
+- [x] `TickResult.identities?: {unreadable, refreshDead}` populated from the survey at `tick.ts` (the counts reduction site); `deriveDecision` untouched, zero existing tests changed
+- [x] `server-tick.ts`: `alertableTick` widened (shape-tolerant), new `composeTickAlert()` = decision line verbatim + `account(s): …` + `re-login: ` + `REAUTH_HUMAN_STEP` (Settings → Claude accounts → Re-login / `POST /api/oauth-rotator/reauth/start {"email"}`); the deliver site sends the composed message through the same `deliverAlerts`
+- [x] `oauth-rotator-tick.test.ts` "carries the surveyed identities … decision line stays email-free": `res.identities` has the email, `res.decision` matches no `@`, and the `decide` sink received exactly that line. FINDING while writing it: asserting over EVERY sink line reddened on `auto: live live@x …` — `autoRotate` (rotate.ts) already logs the LIVE account's email through the same sink, pre-existing and out of this card's scope; the pin is scoped to the decision line, which is what the rule governs
+- [x] three neuters, 2-file selection (server-tick + tick tests, 66 tests), each restored and re-run green:
+      N1 `composeTickAlert` returns `a.decision` (identities dropped) → 2 red: `the delivered alert names the account(s) and the re-login step, with the decision line intact`, `composeTickAlert picks the identities that match the REASON…` · 64 green
+      N2 deliver site reverted to `message: alertable.decision` → 1 red: `the delivered alert names the account(s)…` · 65 green
+      N3 `runTick` stops returning `identities` → 1 red: `carries the surveyed identities on the result while the decision line stays email-free` · 65 green
+      Disjoint red sets across N2/N3; N1 ⊃ N2
+- [x] `tsc --noEmit` 0 errors; full `yarn test` run recorded in the Approval log below
 
 ## Verification
 
@@ -96,3 +94,6 @@ worth nothing until a mutation that removes it has been shown to redden that tes
 ## Approval log
 
 - 2026-08-22T18:26:30+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-28T23:05:05+0200 — implemented by hub-claude; see the ticked boxes for sites and neuters. Full-suite result appended on close.
+- 2026-08-28T23:05:40+0200 — COMPLETED by hub-claude. Full `yarn test`: 494 files, 6554 passed, 2 skipped, 0 red; `tsc --noEmit` 0. Side finding (not this card): `autoRotate` logs the LIVE account email via the decision sink (`auto: live <email> …`, rotate.ts) — the counts-only rule covers the decision line only; whether the auto line should be anonymised is a separate call.
+- 2026-08-28T23:05:40+0200 — COMPLETE by emanuelesabetta. archived → complete.

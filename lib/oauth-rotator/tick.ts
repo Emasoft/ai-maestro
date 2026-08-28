@@ -326,6 +326,14 @@ export interface TickResult {
   switched: boolean
   /** The terminal decision line (also emitted via deps.decide). */
   decision: string
+  /**
+   * WHICH accounts the counts in `decision` refer to (TRDD-JDXTJXE7). Carried separately from
+   * `decision` on purpose: the decision line is the 60 s append-only LOG and is counts-only by
+   * rule (never an email); the ALERT channel is bounded and self-clearing and already carries
+   * emails from the supervisor beat, so the identity rides here for the alert composer and is
+   * never folded into the log line. Absent when the tick switched (no survey ran).
+   */
+  identities?: { unreadable: string[]; refreshDead: string[] }
 }
 
 /**
@@ -1435,6 +1443,7 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   let reason: TickReason | undefined
   let unreadable = 0
   let deadRefresh = 0
+  let identities: TickResult['identities']
   if (!switched) {
     // The sweep itself lives in `surveyAlternates` so the leg that REPAIRS a dead slot reads the
     // same definition of "dead" this beat reports (TRDD-CVQJNW3A). The tick needs only the counts
@@ -1443,6 +1452,8 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
     const survey = surveyAlternates()
     unreadable = survey.unreadable.length
     deadRefresh = survey.refreshDead.length
+    // The identities the counts above were reduced FROM — kept for the alert, never for the log.
+    identities = { unreadable: survey.unreadable, refreshDead: survey.refreshDead }
     // Precedence: OUR fault before THEIRS — see the TickReason doc comment. A SUPPRESSED probe
     // outranks both, and is deliberately NOT a `reauth-needed` (TRDD-MFTDMSJY): the beat has no
     // evidence about any slot, so it must not name a credential fault, and `ok` would read as
@@ -1465,5 +1476,5 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   // Emit the decision line for a STUCK tick too. Previously only `reason` did, so the most urgent
   // outcome was also the quietest one on the beat's own log surface.
   if (reason || stuck) decide(deps, decision)
-  return { nextAction, reason, stuck, windows: rotateOut.windows, refreshed, switched, decision }
+  return { nextAction, reason, stuck, windows: rotateOut.windows, refreshed, switched, decision, identities }
 }

@@ -595,6 +595,26 @@ describe('tick — runTick (compose)', () => {
     expect(res.decision).not.toContain('reauth')
   })
 
+  // TRDD-JDXTJXE7. The identity the survey computed is CARRIED on the result for the alert, and
+  // the decision line — the 60 s append-only LOG — still names nobody. Both directions pinned
+  // on the same run: `identities` has the email, `decision` (and the `decide` sink, which is
+  // what reaches the log) has no '@' at all.
+  it('carries the surveyed identities on the result while the decision line stays email-free', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('dead@x', blob('DEAD', Date.now() - 1000, ''))
+    const logged: string[] = []
+    const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }), decide: (m) => logged.push(m) })
+    expect(res.reason).toBe('refresh-dead')
+    expect(res.identities).toEqual({ unreadable: [], refreshDead: ['dead@x'] })
+    expect(res.decision).not.toMatch(/@/)
+    // The DECISION line reached the log sink and is the email-free one. Scoped to that line on
+    // purpose: `autoRotate` already logs `auto: live <email> …` (the LIVE account, pre-existing,
+    // rotate.ts) through the same sink — measured when this test first asserted over every line
+    // and reddened on it. That is a separate, pre-existing fact recorded on TRDD-JDXTJXE7; the
+    // counts-only rule this pins is the decision line's.
+    expect(logged).toContain(res.decision)
+  })
+
   it('attributes reauth-needed to refresh-dead when a readable alternate has no refresh and is expired', async () => {
     seedLive('live@x', blob('LIVE', H8()))
     // Empty refresh token = an unrefreshable setup-token slot (`Boolean('')` is false), expired.

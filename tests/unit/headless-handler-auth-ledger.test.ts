@@ -153,9 +153,11 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'DELETE /^\\/api\\/hosts\\/([^/]+)$/',
   'GET /^\\/api\\/v1\\/health$/',
   'GET /^\\/api\\/v1\\/info$/',
-  // Public BY DESIGN (TRDD-TLSE2FEF, #88): the capability set — verb names + integer revisions,
-  // nothing else — whitelisted in middleware.ts and HEADLESS_AUTH_WHITELIST alike, so the handler
-  // carries no auth on purpose, exactly like v1/health and v1/info above.
+  // Unguarded by the per-handler gate BECAUSE whitelisted (HEADLESS_AUTH_WHITELIST + middleware.ts
+  // WHITELIST): the whitelist IS the review, as for v1/health and v1/info above. This list has one
+  // meaning — "no auth string in the handler" — and this entry does not change it; what makes the
+  // route safe is the body (verb names + integer revisions, nothing else — TRDD-TLSE2FEF, #88),
+  // pinned by tests/unit/capabilities.test.ts, not this line.
   'GET /^\\/api\\/capabilities$/',
   'POST /^\\/api\\/v1\\/register$/',
   'POST /^\\/api\\/v1\\/route$/',

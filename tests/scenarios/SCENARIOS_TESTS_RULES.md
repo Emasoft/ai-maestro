@@ -1221,7 +1221,17 @@ case "$NEXT" in
   RUN\ *)
     SCEN="${NEXT#RUN }"
     Spawn the scenario-runner agent via the Agent tool for that SCEN.
-    Wait for the runner's 2-line return. Parse verdict.
+    Wait for the runner's 2-line return.
+    FIRST check whether the HARNESS marked that return PARTIAL (a subagent that
+    stops at its maxTurns limit now returns its output marked as partial, with a
+    hint to continue it via SendMessage — Claude Code 2.1.246). If it did, the
+    runner is ALIVE and simply ran out of turns: do NOT parse a verdict, do NOT
+    write state, do NOT commit, do NOT purge screenshots. Continue the SAME
+    runner via SendMessage and wait again. Only an UNMARKED return is final.
+    Beware the word collision: the harness's "partial" and this suite's own
+    PARTIAL verdict mean different things, so decide on the harness's marker,
+    never on the word appearing in the runner's text.
+    Then parse verdict.
     Update tests/scenarios/state/autonomous-batch-state.json:
       scenarios.<SCEN>.status = "done"
       scenarios.<SCEN>.completed_at = now ISO 8601

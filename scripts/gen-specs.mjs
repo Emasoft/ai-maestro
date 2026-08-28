@@ -69,7 +69,10 @@ function genScriptsSpec() {
       if (/^#/.test(l)) { header.push(l.replace(/^# ?/, '')); continue }
       break
     }
-    const vm = text.match(/--version[^)]*\)\s*echo "([^"]+)"/)
+    // The `--version` arm may compute values before its echo and append `verbs=… fingerprint=…`
+    // after the semver (TRDD-JY6IDFFC), so: skip to the echo, capture up to and including the
+    // semver, and stop there — the runtime-derived suffix is not spec text.
+    const vm = text.match(/--version[^)]*\)[\s\S]*?echo "([^"$]*?v\d+\.\d+\.\d+)/)
     // Verbs come from the top-level dispatch case. The needle used to require a
     // `cmd_` handler, which silently dropped every verb routed through a shared
     // helper — measured 2026-08-20 on aimaestro-panel.sh: open/close/refresh/set

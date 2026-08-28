@@ -241,3 +241,22 @@ with the agent's title already reverted to `autonomous` — the delete pipeline 
   self-limiting and needs no fix: a stage that gets batched away is by definition one that lasted
   less than a frame, while a SLOW stage — the only kind the binary spinner made painful — arrives
   alone and always renders. Recorded so the next reader does not re-derive it as a bug.
+- 2026-08-28T06:58:00+0200 — FOURTH correction by ai-maestro-hub-session, fork-caught. Two
+  narrow fixes; no substantive claim changes.
+  **(a) Provenance.** `b4ed0e47` said the mechanism was "verified in code" on the strength of a
+  `grep -n` that returned a SYMBOL INDEX — line numbers and their order. A grep cannot show that
+  :471 is reachable only via :450, that both sit in one function, or that nothing returns in
+  between. The conclusion was right, but it came from the diff I had read earlier in the session,
+  not from that grep. Now actually established by READING `:400-475`: `finalStatus` is assigned
+  only at :454 inside `if (evt.done)`; `onCreated` (:471) is reachable only after the stream loop
+  exits and both the null check (:462) and the 2xx check (:465) pass, then `return`s at :472.
+  The chain holds. **This is the family's fourth costume and the worst placed of the four — a
+  symbol list standing in for the code, inside the VERIFICATION step, which is exactly where a
+  proxy stops being detectable.** Being right by luck is not being verified.
+  **(b) The self-limiting argument's REASON was unsound; the conclusion stands.** "A slow stage
+  arrives alone" assumes chunk boundaries track phase durations, and they do not — they track
+  network flush timing. The correct reason is stronger: the server emits a stage frame when that
+  phase STARTS, and React renders the LAST frame of a batch, so the surviving label is always the
+  most recently STARTED stage — i.e. the one currently running. Batching can therefore only drop
+  labels for phases that have ALREADY FINISHED, and can never leave a stale label on screen. Still
+  no fix needed, now for a reason that is actually true.

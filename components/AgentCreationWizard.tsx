@@ -497,6 +497,30 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     }
   }, [creationSuccess, animationPhase])
 
+  // TRDD-FY6I2MO2 — the ONE way out of this modal, for every dismissal route.
+  //
+  // Two rules meet here, and both are load-bearing:
+  //
+  //  1. While a creation is IN FLIGHT (`isCreating` and not yet successful) the
+  //     backdrop must stay inert, so a stray click cannot abandon a half-created
+  //     agent. That guard is correct — but `isCreating` is never set back to
+  //     false on success, so it also froze the *completion* screen: once "Your
+  //     Agent is Ready!" was up, the single "Let's Go!" button was the only exit
+  //     from a `fixed inset-0 z-50` overlay. When that one click missed, the
+  //     modal sat over the whole dashboard and blocked the Delete flow (observed
+  //     in two independent SCEN-031 runs). After success there is nothing left to
+  //     protect, so every ordinary route out (backdrop, X) is re-enabled.
+  //
+  //  2. Once the agent EXISTS, dismissing must go through `onComplete`, never
+  //     `onClose`. `onClose` only unmounts; it leaves the parent's activeAgentId
+  //     on the PREVIOUS agent, which is the SCEN-005 wrong-agent-delete near-miss
+  //     (Proposal 31). So the escape hatch added by rule 1 must not become a
+  //     second, id-losing exit — it routes to the same handler the button does.
+  const dismiss = useCallback(() => {
+    if (creationSuccess) onComplete(createdAgentId)
+    else onClose()
+  }, [creationSuccess, createdAgentId, onComplete, onClose])
+
   // --- Computed ---
   const stepIndex = STEP_ORDER.indexOf(step)
   const totalSteps = STEP_ORDER.length
@@ -505,7 +529,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
 
   // --- Render ---
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={isCreating ? undefined : onClose}>
+    <div data-testid="agent-creation-wizard" className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={isCreating && !creationSuccess ? undefined : dismiss}>
       <div
         className="bg-gray-900 rounded-xl w-full max-w-3xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
         style={{ maxHeight: '85vh' }}
@@ -515,7 +539,9 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700/50">
           <h3 className="text-base font-semibold text-gray-100">New Agent Setup</h3>
           <button
-            onClick={onClose}
+            onClick={dismiss}
+            data-testid="wizard-close"
+            aria-label="Close agent setup"
             className="p-1 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -579,7 +605,8 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
                 {showLetsGo && (
                   <div className="mt-6 flex justify-center">
                     <button
-                      onClick={() => onComplete(createdAgentId)}
+                      onClick={dismiss}
+                      data-testid="wizard-lets-go"
                       className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
                     >
                       Let&apos;s Go! 🚀

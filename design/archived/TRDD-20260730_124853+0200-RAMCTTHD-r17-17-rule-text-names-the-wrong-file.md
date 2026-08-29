@@ -4,9 +4,9 @@ title: R17.17's rule text names settings.local.json but the guard must target se
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: planned
+column: complete
 created: 2026-07-30T12:48:53+0200
-updated: 2026-08-21T22:02:08+0200
+updated: 2026-08-29T16:56:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -87,9 +87,42 @@ edit into a refactor; this is the routing it promised, not a second discovery.
 LOW. A one-parenthetical doc correction with no code change and an existing test that already pins
 the corrected behaviour. The risk of NOT doing it is strictly higher than the risk of doing it.
 
+## Acceptance
+
+- [x] R17.17's parenthetical names `~/.claude/settings.json`, with the reason inline so the next
+      reader cannot "correct" it back.
+      **DONE 2026-08-29.** The row (now `docs/GOVERNANCE-RULES.md:681`; it has drifted from :672 to
+      :680 to :681 across unrelated edits, which is why the check below is by CONTENT and not by
+      line) reads `(~/.claude/settings.json` — **not** `settings.local.json`, which is a
+      PROJECT-scoped override that nothing reads at the user-home level, so a guard writing there
+      would log success and enforce nothing`)`.
+- [x] The card's own verification check passes.
+      **DONE.** In R17.17 the string `settings.local.json` now appears exactly ONCE — inside the
+      deliberate NOT-clause — and the wrong TARGET form `~/.claude/settings.local.json` appears
+      **zero** times. Stated this way rather than as the card's original
+      `grep -n "settings.local.json" … no longer matches`, because that criterion as written would
+      now FAIL: the fix deliberately keeps the filename in a negation, and a check that forbids the
+      word cannot tell a wrong target from an explicit warning against it.
+- [x] No guard changed, and the pinned behaviour still agrees with the corrected text.
+      **DONE.** `lib/startup-user-scope-guard.mjs:55` still targets `settings.json`;
+      `tests/unit/startup-guards.test.ts` 17/17 green, unchanged; the whole
+      `tests/governance/` suite 56 files / 548 tests green, so the enforcement map and the
+      governance-table checks accept the edited row.
+- [x] **DERIVED, not in the original card:** the guard's own docstring no longer asserts a defect
+      that has been fixed.
+      **DONE.** It read *"R17.17's rule TEXT still says settings.local.json and is wrong; correcting
+      it is a governance edit"* — true when written, false the moment this card landed, and left
+      alone it would send the next reader to "fix" a rule that is now correct. Rewritten to record
+      that the correction HAPPENED (citing this TRDD) and to warn against reverting it to match a
+      remembered version of the rule. This is the card's own thesis applied to itself: a comment
+      claiming a live defect is a false claim once the defect is gone.
+
 ## Approval log
 
 - 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
   Re-measured: `docs/GOVERNANCE-RULES.md:680` (R17.17, line shifted from :672 by unrelated edits) still
   reads `(~/.claude/settings.local.json)`. `tests/unit/startup-guards.test.ts:85/:99` already asserts
   the correct target file, unchanged, still green. Trivial, low-risk, one-parenthetical doc fix.
+- 2026-08-29T16:56:00+0200 — COMPLETED by ai-maestro-hub-session. One-parenthetical governance-text
+  correction plus the derived docstring fix; no guard changed. tests/unit/startup-guards.test.ts
+  17/17 and tests/governance/ 548/548 green.

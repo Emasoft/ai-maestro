@@ -197,6 +197,30 @@ describe('TRDD-TS4G74XA — spec step 2: the pre-lint retries the READ', () => {
     expect(readPlan).toEqual([]) // every planned fault was actually served
     expect(res.attempts).toBe(7) // 3 read faults + 3 staleness faults + the committing pass
     expect(JSON.parse(await onDisk())).toEqual({ keep: 'me', added: 10 })
+    // PIN THE READ ACCOUNTING — MEASURED, not assumed. `readPlan === []` proves the entries were
+    // CONSUMED; it says nothing about WHICH pass consumed each one, so the mapping in the comment
+    // above needs its own evidence. This is that evidence, and the exact sequence is asserted
+    // rather than a bare length, because a length can be right while the order is wrong.
+    //
+    // Two predictions were made before running it (12, and 15). Both were wrong; it is 13. The
+    // three trailing `real` entries are what neither prediction accounted for, and they are also
+    // why the mapping survives: every one of them happens AFTER the commit, so none can shift
+    // entries 1-11.
+    //   1-3   aborted pre-lint passes, one read each (no staleness read is reached)
+    //   4-11  passes 4-7: initial read + staleness re-read, two each
+    //   12    `readJson` in updateJson's POST-COMMIT AUDIT
+    //   13    this test's own `onDisk()` — `realReadFile` is imported from the MOCKED module, so
+    //         the helper is itself observed. Named so nobody "fixes" the count by deleting it.
+    expect(readLog).toEqual([
+      'planned:{ torn a',
+      'planned:{ torn b',
+      'planned:{ torn c',
+      'real', 'planned:{"keep":"me","movedByAno',
+      'real', 'planned:{"keep":"me","movedByAno',
+      'real', 'planned:{"keep":"me","movedByAno',
+      'real', 'real',
+      'real', 'real',
+    ])
   })
 
   it('a corrupt-at-rest target still fails, and fails as UnreadableTargetError', async () => {

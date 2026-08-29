@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-06T00:06:08+0200
+updated: 2026-08-29T07:44:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -152,8 +152,34 @@ result. Fail and report.
       edit to a covered key (pinned — this is the boundary most likely to be widened).
 - [ ] Existing conformant behaviour unchanged: staleness-gate retry, queue isolation,
       atomic swap, backups — the current test suite stays green.
-- [ ] The `auditOk` caller sweep (carried from TRDD-PE54D95Q): establish whether the ~30
+- [x] The `auditOk` caller sweep (carried from TRDD-PE54D95Q): establish whether the ~30
       gate callers branch on it; unchecked callers named.
+      **DONE 2026-08-29 — the answer is ZERO, and every caller is an unchecked caller.**
+      **38 production `updateJson` call sites across 10 files**, and **not one of those files
+      mentions `auditOk` anywhere** (the card's "~30" was close):
+      `services/element-management-service.ts` **22** · `app/api/settings/marketplaces/route.ts` 5 ·
+      `services/role-plugin-service.ts` 3 · `lib/client-plugin-adapters/claude-adapter.ts` 2 ·
+      `services/plugin-storage-service.ts` · `lib/user-scope-plugin-whitelist.ts` ·
+      `lib/statusline-store.ts` · `lib/settings-gate.ts` · `lib/oauth-rotator/alert-delivery.ts` ·
+      `lib/agent-plugin-whitelist-store.ts` (1 each).
+      Method: grep `updateJson(` over `app lib services components scripts server.mjs` (all
+      extensions the runtime uses — `.mjs` included, since `server.mjs` and `lib/*.mjs` load outside
+      the bundle), excluding the definition file and doc-comment lines; then grep each of the 10
+      caller files for `auditOk`. Outside `lib/json-io.ts` the identifier appears **only in tests**,
+      where every occurrence but one is a mock return value being constructed.
+      **The consequence is a finding, not just a count.** `lib/json-io.ts:331` states the contract
+      as *"We surface `auditOk: false` and log loudly; the caller decides."* **No caller decides.**
+      The post-commit audit at `:427` re-reads the file and compares it byte-for-byte against what
+      was written — so it detects precisely the case where a write did not land as intended — and
+      its entire effect today is a `console.warn`. That is the WARN-dressed-verification family
+      this project keeps finding (R51.7's "a post-condition that does not gate the result is a log
+      line that reads like one"), here at the layer every settings write goes through.
+      **NOT proposing auto-rollback** — `:327-331` argues at length that restoring the backup would
+      destroy a legitimate non-participating write by the `claude` CLI, and that reasoning stands.
+      The gap is that "the caller decides" was never built on the caller side: the flag is returned,
+      documented, and read by nobody. Whether the 38 sites should branch, or the contract should
+      stop promising they do, is a design call for this card's spec work — it is named here rather
+      than answered, because the box asked for the sweep and this is the sweep.
 
 ## Non-goals
 

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-29T07:46:29+0200
+updated: 2026-08-29T12:20:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,6 +25,7 @@ release-via: none
 relevant-rules: []
 labels: [settings-gate, json-io, safe-editor, owner-ours]
 external-refs: []
+implementation-commits: [471c4c4b, b8fe744a]
 ---
 # Bring the settings safe-editor to the USER's seven-step transaction spec
 
@@ -132,26 +133,46 @@ result. Fail and report.
 
 ## Acceptance criteria
 
-- [ ] Pre-lint retries: a read that parses on attempt 2 or 3 SUCCEEDS the transaction; one
+- [x] Pre-lint retries: a read that parses on attempt 2 or 3 SUCCEEDS the transaction; one
       unparseable on all 3 fails with `UnreadableTargetError`. Pinned with a fixture whose
       reads are injected (attempt-counted), not chmod-based.
-- [ ] Retry restarts the WHOLE transaction: the retried attempt operates on a FRESH read,
+      **DONE 2026-08-29 — `471c4c4b`**, `tests/unit/json-io-prelint-retry.test.ts`. Reads are
+      served from a test-controlled plan (the ONE seam mocked); every other operation is real.
+- [x] Retry restarts the WHOLE transaction: the retried attempt operates on a FRESH read,
       never the discarded copy — pinned by a fixture whose file content CHANGES between
       attempts and an assertion that the committed result derives from the newest content.
+      **DONE 2026-08-29 — `471c4c4b`.** The mutator records the base it was handed; it runs
+      exactly ONCE, on the retry, against the fresh read. The failed attempt never reaches it,
+      which is what "the copy is discarded" means.
 - [ ] PER-STEP budgets, independent: a transaction whose step 2 fails 3× then succeeds on
       its 4th attempt, and whose step 5 then fails 3× and succeeds on ITS 4th, COMMITS —
       6 cumulative errors, zero steps at 4. A shared global counter fails this test.
-- [ ] The 4-attempt boundary, both directions: a step succeeding on its 4th attempt is a
+      **PARTIAL 2026-08-29 — the CODE is done (`471c4c4b` splits `readFailures` from
+      `staleFailures`), the TEST is not.** `json-io-prelint-retry.test.ts` proves step 2 can
+      spend its whole budget and still commit; it does NOT drive step 5 in the same
+      transaction, so the cross-step independence this box asks for is UNPINNED. A shared
+      counter would still pass what is written today. Left open deliberately — the missing
+      fixture must fail the staleness re-read 3× AFTER a 3×-failed pre-lint.
+- [x] The 4-attempt boundary, both directions: a step succeeding on its 4th attempt is a
       VALID success (the transaction proceeds); a step failing its 4th attempt fails the
       whole transaction, reported to the caller with the step named.
-- [ ] The retry is of the READ only — a neuter proving no write occurs on any failed
+      **DONE 2026-08-29 — `471c4c4b`**, both sides pinned. Also FIXED a real off-by-one: the
+      shipped `attempt >= maxAttempts` gave 3 attempts, not the spec's first-plus-3-retries.
+- [x] The retry is of the READ only — a neuter proving no write occurs on any failed
       pre-lint path (the file's bytes are untouched after 3 failures).
+      **DONE 2026-08-29 — `471c4c4b`.** After an exhausted pre-lint the on-disk bytes are
+      asserted byte-identical to the pre-transaction read.
 - [ ] Post-edit schema lint: a `set` op writing a schema-invalid value for a covered key
       FAILS the transaction with a typed error, no retry, file untouched.
 - [ ] Schema lint is NARROW: a pre-existing oddity in an UNRELATED key does not block an
       edit to a covered key (pinned — this is the boundary most likely to be widened).
-- [ ] Existing conformant behaviour unchanged: staleness-gate retry, queue isolation,
+- [x] Existing conformant behaviour unchanged: staleness-gate retry, queue isolation,
       atomic swap, backups — the current test suite stays green.
+      **DONE 2026-08-29 — `471c4c4b`.** Full suite: **497 files / 6577 passed / 2 skipped**,
+      `tsc --noEmit` 0. One unrelated failure, `statusline-capture-wrapper` asserting a
+      detached spawn returns inside 2 s and reading 17.7 s — a LOAD flake under full-suite
+      parallelism on a box also running a 5.2 GB `alcore`; it passes 21/21 in isolation and
+      touches nothing in `json-io`.
 - [x] The `auditOk` caller sweep (carried from TRDD-PE54D95Q): establish whether the ~30
       gate callers branch on it; unchecked callers named.
       **DONE 2026-08-29 — the answer is ZERO, and every caller is an unchecked caller.**

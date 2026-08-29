@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: complete
 created: 2026-07-30T12:48:53+0200
-updated: 2026-08-29T16:56:00+0200
+updated: 2026-08-29T16:58:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -126,3 +126,14 @@ the corrected behaviour. The risk of NOT doing it is strictly higher than the ri
 - 2026-08-29T16:56:00+0200 — COMPLETED by ai-maestro-hub-session. One-parenthetical governance-text
   correction plus the derived docstring fix; no guard changed. tests/unit/startup-guards.test.ts
   17/17 and tests/governance/ 548/548 green.
+- 2026-08-29T16:58:58+0200 — PRECISION FIX, appended (the card is terminal; this log is the exempt
+  append-only surface). Box 3 opens "No guard changed" while this card's own commit modifies
+  `lib/startup-user-scope-guard.mjs`, and box 4 describes that very edit — so the phrase and the
+  evidence beside it disagree if the box is read alone. Read it as: **no guard BEHAVIOUR changed;
+  the only edit to that file is its docstring**, which is what the unchanged 17/17 startup-guards
+  suite actually pins. Box 2's "appears exactly ONCE" was originally measured with `grep -c`, which
+  counts matching LINES and would have printed 1 for any number of occurrences on this single-line
+  table row; re-measured with `grep -o … | wc -l` the occurrence count is genuinely **1**, so the
+  claim was true and is now correctly sourced. `tsc --noEmit` 0 (immaterial here — the only code
+  edit is a comment in a `.mjs` file, which tsc does not typecheck).
+

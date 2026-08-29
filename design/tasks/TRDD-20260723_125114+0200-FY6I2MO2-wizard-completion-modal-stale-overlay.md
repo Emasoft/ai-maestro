@@ -55,7 +55,27 @@ external-refs:
   the behavioural X test). The success branch is pinned STRUCTURALLY, not behaviourally:
   reaching it from a unit test needs a full drive of six wizard steps plus a 6.5 s
   animation and a POST — so that half carries a positive control instead.
-- `yarn tsc --noEmit` clean.
+- `yarn tsc --noEmit` exit 0.
+
+**Adversarial review (2026-08-29) — three corrections worth carrying forward:**
+
+- **The "unreachable overlay" claim was settled by reading a className, which cannot
+  establish hit-testing.** Now settled by grep instead: no `createPortal` in the wizard
+  (6 other components use one; this is not among them), and the only `pointer-events-none`
+  in its subtree is the decorative blur div at `AgentCreationWizard.tsx:555`, inside the
+  left panel. The two `pointerEvents: 'none'` sites in `MobileDashboard.tsx` (198, 239)
+  are on per-agent terminal panes at `z-0/z-10`, not ancestors of the wizard mount at
+  `z-50`. The SCEN-031 note "DOM-level Chat interactions still reached the composer" is
+  NOT counter-evidence: a scenario runner dispatching synthetic events on an element
+  reference bypasses hit-testing entirely, so it says nothing about a real pointer.
+- **NEW surface, accepted, not guarded:** the backdrop is now live on the success screen,
+  so two rapid clicks before the parent re-renders would fire `onComplete` twice → two
+  `onRefresh()` + two `onAgentCreated(id)`. Both are idempotent at both mount sites, so
+  no data loss; recorded rather than guarded because a guard would cost more than the
+  surface is worth. Revisit if either callback stops being idempotent.
+- **The behaviour-preservation argument for "Let's Go!" was backwards** and is corrected
+  in the code comment: it does not rest on `showLetsGo ⇒ creationSuccess` at set time, it
+  rests on `creationSuccess` being MONOTONIC (one write site, `true`, never reset).
 
 **NEXT ACTION — needs the owner, do not self-authorize.** Acceptance boxes 3-5 are UI
 checks and the ai-maestro server is STOPPED by owner directive ("do NOT restart"). Ask

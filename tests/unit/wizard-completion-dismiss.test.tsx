@@ -27,6 +27,13 @@ import { join } from 'node:path'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import AgentCreationWizard from '@/components/AgentCreationWizard'
 
+// The path is cwd-relative, which is a SECOND way of naming the component the
+// behavioural half imports through `@/` — nothing makes those two agree. The
+// positive control below is what closes that: it asserts the bytes we read are
+// this component, so a cwd or alias change fails loudly instead of silently
+// asserting about some other file. (`new URL(..., import.meta.url)` is not an
+// option — under vitest's transform that url is not file-scheme and readFileSync
+// throws "The URL must be of scheme file".)
 const SOURCE = readFileSync(
   join(process.cwd(), 'components/AgentCreationWizard.tsx'),
   'utf8'
@@ -35,10 +42,12 @@ const SOURCE = readFileSync(
 afterEach(() => cleanup())
 
 describe('AgentCreationWizard — dismissal routes (TRDD-FY6I2MO2)', () => {
-  it('positive control: the source under assertion is the wizard and is non-empty', () => {
-    expect(SOURCE.length).toBeGreaterThan(10_000)
-    expect(SOURCE).toContain("Your Agent is Ready!")
-    expect(SOURCE).toContain("Let&apos;s Go!")
+  it('positive control: the source under assertion IS this wizard', () => {
+    // Identity, not size. A byte floor over a file under active edit says only that
+    // something large was read — it cannot tell this component from another one.
+    expect(SOURCE).toContain('export default function AgentCreationWizard(')
+    expect(SOURCE).toContain('Your Agent is Ready!')
+    expect(SOURCE).toContain('Let&apos;s Go!')
   })
 
   it('before creation: the backdrop dismisses, and routes to onClose', () => {

@@ -516,6 +516,12 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
   //     on the PREVIOUS agent, which is the SCEN-005 wrong-agent-delete near-miss
   //     (Proposal 31). So the escape hatch added by rule 1 must not become a
   //     second, id-losing exit — it routes to the same handler the button does.
+  //
+  // Routing "Let's Go!" through here is behaviour-preserving for a reason worth
+  // stating exactly, because the obvious argument is the wrong one: it is NOT that
+  // `showLetsGo` implies `creationSuccess` at the moment it is set. It is that
+  // `creationSuccess` is MONOTONIC — one write site, `true`, never reset — so once
+  // the button is on screen the `else onClose()` arm is unreachable for it.
   const dismiss = useCallback(() => {
     if (creationSuccess) onComplete(createdAgentId)
     else onClose()

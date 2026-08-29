@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T11:52:00+0200
+updated: 2026-08-29T12:18:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -242,17 +242,24 @@ between, never as one sweep.
       carries an explicit **`readOnly: true`** field at `:9403`, and its `run` body only
       `readFileSync`s `registry.json`, `find`s the row, and either throws or pushes an op — it
       writes nothing.
-      **The `readOnly` flag is load-bearing, and this is confirmed in the RUNNER, not in the gate's
-      own comment** (`lib/gate-transaction.ts:95-97`): *"A mutating gate with no `undo` cannot
-      satisfy R51, so the sequence refuses to start"*, implemented as
-      `gates.filter(g => !g.readOnly && typeof g.undo !== 'function')`. So the missing `undo` is the
-      **contract** — drop `readOnly` and `DeleteAgent` would refuse to run at all.
-      **But one half of that gate's comment does NOT survive the runner, and I had repeated it.**
+      **The `readOnly` flag is load-bearing, and the citation is the CALL SITE, not the helper.**
+      `findUncompensatedGates` (`lib/gate-transaction.ts:96-97`) is a pure predicate — on its own it
+      only *defines* what would offend. The enforcement is `runGateSequence` calling it and
+      returning before anything runs (`:125-141`): a non-empty result yields
+      `{ ok: false, failedGateId: 'PRECHECK', ops: ['PRECHECK: REFUSED — …'] }`. So the missing
+      `undo` is the **contract** — drop `readOnly` from G08b and `DeleteAgent` refuses to start.
+      **One half of that gate's own comment does NOT survive the runner, and I had repeated it.**
       It says `readOnly` is also *"what makes its failure roll G08 back"*, and I wrote that up as a
-      designed relationship between two named gates. The unwind is GENERIC: on any gate's failure
-      the runner walks `executed` in reverse and calls every `undo` it finds (`:114`, `:149-151`).
-      G08b's failure rolls G08 back the same way G07c's would — true, but a property of the
-      sequence, not a pairing. A remediation plan should not read G08b as a guard *for* G08.
+      designed relationship between two named gates. The unwind (`abort()`, `:145-174`) is GENERIC
+      and its loop is unconditional over `executed` in reverse — and it is reached from **three**
+      sites, not one: any gate throwing (`:198`), the R51.7 invariants check throwing (`:213`), and
+      that check returning violations (`:218`). G08b's failure rolls G08 back the same way G07c's
+      would. A remediation plan must not read G08b as a guard *for* G08.
+      **Two runner properties a convergence plan needs, which a partial read had hidden from me:**
+      gates are pushed to `executed` **before** `run` (write-ahead, `:190`), so a gate that throws
+      part-way gets its OWN `undo` called first — which is why `undo` must tolerate partial work;
+      and the unwind **continues past a failed `undo`**, collecting `unrevertable` rather than
+      stopping, because reverting more is strictly better than stopping at the first failure.
       (The gate's comment attributes its existence to SCEN-002 P0-003 — `registryDelete()` can
       return true while the on-disk write silently failed, leaving an agent that resurrects on the
       next restart. Cited as the comment's claim; I have not opened that scenario.)

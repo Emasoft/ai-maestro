@@ -1,12 +1,13 @@
 ---
 trdd-id: MFTDMSJY
 title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-needed for 10 minutes each time
-column: todo
+column: testing
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T16:06:14+0200
+updated: 2026-08-30T00:54:09+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -29,6 +30,27 @@ effort: M
 labels: [credentials, alarm-noise, blocks-deadline]
 external-refs: [Emasoft/ai-maestro#95, TRDD-X4RK1NUW, TRDD-3GU9V70H, TRDD-EQJPPZ2L]
 ---
+
+## ⏵ STATE — 2026-08-30: the fix is LANDED. Only a soak window is left, so this is `testing`.
+
+`todo` → **`testing`**. `todo` asserts work is waiting to start; the behavioural fixes shipped
+days ago and the sole remaining criterion is a **measurement that takes ≥24 h of wall clock**.
+
+- **LANDED:** a TIMEOUT no longer produces the same machine-wide suppression + ACL-worded
+  banner as a real denial; a latch-suppressed read is no longer reported as
+  `reauth-needed: slot-unreadable`; a timed-out read is no longer reported as `unreadable`;
+  and the `runSecurity` instrumentation (`c471b66d`) that characterised the stall — and
+  **refuted** the ACL-prompt hypothesis the banner had been printing as a diagnosis.
+- **CLOSED 2026-08-30 (it had been true since 2026-08-26):** the ai-maestro#95 correction.
+  Both halves are in comment `2026-08-26T09:14:45Z`. **Nobody had gone back to look**, so a
+  priority-0 card carried an open box for four days over work already done.
+- **OPEN, and time-gated only:** ≥24 h with zero latch-attributable false `reauth-needed`
+  beats **AND ≥95 % of that window's beats non-`slot-unreadable`. Do not drop the floor** —
+  without it the box is satisfiable by the failure it exists to detect, because zero false
+  beats is also what a fully-latched, fully-silent rotator produces.
+
+**NEXT ACTION.** Start (or read) the soak window against the shipped fix and score BOTH
+criteria. No code change is pending. If the floor fails, that is a result, not a retry.
 
 ## Problem
 
@@ -486,8 +508,13 @@ contract moves; a purely server-side latch/classification change does not need t
       on the same beat**, which is precisely the distinction `bda75f7d` introduced. Recorded in
       X4RK1NUW's "Observation window — CLOSE" section, which attributes those two alerts to THIS
       card rather than calling its own window spotless.
-- [ ] Correction posted on ai-maestro#95 (the capture-caused cause clause + the "no card needed"
-      line)
+- [x] Correction posted on ai-maestro#95 (the capture-caused cause clause + the "no card needed"
+      line) — **VERIFIED 2026-08-30, and it had been done since 2026-08-26.** Comment
+      `2026-08-26T09:14:45Z` carries both halves: **(a)** *"The latch was NOT caused by the
+      browser capture… the capture ran 09:40-10:05; the latch fired at 10:33:21, 28 minutes
+      after it ended"*, and **(b)** *"'No card needed' was wrong, and it is the load-bearing
+      error"* — with the 350/350-are-timeouts classification and this card named as the one
+      X4RK1NUW asked for. Read from the comment bodies via `gh`, not from the box.
 
 ## Approval log
 

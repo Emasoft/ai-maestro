@@ -54,6 +54,27 @@ describe('baseline spec ratchet (TRDD-683C7H8E)', () => {
     expect(text).toMatch(/required_linear_history.*REMOVED|REMOVED.*required_linear_history/)
   })
 
+  // Added 2026-08-30. The `required_linear_history` guard above is a BLOCKLIST, and a
+  // blocklist only ever pins the one rule someone thought to list. `non_fast_forward` was
+  // struck by USER Tier-3 ruling 2026-08-27 and this spec went on asserting it as ratified
+  // for TWO DAYS with the suite green — because nothing named it. So pin the surviving
+  // rule set POSITIVELY instead: a positive assertion reds on any rule re-added, including
+  // one nobody has thought of yet.
+  it('baseline-history-protect declares exactly `deletion` — no force-push rule may return', () => {
+    const section = text.split(/^## /m).find((s) => s.startsWith('1. `baseline-history-protect`'))
+    expect(section, 'the history-protect section must exist to be checked').toBeTruthy()
+    const rulesLine = section!.split('\n').find((l) => /^- rules:/.test(l.trim()))
+    expect(rulesLine, 'the section must carry a `- rules:` line').toBeTruthy()
+    // Exactly one rule, and it is `deletion`. Both struck rules fail this by construction.
+    expect(rulesLine!.replace(/[`.]/g, '').trim()).toBe('- rules: deletion')
+  })
+
+  it('positive control: the rules-line assertion reds on a re-added rule', () => {
+    // Without this, a selector that matches nothing and a clean spec look identical.
+    const restored = '- rules: `deletion`, `non_fast_forward`.'
+    expect(restored.replace(/[`.]/g, '').trim()).not.toBe('- rules: deletion')
+  })
+
   it('the spec cites the executable SSOT and never claims to be it', () => {
     expect(text).toContain('baseline_ruleset_payloads')
     expect(text).toMatch(/code beats this prose|NEVER from this document/i)

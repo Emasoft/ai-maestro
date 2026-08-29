@@ -1,9 +1,9 @@
 ---
 spec: baseline-github-rulesets
-spec-version: 1.0.0
+spec-version: 1.0.1
 status: normative
 created: 2026-08-15T00:39:45+0200
-updated: 2026-08-15T00:39:45+0200
+updated: 2026-08-30T00:24:53+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "DESCRIPTIVE record of the ratified baseline — blob-addressable so 'the ratified baseline' resolves to one file instead of each agent's local prose copy (TRDD-683C7H8E; the ai-maestro#140 propagation incident). The EXECUTABLE source of truth is the janitor's `branch_protection_lib.baseline_ruleset_payloads` (scripts/lib/ in Emasoft/ai-maestro-janitor) — code beats this prose on any disagreement, and payloads sent to GitHub are built from that function, NEVER from this document."
@@ -32,13 +32,24 @@ tag-protect-only repo, 2026-08-15, fixed 69b8173).
   baseline-history-protect and baseline-pr-and-checks must be changed to allow mutations
   in history and direct pushing/merging by the owner"): the previous `[]` (nobody) was a
   lock with no key on solo-owner repos — the baseline protects against accident, never
-  against the owner's deliberate act. `deletion` + `non_fast_forward` still bind every
-  non-admin actor (CI, agents, outside contributors).
-- rules: `deletion`, `non_fast_forward`.
+  against the owner's deliberate act. `deletion` still binds every non-admin actor (CI,
+  agents, outside contributors).
+- rules: `deletion`.
+- **`non_fast_forward` is REMOVED — never re-add it** (USER Tier-3 ruling 2026-08-27,
+  janitor `TRDD-7EXBJB03`, applied fleet-wide 2026-08-28): *"history rewrite is allowed
+  and must be allowed in all rulesets of all github repos. the janitor must ensure of
+  that."* `non_fast_forward` IS GitHub's "Block force pushes" rule — the one rule whose
+  entire function is to forbid a history rewrite — so keeping it under that directive is
+  not a defensible reading. **The 2026-08-13 admin bypass does NOT satisfy the directive
+  either: a bypass is a key to a lock, and the ruling says the lock must not be there.**
+  Verified in the code SSOT: `branch_protection_lib.py:335-337` carries
+  `DELIBERATELY NO non_fast_forward` with the ruling quoted.
 - **`required_linear_history` is REMOVED — never re-add it** (USER Tier-3 ruling
   2026-08-08, janitor#14): it forbids merge commits, forcing endless rebase churn on a
-  many-agent repo; a workflow opinion, not protection. This is the only place this spec
-  names that rule, and the guard test pins exactly that.
+  many-agent repo; a workflow opinion, not protection.
+- Both removals are the same move for the same stated reason: **the guardian must not be
+  the thing blocking the work.** `deletion` is kept because losing a branch is not a
+  history rewrite — it is the loss of the ref you would rewrite FROM.
 
 ## 2. `baseline-pr-and-checks` — target: branch, enforcement: active
 
@@ -62,8 +73,19 @@ tag-protect-only repo, 2026-08-15, fixed 69b8173).
 ## 3. `baseline-tag-protect` — target: tag, enforcement: active
 
 - conditions: `ref_name.include: ["refs/tags/v*.*.*"]` (readback-pinned on first apply)
-- bypass_actors: `[]` — nobody. Creating a NEW tag is unrestricted, so publish.py still
-  cuts releases; nothing needs a bypass.
+- bypass_actors: `[{actor_id: 5, actor_type: RepositoryRole, bypass_mode: always}]` — the
+  OWNER (admin role) bypasses tags too. **Changed from `[]` by the same USER Tier-3 ruling
+  2026-08-27**, and this was the ruling's REAL gap: with nobody able to repoint or drop a
+  tag, every release tag was stranded on a commit that no longer existed after a
+  *permitted* history rewrite. **A rewrite you cannot follow through on is a rewrite you
+  are not allowed to make.** `deletion` + `update` still bind every non-admin actor.
+- **Why this ruleset was treated DIFFERENTLY from `baseline-history-protect` under one
+  sentence — do NOT "fix" this into consistency.** On branches the offending rule was
+  REMOVED; on tags `update` was KEPT and a bypass added instead. Removing the rule is
+  right where the rule IS the prohibition (`non_fast_forward` has no job left under the
+  directive); a bypass is right where the rule protects against someone ELSE — tag
+  `update` still stops CI, an agent, or a contributor silently repointing a published
+  release tag, and only caught the owner in the blast radius.
 - rules: `deletion`, `update` (NOT non_fast_forward — `update` also blocks a fast-forward
   re-point of an existing tag onto a malicious descendant commit; minimal-complete tag
   immutability). Closes the supply-chain gap where a moved release tag re-points

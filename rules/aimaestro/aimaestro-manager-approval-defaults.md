@@ -129,8 +129,17 @@ condition `ref_name.include: ["~DEFAULT_BRANCH"]`):
   bypasses — USER Tier-3 ruling 2026-08-13: "allow mutations in history
   and direct pushing/merging by the owner"; the previous `[]` was a lock
   with no key on solo-owner repos. Non-admin actors — CI, agents,
-  outside contributors — remain fully bound). Rules: `deletion`,
-  `non_fast_forward`.
+  outside contributors — remain fully bound). Rules: **`deletion` only.**
+  (`non_fast_forward` REMOVED by USER Tier-3 ruling 2026-08-27 —
+  "history rewrite is allowed and must be allowed in all rulesets of all
+  github repos. the janitor must ensure of that." It IS GitHub's
+  block-force-push rule, i.e. the one rule whose whole function is to
+  forbid a history rewrite, so it has no job left under that directive.
+  **The 2026-08-13 admin bypass does NOT satisfy the ruling: a bypass is
+  a key to a lock, and the ruling says the lock must not be there.**
+  Applied fleet-wide 2026-08-28; code SSOT
+  `branch_protection_lib.py:335-337` carries `DELIBERATELY NO
+  non_fast_forward` with the ruling quoted. Do NOT re-add it.)
   (`required_linear_history` REMOVED by USER ruling 2026-08-08 —
   "an unrealistic requirement nobody was ever able to follow;
   development is too complex and articulated, with many faux passes.

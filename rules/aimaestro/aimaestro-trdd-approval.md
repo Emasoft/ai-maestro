@@ -928,12 +928,26 @@ applies to the narrow matched category, never the whole corpus.
 ## Part C — Standard baseline GitHub rulesets (the always-on floor)
 
 Every AI Maestro repository carries a **standard baseline** of GitHub
-branch rulesets: the ratified pair
-**`baseline-history-protect`** (no-bypass: `deletion`,
-`non_fast_forward`, `required_linear_history`) +
-**`baseline-pr-and-checks`** (admin-bypass for `publish.py`:
-`pull_request` 1-approval + `required_status_checks`). The canonical
-definition lives in `aimaestro-manager-approval-defaults.md` §F.
+branch rulesets. **Do not build a payload from this paragraph** — the
+canonical definition lives in `aimaestro-manager-approval-defaults.md`
+§F, and the EXECUTABLE source of truth is the janitor's
+`branch_protection_lib.baseline_ruleset_payloads`. Prose goes stale on
+every ruling; a prose copy re-applied "as-is" is how a ruling gets
+silently undone.
+
+For orientation only, current as of 2026-08-30: the ratified TRIO is
+**`baseline-history-protect`** (admin bypass; rules `deletion`) +
+**`baseline-pr-and-checks`** (admin bypass; conditional `pull_request`
++ `required_status_checks`) + **`baseline-tag-protect`** (admin bypass;
+rules `deletion`, `update`).
+
+**`non_fast_forward` and `required_linear_history` are REMOVED and must
+never be re-added** (USER Tier-3 rulings 2026-08-27 and 2026-08-08).
+This paragraph previously listed BOTH as ratified, and named a PAIR
+where the fleet has carried a TRIO — an agent applying it "as-is" would
+have re-imposed two locks the owner deliberately removed, which is a
+Tier-0 exempt operation undoing a Tier-3 ruling. Corrected 2026-08-30
+against the code SSOT.
 
 **The ai-maestro-janitor automatically enforces this baseline.** If an
 agent forgets to set it (or a repo drifts off it), the janitor

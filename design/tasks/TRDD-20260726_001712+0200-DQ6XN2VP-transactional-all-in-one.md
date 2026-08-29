@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-08-29T07:37:32+0200
+updated: 2026-08-29T13:34:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1746,6 +1746,29 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       question with a named next step, and it is why no promotion was forced here: the card's own
       warning is that a wrong invariant aborts a correct operation, and a valueless one still costs
       a reader the belief that the ratchet measures rollback coverage.
+      **2026-08-29 (later) — THE NAMED NEXT STEP WAS ATTEMPTED AND IS BLOCKED, BY THE SAME CAUSE
+      AS G11. Still 2.** The step this box named was "ADD a post-condition to a multi-gate
+      pipeline". Of the 8 pipelines with no post-condition, exactly ONE is multi-gate:
+      **`ChangeClient`** (`:7801-8282`, gates G07 uninstall-old / G08 install-new / G09
+      registry-program, all three with undos). The others are 0- or 1-gate
+      (`ChangeMCP`/`ChangeLSP`/`ChangeHook` are thin delegators;
+      `ChangeFolder`/`ChangeAvatar`/`ChangeMetadata`/`ChangeCLIArgs` are single-gate).
+      **The contradiction worth catching is real and currently uncaught:** G08's belt-and-braces
+      verification runs only `if (normalized === 'claude')`, so for any OTHER client a silently
+      no-op install still lets G09 write `program: <new client>` — registry claiming a client
+      whose plugins are not there. That is a CONTRADICTION, not a leftover, which is precisely
+      what `invariants` is for.
+      **It is not safely addable today, for the G11 reason exactly.** The check must re-read the
+      registry, and `lib/agent-registry.ts::loadAgents` is LENIENT: its `catch` logs and
+      `return []` (`:258-266`, deliberately — "callers expect a list"). An invariant reading
+      through it sees *agent not found* whenever the registry is unreadable for ANY unrelated
+      reason, and rolls back a CORRECT migration. Same blind spot as `loadJsonSafe` in G11, a
+      different reader — **the third instance of this shape on this card**, which makes it the
+      pattern rather than a coincidence.
+      **So the next step is now upstream and smaller:** give the invariant a LOUD registry read
+      (`readJson` already returns `{ok:false, reason}`) before promoting anything. Recorded
+      rather than forced, per this box's own standing rule — a valueless or false-positive-prone
+      invariant costs more than the ratchet rise buys.
       **⚠ SAME-SESSION CORRECTION — "only 4" was an INSTRUMENT LIMIT, not a fact.** The scan above
       used a fixed **90-line window** after each runner call and a needle of `Final|verified|Verify`.
       Re-run with a wider needle over the whole file

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-29T07:26:12+0200
+updated: 2026-08-29T07:28:38+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -342,6 +342,35 @@ identically at HEAD with this change stashed). tsc clean on touched files.
   (`eh > KEEPALIVE_AHEAD_H` ⇒ skip) predicts exactly the observed 7.88 / 7.85 / 6.11 h remaining-runway pattern
   and bounds the true lifetime at ≥7.88 h — so ≈8 h is correct, but as a **derived** number
   rather than an inherited one.
+- 2026-08-29T07:28:38+0200 — **THE THING ITSELF, and it retires both derivations above.** Both the
+  original close and the correction one entry up reason from **expiry deltas** — an inference,
+  and the correction's half still leans on 08-27 figures recorded by a PRIOR SESSION rather than
+  measured by the closing one. `logs/pm2-out.log` logs the refresh **as an event**:
+  ```
+  2026-08-29 03:03:17 [oauth-rotator] keepalive: refreshed <account-B>
+  2026-08-29 03:28:17 [oauth-rotator] keepalive: refreshed <account-C>
+  2026-08-29 05:04:18 [oauth-rotator] keepalive: refreshed <account-B>
+  2026-08-29 05:29:18 [oauth-rotator] keepalive: refreshed <account-C>
+  2026-08-29 07:05:18 [oauth-rotator] keepalive: refreshed <account-B>
+  2026-08-29 07:15:18 [oauth-rotator] keepalive: refreshed <account-A>
+  ```
+  (Account addresses REDACTED to `<account-A/B/C>`: this repo is PUBLIC and the pre-commit
+  PII gate correctly refused the verbatim paste — a committed address cannot be retracted.
+  The evidence is the six events and their times, not who they name.)
+  Six successful refreshes across all three accounts in 4.5 h, named per account. This needs **no
+  token lifetime, no prior session's numbers, and no delta arithmetic** — it is the token exchange
+  being observed rather than reconstructed, which is exactly what the STATE block said would
+  settle "refresh tokens unproven in both directions". It also re-establishes box 1 independently
+  of the log-prefix argument: something is running the absorbed keepalive, right now, on a ~1 h
+  cadence per account.
+  **And it DERIVES the 8 h lifetime instead of assuming it:** `07:15:18+02:00` → `13:15:18Z` and
+  `05:29:18+02:00` → `11:29:18Z` are both exactly +8 h against the measured `expires_at`. Two
+  exact mint→expiry pairs, first-hand, so the constant this card twice warned about is now a
+  measurement.
+  **The lesson, since this is the third pass over the same claim:** the log line naming the event
+  was in `pm2-out.log` the whole time; three sessions reached for expiry arithmetic instead and
+  each produced a *correct answer by a weaker route*. Look for the artifact that RECORDS the
+  event before reconstructing it from its side effects.
 
 ## Observation window — 2026-08-22T14:25+0200 (evidence for the one open box)
 

@@ -29,11 +29,14 @@ import AgentCreationWizard from '@/components/AgentCreationWizard'
 
 // The path is cwd-relative, which is a SECOND way of naming the component the
 // behavioural half imports through `@/` — nothing makes those two agree. The
-// positive control below is what closes that: it asserts the bytes we read are
-// this component, so a cwd or alias change fails loudly instead of silently
-// asserting about some other file. (`new URL(..., import.meta.url)` is not an
-// option — under vitest's transform that url is not file-scheme and readFileSync
-// throws "The URL must be of scheme file".)
+// positive control below NARROWS that gap without closing it: it establishes the
+// bytes we read are *a* file holding this component, so a cwd or alias change
+// fails loudly rather than silently asserting about an unrelated file. It cannot
+// rule out a second COPY of the component (a duplicate, a worktree); say that
+// plainly rather than claim the two paths are proven to agree.
+// (`new URL(..., import.meta.url)` was tried and threw "The URL must be of scheme
+// file" under this repo's vitest 4 setup on 2026-08-29 — its module urls are not
+// file-scheme. Recorded as what happened here, not as a claim about every config.)
 const SOURCE = readFileSync(
   join(process.cwd(), 'components/AgentCreationWizard.tsx'),
   'utf8'

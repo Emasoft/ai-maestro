@@ -59,20 +59,37 @@ external-refs:
 
 **Adversarial review (2026-08-29) — three corrections worth carrying forward:**
 
-- **The "unreachable overlay" claim was settled by reading a className, which cannot
-  establish hit-testing.** Now settled by grep instead: no `createPortal` in the wizard
-  (6 other components use one; this is not among them), and the only `pointer-events-none`
-  in its subtree is the decorative blur div at `AgentCreationWizard.tsx:555`, inside the
-  left panel. The two `pointerEvents: 'none'` sites in `MobileDashboard.tsx` (198, 239)
-  are on per-agent terminal panes at `z-0/z-10`, not ancestors of the wizard mount at
-  `z-50`. The SCEN-031 note "DOM-level Chat interactions still reached the composer" is
-  NOT counter-evidence: a scenario runner dispatching synthetic events on an element
-  reference bypasses hit-testing entirely, so it says nothing about a real pointer.
+- **The "unreachable overlay" claim was first settled by reading a className, which cannot
+  establish hit-testing; the second attempt grepped only the three files already believed
+  relevant, which is scoping the search to the hypothesis.** Settled on the third pass over
+  the right population — `pointer-events|pointerEvents` across `app/ components/ styles/`
+  including `.css`, since a global stylesheet rule applied by className is invisible to a
+  `.tsx` grep. Result: the ONLY global CSS rule is `.xterm .xterm-accessibility*` in
+  `app/globals.css:154`, irrelevant here; the wizard is not portaled (6 other components
+  use `createPortal`, it is not among them); its own subtree's only `pointer-events-none`
+  is the decorative blur div at `AgentCreationWizard.tsx:561`, inside the left panel. The
+  conditional pane rules (`MobileDashboard.tsx:198,239`, `TabletDashboard.tsx:183,216`,
+  `zoom/AgentCardView.tsx:210,235,259`) were the real risk, because they would make the
+  overlay click-through exactly when a pane is INACTIVE — the intermittent shape the bug
+  report has. They are ruled out by TRACING, not by z-index: MobileDashboard's per-agent
+  panes live inside `onlineAgents.map(...)` which opens at line 188 and closes at 276,
+  while the wizard mounts at 441, outside it; and neither TabletDashboard nor
+  AgentCardView renders `MobileDashboard` or `<AgentList`, so their panes cannot be
+  ancestors of either mount.
+- **The SCEN-031 note "DOM-level Chat interactions still reached the composer" LIKELY does
+  not contradict this, but that is an inference, not a reading.** A synthetic event
+  dispatched on an element reference bypasses hit-testing, while a CDP-driven click does
+  not — and the runner's actual dispatch path was not read. Do not treat this line as
+  settled: it is the only EMPIRICAL observation in the file, and dismissing observed
+  behaviour with an unread mechanism is backwards. Read the runner before relying on it.
 - **NEW surface, accepted, not guarded:** the backdrop is now live on the success screen,
   so two rapid clicks before the parent re-renders would fire `onComplete` twice → two
-  `onRefresh()` + two `onAgentCreated(id)`. Both are idempotent at both mount sites, so
-  no data loss; recorded rather than guarded because a guard would cost more than the
-  surface is worth. Revisit if either callback stops being idempotent.
+  `onRefresh()` + two `onAgentCreated(id)`. Both VERIFIED idempotent by reading their
+  definitions, not assumed: `handleAgentCreated` (`app/page.tsx:474`) is two setState calls
+  with identical values, and `refreshAgents` (`hooks/useAgents.ts:316`) just calls
+  `loadAgents()`, which the hook already re-runs on a poll timer — so a second fire costs
+  one wasted request and nothing else. Recorded rather than guarded; revisit if either
+  callback stops being idempotent.
 - **The behaviour-preservation argument for "Let's Go!" was backwards** and is corrected
   in the code comment: it does not rest on `showLetsGo ⇒ creationSuccess` at set time, it
   rests on `creationSuccess` being MONOTONIC (one write site, `true`, never reset).

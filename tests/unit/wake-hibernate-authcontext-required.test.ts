@@ -13,8 +13,12 @@ import { stripComments } from '../helpers/strip-comments'
  * both functions gate their authorization on the field being PRESENT:
  *
  *     // When authContext is provided (route call), check caller permissions.
- *     // When absent (internal call), skip — backward compatible.
+ *     // When absent (internal call), skip — backward compatible.   ← DELETED 2026-08-29
  *     if (authContext) { if (!authContext.isSystemOwner) { … authorize(…) } }
+ *
+ * The two comment lines above are QUOTED AS THEY WERE, not as they are: they were deleted on
+ * 2026-08-29 because they advertised the bypass as supported. The `if` is unchanged, so the
+ * shape this guard exists for is still live — only the prose inviting it is gone.
  *
  * That is the exact bypass `element-management-service.ts` abolished, and that file records why
  * in `gate0Auth`'s own comment: *"Previously, a missing authContext was silently treated as

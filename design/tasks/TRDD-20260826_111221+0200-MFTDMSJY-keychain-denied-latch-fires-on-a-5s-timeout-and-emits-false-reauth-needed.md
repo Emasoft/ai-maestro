@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T07:20:38+0200
+updated: 2026-08-29T07:26:39+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -331,6 +331,15 @@ contract moves; a purely server-side latch/classification change does not need t
       window returns **0** and reports a flawless **100 %** coverage — a needle keyed to the
       pre-fix spelling, blind to the population it is supposed to count, failing in the reassuring
       direction. The post-fix numerator is the `keychain denied-latch is set` beats.
+      ⚠ **The "zero false `reauth-needed`" half of this box is now STRUCTURAL, so the coverage
+      floor carries all of its discriminating power.** `lib/oauth-rotator/tick.ts:1462` places
+      `if (survey.probeSuppressed) { nextAction='stuck'; stuck='keychain-latched' }` **before**
+      `else if (unreadable > 0) { nextAction='reauth-needed' }` — so while the fix is present, a
+      latch-attributable `reauth-needed` cannot be emitted at all. Measuring zero of them is
+      therefore guaranteed by branch order, not observed; it confirms the fix is INSTALLED, not
+      that the window was healthy. The ≥95 % floor (11/571 = 1.93 % blind) is the half that can
+      still fail, which is why its author added it. Both halves are reported above; only this one
+      is evidence.
       ⚠ **`rotator.log` is the WRONG source for this box** and reads as clean for the same
       spurious reason: post-fix it holds **7 lines, 0 `auto:` beats** — the server logs state
       TRANSITIONS there (`aim-server/` kinds), not beats, so the denominator is zero and the

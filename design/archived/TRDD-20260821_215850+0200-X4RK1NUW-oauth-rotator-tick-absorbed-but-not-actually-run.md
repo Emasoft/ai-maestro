@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-29T07:18:14+0200
+updated: 2026-08-29T07:26:12+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -323,6 +323,25 @@ identically at HEAD with this change stashed). tsc clean on touched files.
   self-mandated). The last open box (the 48h observation window) closed at **54h elapsed** on its
   own stated PASS criteria, re-derived first-hand — see "Observation window — CLOSE" below. All 5
   acceptance boxes ticked; `npt:` and `eht:` both empty, so the completion gate is satisfied.
+- 2026-08-29T07:26:12+0200 — **CORRECTION to the close's reasoning (verdict UNCHANGED, mechanism
+  replaced).** Appended here rather than edited into the body, which is frozen at `complete`;
+  `## Approval log` is the append-only exemption. Raised by an adversarial review of the closing
+  turn and then verified at source.
+  The close derived "these tokens were minted TODAY" from an **8-hour token lifetime**. That
+  constant is **nowhere in the code** — `lib/oauth-rotator/network.ts:453,531` takes the lifetime
+  from the provider's `expires_in` at runtime — and this very card's STATE block already warned
+  (`:125-126`) that the 8 h figure was "taken from the Problem section of the very card being
+  refuted, not measured". So the close inherited the unmeasured constant it had been told not to
+  inherit: **right answer, weaker mechanism than the card demands of itself** — the exact
+  "wrong mechanism, right answer" class this card exists to fight, one notch down.
+  **The stronger derivation needs no lifetime at all and was already on this page.** The 08-27
+  reading recorded expiries **07:34 / 08:05 / 08:41** (`:106`); the 08-29 reading records
+  **13:15 / 13:13 / 11:29**. Different values ⇒ the tokens were **re-minted between the two
+  readings**, whatever a token's lifetime happens to be. That alone carries the PASS.
+  Independently, `tick.ts:105 KEEPALIVE_AHEAD_H = 6` with the refresh trigger at `:841`
+  (`eh > KEEPALIVE_AHEAD_H` ⇒ skip) predicts exactly the observed 7.88 / 7.85 / 6.11 h remaining-runway pattern
+  and bounds the true lifetime at ≥7.88 h — so ≈8 h is correct, but as a **derived** number
+  rather than an inherited one.
 
 ## Observation window — 2026-08-22T14:25+0200 (evidence for the one open box)
 

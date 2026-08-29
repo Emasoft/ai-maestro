@@ -3,7 +3,7 @@ trdd-id: FRRJ80YQ
 title: wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
 column: todo
 created: 2026-08-22T22:20:05+0200
-updated: 2026-08-29T07:24:02+0200
+updated: 2026-08-29T07:26:39+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -152,7 +152,24 @@ sequence inside a string literal, which can only make the guard MISS a call, nev
       the box named only one comment: it carried the same "when authContext is provided" line
       **duplicated verbatim on the next line**, which is the same misleading contract stated
       twice; leaving it would have preserved the affordance at the twin site the card is titled
-      after. `tsc --noEmit` 0 errors; the guard test 3/3 green.
+      after.
+      **CORRECTION, same day, from the review of this turn: "duplicated verbatim" (as the commit
+      message `4577400e` and this box first read) is FALSE.** The two lines were
+      `// When authContext is provided (route call), check caller permissions.` and
+      `// Gate 0: Authorization — when authContext provided, check RBAC` — the same contract
+      stated **twice in different words**, a paraphrase, not an exact duplicate. The finding and
+      the fix stand; the exact-string claim was asserted from a glance at a `sed` window and is
+      corrected forward here because the commit message is already history.
+      **The guard was NEUTERED against the CURRENT tree, not trusted on the 08-22 record.** That
+      matters specifically because this turn edited comments *inside a file the guard scans*, so
+      a stale comment-stripper view was a live risk. `cp scripts_dev/probes/zz-probe-wake-no-ctx.ts
+      lib/` ⇒ exit 1, **1 failed / 2 passed**, naming `lib/zz-probe-wake-no-ctx.ts :: wakeAgent(…)`;
+      removing the copy ⇒ exit 0, 3/3. So the new comment's claim that the build fails when a
+      production caller omits `authContext` is measured, not inherited — and the green run alone,
+      which was my first evidence, would not have shown it.
+      Comments-only is proven by `git show 4577400e -- services/agents-core-service.ts` filtered
+      to non-comment changed lines ⇒ **empty**; `tsc --noEmit` exit 0 was the weaker instrument I
+      reached for first (it passes on plenty of behaviour changes).
       **The only remaining box is the OPTIONAL one below**, so nothing non-optional is left here.
 
 ## Approval log

@@ -156,3 +156,19 @@ touched, no dependencies on other open TRDDs.
   adopted a reviewer's range as my own measurement. In an observe-only suite the step numbers index
   WATCHING, not doing — so only an Action line says who acts, and "every step from X to Y is
   read-only" is a claim about steps X..Y, not about the ones after them.
+
+- 2026-08-29T17:56:00+0200 — CORRECTION to the entry above: the blockquote it introduced was placed
+  in the WRONG STEP'S SLOT. `SCENARIOS_TESTS_RULES.md` says context goes "in a blockquote **before**
+  the step or phase" — blockquotes attach FORWARD — and I had put an S002 rationale after S002's
+  last field and immediately before `#### S003`, i.e. exactly where a reader (or the scenario-runner
+  agent that consumes this file as prose) would take it as S003's context. Corpus practice
+  confirms the convention: SCEN-001 and SCEN-002 both place `> **Context:**` after a `## Phase`
+  heading and BEFORE the `####` step it explains. The blockquote now sits above `#### S002` and
+  opens `**S002 —**`, so attribution is explicit regardless of position.
+
+  Fourth instance of one shape, committed in the very turn whose message enumerated the first
+  three: **I verified the artifact against ITSELF instead of against the document that governs it.**
+  Re-reading lines 175-192 proved where the bytes sat and could not, even in principle, tell me what
+  that position MEANS. The rules file was already in context; nothing needed fetching. The
+  generalization is not "read headings carefully" but: *when the claim is conformance, the
+  instrument is the standard — never the thing being judged.*

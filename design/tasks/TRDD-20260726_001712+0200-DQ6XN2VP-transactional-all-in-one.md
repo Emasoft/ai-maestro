@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-08-02T15:25:31+0200
+updated: 2026-08-29T07:35:19+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1724,7 +1724,28 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       ratchet assertions stay green, which is exactly why a ratchet cannot replace a behavioural
       test). **`ChangePlugin`'s G11 did NOT qualify** — it reads settings via `loadJsonSafe`, which
       returns `{}` on a parse failure, so a corrupt `settings.local.json` would roll back a correct
-      change. One at a time, each with the evidence that its check cannot false-positive
+      change. One at a time, each with the evidence that its check cannot false-positive.
+      **2026-08-29 — THE CANDIDATE SET IS NOW ENUMERATED, AND IT IS EMPTY. The ratchet stays at 2,
+      and this is a finding rather than a pass.** Surveyed all **19** `runGateSequence` /
+      `runAioPipeline` call sites in `element-management-service.ts` for a post-txn final-state
+      check (AST-free scan: a `Final|verified|Verify` op push within 90 lines of the runner call).
+      **Only 4 have one at all**: `:4383` `ChangeTitle` and `:7255` `ChangeName` — the two already
+      declaring `invariants` — plus `:6078` `ChangeSkill` and `:6281` `changeSimpleElement`.
+      Both remaining candidates PASS the false-positive bar and FAIL on value, for the same
+      structural reason: each is a **single-gate** txn whose undo is `rm targetPath`, and its
+      post-condition fires **exactly when `targetPath` does not exist**. So the compensation a
+      promotion would buy is **a no-op by construction** — it would change the error WORDING to the
+      uniform R51.3 message and unwind nothing, which is not what the `invariants` hook is for.
+      (Their checks are sound in themselves: `existsSync` reads the thing, so neither carries the
+      `loadJsonSafe` blind spot that disqualified `ChangePlugin`'s G11 — a different reason for a
+      different answer.)
+      **This CHANGES THE REMAINING WORK, so it is worth more than another promotion would have
+      been.** The next rise cannot come from promoting an existing check — there are none left. It
+      has to come from ADDING a post-condition to a **multi-gate** pipeline, where an undo actually
+      unwinds something. That converts an open-ended "promote them one at a time" into a bounded
+      question with a named next step, and it is why no promotion was forced here: the card's own
+      warning is that a wrong invariant aborts a correct operation, and a valueless one still costs
+      a reader the belief that the ratchet measures rollback coverage.
 - [x] The tmux-kill compensation question decided and recorded here (R51.10 — re-launch is valid;
       a pid is not part of "the exact state")
 - [x] tsc clean, full suite green — **measured at `790cd8cb`**: `bash scripts/with-node.sh npx tsc

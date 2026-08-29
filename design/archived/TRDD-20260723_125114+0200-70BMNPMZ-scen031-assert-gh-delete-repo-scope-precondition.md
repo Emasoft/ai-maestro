@@ -110,3 +110,25 @@ touched, no dependencies on other open TRDDs.
   scenario phrases those in prose ("fork + clone", "opens PRs", "cut a v1.0.0 release"), so an
   instrument that finds nothing before S011 would also find nothing at three steps that definitely
   create state. Reading the step bodies is what settled it, not the grep's zero.
+
+- 2026-08-29T17:39:00+0200 — CORRECTION to the entry above, and to the wording it defended. The
+  previous entry verified that no step BEFORE S011 creates GitHub state and concluded the locator
+  held. Both the entry and the shipped clause were wrong in the same way: **S011 creates nothing.**
+  Its Action line begins "Watch (read-only) the MAINTAINER", and every step S007-S015 is
+  "Observe" / "STOP and observe" — the runner's last drive is the S006 brief, after which the fleet
+  works unsupervised (Rule 0.b). So the earliest moment outward GitHub state can exist is ANY TIME
+  AFTER S006, on the fleet's own schedule; nothing pins repo creation to S011, which is only where
+  the MAINTAINER is EXPECTED to do it.
+
+  I had quoted that "Watch (read-only)" line verbatim in the previous turn and still read the step
+  HEADING ("the MANAGER instructs the MAINTAINER to create...") as the action. That is the exact
+  failure I had just written the entry above to warn about, committed one turn later against
+  evidence already in front of me: **a heading is a description of intent; only the Action line says
+  who acts.** In an observe-only suite, the runner's step numbers index WATCHING, not doing, so no
+  step number can bound when the fleet acts.
+
+  Safety impact: NONE. The gate sits at S002, ahead of the S006 brief, so it fires before anything
+  can exist either way. The wording was the whole defect — and it was the dangerous kind, because a
+  future repairer reading "before S011 creates the real repo" could move the gate to just before
+  S011 and believe it still held, when the repo may already exist by S007. The scenario line now
+  states the real invariant (the gate MUST hold at S002) instead of a step-number locator.

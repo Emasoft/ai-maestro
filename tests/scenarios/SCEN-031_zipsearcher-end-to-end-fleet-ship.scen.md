@@ -177,7 +177,7 @@ author: Emasoft
 - **Goal:** `gh` is authed, the token can delete what this run will create, the target repo name is free, and the template exists.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** auth ok; `gh auth status 2>&1 | grep -q "'delete_repo'"` exits 0; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it. If `delete_repo` is MISSING, ABORT setup here — before S011 creates the real repo — with the remediation `gh auth refresh -h github.com -s delete_repo`. This gate exists because run `SCEN-031_20260722T203644Z` discovered the missing scope only at S022 cleanup, after the repo already existed, and had to leave it as residue for the user to delete by hand.
+- **Verify:** auth ok; `gh auth status 2>&1 | grep -q "'delete_repo'"` exits 0; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it. If `delete_repo` is MISSING, ABORT setup here — the gate MUST hold at S002, because after the S006 brief the fleet creates GitHub state on ITS OWN schedule and the runner only watches (S011 is where the MAINTAINER is EXPECTED to cut the repo, but nothing pins it there) — with the remediation `gh auth refresh -h github.com -s delete_repo`. This gate exists because run `SCEN-031_20260722T203644Z` discovered the missing scope only at S022 cleanup, after the repo already existed, and had to leave it as residue for the user to delete by hand.
 
 #### S003: Log in and baseline the dashboard
 - **Action:** `aim_login`, then screenshot the agent list.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T07:48:30+0200
+updated: 2026-08-29T07:50:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -104,8 +104,14 @@ are documentation-only and carry no runtime risk.
       verbatim as the baseline
 - [ ] The USER picks option 1, 2 or 3 (option 1 alone needs their sign-off — it changes a shipped
       response shape)
-- [ ] `json-io.ts:331`'s "the caller decides" is either made true or replaced by what actually
+- [x] `json-io.ts:331`'s "the caller decides" is either made true or replaced by what actually
       happens — this is option 3 and lands regardless of the choice above
+      **DONE 2026-08-29T07:50:12+0200.** Replaced, not deleted: the line now records the measurement
+      (0 of 41 sites branch; 33 discard the result outright), names what actually happens (two
+      indirect consumers SPREAD the result to an HTTP client and a CLI beside `success: true`), and
+      points at this card for the open decision. The no-auto-rollback argument above it is
+      untouched — it was never the part that was wrong. Comment-only: `tsc --noEmit` 0 errors,
+      `tests/unit/json-io-update.test.ts` 13/13 green.
 - [ ] The chosen behaviour is pinned by a test with a recorded neuter run
 - [ ] `tsc --noEmit` clean; json-io + settings-gate suites green
 

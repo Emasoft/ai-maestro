@@ -328,7 +328,17 @@ export class KeyLossRefused extends Error {
  * restores its backup when the audit disagrees (`safe_config_edit.py:438`), which is right for a
  * tool that owns the file. It is a HAZARD here: the `claude` CLI writes settings.json without our
  * lock, so an audit mismatch is more likely to be its legitimate write than our corruption — and
- * rolling back would DESTROY it. We surface `auditOk: false` and log loudly; the caller decides.
+ * rolling back would DESTROY it. We surface `auditOk: false` and log loudly.
+ *
+ * This used to end "…; the caller decides." It does not, and saying so stopped anyone checking.
+ * Measured 2026-08-29 (TRDD-TS4G74XA): of 38 direct call sites plus 3 reached through
+ * `editSettings`, ZERO branch on the flag — 33 discard the return value outright, so they could
+ * not read it under any spelling. What actually happens is that two of the indirect consumers
+ * SPREAD the whole result (`app/api/settings/edit/route.ts`, `scripts/aimaestro-settings-cli.mjs`),
+ * so `auditOk: false` ships to an HTTP client and a CLI beside a sibling `success: true` — a
+ * delegation past every layer that could act on it, to a consumer who is not told the field exists.
+ * Whether that should change is TRDD-HF2DY4VT; what must not persist is a contract line promising
+ * a decision nobody makes.
  *
  * ⚠ `mutator` MUST mutate the object it is given (or return void). Building a fresh object and
  * returning it is the 2026-07-07 shape — the minimal-object rebuild that wiped a 57.8 KB config —

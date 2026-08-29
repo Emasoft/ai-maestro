@@ -17,7 +17,7 @@ approval-datetime: 2026-07-23T12:51:14+0200
 relevant-rules: []
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [8450bbf6]
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260722T203644Z.report.md (ISSUE-002)
   - "memory:github-repo-deletion-and-scenario-repo-cleanup"

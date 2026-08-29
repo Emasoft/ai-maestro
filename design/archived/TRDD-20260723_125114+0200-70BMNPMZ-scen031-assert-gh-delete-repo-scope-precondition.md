@@ -1,9 +1,9 @@
 ---
 trdd-id: 70BMNPMZ
 title: SCEN-031 S002 preconditions should assert the gh token carries delete_repo scope
-column: planned
+column: complete
 created: 2026-07-23T12:51:14+0200
-updated: 2026-08-16T16:43:00+0200
+updated: 2026-08-29T17:22:53+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -64,11 +64,34 @@ touched, no dependencies on other open TRDDs.
 
 ## Acceptance
 
-- [ ] `tests/scenarios/SCEN-031_*.scen.md` S002 asserts the `gh` token's scopes include `delete_repo` (via `gh auth status` or the `X-OAuth-Scopes` response header) before any repo is created.
-- [ ] The step FAILS setup with a remediation message naming `gh auth refresh -h github.com -s delete_repo` when the scope is absent.
-- [ ] Simulated absence of `delete_repo` (or a scopes-check dry-run) shows the check fails fast, before S003/repo-creation runs.
-- [ ] The check does not false-fail against the current host's token (which carries `delete_repo` as of 2026-07-23).
+- [x] `tests/scenarios/SCEN-031_*.scen.md` S002 asserts the `gh` token's scopes include `delete_repo` (via `gh auth status` or the `X-OAuth-Scopes` response header) before any repo is created.
+- [x] The step FAILS setup with a remediation message naming `gh auth refresh -h github.com -s delete_repo` when the scope is absent.
+- [x] Simulated absence of `delete_repo` (or a scopes-check dry-run) shows the check fails fast, before S003/repo-creation runs.
+- [x] The check does not false-fail against the current host's token (which carries `delete_repo` as of 2026-07-23).
 
 ## Approval log
 
 - 2026-07-23T12:51:14+0200 — MANDATE by USER (report→TRDD conversion, "you have my trust").
+- 2026-08-29T17:22:53+0200 — COMPLETED. S002 now asserts `gh auth status`'s `Token scopes:` line
+  contains `'delete_repo'` and ABORTS setup with the `gh auth refresh -h github.com -s delete_repo`
+  remediation when it does not. No new tooling: S002 ALREADY ran `gh auth status`, and that command
+  already prints the scopes, so the whole fix is one added assertion on output the step was
+  discarding.
+
+  **Two corrections to this card's own text, both measured rather than assumed.**
+  (1) The card's third acceptance box says the abort must land "before S003/repo-creation" — S003
+  is the dashboard login; the repo is created at **S011** (MAINTAINER, `gh repo create --template`),
+  and the blocked cleanup is **S022** (`gh repo delete`). The scenario text cites S011 and S022, the
+  step numbers that are actually true; the box's "S003" is left as written because a terminal card's
+  body is frozen and the box's INTENT (fail before any real GitHub state exists) is satisfied either
+  way. My first draft of the edit wrote "before S008" from memory — S008 creates the AGENTS, not the
+  repo — and only grepping the step list caught it.
+  (2) The card proposed `X-OAuth-Scopes` response headers as an alternative mechanism. Not needed,
+  and the simpler one is strictly better here: the header route would add an API round-trip to a
+  step that already holds the answer in a command's stdout.
+
+  **Verified by a control PAIR, not by reading the predicate** — a scope check that never fails is
+  the whole failure mode this card exists to prevent, and one direction cannot show it:
+  `'delete_repo'` present → exit 0 · absent → exit 1 · the live host's real `gh auth status` → exit 0
+  (so the gate does not false-fail today). The negative arm is the load-bearing one; without it, an
+  identity check passes both arms and the gate is decorative.

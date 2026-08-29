@@ -173,11 +173,11 @@ author: Emasoft
 - **Verify:** Script exits 0; backup dir exists with `MANIFEST.sha256`; the sample-zip fixture exists.
 
 #### S002: Verify the GitHub preconditions (read-only)
-- **Action:** `gh auth status` (must be the @Emasoft identity); `gh repo view Emasoft/zipsearcher` MUST 404 (repo absent); `gh repo view fannijako/repo_template` MUST succeed and report `isTemplate: true`.
-- **Goal:** `gh` is authed, the target repo name is free, and the template exists.
+- **Action:** `gh auth status` (must be the Emasoft identity) — its `Token scopes:` line MUST include `delete_repo`; `gh repo view Emasoft/zipsearcher` MUST 404 (repo absent); `gh repo view fannijako/repo_template` MUST succeed and report `isTemplate: true`.
+- **Goal:** `gh` is authed, the token can delete what this run will create, the target repo name is free, and the template exists.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** auth ok; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it.
+- **Verify:** auth ok; `gh auth status 2>&1 | grep -q "'delete_repo'"` exits 0; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it. If `delete_repo` is MISSING, ABORT setup here — before S011 creates the real repo — with the remediation `gh auth refresh -h github.com -s delete_repo`. This gate exists because run `SCEN-031_20260722T203644Z` discovered the missing scope only at S022 cleanup, after the repo already existed, and had to leave it as residue for the user to delete by hand.
 
 #### S003: Log in and baseline the dashboard
 - **Action:** `aim_login`, then screenshot the agent list.

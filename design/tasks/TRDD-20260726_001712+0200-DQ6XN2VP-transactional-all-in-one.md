@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-08-29T13:34:00+0200
+updated: 2026-08-29T13:46:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1769,6 +1769,24 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       (`readJson` already returns `{ok:false, reason}`) before promoting anything. Recorded
       rather than forced, per this box's own standing rule — a valueless or false-positive-prone
       invariant costs more than the ratchet rise buys.
+      **AND THE OBVIOUS WORKAROUND ALSO FAILS THE SAME BAR — checked, so nobody re-derives it.**
+      Two candidates were tried before recording the block. (1) Give the invariant a LOUD registry
+      read (`readJson` → `{ok:false, reason}`): this detects the unreadable case but cannot ACT
+      on it, because the compensation for G09 is another `updateAgent` — i.e. rolling back INTO
+      the registry that just proved unreadable. `DeleteAgent`'s G10 already ruled on this exact
+      trade in its own comment: a fake rollback is worse than an honest report. (2) Verify the
+      install through the adapter instead of the registry — `PluginAdapter.detectState` exists on
+      EVERY adapter (`lib/client-plugin-adapters/types.ts:118`), which would fix G08's
+      claude-only narrowing at its root. But it returns `PluginInstallState { installed: boolean }`
+      with **no unreadable variant**, so a failed probe is indistinguishable from "not installed" —
+      the identical false-positive shape one layer out, and it would abort a correct migration on a
+      transient read.
+      **So the blocker is not "the registry reader is lenient"; it is that NEITHER available
+      instrument can say "I could not tell".** R51.7 needs a three-valued answer (valid /
+      contradicted / unknown) and both readers are two-valued. That is the real prerequisite, and
+      it is a design decision with user-visible consequences — an unverifiable install either
+      aborts a correct client migration or leaves a registry lying — so it wants a ruling, not a
+      unilateral pick.
       **⚠ SAME-SESSION CORRECTION — "only 4" was an INSTRUMENT LIMIT, not a fact.** The scan above
       used a fixed **90-line window** after each runner call and a needle of `Final|verified|Verify`.
       Re-run with a wider needle over the whole file

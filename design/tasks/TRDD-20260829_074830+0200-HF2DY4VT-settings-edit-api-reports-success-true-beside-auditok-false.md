@@ -1,12 +1,13 @@
 ---
 trdd-id: HF2DY4VT
 title: The settings-edit API and CLI report success true while carrying auditOk false in the same object
-column: todo
+column: human_review
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T08:12:30+0200
+updated: 2026-08-30T00:49:16+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -28,6 +29,34 @@ effort: S
 labels: [settings-gate, json-io, api-honesty]
 external-refs: [TRDD-TS4G74XA, TRDD-PE54D95Q]
 ---
+
+## ⏵ STATE — 2026-08-30: everything an agent can do here is DONE. It waits on the USER.
+
+`todo` → **`human_review`**. The column was asserting this card is ready to be worked; it is
+not, and it has not been for a while — **the only open work is a decision the owner must make.**
+
+- **Option 3 has LANDED** (`4fc3f93e`). `lib/json-io.ts` no longer promises "the caller
+  decides"; it now states what actually happens, carries the measurement (38 direct call sites
+  + 3 through `editSettings`, **zero** branch on the flag, 33 discard the return value), names
+  the two spreading consumers, and points here. Verified by reading the file, not the box.
+- **Option 2's documentation half has LANDED** — both spreading consumers now tell the reader
+  what `auditOk` means.
+- **What is left is options 1 vs 2, and that is a public-API contract judgement.** Option 1
+  changes a shipped response shape, so it is a breaking public-API change: D3 floor `user`.
+  No agent may pick it, and the card said so from the day it was filed.
+
+**Why the column moved rather than a `blocked-by:` being added.** `blocked-by:` is a TRDD-id
+citation field, and what blocks this is a USER decision, not a card — writing a prose
+placeholder there would make the blocked predicate untestable and leave a dangling reference
+(the failure `ai-maestro-maintainer-agent` hit and reverted on `RO44YZDP` the same night).
+`human_review` is the column that asserts *waits on the USER*, which is true. The transition is
+off the usual `ai_review → human_review` path and that is deliberate: the alternative was
+leaving a card in `todo` claiming to be workable, and **an untrue column is worse than an
+unusual one**.
+
+**NEXT ACTION — owner only.** Pick option 1 (honest response: `success` reflects the audit,
+breaking) or option 2 (keep the shape, now documented — already effectively in place). Then an
+agent pins the choice with a test + neuter run and closes the card.
 
 ## Problem
 

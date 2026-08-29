@@ -1,11 +1,11 @@
 ---
 trdd-id: TS4G74XA
 title: Bring the settings safe-editor to the USER's seven-step transaction spec
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-29T13:10:00+0200
+updated: 2026-08-29T13:18:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,7 +25,7 @@ release-via: none
 relevant-rules: []
 labels: [settings-gate, json-io, safe-editor, owner-ours]
 external-refs: []
-implementation-commits: [471c4c4b, b8fe744a, ff4d8081, a678109f]
+implementation-commits: [471c4c4b, b8fe744a, ff4d8081, a678109f, f5883453]
 ---
 # Bring the settings safe-editor to the USER's seven-step transaction spec
 
@@ -257,3 +257,7 @@ result. Fail and report.
   its verification section holds the line-cited conformance evidence this card builds on.
 - TRDD-RYFP030K — the gate this extends. TRDD-CS25TA6W / TRDD-K71FV649 — the json-io
   consolidation and strict-reader cards whose invariants this must not weaken.
+
+## Approval log
+
+- 2026-08-29T13:18:00+0200 — COMPLETED. All 8 acceptance boxes closed; GAP A and GAP B both landed. Full suite 499 files / 6584 passed / 2 skipped; tsc clean.

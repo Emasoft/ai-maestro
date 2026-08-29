@@ -95,3 +95,18 @@ touched, no dependencies on other open TRDDs.
   `'delete_repo'` present → exit 0 · absent → exit 1 · the live host's real `gh auth status` → exit 0
   (so the gate does not false-fail today). The negative arm is the load-bearing one; without it, an
   identity check passes both arms and the gate is decorative.
+
+- 2026-08-29T17:31:00+0200 — Post-close verification of the ABORT clause's LOCATOR (append-only log;
+  the frozen body is untouched). An adversarial review caught that I had verified S011 is *a*
+  repo-creation step but never that it is the FIRST step creating outward GitHub state — and that is
+  the property the clause actually asserts, for a gate whose entire purpose is to fire before real
+  state exists. Now measured: every step S003–S010 was read for an outward-state action, and the
+  only GitHub mentions there are PROSE (the brief's text, the template named in S002, and one
+  "pushes a card into a column" metaphor) — no step before S011 touches GitHub. The locator holds.
+
+  Recorded because the settling grep UNDER-MATCHES and its silence is therefore not evidence: the
+  pattern `gh repo create|gh repo fork|git push|gh release create|gh pr create` hits exactly ONE
+  line in the whole file (276, S011), yet S012 forks, S013 opens PRs and S016 cuts a release — the
+  scenario phrases those in prose ("fork + clone", "opens PRs", "cut a v1.0.0 release"), so an
+  instrument that finds nothing before S011 would also find nothing at three steps that definitely
+  create state. Reading the step bodies is what settled it, not the grep's zero.

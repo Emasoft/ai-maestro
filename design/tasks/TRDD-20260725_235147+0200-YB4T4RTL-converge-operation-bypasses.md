@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T09:28:00+0200
+updated: 2026-08-29T10:06:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -218,15 +218,32 @@ between, never as one sweep.
       **`if (mode === 'move')` branch (`:1222`) — the deliberate local removal after a SUCCESSFUL
       transfer-out.** The `catch` wraps that teardown; it does not trigger it. Struck: the
       failure-path framing, and "the highest-severity entry in category (a)".
-      **What survives is the bypass, on a worse footing than a rollback would have been.** This is
-      a hand-rolled agent deletion on the NORMAL path of a user-facing operation: it `fs.rmSync`s
-      the agent dir, wipes the three AMP message dirs, and filters the registry — while the
-      cemetery archive, team-slot clearing, AID-token revocation, tmux teardown and
-      `PersistedSession` unpersist (G05b) never run. **`DeleteAgent` appears nowhere in this file.**
-      That is the TRDD-KERM18NX condition (a `PersistedSession` outliving its agent, resurrecting
-      the workdir) reached by an ordinary user action rather than by a failure. And on partial
-      failure the catch returns **`success: true`** with a `warning` string, so a half-deleted agent
-      reports success to the caller.
+      **What survives is the bypass, and it is reached by an ordinary user action rather than by a
+      failure.** This is a hand-rolled agent deletion on the NORMAL path of a user-facing operation:
+      it `fs.rmSync`s the agent dir, wipes the three AMP message dirs, and filters the registry.
+      **`DeleteAgent` appears nowhere in this file, and neither caller supplies it** — the Next
+      route `app/api/agents/[id]/transfer/route.ts` is a thin wrapper (`enforceAuth` +
+      `requireSudoToken` + call + return) and the headless twin
+      (`services/headless-router.ts:1649`) is thinner still; the gate does not run one frame up.
+      **THE GATE LIST BELOW IS MEASURED, NOT RECALLED (2026-08-29, second correction).** My first
+      write-up named five gates from memory. Read off `DeleteAgent`'s own `ops.push`/`id:` labels,
+      the sequence it actually owns is **G01** (exists / not already soft-deleted) · **G01b**
+      (R39.6 ASSISTANT independent-delete refusal) · **G01c** (cemetery archive) · **G02** (MANAGER
+      auto-demote to AUTONOMOUS before deletion) · **G04** (COS / Orchestrator / membership slots
+      cleared in every team) · **G05** (tmux session kill) · **G05b** (`PersistedSession`
+      unpersist) · **G06** (AMP API keys *and* AID governance tokens revoked) · **G07** (pending
+      governance requests + transfers) · **G07c** (group unsubscribe) · **G08** (registry delete) ·
+      **G08b** (on-disk verification of that delete) · **G08c** (local plugin-record uninstall) ·
+      **G09/EXE** (folder, with the `~/agents/` refusal) · **G10** (post-condition verification).
+      My recalled five were all real but were a SUBSET: it also loses the R39.6 refusal, the MANAGER
+      demotion, pending governance requests and transfers, group membership, the AMP key half of
+      G06, and both verification gates. The bypass is wider than I first wrote, and the correction
+      runs in the direction I would not have guessed.
+      TRDD-KERM18NX is the concrete consequence to point at (a `PersistedSession` outliving its
+      agent and resurrecting the workdir — G05b), not the whole of it. And on partial failure the
+      catch returns **`success: true`** with a `warning` string; the Next route forwards
+      `result.data` whenever `result.error` is unset, so a half-deleted agent reports success to the
+      HTTP caller with a 200.
       It was invisible while one ratchet key stood for seven sites.
       Sequencing consequence: transfer's delete converges onto the EXISTING `DeleteAgent` and can
       be done today; repos/docker cannot start until their AIO exists.

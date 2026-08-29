@@ -57,7 +57,9 @@ external-refs:
   animation and a POST — so that half carries a positive control instead.
 - `yarn tsc --noEmit` exit 0.
 
-**Adversarial review (2026-08-29) — three corrections worth carrying forward:**
+**Adversarial review (2026-08-29) — four passes; the code was stable from the first, and
+passes 2-4 changed only prose. Kept because each names an INSTRUMENT that was wrong, not
+just a conclusion; the blow-by-blow is in git (`e4b4755b`, `70d1dd5c`, `a2f75f80`).**
 
 - **The "unreachable overlay" claim was first settled by reading a className, which cannot
   establish hit-testing; the second attempt grepped only the three files already believed
@@ -87,7 +89,17 @@ external-refs:
   BARE needles (`AgentList\|MobileDashboard`, no `<`, the first attempt having been
   asymmetric) and widened to `app/page.tsx`, where both mounts' real ancestor chain is
   decided: both components are rendered ONLY from `app/page.tsx` (674, 714), and neither
-  TabletDashboard nor AgentCardView references either. Their panes cannot be ancestors.
+  TabletDashboard nor AgentCardView references either — so their panes are not in the
+  OBSERVED chain. (Not "cannot be": a zero-hit grep on literal component names cannot see
+  an indirect render through a `children` prop. The positive evidence — the real chain,
+  read below — is what carries this, and it makes the negative grep nearly redundant.)
+  **The chain itself is now traced end to end**, including the one definitionally-unavoidable
+  ancestor: `app/layout.tsx` is `html > body > SudoProvider > HelpPanelProvider > LoginGate >
+  {children}`, and `pointer-events` appears in NONE of it — `contexts/`, `lib/` and `hooks/`
+  hold one comment between them, and LoginGate none. `GlobalTouchScrollbars` (the one hit in
+  that neighbourhood, `:122`) sets `pointer-events:none` inline on a decorative scrollbar
+  overlay it appends — i.e. on itself, so it does not intercept — and it is a SIBLING of the
+  provider tree, not an ancestor of `{children}`.
 - **The SCEN-031 note "DOM-level Chat interactions still reached the composer" LIKELY does
   not contradict this, but that is an inference, not a reading.** A synthetic event
   dispatched on an element reference bypasses hit-testing, while a CDP-driven click does
@@ -102,7 +114,9 @@ external-refs:
   which was itself opened (`hooks/useAgents.ts:235`) rather than assumed safe from the fact
   that a poll timer already calls it: it carries an explicit last-write-wins guard — a
   monotonic `requestIdRef` counter, so a second concurrent call supersedes the first and
-  the stale one abandons its `setState`. A double fire therefore costs one wasted request
+  the stale one abandons its `setState`. (Read THROUGH ITS GUARD SITES, not to the end of
+  the function — the claim survives a sloppy tail anyway, since both fires request the
+  same data.) A double fire therefore costs one wasted request
   and nothing else. Recorded rather than guarded; revisit if either callback stops being
   idempotent.
 - **The behaviour-preservation argument for "Let's Go!" was backwards** and is corrected

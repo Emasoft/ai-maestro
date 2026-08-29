@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T12:37:51+0200
+updated: 2026-08-29T15:51:32+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -308,6 +308,14 @@ contract moves; a purely server-side latch/classification change does not need t
       opposite verdict); neuter `keychainDeniedLatched() → false` reddens exactly it. The two
       neuters' red sets are disjoint. `JANITOR_GLOBAL_STATE_DIR` is now redirected in that test
       file — without it every tick test read the developer's REAL latch.
+- [ ] **A read that TIMED OUT is not reported as `unreadable`.** Added 2026-08-29T15:51 after the
+      window's single false alarm (below) proved `bda75f7d` covers only the LATCHED path. A
+      sub-threshold timeout (`TIMEOUT_LATCH_THRESHOLD = 3` consecutive, reset by any answered op)
+      returns a failed read that `surveyAlternates` cannot distinguish from a slot that is genuinely
+      gone — two-valued where three values are needed. The floor is `none` only while the fix stays
+      inside this rotator; if it changes what a beat REPORTS to the supervisor, re-derive it.
+      **Do NOT close the 24 h box before this one** — the window cannot come back clean while the
+      path that dirtied it is open.
 - [ ] ≥24 h with zero false `reauth-needed` beats attributable to a latch, measured from the logs
       **AND a coverage floor: ≥95 % of that window's beats non-`slot-unreadable`.** The floor is
       not decoration — WITHOUT it this box has the same proxy defect the window criterion had:
@@ -327,7 +335,46 @@ contract moves; a purely server-side latch/classification change does not need t
       **The rotator is confirmed ALIVE, not silent** — the distinction this box exists to make,
       since a fully-latched silent rotator also reports zero false beats: last beat 12:37:13, i.e.
       24 s before the measurement, with 95 beats in the preceding 1.6 h.
-      **Window closes 2026-08-29T21:36.**
+      ~~**Window closes 2026-08-29T21:36.**~~ **IT DID NOT — THE WINDOW ABORTED AT 17.6 h, AND
+      IT FAILED. Measured 2026-08-29T15:49+0200 over BOTH logs (the prior readings counted
+      `pm2-out.log` only).**
+
+      | | |
+      |---|---|
+      | window | 21:36:09 → **15:10:23**, when the server was STOPPED by owner directive ⇒ **17.57 h**, not 24 h |
+      | `auto:` beats | **1024** (out) |
+      | latch-suppressed | **11**, all 2026-08-28 21:51–22:01 — unchanged since the 9.7 h reading |
+      | coverage | 98.93 % — the floor is **met** |
+      | `reauth-needed` | **1**, not 0 — the criterion **FAILS** |
+
+      **The one event is a FALSE alarm of exactly the class this card exists to kill, and it is
+      NOT the latched path the fix covers.** `15:10:12 [oauth-rotator] reauth-needed: 1 alternate
+      slot(s) UNREADABLE`, delivered at `15:10:22` by the supervisor — ONE event appearing in both
+      logs, not two. In the SAME second, `15:10:12 [safe-storage] SLOW security op: 13916ms
+      (timeout 5000ms, TIMED OUT) verb=find-generic-password service=Claude Code-rotator-slot-backup`.
+      The latch was NOT set (no latch beat after 22:01 the previous night), so `probeSuppressed`
+      was false and `tick.ts:1462` fell through to the `unreadable > 0` arm.
+
+      **The gap, read from the code, not inferred:** `safe-storage.ts:342` latches only at
+      `TIMEOUT_LATCH_THRESHOLD = 3` **consecutive** timeouts, and `:369` resets that counter on
+      **any** answered op — including a fast one, which is below `SLOW_SECURITY_LOG_MS` and
+      therefore never logged. So an interleaved timeout/success run keeps the counter under 3
+      indefinitely while each individual timeout still returns a failed read, which
+      `surveyAlternates` classifies as `unreadable`. `bda75f7d` made the LATCHED path honest; it
+      left the SUB-THRESHOLD path emitting the same false `reauth-needed` it always did. The
+      threshold change traded a latched blackout for an un-latched false alarm.
+
+      **What that costs this box:** its "zero false `reauth-needed`" half is no longer purely
+      structural (the note below says it is — that note is now WRONG for the un-latched path).
+      A re-run of the window cannot pass until a timeout-caused read failure stops being reported
+      as `unreadable`. That is the SAME three-valued problem TRDD-DQ6XN2VP is blocked on
+      (`could-not-read` ≠ `read-and-absent`), and CPV's exit-2 is the pattern both want.
+
+      **CORRECTION to my own earlier framing, stated precisely.** The 12:37 reading of "0
+      `reauth-needed`" was CORRECT for the window it covered (21:36 → 12:37); the event happened
+      at 15:10, after it. The handoff's claim that the miss was caused by reading `pm2-out.log`
+      only is ALSO wrong: `pm2-out.log` carries the event too. The real defect was extrapolating a
+      partial window to the whole one — the same population error, one layer along.
       **PRIOR INTERIM 2026-08-29T07:20+0200 — 9.7 h elapsed, both criteria met.**
       Window starts at the fix, `bda75f7d` (2026-08-28T21:36); first post-fix beat 21:37:05, last
       read 07:20:38 ⇒ **9.73 h**. Measured over **571 `auto:` beats**: **0** `reauth-needed` of any

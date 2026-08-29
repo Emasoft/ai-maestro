@@ -932,6 +932,35 @@ export function lintCorpus(designDir: string): DoctorReport {
       }
     }
 
+    // ================= `updated:` IN THE FUTURE = a TYPED timestamp =================
+    // The board sorts on `updated:`, so a future value parks a card at the top until real time
+    // catches up. It has exactly one cause worth guarding: an agent WROTE the timestamp from its
+    // own idea of the time instead of reading a clock. That is not hypothetical — it happened four
+    // times in one session on 2026-08-29 (13:18/13:34/13:46/13:58 written while the clock read
+    // 12:37), and the prose lesson forbidding it was already on file and had been read.
+    //
+    // Prose did not hold, so this is the check. The skew allowance is deliberately generous: the
+    // values carry their own UTC offset, so this compares absolute instants and a legitimately
+    // clock-skewed contributor is still nowhere near an hour out — while every instance of the
+    // typed-it-from-memory bug has been tens of minutes at least.
+    const FUTURE_SKEW_MS = 10 * 60 * 1000
+    const updatedRaw = String(c.fm['updated'] ?? '').trim()
+    if (updatedRaw) {
+      const t = Date.parse(updatedRaw)
+      // An UNPARSEABLE value is not this rule's business — `frontmatterDay` above already fails
+      // open on it, and two rules reporting one defect is noise.
+      if (Number.isFinite(t) && t > Date.now() + FUTURE_SKEW_MS) {
+        add({
+          rule: 'UPDATED-IN-THE-FUTURE',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `has \`updated: ${updatedRaw}\`, which is in the FUTURE — the board sorts on this field, so the card parks at the top until real time catches up. The cause is almost always a timestamp TYPED from memory rather than read: use \`date +%Y-%m-%dT%H:%M:%S%z\` and paste what it prints`,
+          autofixable: false,
+        })
+      }
+    }
+
     // ================= ORDER — the invariant that actually matters =================
     //
     // Timing is noise: a TRDD may wait a day or a month and nothing is wrong. What is

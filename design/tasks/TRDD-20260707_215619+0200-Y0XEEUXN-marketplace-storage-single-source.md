@@ -3,7 +3,7 @@ trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
 column: todo
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-29T22:05:14+0200
+updated: 2026-08-30T00:35:59+0200
 current-owner: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 created-by: code-review
@@ -253,10 +253,36 @@ them before doing the rest, because one of them makes the obvious next step a mi
   check for exactly that reason on `update`. `marketplace remove` is an honest compensation,
   which `update` has none of. Short and safe, but an inference.
 
-**NEXT ACTION.** Part 2 is a SMALL, well-scoped change (2 route write-sites → 1 pipeline
-branch, no new parameter), but it adds a gate + compensation to an all-in-one pipeline,
-which is TRDD-DQ6XN2VP's open owner-gated surface. Blocked on the owner: implement it here,
-or fold it into that card's trade. Not started.
+**PART 2 IS DONE — this paragraph said "Not started" while the commit was already in the
+log.** Measured 2026-08-30: `grep -nE 'extraKnownMarketplaces[[:space:]]*=' route.ts` →
+**ZERO**. Both route stamps (1552, 1604) are gone; they moved into `ChangeMarketplace`'s
+`add` transaction in `9ef021a5`, and `5c2a2209` pinned the 409 string contract and dropped
+an unreachable undo branch. A STATE block claiming work is unstarted while its commit is
+merged is the same defect this card keeps catching in itself, one level up.
+
+**THE OPEN QUESTION IS ANSWERED, AND IT RESOLVES THE WAY THAT ENLARGES PART 3.** The census
+bullet above says: *"if `role-plugin-service:719` is reached from an AIO pipeline, part 3 is
+a different job than this card implies."* Measured 2026-08-30, caller chains followed to
+their entry points:
+
+| direct writer | enclosing fn | reached from |
+|---|---|---|
+| `plugin-storage-service.ts:939` | `ensureCustomClientMarketplace` | `convertAndStorePlugin` ← **`InstallElement` (:799, the G11 gate region), `ChangeTitle` (:3944), `autoAssignRolePluginForTitle` (:2103)** |
+| `role-plugin-service.ts:720` | `registerMarketplaceGlobally` | `ensureMarketplace` ← `plugin-storage-service:217` (inside the same `convertAndStorePlugin`), `role-plugin-service:512`, `publish-plugin/route.ts` |
+| `role-plugin-service.ts:1101` | `migrateDefaultPluginSettings` | `syncDefaultRolePlugins` ← `headless-router:3591`, `sync-defaults/route.ts` — **NOT a pipeline** |
+
+**So two of the three ARE inside AIO pipelines, and the third is not.** The consequence is
+not "part 3 is bigger" — it is that part 3 changes CLASS. These writers mutate
+`~/.claude/settings.json` **directly**, outside the pipeline's gate/compensation machinery,
+from inside `InstallElement` and `ChangeTitle`. A pipeline rollback therefore cannot revert
+them: the ops trace will say the transaction unwound while `extraKnownMarketplaces` keeps
+the write. That is an R50/R51 rollback hole, not a dedup refactor, and it belongs beside
+TRDD-DQ6XN2VP rather than under this card's "one owner" title.
+
+**NEXT ACTION.** Decide where part 3 lives now that it is a rollback-integrity finding
+rather than a storage-dedup one — this card, or DQ6XN2VP. Owner-gated either way, because
+adding a compensation to `InstallElement`/`ChangeTitle` is exactly DQ6XN2VP's surface. Do
+NOT start it as a dedup.
 
 ## Problem
 

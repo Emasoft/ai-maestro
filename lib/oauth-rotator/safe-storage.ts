@@ -289,7 +289,29 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
   // "hung past 5s" with no argv and no duration. Threshold is 40x the measured p95, so a healthy
   // box logs nothing.
   const t0 = Date.now()
-  const res = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: timeoutMs })
+  // `killSignal: 'SIGKILL'` IS LOAD-BEARING — without it `timeout` does not bound this call, and
+  // this call is SYNCHRONOUS, so an unbounded one freezes the whole Node event loop.
+  //
+  // MEASURED 2026-08-29, from pm2-error.log during a live server hang: ops logged 5611ms, 7786ms,
+  // 13916ms and **24837ms** against `timeoutMs` = 5000. The timeout was not being honoured. Node's
+  // spawnSync default `killSignal` is SIGTERM, and a `security` process blocked on a keychain
+  // unlock/ACL prompt does not act on SIGTERM promptly — so the timer fired, the signal was sent,
+  // and the parent kept waiting anyway. SIGKILL cannot be ignored, so the wait is now genuinely
+  // capped at `timeoutMs`.
+  //
+  // Why this was a SERVER OUTAGE and not just slow credential reads: the process held :23000 in
+  // LISTEN the whole time, so the kernel kept accepting connections while Node was frozen inside
+  // the subprocess. `pm2` reported `online`, `lsof` showed the socket, and `GET /api/sessions`
+  // timed out at 15s — three "it is up" signals and one that actually asked it a question.
+  //
+  // This bounds the freeze; it does not remove it. Making the credential path genuinely async is
+  // the real fix and is a larger change across every caller — filed separately rather than
+  // smuggled in here.
+  const res = spawnSync(argv[0], argv.slice(1), {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    killSignal: 'SIGKILL',
+  })
   const elapsedMs = Date.now() - t0
   if (elapsedMs >= SLOW_SECURITY_LOG_MS) {
     try {
@@ -551,6 +573,7 @@ function secretToolStore(service: string, account: string, secret: string): Stor
     input: secret,
     encoding: 'utf8',
     timeout: CLI_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
   })
   if (res.error) {
     return (res.error as NodeJS.ErrnoException).code === 'ENOENT'
@@ -562,7 +585,7 @@ function secretToolStore(service: string, account: string, secret: string): Stor
 
 function secretToolRetrieve(service: string, account: string): string | null {
   const argv = secretToolRetrieveArgv(service, account)
-  const res = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: CLI_TIMEOUT_MS })
+  const res = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: CLI_TIMEOUT_MS, killSignal: 'SIGKILL' })
   if (res.error) return null
   if (res.status === 0 && res.stdout) {
     const out = res.stdout
@@ -573,7 +596,7 @@ function secretToolRetrieve(service: string, account: string): string | null {
 
 function secretToolDelete(service: string, account: string): void {
   const argv = secretToolDeleteArgv(service, account)
-  spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: CLI_TIMEOUT_MS })
+  spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: CLI_TIMEOUT_MS, killSignal: 'SIGKILL' })
 }
 
 // --------------------------------------------------------------------------
@@ -606,6 +629,7 @@ function dpapiStore(service: string, account: string, secret: string): StoreResu
     input: secret,
     encoding: 'utf8',
     timeout: CLI_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
     env: { ...process.env, SS_PATH: p },
   })
   if (res.error) {
@@ -628,6 +652,7 @@ function dpapiRetrieve(service: string, account: string): string | null {
   const res = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], {
     encoding: 'utf8',
     timeout: CLI_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
     env: { ...process.env, SS_PATH: p },
   })
   if (res.error) return null

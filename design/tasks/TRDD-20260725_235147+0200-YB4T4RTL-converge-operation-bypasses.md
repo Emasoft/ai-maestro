@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T07:40:23+0200
+updated: 2026-08-29T07:41:09+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -163,6 +163,19 @@ between, never as one sweep.
       already slated to disappear.
       **OWNER CALL: delete the deprecated endpoint (and this box closes by removal), or keep it and
       converge it?** Nothing here is blocked on anything else.
+      **Both scoped searches above re-run UNSCOPED, because a search whose SCOPE produces its answer
+      is how "exactly two callers" gets to be wrong.** The caller list was taken from a grep over
+      `app services lib` limited to `*.ts`; re-run across the whole tree with no directory or
+      extension filter it holds — the only production callers are still those two. But it also
+      surfaces what the filtered version hid: **5 test call sites** in
+      `tests/services/sessions-service.test.ts` (`:139, :482, :493, :504, :517`, with its own
+      `describe('deleteSession')` at `:477`). They change the REMOVAL option's cost — deleting the
+      function reddens that file — and my `-v '^./tests/'` filter had removed exactly the evidence
+      that bears on the choice being offered.
+      The replacement route was also confirmed by READING it rather than by `ls`: it parses
+      `searchParams.get('deleteAgent') === 'true'` (`:188`, behind an explicit auth gate at `:190`)
+      and carries a session-only `kill=true` branch (`:231`) — so the documented successor really
+      does support the flags the deprecation notice points at.
 - [ ] The 6 `createAgent` call sites route through `CreateAgent` (with a discovered-session mode)
 - [ ] The 3 `saveAgents` call sites route through the owning `Change*` pipeline
 - [ ] `renameAgentSession` routes through `ChangeName`

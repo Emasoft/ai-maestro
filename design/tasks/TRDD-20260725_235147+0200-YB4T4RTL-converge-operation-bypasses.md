@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T10:34:00+0200
+updated: 2026-08-29T11:02:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -237,17 +237,28 @@ between, never as one sweep.
       revoked) · **G07** (pending governance requests + transfers) · **G07c** (group unsubscribe) ·
       **G08** (registry delete) · **G08b** (on-disk verification of that delete) · **G08c** (local
       plugin-record uninstall) — all handed to `runGateSequence` at `:9562`.
+      **10 of those 11 declare an `undo`** (`grep -c "^\s*undo:"` over `:9090-9563`). The one that
+      does not is **G08b**, the read-only on-disk verification of the registry delete — a gate that
+      writes nothing has nothing to compensate, so the exception is correct by construction, not a
+      hole. State it this way rather than as a bare "with compensation": the count is measured, the
+      adjective was not, and it is the adjective that argues FOR converging.
       **Four further steps run but are deliberately NOT sequence entries**, and calling them gates
       was the error: **G01** and **G01b** are pre-flight refusals before the transaction opens
       (exists / not already soft-deleted; the R39.6 ASSISTANT independent-delete block);
       **G09/EXE** is the folder delete, which the code's own comment excludes from the sequence
       because it is *"the sole genuinely irreversible"* step; **G10** is the post-condition
-      verification after `ops.push(...txn.ops)`. (`G09b` appears only in a `USED TO SIT HERE`
-      comment and is not live — it is in neither count.)
+      verification. **Both G09 and G10 sit AFTER the `if (!txn.ok) { … return result }` early return
+      at `:9563`, so they run on the transaction-SUCCESS path only** — "post-condition
+      verification" without that qualifier claims a stronger guarantee than the code gives. G10
+      also does not roll back by design; its own comment says a fake rollback would be worse than
+      an honest report, so what it guarantees is VISIBILITY of an invalid state, not repair.
+      (`G09b` appears only in a `USED TO SIT HERE` comment and is not live — it is in neither
+      count.)
       **For this bypass the distinction does not soften anything**, because transfer's `move` branch
       skips all fifteen steps, transactional or not. What it changes is the shape a remediation
-      plans against: converging onto `DeleteAgent` buys an 11-gate transaction with compensation,
-      plus two pre-flight refusals and two post-transaction steps — not one flat list.
+      plans against: converging onto `DeleteAgent` buys an 11-gate transaction, 10 of them with
+      declared compensation, plus two pre-flight refusals and two success-path-only steps — not one
+      flat list.
       My recalled five were a strict SUBSET, and the two renames hold: "cemetery archive" is G01c,
       "team-slot clearing" is G04. TRDD-KERM18NX is the concrete consequence to point at (a
       `PersistedSession` outliving its agent and resurrecting the workdir — G05b), not the whole of

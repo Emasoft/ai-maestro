@@ -3,7 +3,7 @@ trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
 column: todo
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-29T18:46:31+0200
+updated: 2026-08-29T18:49:47+0200
 current-owner: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 created-by: code-review

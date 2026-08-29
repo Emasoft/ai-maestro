@@ -3,7 +3,7 @@ trdd-id: FY6I2MO2
 title: agent-creation wizard completion modal can persist and overlay the dashboard, blocking Delete
 column: todo
 created: 2026-07-23T12:51:14+0200
-updated: 2026-08-29T18:17:27+0200
+updated: 2026-08-29T18:49:47+0200
 current-owner: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 created-by: ai-maestro-hub-session

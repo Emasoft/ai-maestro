@@ -138,6 +138,21 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
     expect(body.error).not.toMatch(/^Action failed$/)
   })
 
+  it('THE STRING CONTRACT: UnreadableTargetError still says what the route matches on', async () => {
+    // The route's sentinel matches two LITERAL phrases against a message built in
+    // `lib/json-io.ts` — a coupling across a module boundary that the type system cannot see,
+    // because the gate runner hands the route a stringified error, not the error object.
+    //
+    // Every other test here derives its expectation by calling `new UnreadableTargetError(...)`,
+    // so production and expectation come from the SAME source and agree by construction: reword
+    // that message and they all still pass while the user's corrupt-config diagnostic silently
+    // reverts to a generic 500. This asserts the literals themselves, so the reword reds a test.
+    const { UnreadableTargetError } = await import('@/lib/json-io')
+    const msg = new UnreadableTargetError('/any/path/settings.json', 'Unexpected end of JSON input').message
+    expect(msg).toContain('does not parse')
+    expect(msg).toContain('refusing to overwrite')
+  })
+
   it('a GENERIC error is still a 500 — the mapping is specific, not a blanket 409', async () => {
     mockCreateMarketplace.mockResolvedValueOnce({ success: false, error: 'disk full' })
     const res = await post(ADD)

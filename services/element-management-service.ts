@@ -5770,10 +5770,8 @@ export async function ChangeMarketplace(desired: {
         registered: boolean
         /** Set only once the settings entry was really written. */
         ekmWritten: boolean
-        /** Whatever the key held before we touched it, so the undo restores rather than deletes. */
-        priorEntry: unknown
       }
-      const ac: AddCtx = { registered: false, ekmWritten: false, priorEntry: undefined }
+      const ac: AddCtx = { registered: false, ekmWritten: false }
 
       const { runGateSequence } = await import('@/lib/gate-transaction')
       const txn = await runGateSequence<AddCtx>(
@@ -5804,31 +5802,31 @@ export async function ChangeMarketplace(desired: {
               const entry = 'repo' in source
                 ? { source: { source: 'github', repo: source.repo } }
                 : { source: { source: 'local', path: source.path } }
-              // STAGE-THEN-PUBLISH: `updateJson` MAY RUN THIS MUTATOR MORE THAN ONCE (a
-              // non-participating writer landing between our read and our commit makes it
-              // re-read and re-apply). Capturing `priorEntry` straight into the ctx would,
-              // on the second attempt, capture the value WE wrote on the first — and the
-              // undo would then "restore" our own entry instead of what was there before.
-              // The local resets every attempt, so only the attempt that committed is kept.
-              let priorThisAttempt: unknown
               await updateJson(SETTINGS_JSON, settings => {
                 const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-                priorThisAttempt = ekm[desired.name]
                 ekm[desired.name] = entry
                 settings.extraKnownMarketplaces = ekm
               }, { createIfMissing: true })
-              c.priorEntry = priorThisAttempt
               c.ekmWritten = true
               ops.push(`G03b: Recorded in extraKnownMarketplaces`)
             },
             undo: async (c) => {
               if (!c.ekmWritten) return
-              // Restore the prior value rather than deleting unconditionally: `add` over an
-              // existing name would otherwise have its rollback destroy the entry it found.
+              // THIS UNDO IS REQUIRED AND CURRENTLY UNREACHABLE, and both halves are deliberate.
+              // REQUIRED: `runGateSequence` refuses to start a sequence containing a mutating
+              // gate with no `undo`, so G03b must declare one. UNREACHABLE: `ekmWritten` is set
+              // only after `updateJson` RESOLVES, so a throw leaves this a no-op, and G03b is the
+              // last gate, so nothing can abort into it afterwards. The only live path would be a
+              // commit followed by a throw, which no seam here can produce — MEASURED: neutering
+              // this whole body reds zero tests, so do not read the suite as covering it.
+              // A first draft snapshotted the key's prior value to "restore" it; that was dead
+              // code shaped like a safety property, the exact thing this module's docs warn
+              // about. Deleting the key is all the reachable behaviour needs. If a gate is ever
+              // appended AFTER G03b this becomes live — reinstate the snapshot then, with a test
+              // that drives it, rather than carrying an unexercised branch until that day.
               await updateJson(SETTINGS_JSON, settings => {
                 const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-                if (c.priorEntry === undefined) delete ekm[desired.name]
-                else ekm[desired.name] = c.priorEntry
+                delete ekm[desired.name]
                 settings.extraKnownMarketplaces = ekm
               }, { createIfMissing: true })
             },

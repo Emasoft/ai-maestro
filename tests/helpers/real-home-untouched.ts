@@ -25,9 +25,14 @@
  * SHARED global config — so a concurrent session rewriting it mid-suite is, from inside this
  * process, indistinguishable from a test escape. The message used to open "This almost always
  * means a `vi.mock(…)` factory…", asserting a cause it never observed; a full-suite run then went
- * red at 18 files / 1 test while the writer was demonstrably external (the same file changed three
- * more times with NO suite running, oscillating `statusLine` between the host's real value and a
- * two-element array of `/tmp/slprobe` scripts, a path with zero hits in this repo).
+ * red at 18 files / 1 test while the writer was demonstrably external — the same file changed three
+ * more times with NO suite running, which is the whole of what that finding needs.
+ *
+ * (Colour, stated no more strongly than it was measured: at two points two hours apart the
+ * `statusLine` key held a two-element array of `/tmp/slprobe` scripts instead of its single-object
+ * value. The sampler in between recorded sizes and hashes ONLY, so the shape at the intermediate
+ * write is unidentified and the duration between the two endpoints is an inference, not a
+ * measurement. No pre-existing code in this repo produces that path.)
  *
  * The fix was to the MESSAGE ONLY, deliberately. The trigger stays a byte-compare and no suite is
  * exempted: relaxing either would blind the guard to the silent write it exists to catch, and the

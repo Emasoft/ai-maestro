@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T12:54:55+0200
-updated: 2026-08-29T16:24:52+0200
+updated: 2026-08-29T16:40:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -252,3 +252,24 @@ was green through it twice, which is the point: the fix does not depend on the b
 - 2026-08-29T16:24:52+0200 — COMPLETED by ai-maestro-hub-session. All four acceptance boxes
   closed; the four subject files passed three consecutive full-suite runs on a loaded box. Run 3's
   unrelated red is attributed to an external writer and carded as TRDD-O4E2LW3U.
+- 2026-08-29T16:41 — **CORRECTION, appended not rewritten (the body is frozen; this log is the
+  exempt append-only surface).** Two sentences in box 3 above claim more than the commands behind
+  them showed. The verdict is unchanged; the sourcing is not.
+
+  **(1) "checked per name against each run's failure list, not inferred from the totals" is true of
+  RUN 3 ONLY.** I grepped run 3's output for each of the four names. For runs 1 and 2 the claim
+  comes from "501 files passed / 0 failures" — which is a SOUND inference (a zero-failure run
+  cannot contain a failing file) but a different kind of evidence, and the parenthetical presents
+  one method as covering all three. Read it as: run 3 checked per name; runs 1-2 follow from zero
+  failures.
+
+  **(2) The `statusLine` / `/tmp/slprobe` detail restated here is corrected on TRDD-O4E2LW3U's own
+  Approval log** and should be read from there, not from this card. In short: the array form was
+  measured at two points two hours apart with nothing sampled between, the 16:16:19 write was never
+  read, and the "zero hits in this repo" grep used `--include=*`, a flag with a known blind spot on
+  this toolchain — re-run properly it returns 3 hits, all files authored in this same session.
+
+  **What is NOT affected.** Box 3's finding — the four subject files were green in all three runs,
+  and run 3's red belongs to a different defect — and box 4's threshold audit both stand. The
+  external-writer attribution rests on three mtime+hash changes with no suite running, which needs
+  none of the content detail.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T16:24:52+0200
-updated: 2026-08-29T16:30:49+0200
+updated: 2026-08-29T16:40:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -156,3 +156,37 @@ in this repo, and filing it here would put a finding on the wrong tracker.
 - 2026-08-29T16:30:49+0200 — COMPLETED by ai-maestro-hub-session. Message-only fix; all four
   acceptance boxes closed with a recorded neuter run. The guard's trigger and global wiring are
   unchanged and no suite was exempted.
+- 2026-08-29T16:41 — **CORRECTION, appended not rewritten (the body is frozen; this log is the
+  exempt append-only surface). An adversarial review found that this card commits the exact defect
+  it is about: it names a content story it never measured.** Two claims in the body above are
+  weaker than written, and one is false.
+
+  **(1) The `statusLine` oscillation is a three-point narrative drawn through TWO measured points
+  and one unread size.** The 15 s sampler printed `mtime size sha256[0:12]` and read no content at
+  all, so from it `54408 / 54288 / 54426` are three SIZES and nothing more. The array form is
+  genuinely measured twice — the `aim-bak-2026-08-29_1412` backup (54407 bytes) and a key-level
+  diff of the then-current 54408-byte file at ~16:13, which came back with an identical key set —
+  and the single-object form is measured once, by reading the current file directly. **The 16:16:19
+  write at 54288 bytes was NEVER read and is identified as neither shape.** Settling command run
+  after the review — enumerate every backup's byte count and `statusLine` shape — confirms it:
+  the ONLY `list`-shaped backup on disk is the 14:12 one at 54407, all nine others are `dict`, and
+  **no backup exists at 54288, 54408 or 54426**, so the bytes at those three moments have no
+  surviving record. Consequently "the operator's statusline was broken for roughly two hours" is an
+  INFERENCE from two endpoints with nothing sampled between them, not a measured duration.
+
+  **(2) "`/tmp/slprobe` appears nowhere in this repo (grep ⇒ zero hits)" is FALSE as written.** The
+  zero came from `grep -rn "slprobe" --include=* -l .`, and this repo carries a standing lesson that
+  `--include` silently fails to filter on this toolchain (it once produced 38 false findings in the
+  opposite direction). Re-run properly with `find … -print0 | xargs -0 grep -l` and a positive
+  control (46 747 files scanned; control string `guardRealUserSettings` → 13 files), the answer is
+  **3 hits** — and all three are files authored in this same session (both cards and
+  `tests/helpers/real-home-untouched.ts`). The SUBSTANTIVE claim survives: no PRE-EXISTING code in
+  this repo produces that path. The sentence asserting a repo-wide zero does not, and a zero taken
+  from an instrument with a known blind spot should never have been stated as one.
+
+  **What is NOT affected.** The card's actual finding — that the writer was EXTERNAL to the suite,
+  and therefore that the guard's old single-cause message asserted something it cannot observe —
+  rests on the three mtime+hash changes with no suite running, and needs none of the content story.
+  The shipped fix (`9c7821a4`) and its neuter are unchanged and remain correct.
+  `tests/helpers/real-home-untouched.ts` is code, not frozen, so its docstring was corrected in
+  place rather than annotated here.

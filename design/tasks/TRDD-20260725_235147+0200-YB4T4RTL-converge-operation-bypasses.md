@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T07:41:09+0200
+updated: 2026-08-29T07:41:51+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -176,6 +176,19 @@ between, never as one sweep.
       `searchParams.get('deleteAgent') === 'true'` (`:188`, behind an explicit auth gate at `:190`)
       and carries a session-only `kill=true` branch (`:231`) — so the documented successor really
       does support the flags the deprecation notice points at.
+      **FRAMING CORRECTION — calling this a binary "owner call" overstated the block.**
+      **Convergence is Tier 0 and available right now**; only REMOVAL is Tier 3. The honest shape is
+      *"converge it today and lose that work if the owner later deletes the endpoint, or ask first"*
+      — not *"nothing can proceed"*. I chose to ask because the work is discardable by design, but a
+      reader should not infer this box is blocked.
+      **AND IT IS NOT ONE ROUTE — IT IS A FAMILY, WHICH ALSO CATCHES BOX 4 BELOW.** Grepping the
+      tree for `Removal target` finds **three** routes carrying `v0.28.0`, all overdue at `0.29.0`:
+      `app/api/sessions/[id]/route.ts:12`, `…/rename/route.ts:11`, `…/command/route.ts:10`.
+      That matters here because **box 4 (`renameAgentSession` routes through `ChangeName`) is the
+      same shape**: its only two call sites, `services/sessions-service.ts:1286` and `:1303`, are
+      both inside `renameSession`, which serves `/api/sessions/[id]/rename` — the second overdue
+      route. So the owner's single ruling on this route family decides **two** boxes of this card,
+      not one, and deleting the family would close both by removal.
 - [ ] The 6 `createAgent` call sites route through `CreateAgent` (with a discovered-session mode)
 - [ ] The 3 `saveAgents` call sites route through the owning `Change*` pipeline
 - [ ] `renameAgentSession` routes through `ChangeName`

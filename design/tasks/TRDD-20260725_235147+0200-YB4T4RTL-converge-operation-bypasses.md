@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T11:26:00+0200
+updated: 2026-08-29T11:52:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -241,12 +241,21 @@ between, never as one sweep.
       does not is **G08b**, and this is STRUCTURAL, not inferred from the log strings: the entry
       carries an explicit **`readOnly: true`** field at `:9403`, and its `run` body only
       `readFileSync`s `registry.json`, `find`s the row, and either throws or pushes an op — it
-      writes nothing. Its own comment states the mechanism both ways: *"Declaring it so is what
-      lets the pre-flight accept it without an `undo` — and what makes its failure roll G08 back."*
-      So the missing `undo` is not a tolerated gap, it is the **contract** — and G08b's failure is
-      what triggers G08's compensation. (It exists because `registryDelete()` can return true while
-      the on-disk write silently failed — SCEN-002 P0-003 — leaving an agent that resurrects on the
-      next restart.)
+      writes nothing.
+      **The `readOnly` flag is load-bearing, and this is confirmed in the RUNNER, not in the gate's
+      own comment** (`lib/gate-transaction.ts:95-97`): *"A mutating gate with no `undo` cannot
+      satisfy R51, so the sequence refuses to start"*, implemented as
+      `gates.filter(g => !g.readOnly && typeof g.undo !== 'function')`. So the missing `undo` is the
+      **contract** — drop `readOnly` and `DeleteAgent` would refuse to run at all.
+      **But one half of that gate's comment does NOT survive the runner, and I had repeated it.**
+      It says `readOnly` is also *"what makes its failure roll G08 back"*, and I wrote that up as a
+      designed relationship between two named gates. The unwind is GENERIC: on any gate's failure
+      the runner walks `executed` in reverse and calls every `undo` it finds (`:114`, `:149-151`).
+      G08b's failure rolls G08 back the same way G07c's would — true, but a property of the
+      sequence, not a pairing. A remediation plan should not read G08b as a guard *for* G08.
+      (The gate's comment attributes its existence to SCEN-002 P0-003 — `registryDelete()` can
+      return true while the on-disk write silently failed, leaving an agent that resurrects on the
+      next restart. Cited as the comment's claim; I have not opened that scenario.)
       State it this way rather than as a bare "with compensation": the count is measured, the
       adjective was not, and it is the adjective that argues FOR converging.
       **Four further steps run but are deliberately NOT sequence entries**, and calling them gates

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-29T07:44:40+0200
+updated: 2026-08-29T07:46:29+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -180,6 +180,34 @@ result. Fail and report.
       documented, and read by nobody. Whether the 38 sites should branch, or the contract should
       stop promising they do, is a design call for this card's spec work — it is named here rather
       than answered, because the box asked for the sweep and this is the sweep.
+      **⚠ MATERIAL CORRECTION, same session — "no consumer" was literally right and materially
+      MISLEADING, and the identifier grep is what made it so.** Two gaps in that sweep, the second
+      found only after closing the first:
+      **(i) The census enumerated DIRECT callers and concluded about CONSUMERS.**
+      `lib/settings-gate.ts:212` does `return updateJson(…)` — it **propagates** the result out of
+      `editSettings`, so every caller of `editSettings` receives `auditOk` while never appearing in
+      a `updateJson(` census. There is exactly **one** such propagation site, and `editSettings` has
+      **4 caller files** (`app/api/settings/edit/route.ts:110`, `lib/agent-invariants.ts:177`,
+      `services/auto-update-service.ts:553`, `scripts/aimaestro-settings-cli.mjs:133`), none of
+      which mentions `auditOk`. Set now closed: 38 direct + 3 indirect call sites, 14 files.
+      **(ii) And two of those indirect consumers SPREAD the whole result — the exact case
+      `grep auditOk` cannot see.** `app/api/settings/edit/route.ts:112` returns
+      `NextResponse.json({ success: true, ...result })` and
+      `scripts/aimaestro-settings-cli.mjs:134` prints `JSON.stringify({ success: true, ...result })`.
+      **So `auditOk` IS surfaced — into an HTTP response body and onto a CLI's stdout — beside
+      `success: true`.** No code branches on it, but "nobody sees it" is false: the contract's
+      *"the caller decides"* is honoured by delegating the decision all the way out to an API/CLI
+      consumer, undocumented, in the same object that says the write succeeded.
+      That reframes the design question this box hands to the GAP work. It is not only *"should the
+      38 sites branch?"* but *"is `success: true` beside `auditOk: false` an honest API response?"* —
+      and the second is the sharper one, because it is already shipping to external consumers.
+      **Method note, since this is the third instrument correction on one box:** the census that
+      settles it is not a needle at all — classify each site by WHAT IT DOES WITH THE RETURN VALUE.
+      **33 of the 38 direct sites are a bare `await updateJson(…)` with the result DISCARDED**, so
+      they cannot read the flag under any spelling; that is proof by construction. Only the 5 that
+      bind or destructure it, plus the 3 indirect sites, could consume it — and of those 8, two
+      spread it outward. A grep for an identifier answers "does this spelling appear"; the box asked
+      "does anyone act on it", and only the value-flow classification answers that.
 
 ## Non-goals
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T07:26:39+0200
+updated: 2026-08-29T07:31:05+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -338,8 +338,14 @@ contract moves; a purely server-side latch/classification change does not need t
       latch-attributable `reauth-needed` cannot be emitted at all. Measuring zero of them is
       therefore guaranteed by branch order, not observed; it confirms the fix is INSTALLED, not
       that the window was healthy. The ≥95 % floor (11/571 = 1.93 % blind) is the half that can
-      still fail, which is why its author added it. Both halves are reported above; only this one
-      is evidence.
+      still fail, which is why its author added it.
+      **NARROWED the same hour — the paragraph above over-corrected and threw away real evidence.**
+      `probeSuppressed` short-circuits only the **11 latched beats**; on the other **560** the
+      `else if (deadRefresh > 0) { reason = 'refresh-dead' }` branch at `tick.ts:1464` was fully
+      live and fired **zero** times. So the structural claim holds for **`slot-unreadable` only**,
+      and the `refresh-dead` class is 560 beats of genuine observation. Correcting *past* the truth
+      in the humble direction is its own way of misstating a measurement — the same defect as
+      overclaiming, just harder to notice because it sounds careful.
       ⚠ **`rotator.log` is the WRONG source for this box** and reads as clean for the same
       spurious reason: post-fix it holds **7 lines, 0 `auto:` beats** — the server logs state
       TRANSITIONS there (`aim-server/` kinds), not beats, so the denominator is zero and the

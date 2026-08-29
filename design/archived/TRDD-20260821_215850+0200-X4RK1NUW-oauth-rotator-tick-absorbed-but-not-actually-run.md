@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-29T07:28:38+0200
+updated: 2026-08-29T07:31:05+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -367,6 +367,16 @@ identically at HEAD with this change stashed). tsc clean on touched files.
   `05:29:18+02:00` → `11:29:18Z` are both exactly +8 h against the measured `expires_at`. Two
   exact mint→expiry pairs, first-hand, so the constant this card twice warned about is now a
   measurement.
+  **SECOND FIRST-HAND ENDPOINT, 12 minutes later — the 08-27 dependency is now fully retired.**
+  A review of the entry above landed the sharpest version of its own complaint: the replacement
+  derivation still read its 08-27 half off **this card's line 106**, a prior session's record that
+  can never be re-taken — the exact provenance defect the correction was fixing, one level up. It
+  also flagged that the two readings were in **mismatched units** (line 106 carries no timezone
+  marker; the 08-29 figures are explicitly `Z`), a silent 2 h artefact sitting inside the
+  comparison. Re-read `oauth-health` at 07:31+0200 and diffed against **this session's own**
+  07:17 reading: `11:29:18Z` → **`13:29:37Z`**. **MOVED.** Both endpoints mine, one timezone, one
+  session, no lifetime constant, no prior record. Predicted, too: that slot stood at 6.20 h at the
+  07:17 reading and `KEEPALIVE_AHEAD_H = 6` fires below 6 h.
   **The lesson, since this is the third pass over the same claim:** the log line naming the event
   was in `pm2-out.log` the whole time; three sessions reached for expiry arithmetic instead and
   each produced a *correct answer by a weaker route*. Look for the artifact that RECORDS the

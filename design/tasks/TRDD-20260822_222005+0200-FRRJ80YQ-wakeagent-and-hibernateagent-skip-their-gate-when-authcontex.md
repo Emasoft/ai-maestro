@@ -3,7 +3,7 @@ trdd-id: FRRJ80YQ
 title: wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
 column: todo
 created: 2026-08-22T22:20:05+0200
-updated: 2026-08-29T07:26:39+0200
+updated: 2026-08-29T07:31:05+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -167,9 +167,26 @@ sequence inside a string literal, which can only make the guard MISS a call, nev
       removing the copy ⇒ exit 0, 3/3. So the new comment's claim that the build fails when a
       production caller omits `authContext` is measured, not inherited — and the green run alone,
       which was my first evidence, would not have shown it.
+      **The first neuter was WEAKER than I claimed, and a second one closed the gap.** It seeded a
+      **single-line** call in **`lib/`** — while this card itself records that every real caller is
+      **multi-line** and the guard scans **four** roots. So it proved the guard is wired, not that
+      it catches the shape a real violation will take. Second probe: a multi-line
+      `hibernateAgent(…)` in **`services/`** (other function, other root, other shape) ⇒ exit 1,
+      1 failed / 2 passed, naming
+      `services/zz-probe-multiline-no-ctx.ts :: hibernateAgent( 'some-id', { sessionIndex: 0, }, …)`
+      — so the bracket-depth extractor really does span lines. Removed ⇒ 3/3.
+      To check the paraphrase claim later, read the PRE-fix text: `4577400e` rewrote both lines, so
+      it takes `git show 4577400e^:services/agents-core-service.ts`.
       Comments-only is proven by `git show 4577400e -- services/agents-core-service.ts` filtered
       to non-comment changed lines ⇒ **empty**; `tsc --noEmit` exit 0 was the weaker instrument I
-      reached for first (it passes on plenty of behaviour changes).
+      reached for first (it passes on plenty of behaviour changes). That empty result carries a
+      POSITIVE CONTROL, because empty also reads as "the chain matched nothing": the identical
+      chain over the whole commit emits **16** lines and over the `.ts` alone **0**.
+      **RULE-0 note — my stated reason for `rm`-ing the probe copies was wrong.** I called the
+      source "a committed file in `scripts_dev/probes/`"; `scripts_dev/` is **gitignored and
+      untracked**, so nothing in it is committed. Nothing was lost — the real reason is that each
+      `rm` removed a COPY whose source still sits on disk — but the premise was false, and applied
+      to a file that is *not* duplicated it would have authorised real loss.
       **The only remaining box is the OPTIONAL one below**, so nothing non-optional is left here.
 
 ## Approval log

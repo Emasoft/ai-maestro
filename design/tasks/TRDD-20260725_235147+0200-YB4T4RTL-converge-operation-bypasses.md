@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T07:41:51+0200
+updated: 2026-08-29T09:14:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -191,6 +191,33 @@ between, never as one sweep.
       not one, and deleting the family would close both by removal.
 - [ ] The 6 `createAgent` call sites route through `CreateAgent` (with a discovered-session mode)
 - [ ] The 3 `saveAgents` call sites route through the owning `Change*` pipeline
+      **⚠ 2026-08-29 — MEASURED: this box's own (a) CLASSIFICATION IS WRONG FOR 2 OF ITS 3 FILES,
+      AND THE THIRD IS NOT A FIELD WRITE AT ALL.** The count (3) is right — it is file-granular,
+      matching the ratchet's `file::primitive` keys, and the 4th `saveAgents` pin
+      (`foreign-approval-service`) is category (c), permanent by design. What is wrong is the
+      category, which is what sets the estimate.
+      **(1) There is no pipeline to route to, for two of them.** Enumerated from the AIO module,
+      23 pipelines exist: `ChangeAgentDef ChangeAvatar ChangeCLIArgs ChangeClient ChangeCommand
+      ChangeFolder ChangeHook ChangeLSP ChangeMarketplace ChangeMCP ChangeMetadata ChangeName
+      ChangeOutputStyle ChangePlugin ChangeRule ChangeSkill ChangeTeam ChangeTitle CreateAgent
+      CreateMarketplace DeleteAgent DeleteMarketplace DeleteTeam`. **No `ChangeRepo`. No
+      `ChangeDeployment`.** But `agents-repos-service.ts:180,201,234` writes
+      `agents[i].tools.repositories`, and `agents-docker-service.ts:251` writes
+      `agents[i].deployment`. Both are therefore category **(b) — build the AIO first**, not (a)
+      "re-route the call". Filed under (a) they read as three one-line redirects; they are two new
+      pipelines.
+      **(2) `agents-transfer-service.ts::saveAgents` is unpipelined CREATE and DELETE of whole
+      agents — not a field write.** Its 7 sites: `:802` pushes a new agent into the registry
+      (bypasses `CreateAgent`); `:793` replaces an existing agent on `options.overwrite`;
+      `:901/:957/:1001/:1028` write `workingDirectory`/`preferences`/`hooks`/`ampIdentity` during
+      import; and **`:1243` DELETES an agent by `agents.filter(a => a.id !== agent.id)`, inside a
+      `catch (deleteError)` block.** That last one is the TRDD-KERM18NX shape exactly — the registry
+      row goes, and the cemetery archive, team-slot clearing, AID-token revocation, tmux teardown
+      and `PersistedSession` unpersist (G05b) do not run — and because it sits on a failure path it
+      fires precisely when the system is already in a bad state. **It is the highest-severity entry
+      in category (a) of this card and was invisible while one ratchet key stood for seven sites.**
+      Sequencing consequence: transfer's delete converges onto the EXISTING `DeleteAgent` and can
+      be done today; repos/docker cannot start until their AIO exists.
 - [ ] `renameAgentSession` routes through `ChangeName`
 
 **(b) UNGATED SOLE PATH — build the missing all-in-one first (26)**

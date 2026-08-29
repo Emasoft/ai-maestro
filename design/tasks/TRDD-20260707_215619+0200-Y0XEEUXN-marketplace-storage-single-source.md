@@ -1,11 +1,12 @@
 ---
 trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
-column: planned
+column: dev
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-20T22:20:37+0200
-current-owner: code-review
-assignee: null
+updated: 2026-08-29T18:46:31+0200
+current-owner: ai-maestro-hub-session
+assignee: ai-maestro-hub-session
+created-by: code-review
 priority: 2
 severity: LOW
 effort: M
@@ -20,6 +21,43 @@ external-refs: ["reports/code-review/20260707_175225+0200-finder-CLEAN.json"]
 ---
 
 # TRDD-Y0XEEUXN — Give the marketplace-storage layer one owner for manifest read + settings registration
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-29
+
+**Part 1 is DONE for the READ helper only. Two of this card's premises were wrong; read
+them before doing the rest, because one of them makes the obvious next step a mistake.**
+
+- **DONE:** `readRoleClientMarketplacePlugins` and `readCustomClientMarketplacePlugins`
+  were byte-identical modulo the path helper (verified by `diff`, not by eye) and are now
+  ONE `readClientMarketplacePlugins(marketplaceDir)`. All four call sites already bound
+  `marketplaceDir` on the preceding line, so the parameter cost nothing. All six functions
+  are module-private with no caller outside this file, so the blast radius is the file.
+- **PREMISE WRONG #1 — the `ensure`/`update` halves are NOT near-identical, and merging
+  them the way this card describes would change behaviour.** Beyond the name and path they
+  differ on `claude`: the ROLE pair early-returns (`if (targetClient === 'claude') return`)
+  because role-plugin-service owns Claude's manifest, while the CUSTOM pair falls through
+  and performs a LOCKED settings.json read-modify-write to register the marketplace with
+  the Claude CLI (TRDD-RYFP030K). A shared helper would need flags for skip-claude,
+  register-claude, the manifest name and the log prefix — four parameters to save ~40
+  lines, which is worse than the duplication. **Recommend: dedup the read (done) and leave
+  `ensure`/`update` alone**, or reduce the scope of this card to part 2.
+- **PREMISE WRONG #2 — "exercise the full plugin-conversion test path" describes a path
+  that does not exist.** MEASURED: stubbing the merged reader to `return []`
+  unconditionally left all 24 tests of the four conversion suites GREEN
+  (`change-client-matrix`, `install-element-codex-adapter`, `createagent-g08-cross-client`,
+  `marketplace-supported`). Nothing reached it. So "24/24 still pass" after the refactor was
+  a VACUOUS confirmation. `tests/unit/client-marketplace-manifest-read.test.ts` now covers
+  it directly — 6 tests including both manifest shapes (Claude `source` string vs Codex
+  `source` object), the both-present precedence, the no-manifest case, and malformed
+  entries. Two neuters attributed: stubbing the reader reds 5 of 6; breaking only the Codex
+  object decode reds exactly the Codex test.
+- The helper is `export`ed for that test and has no production caller outside the module;
+  the comment above it says so.
+
+**NEXT ACTION.** Decide part 2 (moving `extraKnownMarketplaces` registration into
+`CreateMarketplace`/`DeleteMarketplace`/`UpdateMarketplace`) on its own — it touches 5
+route handlers plus 3 pipelines and deserves its own change, per this card's own
+"land as its own PR". Not started.
 
 ## Problem
 
@@ -79,6 +117,14 @@ preserved exactly (the role trio keeps the bare `LOCAL_MARKETPLACE_NAME`, the
 custom trio keeps the `-<client>` suffix — the shared helper must not
 homogenize them). Land as its own PR with the full plugin-conversion test path
 exercised.
+
+## Acceptance
+
+- [x] The two manifest READ helpers are one function; the duplicate is deleted and every call site repointed. Bodies confirmed byte-identical by `diff` before merging, so the merge is a rename plus a parameter the callers already had.
+- [x] The merged reader has direct behavioural coverage — both manifest shapes, precedence, absence, malformed entries — with two attributed neuters proving it non-vacuous.
+- [x] `yarn tsc --noEmit` exit 0; the five relevant suites 30/30 (24 pre-existing at their recorded baseline + 6 new).
+- [ ] ~~Factor the `ensure`/`update` trios into one parameterized helper set.~~ **DECLINED as specified** — measured, they differ on `claude` handling, not just on a name string; see STATE. Reopen only with a design that keeps the two behaviours distinct.
+- [ ] Part 2: `extraKnownMarketplaces` registration moved into the Create/Delete/UpdateMarketplace pipelines, route handlers stop patching settings.json below the pipeline call. **NOT STARTED** — own change.
 
 ## Approval log
 

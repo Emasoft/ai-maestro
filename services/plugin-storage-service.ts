@@ -834,10 +834,16 @@ import { loadJsonSafe, updateJson } from '@/lib/json-io'
  * Load the current set of plugin entries from a per-client marketplace
  * manifest. Returns an empty array when the manifest doesn't exist yet.
  */
-async function readCustomClientMarketplacePlugins(
-  targetClient: string
+// Exported for tests ONLY (TRDD-Y0XEEUXN). It has no production caller outside this
+// module — but when the role/custom duplicates were merged into it, a neuter proved the
+// four conversion suites never reach it: making it return [] unconditionally left all 24
+// green. A helper that parses both the Claude (`source` string) and Codex (`source`
+// object) manifest shapes, on the path every plugin install/convert flow depends on, was
+// covered by nothing. Exporting is the cheap way to give it a direct test; the alternative
+// was driving a full conversion.
+export async function readClientMarketplacePlugins(
+  marketplaceDir: string
 ): Promise<MarketplacePluginEntry[]> {
-  const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
   // Try both Claude and Codex manifest locations; other clients can be added
   // when their spec is implemented in marketplace-emitters.ts.
   const claudePath = path.join(marketplaceDir, '.claude-plugin', 'marketplace.json')
@@ -892,7 +898,7 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
   await mkdir(marketplaceDir, { recursive: true })
 
   // Seed an empty manifest for this client if one doesn't exist yet.
-  const existingPlugins = await readCustomClientMarketplacePlugins(targetClient)
+  const existingPlugins = await readClientMarketplacePlugins(marketplaceDir)
   if (existingPlugins.length === 0) {
     // Graceful degradation (TRDD-TBGGUA2V P5): stub clients (gemini/kiro/
     // opencode/cursor) have no marketplace serializer yet, so writing the
@@ -953,7 +959,7 @@ async function updateCustomClientMarketplaceManifest(
   version: string
 ): Promise<void> {
   const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
-  const existing = await readCustomClientMarketplacePlugins(targetClient)
+  const existing = await readClientMarketplacePlugins(marketplaceDir)
   const filtered = existing.filter(p => p.name !== pluginName)
   filtered.push({
     name: pluginName,
@@ -992,39 +998,6 @@ async function updateCustomClientMarketplaceManifest(
 // OTHER client, which previously had no manifest writer at all.
 // ═══════════════════════════════════════════════════════════════
 
-/** Load the current plugin entries from a per-client ROLE marketplace manifest. */
-async function readRoleClientMarketplacePlugins(
-  targetClient: string
-): Promise<MarketplacePluginEntry[]> {
-  const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
-  const claudePath = path.join(marketplaceDir, '.claude-plugin', 'marketplace.json')
-  const codexPath = path.join(marketplaceDir, 'marketplace.json')
-  const manifestPath = existsSync(claudePath) ? claudePath : existsSync(codexPath) ? codexPath : null
-  if (!manifestPath) return []
-
-  const raw = await loadJsonSafe(manifestPath)
-  const plugins = (raw.plugins || []) as unknown[]
-  const out: MarketplacePluginEntry[] = []
-  for (const p of plugins) {
-    if (!p || typeof p !== 'object') continue
-    const plug = p as Record<string, unknown>
-    let relativePath = ''
-    const src = plug.source
-    if (typeof src === 'string') relativePath = src
-    else if (src && typeof src === 'object' && typeof (src as Record<string, unknown>).path === 'string') {
-      relativePath = (src as Record<string, string>).path
-    }
-    out.push({
-      name: String(plug.name ?? ''),
-      description: String(plug.description ?? ''),
-      version: String(plug.version ?? '0.0.0'),
-      relativePath,
-      category: typeof plug.category === 'string' ? plug.category : undefined,
-    })
-  }
-  return out
-}
-
 /**
  * Ensure the per-client ROLE marketplace folder + manifest exist for
  * `targetClient` (any client except 'claude', which manages its own
@@ -1036,7 +1009,7 @@ async function ensureRoleClientMarketplace(targetClient: string): Promise<void> 
   const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
   await mkdir(marketplaceDir, { recursive: true })
 
-  const existingPlugins = await readRoleClientMarketplacePlugins(targetClient)
+  const existingPlugins = await readClientMarketplacePlugins(marketplaceDir)
   if (existingPlugins.length === 0) {
     // Graceful degradation (TRDD-TBGGUA2V P5), same rationale as
     // ensureCustomClientMarketplace: an unsupported client's serializer
@@ -1062,7 +1035,7 @@ async function updateRoleClientMarketplaceManifest(
 ): Promise<void> {
   if (targetClient === 'claude') return
   const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
-  const existing = await readRoleClientMarketplacePlugins(targetClient)
+  const existing = await readClientMarketplacePlugins(marketplaceDir)
   const filtered = existing.filter(p => p.name !== pluginName)
   filtered.push({
     name: pluginName,

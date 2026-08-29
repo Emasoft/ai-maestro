@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T10:06:00+0200
+updated: 2026-08-29T10:34:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -225,25 +225,37 @@ between, never as one sweep.
       route `app/api/agents/[id]/transfer/route.ts` is a thin wrapper (`enforceAuth` +
       `requireSudoToken` + call + return) and the headless twin
       (`services/headless-router.ts:1649`) is thinner still; the gate does not run one frame up.
-      **THE GATE LIST BELOW IS MEASURED, NOT RECALLED (2026-08-29, second correction).** My first
-      write-up named five gates from memory. Read off `DeleteAgent`'s own `ops.push`/`id:` labels,
-      the sequence it actually owns is **G01** (exists / not already soft-deleted) · **G01b**
-      (R39.6 ASSISTANT independent-delete refusal) · **G01c** (cemetery archive) · **G02** (MANAGER
-      auto-demote to AUTONOMOUS before deletion) · **G04** (COS / Orchestrator / membership slots
-      cleared in every team) · **G05** (tmux session kill) · **G05b** (`PersistedSession`
-      unpersist) · **G06** (AMP API keys *and* AID governance tokens revoked) · **G07** (pending
-      governance requests + transfers) · **G07c** (group unsubscribe) · **G08** (registry delete) ·
-      **G08b** (on-disk verification of that delete) · **G08c** (local plugin-record uninstall) ·
-      **G09/EXE** (folder, with the `~/agents/` refusal) · **G10** (post-condition verification).
-      My recalled five were all real but were a SUBSET: it also loses the R39.6 refusal, the MANAGER
-      demotion, pending governance requests and transfers, group membership, the AMP key half of
-      G06, and both verification gates. The bypass is wider than I first wrote, and the correction
-      runs in the direction I would not have guessed.
-      TRDD-KERM18NX is the concrete consequence to point at (a `PersistedSession` outliving its
-      agent and resurrecting the workdir — G05b), not the whole of it. And on partial failure the
-      catch returns **`success: true`** with a `warning` string; the Next route forwards
-      `result.data` whenever `result.error` is unset, so a half-deleted agent reports success to the
-      HTTP caller with a 200.
+      **WHAT `DeleteAgent` OWNS — measured, and then the INSTRUMENT validated (2026-08-29, third
+      correction).** My first write-up named five gates from memory; my second named fifteen from a
+      grep whose pattern matched comments by design (`^\s*//\s*G[0-9]`) and whose `awk` range I had
+      not bounded. Both halves are now checked. The function spans **8947-9744** with the next
+      top-level export at 9749, so the range neither truncated nor over-ran. Counting only
+      STRUCTURAL sequence entries (`id: 'G..'`) gives **11**, not 15:
+      **G01c** (cemetery archive) · **G02** (MANAGER auto-demote to AUTONOMOUS) · **G04** (COS /
+      Orchestrator / membership slots cleared in every team) · **G05** (tmux session kill) ·
+      **G05b** (`PersistedSession` unpersist) · **G06** (AMP API keys *and* AID governance tokens
+      revoked) · **G07** (pending governance requests + transfers) · **G07c** (group unsubscribe) ·
+      **G08** (registry delete) · **G08b** (on-disk verification of that delete) · **G08c** (local
+      plugin-record uninstall) — all handed to `runGateSequence` at `:9562`.
+      **Four further steps run but are deliberately NOT sequence entries**, and calling them gates
+      was the error: **G01** and **G01b** are pre-flight refusals before the transaction opens
+      (exists / not already soft-deleted; the R39.6 ASSISTANT independent-delete block);
+      **G09/EXE** is the folder delete, which the code's own comment excludes from the sequence
+      because it is *"the sole genuinely irreversible"* step; **G10** is the post-condition
+      verification after `ops.push(...txn.ops)`. (`G09b` appears only in a `USED TO SIT HERE`
+      comment and is not live — it is in neither count.)
+      **For this bypass the distinction does not soften anything**, because transfer's `move` branch
+      skips all fifteen steps, transactional or not. What it changes is the shape a remediation
+      plans against: converging onto `DeleteAgent` buys an 11-gate transaction with compensation,
+      plus two pre-flight refusals and two post-transaction steps — not one flat list.
+      My recalled five were a strict SUBSET, and the two renames hold: "cemetery archive" is G01c,
+      "team-slot clearing" is G04. TRDD-KERM18NX is the concrete consequence to point at (a
+      `PersistedSession` outliving its agent and resurrecting the workdir — G05b), not the whole of
+      it. And on partial failure the catch returns **`success: true`** with a `warning` string;
+      **the Next route** (`app/api/agents/[id]/transfer/route.ts`, read in full) forwards
+      `result.data` whenever `result.error` is unset, so a half-deleted agent reports success with a
+      200. The headless twin returns through `sendServiceResult`, which I have not read — the claim
+      is asserted for the Next route only.
       It was invisible while one ratchet key stood for seven sites.
       Sequencing consequence: transfer's delete converges onto the EXISTING `DeleteAgent` and can
       be done today; repos/docker cannot start until their AIO exists.

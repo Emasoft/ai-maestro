@@ -3,7 +3,7 @@ trdd-id: 2K08IAPV
 title: Add a shared useToast hook to replace the hand-rolled toast in 6+ components
 column: complete
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-29T17:14:37+0200
+updated: 2026-08-29T17:16:36+0200
 current-owner: code-review
 assignee: ai-maestro-hub-session
 priority: 3
@@ -117,3 +117,29 @@ state would erase the only trace of the intended feature, so it is recorded here
 
 - 2026-08-20T22:20:37+0200 — classified min-approval-requirement: none (was UNSET) and re-filed design/proposals/ → design/tasks/ as column: planned. Floor is none: a shared useToast() hook replacing six hand-rolled copies is an in-scope, reversible, local refactor of this project's own source, with zero D3 floor signals. Proposals are Tier 1/2/3 BY DEFINITION — a Tier-0 task does not belong in the proposals folder, so this was a filing error, not a pending decision. Nothing was approved here; a Tier-0 card has no approver and needed none. It sat unroutable in the wrong zone for six weeks.
 - 2026-08-29T17:14:37+0200 — COMPLETED by ai-maestro-hub-session. Tier-0 self-mandate (floor `none`, so no approver was needed or recorded). Hook + 4 migrations + 6 tests with a recorded neuter; tsc 0, suite 502/6600, build 0.
+- 2026-08-29T17:16:36+0200 — **CORRECTION, appended (the card is terminal; this log is the exempt append-only
+  surface). The "four, not seven" count is RIGHT and the evidence I gave for it was WORTHLESS
+  for two of the three files.**
+
+  I declared `TeamOverviewSection.tsx` and `ClientSection.tsx` toast-free from a grep that
+  printed nothing. It printed nothing because **the paths I grepped do not exist**: I used
+  `components/settings/…` for both, and they live at `components/teams/TeamOverviewSection.tsx`
+  and `components/agent-profile/ClientSection.tsx`. A silent grep against a missing file is
+  indistinguishable from a silent grep against a file with no matches — the exact shape this
+  session has been caught on repeatedly, here reached by a wrong PATH rather than a wrong needle.
+
+  **Re-checked at the real paths, with a positive control (line counts and `useState` counts
+  proving the files were actually read): the conclusion survives.** All three carry exactly one
+  or two case-insensitive `toast` hits and every one is a COMMENT; none has toast state and none
+  has a dismiss `setTimeout`. `AgentProfilePanel.tsx` (872 lines), `TeamOverviewSection.tsx`
+  (321), `ClientSection.tsx` (188). So the population is FOUR, as stated.
+
+  **And the comments turn out to corroborate the migration rather than contradict it.** What they
+  call *"the shared toast"* is `reportSudoError` from `SudoContext` — i.e. these three are
+  CONSUMERS of the very toast this card migrated, not a fifth hand-rolled copy. `reportSudoError`
+  keeps its exact signature through the migration, so those call sites are unaffected, which is
+  why nothing in them needed touching.
+
+  Commit `30c6b831`'s message carries the same unqualified "have no toast at all" claim and
+  cannot be edited; this entry is the correction of record.
+

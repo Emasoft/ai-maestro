@@ -172,3 +172,27 @@ touched, no dependencies on other open TRDDs.
   that position MEANS. The rules file was already in context; nothing needed fetching. The
   generalization is not "read headings carefully" but: *when the claim is conformance, the
   instrument is the standard — never the thing being judged.*
+
+- 2026-08-29T18:04:00+0200 — Three precision corrections to the entry above, none changing an
+  outcome. Recorded because each is the session's own shape in a smaller form.
+
+  **(a) A coverage claim measured at the wrong TIME.** That entry's closing line said `trddgrep
+  validate` had been "re-run across all commits since fd64e544" — but the run happened BEFORE the
+  commit carrying that sentence, so it could not see the change it vouched for. Same proxy failure
+  as the rest of this log, except the proxy is a measurement of the right object at the wrong
+  moment. Now verified AFTER the fact, at HEAD: exit 1, exactly the 2 pre-existing allowlisted
+  errors (`G6A54OYK`, `39OPYXQ9`), zero lines on this card. The claim was true; the evidence
+  offered for it was not yet capable of being evidence.
+
+  **(b) "Corpus practice confirms" overstated a 2-of-~20 read.** I checked SCEN-001 and SCEN-002
+  and generalized to the corpus. The honest form costs nothing: *the two I checked agree.* A third
+  placement exists — SCEN-001's blockquote sits after `#### S014:` and before that step's fields —
+  which is forward-attachment at finer grain rather than a counterexample, and the
+  `MANDATORY CLEANUP ORDER` blockquotes are phase-level, a different unit. The conclusion survives;
+  the warrant was thinner than stated.
+
+  **(c) The conformance lesson was violated in the act of recording it.** Entry (above) says the
+  instrument must be the STANDARD — and I applied the rule as QUOTED BY A REVIEWER without opening
+  `SCENARIOS_TESTS_RULES.md`, which was already in context. The quote proved verbatim-correct, so
+  the conclusion holds and the process was still the proxy. Kept here rather than quietly fixed: a
+  lesson recorded in the same breath as its own breach is the most durable form of it.

@@ -102,9 +102,18 @@ LOW, and lower than before: the dangerous half of this card has been removed.
 
 - [x] The false premise is retracted in place, with the measured per-card evidence, so
       a future reader cannot re-derive the original conclusion from this file.
-- [ ] The four unassigned cards get an assignee or an explicit park.
-- [ ] `979dbdaa` gets a `min-approval-requirement:` and an approver, or is moved out of
-      `approval` to a column that is true.
+- [x] `979dbdaa` gets a `min-approval-requirement:` — set to `user` (commit `f85057fc`), which
+      is what its own phased plan already said ("build gated on USER go"). The column stays
+      `approval` because that is TRUE, and the card now names who can end the wait. The linter's
+      surviving `STALE-COLUMN` warning is a fair question with a correct answer: the STATE block
+      records a finished DESIGN phase (the 2026-06-25 synthesis), not a finished build.
+- [ ] The four unassigned cards get an assignee or an explicit park. **Deliberately NOT done, and
+      this is a judgement worth recording rather than an omission.** On a mono-agent board the
+      only truthful assignee is the hub session, so writing it changes no execution — and this
+      board carries 100+ open cards. Stamping four more with an owner that will not pull them is
+      the failure `the-kanban-is-a-pipeline-that-must-drain` names: filing as a substitute for
+      doing, producing a field that looks resolved and moves nothing. It should be done as part
+      of a real triage pass over the whole board, not alone.
 
 ## Approval log
 

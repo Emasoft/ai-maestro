@@ -61,21 +61,33 @@ external-refs:
 
 - **The "unreachable overlay" claim was first settled by reading a className, which cannot
   establish hit-testing; the second attempt grepped only the three files already believed
-  relevant, which is scoping the search to the hypothesis.** Settled on the third pass over
+  relevant, which is scoping the search to the hypothesis.** Re-run on the third pass over
   the right population — `pointer-events|pointerEvents` across `app/ components/ styles/`
   including `.css`, since a global stylesheet rule applied by className is invisible to a
-  `.tsx` grep. Result: the ONLY global CSS rule is `.xterm .xterm-accessibility*` in
+  `.tsx` grep. That population is materially wider, NOT provably complete — `lib/`,
+  `hooks/`, `contexts/` and any CSS outside `app/` were not searched, and a Tailwind
+  arbitrary variant would not appear either. Named so the next reader knows where to
+  look rather than trusting the word "settled". Result: the only global CSS rule is
+  `.xterm .xterm-accessibility*` in
   `app/globals.css:154`, irrelevant here; the wizard is not portaled (6 other components
   use `createPortal`, it is not among them); its own subtree's only `pointer-events-none`
   is the decorative blur div at `AgentCreationWizard.tsx:561`, inside the left panel. The
   conditional pane rules (`MobileDashboard.tsx:198,239`, `TabletDashboard.tsx:183,216`,
   `zoom/AgentCardView.tsx:210,235,259`) were the real risk, because they would make the
   overlay click-through exactly when a pane is INACTIVE — the intermittent shape the bug
-  report has. They are ruled out by TRACING, not by z-index: MobileDashboard's per-agent
-  panes live inside `onlineAgents.map(...)` which opens at line 188 and closes at 276,
-  while the wizard mounts at 441, outside it; and neither TabletDashboard nor
-  AgentCardView renders `MobileDashboard` or `<AgentList`, so their panes cannot be
-  ancestors of either mount.
+  report has. They are ruled out by TRACING, not by z-index (z-index says nothing about
+  ancestry), and the tracing rests on semantics rather than on brace-matching: the
+  MobileDashboard panes are returned from `onlineAgents.map(agent => …)` at line 188, so
+  anything inside it renders ONCE PER AGENT — while the wizard is guarded by a single
+  `showCreationWizard` boolean and renders once. A per-agent wizard would be a loud,
+  obvious bug. (An awk scan also puts the map's close at 276, well above the mount at 441,
+  but that pattern was written to match a shape I expected, so it corroborates and does
+  not carry the claim.) For TabletDashboard and AgentCardView the check is a zero-hit
+  grep — proof of a negative only if the needle is right, so it was re-run with SYMMETRIC
+  BARE needles (`AgentList\|MobileDashboard`, no `<`, the first attempt having been
+  asymmetric) and widened to `app/page.tsx`, where both mounts' real ancestor chain is
+  decided: both components are rendered ONLY from `app/page.tsx` (674, 714), and neither
+  TabletDashboard nor AgentCardView references either. Their panes cannot be ancestors.
 - **The SCEN-031 note "DOM-level Chat interactions still reached the composer" LIKELY does
   not contradict this, but that is an inference, not a reading.** A synthetic event
   dispatched on an element reference bypasses hit-testing, while a CDP-driven click does
@@ -86,10 +98,13 @@ external-refs:
   so two rapid clicks before the parent re-renders would fire `onComplete` twice → two
   `onRefresh()` + two `onAgentCreated(id)`. Both VERIFIED idempotent by reading their
   definitions, not assumed: `handleAgentCreated` (`app/page.tsx:474`) is two setState calls
-  with identical values, and `refreshAgents` (`hooks/useAgents.ts:316`) just calls
-  `loadAgents()`, which the hook already re-runs on a poll timer — so a second fire costs
-  one wasted request and nothing else. Recorded rather than guarded; revisit if either
-  callback stops being idempotent.
+  with identical values, and `refreshAgents` (`hooks/useAgents.ts:316`) calls `loadAgents`,
+  which was itself opened (`hooks/useAgents.ts:235`) rather than assumed safe from the fact
+  that a poll timer already calls it: it carries an explicit last-write-wins guard — a
+  monotonic `requestIdRef` counter, so a second concurrent call supersedes the first and
+  the stale one abandons its `setState`. A double fire therefore costs one wasted request
+  and nothing else. Recorded rather than guarded; revisit if either callback stops being
+  idempotent.
 - **The behaviour-preservation argument for "Let's Go!" was backwards** and is corrected
   in the code comment: it does not rest on `showLetsGo ⇒ creationSuccess` at set time, it
   rests on `creationSuccess` being MONOTONIC (one write site, `true`, never reset).

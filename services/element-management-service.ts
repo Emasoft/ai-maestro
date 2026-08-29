@@ -5754,8 +5754,95 @@ export async function ChangeMarketplace(desired: {
     if (desired.action === 'add') {
       const source = desired.source!
       const sourceArg = 'repo' in source ? source.repo : source.path
-      await execFileAsync('claude', ['plugin', 'marketplace', 'add', sourceArg], { timeout: 120000 })
-      ops.push(`G03: Added marketplace "${desired.name}" from ${sourceArg}`)
+
+      // ── The add transaction (TRDD-Y0XEEUXN part 2) ────────────
+      // `add` used to be ONE mutating gate with nothing abortable after it, which is
+      // exactly why it carried no compensation. It now has TWO stores: the CLI
+      // registration and the `extraKnownMarketplaces` entry that `route.ts` used to
+      // stamp AFTER the pipeline returned. That stamp was never the route's to own —
+      // the sibling `remove` branch already deletes the same key under G05 WITH an
+      // undo, so the pipeline removed an entry it never added, and the window between
+      // the two writes straddled the route/pipeline boundary where nothing could
+      // compensate it. Moving the stamp in does not create the window; it moves it
+      // somewhere it can be closed, and pays for the closing with G03's undo.
+      interface AddCtx {
+        /** Set only once the CLI really registered it — an undo must not deregister a no-op. */
+        registered: boolean
+        /** Set only once the settings entry was really written. */
+        ekmWritten: boolean
+        /** Whatever the key held before we touched it, so the undo restores rather than deletes. */
+        priorEntry: unknown
+      }
+      const ac: AddCtx = { registered: false, ekmWritten: false, priorEntry: undefined }
+
+      const { runGateSequence } = await import('@/lib/gate-transaction')
+      const txn = await runGateSequence<AddCtx>(
+        [
+          {
+            id: 'G03',
+            what: `Register marketplace "${desired.name}" with the Claude CLI`,
+            run: async (c) => {
+              await execFileAsync('claude', ['plugin', 'marketplace', 'add', sourceArg], { timeout: 120000 })
+              // Flag AFTER the call returns: a retried mutator would otherwise arm the undo
+              // on behalf of an attempt that never landed (the G05 discipline, mirrored).
+              c.registered = true
+              ops.push(`G03: Added marketplace "${desired.name}" from ${sourceArg}`)
+            },
+            undo: async (c) => {
+              if (!c.registered) return
+              await execFileAsync('claude', ['plugin', 'marketplace', 'remove', desired.name], { timeout: 120000 })
+            },
+          },
+          {
+            id: 'G03b',
+            what: 'Record the marketplace in extraKnownMarketplaces in settings.json',
+            run: async (c) => {
+              // The discriminant is CHOSEN here, and this is the only place in the pipeline
+              // that chooses one: `marketplaceAddArg` merely SCAVENGES `repo`/`url`/`path`
+              // off an entry someone else wrote. The two values below are exactly what
+              // `CreateMarketplace`'s `{repo} | {path}` input can produce — nothing wider.
+              const entry = 'repo' in source
+                ? { source: { source: 'github', repo: source.repo } }
+                : { source: { source: 'local', path: source.path } }
+              // STAGE-THEN-PUBLISH: `updateJson` MAY RUN THIS MUTATOR MORE THAN ONCE (a
+              // non-participating writer landing between our read and our commit makes it
+              // re-read and re-apply). Capturing `priorEntry` straight into the ctx would,
+              // on the second attempt, capture the value WE wrote on the first — and the
+              // undo would then "restore" our own entry instead of what was there before.
+              // The local resets every attempt, so only the attempt that committed is kept.
+              let priorThisAttempt: unknown
+              await updateJson(SETTINGS_JSON, settings => {
+                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+                priorThisAttempt = ekm[desired.name]
+                ekm[desired.name] = entry
+                settings.extraKnownMarketplaces = ekm
+              }, { createIfMissing: true })
+              c.priorEntry = priorThisAttempt
+              c.ekmWritten = true
+              ops.push(`G03b: Recorded in extraKnownMarketplaces`)
+            },
+            undo: async (c) => {
+              if (!c.ekmWritten) return
+              // Restore the prior value rather than deleting unconditionally: `add` over an
+              // existing name would otherwise have its rollback destroy the entry it found.
+              await updateJson(SETTINGS_JSON, settings => {
+                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+                if (c.priorEntry === undefined) delete ekm[desired.name]
+                else ekm[desired.name] = c.priorEntry
+                settings.extraKnownMarketplaces = ekm
+              }, { createIfMissing: true })
+            },
+          },
+        ],
+        ac,
+      )
+      if (!txn.ok) {
+        ops.push(...txn.ops)
+        result.error = txn.rolledBack
+          ? `${txn.message} The CLI registration and the settings.json entry were both rolled back.`
+          : txn.message
+        return result
+      }
     } else if (desired.action === 'remove') {
       // ── The transaction (AIO-TXN-10 / R51) ────────────────────
       // ONLY `remove` is wrapped, and that is the BOUNDARY RULE rather than laziness.

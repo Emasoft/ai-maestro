@@ -3,7 +3,7 @@ trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
 column: todo
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-29T19:27:49+0200
+updated: 2026-08-29T21:58:02+0200
 current-owner: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 created-by: code-review
@@ -323,7 +323,7 @@ exercised.
 - [x] The merged reader has direct behavioural coverage — both manifest shapes, precedence, absence, malformed entries — with two attributed neuters proving it non-vacuous.
 - [x] `yarn tsc --noEmit` exit 0; the five relevant suites 30/30 (24 pre-existing at their recorded baseline + 6 new).
 - [ ] ~~Factor the `ensure`/`update` trios into one parameterized helper set.~~ **DECLINED as specified** — measured, they differ on `claude` handling, not just on a name string; see STATE. Reopen only with a design that keeps the two behaviours distinct.
-- [ ] Part 2: `extraKnownMarketplaces` registration moved into `ChangeMarketplace`'s `add` branch (with a compensation), and `route.ts` stops stamping settings.json at 1552 and 1604 below the `CreateMarketplace` calls. **NOT STARTED** — blocked on the owner, see PREMISE WRONG #3 in STATE. (`remove` already owns the entry at service:5923-5946 with an undo, so Delete needs nothing; Update never writes it.)
+- [x] Part 2: `extraKnownMarketplaces` registration moved into `ChangeMarketplace`'s `add` branch as G03b, with a compensation, and `route.ts` no longer stamps settings.json below the `CreateMarketplace` calls. **DONE** — full suite green (504 files / 6617 tests); four new tests in `change-marketplace-rollback.test.ts`, two neuters attributed (G03's undo → the deregister test; the discriminant encoder → both happy paths). (`remove` already owns the entry at service:5923-5946 with an undo, so Delete needs nothing; Update never writes it.)
 - [ ] Part 3 (NEW, and the part that actually answers this card's title): the three non-pipeline writers — `plugin-storage-service.ts:939`, `role-plugin-service.ts:720`, `role-plugin-service.ts:1101` — write `extraKnownMarketplaces` directly, through no pipeline at all. Part 2 gives the key ONE owner only for marketplaces created via `CreateMarketplace`; these three are why "one owner" is still false afterwards. **NOT STARTED** — scope unknown, not yet costed.
 
 ## Approval log

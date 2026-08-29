@@ -112,14 +112,23 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
     const res = await post(ADD)
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ success: true, action: 'add-marketplace' })
-    expect(mockUpdateJson).toHaveBeenCalledTimes(1)
+    // NOTE: no `mockUpdateJson` assertion here any more. TRDD-Y0XEEUXN part 2 moved the
+    // `extraKnownMarketplaces` stamp into ChangeMarketplace's add transaction, and this suite
+    // MOCKS that pipeline — so the write happens in code this file deliberately stubs out.
+    // The write itself is pinned where it now lives, by
+    // `tests/integration/change-marketplace-rollback.test.ts`, including its compensation.
   })
 
   it('answers 409 and NAMES THE CAUSE when the write refuses', async () => {
+    // The failure now arrives as a PIPELINE RESULT rather than a throw: part 2 put the write
+    // inside a gate, and the gate runner converts a throw into `{success:false, error}`. That
+    // channel change is exactly what would have regressed this diagnostic silently — the route
+    // maps the result back to the same 409 the throw produced.
     const { UnreadableTargetError } = await import('@/lib/json-io')
-    mockUpdateJson.mockRejectedValueOnce(
-      new UnreadableTargetError('/home/u/.claude/settings.json', 'Unexpected end of JSON input'),
-    )
+    mockCreateMarketplace.mockResolvedValueOnce({
+      success: false,
+      error: new UnreadableTargetError('/home/u/.claude/settings.json', 'Unexpected end of JSON input').message,
+    })
     const res = await post(ADD)
     expect(res.status).toBe(409)
     const body = await res.json()
@@ -130,32 +139,27 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
   })
 
   it('a GENERIC error is still a 500 — the mapping is specific, not a blanket 409', async () => {
-    mockUpdateJson.mockRejectedValueOnce(new Error('disk full'))
+    mockCreateMarketplace.mockResolvedValueOnce({ success: false, error: 'disk full' })
     const res = await post(ADD)
     expect(res.status).toBe(500)
-    expect(await res.json()).toMatchObject({ error: 'Action failed' })
+    // The add handler wraps a pipeline failure; the discriminating point is that it is NOT 409
+    // and NOT typed as unreadable-settings, which is what a blanket mapping would produce.
+    expect(res.status).not.toBe(409)
+    expect((await res.json()).errorType).toBeUndefined()
   })
 
-  it('the route reaches the GUARDED writer — never a direct write', async () => {
+  it('the ADD write is the PIPELINE\'s, and the route no longer performs one', async () => {
     // Pairs with `user-settings-has-two-writers.test.ts`, which forbids the direct-write SHAPE in
-    // source. This is the runtime half: the handler actually calls the owner.
+    // source. This used to assert the route CALLED `updateJson` itself; TRDD-Y0XEEUXN part 2 moved
+    // that stamp into ChangeMarketplace's add transaction, so asserting it here would now pin the
+    // wrong owner. The inverse is the honest claim, and it is the one that would catch a
+    // re-introduced route-side stamp — the exact regression part 2 exists to prevent, since a write
+    // performed here sits outside the pipeline's compensation.
     await post(ADD)
-    expect(mockUpdateJson).toHaveBeenCalledWith(
-      expect.stringMatching(/\.claude[/\\]settings\.json$/),
-      expect.any(Function),
-      expect.objectContaining({ createIfMissing: true }),
+    expect(mockCreateMarketplace).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'someone-their-plugins', source: { repo: 'someone/their-plugins' } }),
+      expect.anything(),
     )
-
-    // RUN THE MUTATOR. `expect.any(Function)` is satisfied by a mutator that does nothing at all, so
-    // the call-shape assertion above cannot tell a working stamp from an empty closure. This is
-    // strictly stronger than what the pre-migration version could assert: it checked the object
-    // handed to `saveJsonSafe`, which the route had already built, whereas this executes the
-    // route's own mutation logic against a fresh draft.
-    const mutator = mockUpdateJson.mock.calls[0][1] as (s: Record<string, unknown>) => void
-    const draft: Record<string, unknown> = {}
-    mutator(draft)
-    expect(draft.extraKnownMarketplaces).toMatchObject({
-      'someone-their-plugins': { source: { source: 'github', repo: 'someone/their-plugins' } },
-    })
+    expect(mockUpdateJson).not.toHaveBeenCalled()
   })
 })

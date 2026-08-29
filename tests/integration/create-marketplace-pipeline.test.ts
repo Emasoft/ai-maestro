@@ -23,12 +23,43 @@
  *   - `child_process.execFile` — we must mock this because the test
  *     environment has no `claude` CLI on PATH. Both success and failure
  *     branches are exercised.
- *   - `fs` promise APIs — left untouched; the add branch does not touch
- *     settings.json at all (only the remove branch does), so we don't need
- *     to stub the filesystem.
+ *   - A FAKE HOME. This file used to say "the add branch does not touch
+ *     settings.json at all (only the remove branch does), so we don't need to
+ *     stub the filesystem." That was true, and TRDD-Y0XEEUXN part 2 made it
+ *     false: `add` now records the marketplace in `extraKnownMarketplaces`
+ *     itself (G03b), inside the transaction, because the stamp that used to
+ *     live in `route.ts` sat outside any compensation.
+ *
+ *     Without the fake home this file MODIFIES THE DEVELOPER'S OWN
+ *     `~/.claude/settings.json` — measured, not hypothetical: it added
+ *     `my-new-marketplace` and CLOBBERED the real
+ *     `ai-maestro-local-roles-marketplace` entry, replacing its path with the
+ *     fixture's `/Users/test/...` and dropping `autoUpdate`. The 0-IMPACT
+ *     guard at the bottom is what caught it. Never remove the fake home on the
+ *     grounds that "the pipeline only shells out" — that is precisely the
+ *     assumption that expired here.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+const H = vi.hoisted(() => {
+  const { mkdtempSync: mk } = require('fs') as typeof import('fs')
+  const { join: j } = require('path') as typeof import('path')
+  const root = (process.env.TMPDIR || '/tmp').replace(/\/$/, '')
+  const FAKE_HOME = mk(j(root, 'aim-create-marketplace-'))
+  return { FAKE_HOME, FAKE_STATE: j(FAKE_HOME, '.aimaestro') }
+})
+
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>()
+  return { ...actual, homedir: () => H.FAKE_HOME, default: { ...actual, homedir: () => H.FAKE_HOME } }
+})
+
+vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ecosystem-constants')>()
+  const { fakeEcosystemPaths } = await import('@/tests/helpers/fake-ecosystem-home')
+  return fakeEcosystemPaths(actual, H.FAKE_HOME, H.FAKE_STATE)
+})
 
 // ─── Mocks ─────────────────────────────────────────────────────────────────
 

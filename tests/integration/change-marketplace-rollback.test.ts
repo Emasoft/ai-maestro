@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs'
 import { join } from 'path'
 
 const H = vi.hoisted(() => {
@@ -191,6 +191,93 @@ describe('ChangeMarketplace::remove — every abort unwinds every store (R51)', 
   })
 
   it('0-IMPACT: every path this suite writes is inside the fake home', () => {
+    // The suite seeds and asserts a real settings.json. If the fake home ever fails to take,
+    // these tests would be editing the developer's own Claude configuration.
+    expect(SETTINGS.startsWith(H.FAKE_HOME)).toBe(true)
+    const tmp = String(process.env.TMPDIR || '/tmp')
+    expect(H.FAKE_HOME.startsWith('/tmp') || H.FAKE_HOME.startsWith('/private') || H.FAKE_HOME.startsWith(tmp)).toBe(true)
+  })
+})
+
+/**
+ * `add` used to be ONE mutating gate with nothing abortable after it, and `route.ts` stamped
+ * `extraKnownMarketplaces` AFTER the pipeline returned — outside the transaction, where no
+ * compensation could reach it. TRDD-Y0XEEUXN part 2 moved that stamp in as G03b, which gives
+ * the branch a second store and therefore gives G03 a reachable undo for the first time.
+ *
+ * Both undos are live here, and that is a property of the RUNNER, not of luck: `runGateSequence`
+ * registers each compensation BEFORE running its gate (write-ahead), so a gate that throws
+ * part-way is itself unwound. The file's own warning about an `undo` for `add` being
+ * "unreachable code that READS as a guarantee" described the ONE-gate shape this replaces.
+ */
+describe('ChangeMarketplace::add — the settings stamp is inside the transaction (TRDD-Y0XEEUXN)', () => {
+  const NEW_MKT = 'freshly-added-marketplace'
+
+  beforeEach(() => {
+    cli.calls = []
+    cli.failOn = null
+    fsp.failRenameTo = null
+    enumeration.plugins = []
+    enumeration.installs = []
+    // No settings file at all: `add` must create the entry, not find one. Seeding one would
+    // make the "entry is present afterwards" assertions pass without G03b ever running.
+    rmSync(join(H.FAKE_HOME, '.claude', 'settings.json'), { force: true })
+  })
+
+  it('records a github source with the github discriminant', async () => {
+    const { CreateMarketplace } = await import('@/services/element-management-service')
+    const result = await CreateMarketplace({ name: NEW_MKT, source: { repo: SOURCE_REPO } }, OWNER)
+
+    expect(result.success).toBe(true)
+    // The pipeline CHOOSES the discriminant — this is the one thing it gained. `'github'` is
+    // asserted by value, not merely "an entry exists": writing `'local'` here would be a
+    // silent behaviour change that a presence check could not see.
+    expect(readEkm()[NEW_MKT]).toEqual({ source: { source: 'github', repo: SOURCE_REPO } })
+  })
+
+  it('records a path source with the local discriminant', async () => {
+    const { CreateMarketplace } = await import('@/services/element-management-service')
+    const LOCAL = join(H.FAKE_HOME, 'some-marketplace-dir')
+    const result = await CreateMarketplace({ name: NEW_MKT, source: { path: LOCAL } }, OWNER)
+
+    expect(result.success).toBe(true)
+    expect(readEkm()[NEW_MKT]).toEqual({ source: { source: 'local', path: LOCAL } })
+  })
+
+  it('deregisters the marketplace it just registered when the settings write fails', async () => {
+    // The whole point of part 2. Before it, this failure left the CLI registered with NO
+    // settings entry and nothing anywhere to roll either back, because the stamp lived in the
+    // route, outside the transaction.
+    fsp.failRenameTo = 'settings.json'
+
+    const { CreateMarketplace } = await import('@/services/element-management-service')
+    const result = await CreateMarketplace({ name: NEW_MKT, source: { repo: SOURCE_REPO } }, OWNER)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('G03b')
+    // G03's undo: the registration is given back. Without it the host keeps a marketplace the
+    // settings file has no record of — the exact split part 2 exists to prevent.
+    expect(argvOf(`marketplace remove ${NEW_MKT}`)).toHaveLength(1)
+    // And no half-written entry survives.
+    expect(readEkm()[NEW_MKT]).toBeUndefined()
+  })
+
+  it('writes no settings entry at all when the CLI registration itself fails', async () => {
+    // G03 aborts first, so G03b never runs. Asserts the ordering: the settings store is not
+    // touched on behalf of a registration that never happened.
+    cli.failOn = 'marketplace add'
+
+    const { CreateMarketplace } = await import('@/services/element-management-service')
+    const result = await CreateMarketplace({ name: NEW_MKT, source: { repo: SOURCE_REPO } }, OWNER)
+
+    expect(result.success).toBe(false)
+    expect(readEkm()[NEW_MKT]).toBeUndefined()
+    // G03 recorded nothing, so its own undo is a no-op — no compensating `remove` is issued
+    // for a registration that never landed.
+    expect(argvOf(`marketplace remove ${NEW_MKT}`)).toHaveLength(0)
+  })
+
+  it('0-IMPACT: every path this block writes is inside the fake home', () => {
     // The suite seeds and asserts a real settings.json. If the fake home ever fails to take,
     // these tests would be editing the developer's own Claude configuration.
     expect(SETTINGS.startsWith(H.FAKE_HOME)).toBe(true)

@@ -1539,6 +1539,8 @@ async function handleAddMarketplaceFromPath(localPath: string) {
 
   const result = await CreateMarketplace({ name: marketplaceName, source: { path: localPath } }, { isSystemOwner: true as const })
   if (!result.success) {
+    const unreadable = unreadableSettingsResponse(result.error)
+    if (unreadable) return unreadable
     const errStr = String(result.error || '')
     if (errStr.includes('already') || errStr.includes('exists')) {
       return NextResponse.json({ error: `Marketplace "${marketplaceName}" already exists` }, { status: 409 })
@@ -1546,13 +1548,36 @@ async function handleAddMarketplaceFromPath(localPath: string) {
     return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
   }
 
-  await updateJson(SETTINGS_PATH, s => {
-    const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
-    ekm[marketplaceName] = { source: { source: 'local', path: localPath } }
-    s.extraKnownMarketplaces = ekm
-  }, { createIfMissing: true })
+  // The `extraKnownMarketplaces` stamp that used to live here is now G03b inside
+  // ChangeMarketplace's `add` (TRDD-Y0XEEUXN part 2). It belongs there because the sibling
+  // `remove` branch already owns the same key under G05 with an undo, and because a stamp
+  // written here sat OUTSIDE the pipeline's transaction — a failure between the CLI
+  // registration and this write left the marketplace registered with no settings entry and
+  // nothing anywhere able to roll either back.
 
   return NextResponse.json({ success: true, action: 'add-marketplace', marketplaceName, path: localPath })
+}
+
+/**
+ * Map a PIPELINE failure whose cause was an unreadable `~/.claude/settings.json` back to the same
+ * 409 + `errorType` the THROWN path produces at the POST catch-all.
+ *
+ * Needed because TRDD-Y0XEEUXN part 2 moved the `extraKnownMarketplaces` stamp INTO
+ * `ChangeMarketplace`'s add transaction. That was right — outside it, nothing could compensate the
+ * write — but it also changed the CHANNEL the failure arrives on: a throw from `updateJson` inside
+ * a gate is caught by the gate runner and returned as `{success:false, error}`, so it no longer
+ * reaches the route's `catch`. Without this, TRDD-ZT3P02PO's whole point regressed silently: the
+ * user clicks "add marketplace", their global config is corrupt, and the answer is a generic 500
+ * that never says so. The status is not cosmetic — 409 means the state on disk is UNKNOWN.
+ *
+ * Matches on the message because a gate result carries a STRING, not the error object. Both phrases
+ * are `UnreadableTargetError`'s own (`lib/json-io.ts`), and BOTH are required so an unrelated error
+ * mentioning one word cannot claim this status.
+ */
+function unreadableSettingsResponse(error: unknown): NextResponse | null {
+  const msg = String(error || '')
+  if (!msg.includes('does not parse') || !msg.includes('refusing to overwrite')) return null
+  return NextResponse.json({ error: msg, errorType: 'unreadable-settings' }, { status: 409 })
 }
 
 /** Clone a GitHub marketplace repo, or register a local directory marketplace (TRDD-4IYPNZWT). */
@@ -1588,6 +1613,8 @@ async function handleAddMarketplace({ url, path: localPath }: { url?: string; pa
   // sources.
   const result = await CreateMarketplace({ name: marketplaceName, source: { repo } }, { isSystemOwner: true as const })
   if (!result.success) {
+    const unreadable = unreadableSettingsResponse(result.error)
+    if (unreadable) return unreadable
     const errStr = String(result.error || '')
     if (errStr.includes('already') || errStr.includes('exists')) {
       return NextResponse.json({ error: `Marketplace "${marketplaceName}" already exists` }, { status: 409 })
@@ -1595,14 +1622,12 @@ async function handleAddMarketplace({ url, path: localPath }: { url?: string; pa
     return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
   }
 
-  // Add to extraKnownMarketplaces — the pipeline does CLI registration but
-  // doesn't populate extraKnownMarketplaces (that's the route's stamping
-  // concern, not the pipeline's; the pipeline stays source-agnostic).
-  await updateJson(SETTINGS_PATH, s => {
-    const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
-    ekm[marketplaceName] = { source: { source: 'github', repo } }
-    s.extraKnownMarketplaces = ekm
-  }, { createIfMissing: true })
+  // The `extraKnownMarketplaces` stamp is now G03b inside ChangeMarketplace's `add`
+  // (TRDD-Y0XEEUXN part 2). This comment used to claim the pipeline "stays source-agnostic"
+  // and that populating the key was the route's concern — but the sibling `remove` branch has
+  // always owned the same key under G05, with an undo, so the pipeline removed an entry it
+  // never added. What the pipeline genuinely gained is CHOOSING the discriminant on the way
+  // in; it already scavenged `repo`/`url`/`path` off entries on the way back out.
 
   return NextResponse.json({ success: true, action: 'add-marketplace', marketplaceName, repo })
 }

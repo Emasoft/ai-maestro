@@ -340,6 +340,16 @@ export class KeyLossRefused extends Error {
  * Whether that should change is TRDD-HF2DY4VT; what must not persist is a contract line promising
  * a decision nobody makes.
  *
+ * The counts above are a DATED MEASUREMENT, not an invariant — they rot, and a stale number in a
+ * comment is the defect this very comment was rewritten to remove. Re-derive rather than trust
+ * them, and note the instrument: `grep auditOk` answers "does this spelling appear", NOT "does
+ * anyone act on it" (a spread or a rename defeats it — which is how the first pass got this wrong).
+ * Classify each site by what it DOES with the return value instead:
+ *   grep -rn 'updateJson(' --include=*.ts --include=*.mjs app lib services components scripts server.mjs
+ * A bare `await updateJson(…)` discards the result and cannot read the flag under any spelling;
+ * only the sites that BIND or DESTRUCTURE it can, plus anything reached through a propagating
+ * wrapper (`return updateJson(…)` — today only `settings-gate.ts::editSettings`).
+ *
  * ⚠ `mutator` MUST mutate the object it is given (or return void). Building a fresh object and
  * returning it is the 2026-07-07 shape — the minimal-object rebuild that wiped a 57.8 KB config —
  * so the return value is deliberately ignored, and the key-loss tripwire catches it anyway.

@@ -60,6 +60,33 @@ describe('guardRealUserSettings', () => {
     expect(() => check()).toThrow(/DELETED it/)
   })
 
+  it('states what it OBSERVED and names BOTH causes, asserting neither (TRDD-O4E2LW3U)', async () => {
+    // The guard sees only that the bytes differ; it cannot see which process wrote them, and the
+    // path it watches is the SHARED global config. The message used to open "This almost always
+    // means a `vi.mock(…)` factory…" — a cause it never observed — and on 2026-08-29 a full-suite
+    // run went red at 18 files while the writer was demonstrably external. Pinned here so the
+    // single-cause claim cannot drift back in silently, the way MFTDMSJY pinned its own wording.
+    await writeFile(file, '{"a":1}', 'utf-8')
+    const check = guardRealUserSettings(file)
+    await writeFile(file, '{"a":2}', 'utf-8')
+
+    let message = ''
+    try {
+      check()
+    } catch (err) {
+      message = (err as Error).message
+    }
+    // Non-vacuity: if the guard stopped failing, every toContain below would be asserted against
+    // an empty string and this test would certify nothing.
+    expect(message).not.toBe('')
+
+    expect(message).not.toContain('almost always means')
+    expect(message).toContain('WHAT THIS GUARD OBSERVED')
+    expect(message).toContain('A TEST ESCAPE')       // cause (a)
+    expect(message).toContain('ANOTHER PROCESS')     // cause (b)
+    expect(message).toContain('THE DISCRIMINATOR')   // how to tell them apart
+  })
+
   it('names the real user settings path by default, so a caller cannot point it somewhere harmless by accident', () => {
     // The default is the whole value of the helper: a guard that has to be TOLD what to protect
     // gets pointed at a fixture and protects nothing.

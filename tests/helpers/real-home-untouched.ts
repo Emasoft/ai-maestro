@@ -19,6 +19,21 @@
  * ⚠ IT DETECTS, IT DOES NOT PREVENT. By the time it fires the write has happened. That is still the
  * whole value: the failure mode this replaces was SILENT, and a loud failure with the file named in
  * it is the difference between "fix the mock" and "discover it months later".
+ *
+ * ⚠ IT DETECTS, IT DOES NOT ATTRIBUTE (TRDD-O4E2LW3U, measured 2026-08-29). This guard sees only
+ * that the bytes differ. It cannot see WHICH process wrote them, and the path it watches is the
+ * SHARED global config — so a concurrent session rewriting it mid-suite is, from inside this
+ * process, indistinguishable from a test escape. The message used to open "This almost always
+ * means a `vi.mock(…)` factory…", asserting a cause it never observed; a full-suite run then went
+ * red at 18 files / 1 test while the writer was demonstrably external (the same file changed three
+ * more times with NO suite running, oscillating `statusLine` between the host's real value and a
+ * two-element array of `/tmp/slprobe` scripts, a path with zero hits in this repo).
+ *
+ * The fix was to the MESSAGE ONLY, deliberately. The trigger stays a byte-compare and no suite is
+ * exempted: relaxing either would blind the guard to the silent write it exists to catch, and the
+ * external write is not this repo's defect. A detector that names one cause stops the reader
+ * looking for the other — the same defect corrected twice on TRDD-MFTDMSJY (`readTimedOut` →
+ * `readFailed`, and a banner that printed "(a keychain unlock/ACL prompt)" for a prompt nobody saw).
  */
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -56,12 +71,25 @@ export function guardRealUserSettings(path = REAL_USER_SETTINGS): () => void {
       : after === null ? 'DELETED it'
       : `MODIFIED it (${before.length} → ${after.length} bytes)`
     expect.fail(
-      `A test wrote the DEVELOPER'S OWN settings file and ${what}:\n  ${path}\n\n` +
-      `This almost always means a \`vi.mock('@/lib/json-io', …)\` factory mocks a write verb the ` +
-      `code under test no longer calls, so the REAL writer ran. Mocks keyed on a NAME stop mocking ` +
-      `silently when the name changes. Check every write verb the route actually uses.\n\n` +
-      `If the module under test wrote through \`updateJson\`, a timestamped backup sits next to the ` +
-      `file (\`settings.json.aim-bak-*\`) and recovery is a diff away.`,
+      `The DEVELOPER'S OWN settings file changed while this test file ran, and it ${what}:\n  ${path}\n\n` +
+      `WHAT THIS GUARD OBSERVED is exactly that — the bytes differ between this file's beforeAll ` +
+      `and its afterAll. It has NO evidence about which process wrote them, so it names both ` +
+      `reachable causes rather than one:\n\n` +
+      `  (a) A TEST ESCAPE. Usually a \`vi.mock('@/lib/json-io', …)\` factory mocking a write verb ` +
+      `the code under test no longer calls, so the REAL writer ran — a mock keyed on a NAME stops ` +
+      `mocking silently when the name changes. Also: a step whose path argument DEFAULTS to the ` +
+      `real settings file. Check every write verb the code actually reaches.\n\n` +
+      `  (b) ANOTHER PROCESS on this machine. This path is the SHARED global Claude Code config; ` +
+      `any other session, agent, or installer running concurrently can rewrite it mid-suite. Then ` +
+      `every test file whose afterAll follows that single write fails, which looks like many ` +
+      `broken suites and is one external write (measured 2026-08-29: 18 files red, 1 test red).\n\n` +
+      `THE DISCRIMINATOR, so you do not have to rediscover it: re-sample this file's mtime, size ` +
+      `and content hash every few seconds for a few minutes with NO suite running. A file that ` +
+      `keeps changing while nothing is running exonerates the suite; one that goes still points ` +
+      `back at (a).\n\n` +
+      `RECOVERY: a timestamped backup (\`settings.json.aim-bak-*\`) sits next to the file only if ` +
+      `the write went through \`updateJson\`. Its ABSENCE is itself evidence the write did NOT ` +
+      `come through that path.`,
     )
   }
 }

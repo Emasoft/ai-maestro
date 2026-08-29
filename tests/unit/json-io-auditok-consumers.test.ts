@@ -70,6 +70,18 @@ function sourceFiles(): string[] {
   return out
 }
 
+/**
+ * Remove `/* … *\/` blocks and `// …` line comments so a census counts CODE, not prose.
+ *
+ * Deliberately rough: it does not parse, so a `//` inside a string literal is over-stripped. That
+ * direction is safe here — over-stripping can only HIDE a mention, and the assertion this feeds
+ * fails when a mention is FOUND, so the residual risk is a missed consumer, never a false alarm.
+ * The positive control below pins that it still keeps real code.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '').replace(/\/\/.*$/gm, '')
+}
+
 /** Files that call `updateJson(` or `editSettings(` — the set that could observe the flag. */
 function callerFiles(): string[] {
   return sourceFiles().filter(f => {
@@ -98,10 +110,27 @@ describe('TRDD-HF2DY4VT — the auditOk census is pinned, not asserted in prose'
     expect(rel).toContain('app/api/settings/edit/route.ts')
   })
 
+  it('POSITIVE CONTROL — stripComments removes prose without eating code', () => {
+    // The stripper is an INSTRUMENT, so it gets its own control: it must delete a mention that
+    // lives in a comment and keep one that lives in code. Without this, a stripper that erased
+    // everything would make the census assertion below pass by measuring an empty string.
+    expect(stripComments('/* auditOk in a block */\nconst x = 1')).not.toMatch(/auditOk/)
+    expect(stripComments('// auditOk in a line\nconst y = 2')).not.toMatch(/auditOk/)
+    expect(stripComments('if (!r.auditOk) throw new Error("x") // auditOk')).toMatch(/auditOk/)
+    // And on the real definition file, where `auditOk` is unambiguously code.
+    expect(stripComments(readFileSync(path.join(REPO, DEFINITION), 'utf-8'))).toMatch(/auditOk/)
+  })
+
   it('no caller of updateJson/editSettings BRANCHES on auditOk', () => {
+    // MEASURE CODE, NOT PROSE. This assertion is named BRANCHES, so its detector must not fire on
+    // a DOC COMMENT that merely names the flag — and it did: 2112abca documented the field on
+    // `app/api/settings/edit/route.ts` and `scripts/aimaestro-settings-cli.mjs` precisely to make
+    // the contract honest ("success:true does not mean the audit agreed"), and a bare
+    // `src.includes('auditOk')` reddened the build for it. Documenting a field is not consuming
+    // it; a test whose name and whose detector disagree punishes the wrong change.
     const consumers = callers
       .map(f => path.relative(REPO, f))
-      .filter(rel => readFileSync(path.join(REPO, rel), 'utf-8').includes('auditOk'))
+      .filter(rel => stripComments(readFileSync(path.join(REPO, rel), 'utf-8')).includes('auditOk'))
 
     expect(
       consumers,

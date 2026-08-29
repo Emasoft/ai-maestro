@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T07:31:05+0200
+updated: 2026-08-29T12:37:51+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -316,7 +316,19 @@ contract moves; a purely server-side latch/classification change does not need t
       (`UNREADABLE` beats ÷ `auto:` beats) over the last 12 days: **0.0 / 0.0 / 0.0 / 1.2 / 2.3 /
       5.1 / 12.2 / 12.5 / 12.8 / 13.5 / 16.8 / 42.1 %** — so a blind-but-clean window is not
       hypothetical here, it is what 2026-08-20 was.
-      **INTERIM 2026-08-29T07:20+0200 — 9.7 h of the 24 h elapsed, both criteria met so far.**
+      **INTERIM 2026-08-29T12:37:51+0200 — 15.0 h of the 24 h elapsed, both criteria still met.**
+      Re-measured window-scoped (the earlier ad-hoc attempt counted the WHOLE cumulative log and
+      reported 40903 beats / 25309 `reauth-needed`, which is a count over the wrong population —
+      the file starts 2026-07-29, a month before the fix). Filtering lexically from the window
+      start, `awk '$0 >= "2026-08-28 21:36:00"'`: **881 `auto:` beats · 0 `reauth-needed` of any
+      kind · 11 latch-suppressed** ⇒ blindness **1.25 %**, coverage **98.75 %** (floor 95 %).
+      The 11 are unchanged from the 9.7 h reading, so every beat since has been a clean read —
+      blindness FALLS as the window lengthens because the numerator is fixed.
+      **The rotator is confirmed ALIVE, not silent** — the distinction this box exists to make,
+      since a fully-latched silent rotator also reports zero false beats: last beat 12:37:13, i.e.
+      24 s before the measurement, with 95 beats in the preceding 1.6 h.
+      **Window closes 2026-08-29T21:36.**
+      **PRIOR INTERIM 2026-08-29T07:20+0200 — 9.7 h elapsed, both criteria met.**
       Window starts at the fix, `bda75f7d` (2026-08-28T21:36); first post-fix beat 21:37:05, last
       read 07:20:38 ⇒ **9.73 h**. Measured over **571 `auto:` beats**: **0** `reauth-needed` of any
       kind, and **11** latch-suppressed beats ⇒ blindness **1.93 %**, coverage **98.07 %** (floor

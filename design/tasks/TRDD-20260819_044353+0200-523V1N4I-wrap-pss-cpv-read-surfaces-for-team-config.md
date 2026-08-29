@@ -3,7 +3,7 @@ trdd-id: 523V1N4I
 title: Wrap the verified PSS and CPV read surfaces for team configuration
 column: todo
 created: 2026-08-19T04:43:53+0200
-updated: 2026-08-29T13:58:00+0200
+updated: 2026-08-29T12:37:51+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2

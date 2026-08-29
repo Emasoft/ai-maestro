@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-08-29T13:46:00+0200
+updated: 2026-08-29T12:37:51+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

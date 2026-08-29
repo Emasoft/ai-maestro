@@ -72,6 +72,27 @@ const TIMEOUT_LATCH_THRESHOLD = 3
 // nobody has observed.
 let consecutiveTimeouts = 0
 
+// MONOTONIC count of `security` ops that failed with a spawn error (a timeout, in practice), PER
+// PROCESS. TRDD-MFTDMSJY: `consecutiveTimeouts` cannot answer "did anything fail during THIS
+// sweep?" because it RESETS on every answered op — including a fast one, which is below
+// `SLOW_SECURITY_LOG_MS` and therefore never even logged. That reset is correct for the latch (a
+// run is broken by an answer) and useless to a caller that needs to know whether its own reads
+// are trustworthy. A monotonic counter answers it with two reads and no shared state: snapshot
+// before, compare after.
+//
+// Measured 2026-08-29: a 13916 ms TIMED OUT read made `surveyAlternates` classify a slot as
+// `unreadable` while the latch stayed unset, so the beat emitted `reauth-needed` — a call for a
+// human re-login caused by a stall on THIS side of the keychain. That is the exact fault this
+// card exists to kill; `bda75f7d` had only closed the LATCHED path.
+let securityFailures = 0
+
+/** Monotonic count of `security` ops that failed with a spawn error (timeout). Snapshot it before
+ *  a batch of reads and compare after: a change means at least one read in that batch did not
+ *  happen, so any "absent" conclusion drawn from the batch is unsound. Never resets. */
+export function securityFailureCount(): number {
+  return securityFailures
+}
+
 // Substrings that mark a `security` result as a DENIAL worth latching on (case-insensitive).
 // Deliberately NARROW: an ACL/unlock/interaction denial or a user-canceled prompt — NEVER
 // "item could not be found" (a normal not-found must not latch and deny everything).
@@ -340,6 +361,7 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
     // cost one failed read instead of a ten-minute blackout that also produced a false call for
     // a human re-login.
     consecutiveTimeouts += 1
+    securityFailures += 1 // monotonic — see `securityFailureCount`; NOT reset by an answered op
     if (consecutiveTimeouts >= TIMEOUT_LATCH_THRESHOLD) {
       const n = consecutiveTimeouts
       consecutiveTimeouts = 0

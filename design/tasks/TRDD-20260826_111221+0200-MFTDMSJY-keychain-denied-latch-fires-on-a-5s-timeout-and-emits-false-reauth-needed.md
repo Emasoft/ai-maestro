@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T15:51:32+0200
+updated: 2026-08-29T15:57:35+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -308,7 +308,7 @@ contract moves; a purely server-side latch/classification change does not need t
       opposite verdict); neuter `keychainDeniedLatched() → false` reddens exactly it. The two
       neuters' red sets are disjoint. `JANITOR_GLOBAL_STATE_DIR` is now redirected in that test
       file — without it every tick test read the developer's REAL latch.
-- [ ] **A read that TIMED OUT is not reported as `unreadable`.** Added 2026-08-29T15:51 after the
+- [x] **A read that TIMED OUT is not reported as `unreadable`.** Added 2026-08-29T15:51 after the
       window's single false alarm (below) proved `bda75f7d` covers only the LATCHED path. A
       sub-threshold timeout (`TIMEOUT_LATCH_THRESHOLD = 3` consecutive, reset by any answered op)
       returns a failed read that `surveyAlternates` cannot distinguish from a slot that is genuinely
@@ -316,6 +316,30 @@ contract moves; a purely server-side latch/classification change does not need t
       inside this rotator; if it changes what a beat REPORTS to the supervisor, re-derive it.
       **Do NOT close the 24 h box before this one** — the window cannot come back clean while the
       path that dirtied it is open.
+      **DONE 2026-08-29T15:57.** `safe-storage.ts` now keeps a MONOTONIC `securityFailureCount()`
+      alongside `consecutiveTimeouts` — the latter cannot answer "did anything fail during THIS
+      sweep?" because it resets on any answered op, including a fast one that is below the SLOW
+      threshold and never even logged. `surveyAlternates` snapshots it before its loop and compares
+      after; on a change it empties `unreadable` and sets a new `readTimedOut` flag, which is the
+      SAME treatment the latch branch already gives (an empty array cannot be misread; a mixed one
+      makes every consumer adjudicate). `refreshDead` is deliberately KEPT — it comes from blobs
+      that actually came back — so a dead refresh stays actionable and still outranks the new
+      `stuck: keychain-timeout` verdict. That verdict is a NEW `StuckReason`, not a reuse of
+      `keychain-latched`, because the two differ operationally: a latch is a deliberate circuit
+      breaker that self-clears on its half-open probe; this beat was never latched and simply
+      retries.
+      **4 tests** in `tests/unit/oauth-rotator-survey-read-timeout.test.ts`, the third member of a
+      triplet whose siblings live in `oauth-rotator-tick.test.ts` — all three seed the same
+      registered-but-unreadable slot and differ in exactly one precondition.
+      **COMPLEMENTARY NEUTER PAIR, both observed and restored:**
+      `if (false && securityFailureCount() !== failuresBefore)` ⇒ **3 red / 55 green** (tests 1, 3,
+      4; the positive control — counter non-zero but UNCHANGED — stayed green, and neither sibling
+      file moved). `else if (false && survey.readTimedOut)` ⇒ **1 red / 57 green**, the verdict test
+      alone. So each stage is pinned by its own mutation and none of the four is vacuous.
+      Only `securityFailureCount` is mocked, and that is forced rather than chosen: these tests run
+      with `CLAUDE_SAFE_STORAGE_BACKEND=none`, so `security` is never spawned and a real timeout
+      cannot be provoked. The guard itself — the comparison and the verdict branch — is real code.
+      After restore: `tsc` 0, 84/84 across the four rotator test files.
 - [ ] ≥24 h with zero false `reauth-needed` beats attributable to a latch, measured from the logs
       **AND a coverage floor: ≥95 % of that window's beats non-`slot-unreadable`.** The floor is
       not decoration — WITHOUT it this box has the same proxy defect the window criterion had:

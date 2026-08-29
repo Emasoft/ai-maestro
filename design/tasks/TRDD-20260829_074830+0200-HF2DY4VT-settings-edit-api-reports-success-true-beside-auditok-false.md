@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T08:04:10+0200
+updated: 2026-08-29T08:12:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -133,6 +133,22 @@ are documentation-only and carry no runtime risk.
       deliberately, with this file as the record of what it changed FROM.
 - [ ] The USER picks option 1, 2 or 3 (option 1 alone needs their sign-off — it changes a shipped
       response shape)
+      **STILL OPEN — asked 2026-08-29T08:0x, no answer within the prompt window (owner away).**
+      Proceeding on the Tier-0 subset only: **option 2's documentation half landed** (see the box
+      below). Option 1 was NOT taken and must not be taken without them — it is a breaking
+      response-shape change.
+- [x] Option 2, documentation half: the two spreading consumers now TELL the reader that
+      `success` does not imply the audit agreed
+      **DONE 2026-08-29T08:0x+0200.** `app/api/settings/edit/route.ts` and
+      `scripts/aimaestro-settings-cli.mjs` both carry it in their header: the response/stdout
+      SPREADS `UpdateJsonResult`, so `auditOk` is a sibling of `success`; a mismatch is not an
+      error, nothing throws, and the caller still gets `success: true` / exit 0; a client reading
+      only `success` will believe a possibly-unlanded write succeeded.
+      Deliberately written as **what ships today, taking no position on the shape** — so it stays
+      true if the USER picks option 1 (only the closing sentence, which points here, would change).
+      Documentation-only: `tsc --noEmit` 0 errors, `node --check` on the CLI clean. Chosen over
+      converging or deleting anything because it is the one move that is strictly an improvement
+      under EVERY outcome of the open decision above.
 - [x] `json-io.ts:331`'s "the caller decides" is either made true or replaced by what actually
       happens — this is option 3 and lands regardless of the choice above
       **DONE 2026-08-29T07:50:12+0200.** Replaced, not deleted: the line now records the measurement

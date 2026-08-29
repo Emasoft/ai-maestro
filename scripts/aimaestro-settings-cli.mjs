@@ -10,6 +10,15 @@
  * identical function `app/api/settings/edit/route.ts` calls — so there is one gate and
  * two thin transports over it (Plugin Abstraction Principle, CLAUDE.md).
  *
+ * ⚠ ON SUCCESS THIS PRINTS `{ success: true, ...UpdateJsonResult }`, so `auditOk` is a SIBLING of
+ * `success` on stdout. `updateJson` re-reads the file after the atomic swap and compares it against
+ * what it wrote (`lib/json-io.ts:427`); `auditOk: false` means the write did not land as intended,
+ * usually because a non-participating writer (the `claude` CLI takes no lock of ours) landed in
+ * that window. It deliberately does NOT roll back — a restore would destroy that writer's
+ * legitimate change — so the mismatch is not an error, nothing throws, and this CLI still prints
+ * `success: true` and exits 0. A script that greps only `success` will believe a possibly-unlanded
+ * write succeeded; parse `auditOk` too. Whether the shape should change is TRDD-HF2DY4VT.
+ *
  * Usage:
  *   aimaestro-settings.sh get <path>
  *   aimaestro-settings.sh set <path> --key <dot.path> --value <json-or-string> [--no-create]

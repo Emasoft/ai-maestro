@@ -10,6 +10,18 @@
  * GET  /api/settings/edit?path=<abs path>                  -> { ok, data } | { ok:false, reason, error }
  * POST /api/settings/edit  { path, ops, createIfMissing? }  -> { success:true, ...UpdateJsonResult }
  *
+ * ⚠ `success: true` DOES NOT MEAN THE AUDIT AGREED. The response SPREADS `UpdateJsonResult`, so it
+ * carries `auditOk` as a sibling of `success`. `updateJson` re-reads the file after the atomic swap
+ * and compares it byte-for-byte against what it wrote (`lib/json-io.ts:427`); a mismatch means the
+ * write did not land as intended — most often because a non-participating writer (the `claude` CLI,
+ * which takes no lock of ours) landed in that window. It deliberately does NOT roll back, because
+ * restoring the backup would destroy that other writer's legitimate change. So the mismatch is
+ * NOT an error here: nothing throws, and this route still answers `success: true`.
+ * **A client that reads only `success` will believe a possibly-unlanded write succeeded.** Read
+ * `auditOk` too. Whether this response SHAPE should change — so the mismatch is visible without
+ * knowing to look — is the open decision on TRDD-HF2DY4VT; this note documents what ships today
+ * and takes no position on it.
+ *
  * LOCALHOST-ONLY (deliberate, and NARROWER than most admin routes in this repo):
  * `settings.json` / `settings.local.json` decide which plugins run for the human user
  * and for every agent on this host. Exposing arbitrary `set`/`delete` on them to any

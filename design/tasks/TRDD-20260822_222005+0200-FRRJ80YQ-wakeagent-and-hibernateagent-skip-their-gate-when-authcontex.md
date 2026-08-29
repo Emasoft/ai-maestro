@@ -3,7 +3,7 @@ trdd-id: FRRJ80YQ
 title: wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
 column: todo
 created: 2026-08-22T22:20:05+0200
-updated: 2026-08-22T22:43:38+0200
+updated: 2026-08-29T07:24:02+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -142,8 +142,18 @@ sequence inside a string literal, which can only make the guard MISS a call, nev
 - [ ] OPTIONAL, deliberately deferred: make `authContext` required on both param types and
       migrate the 32 test call sites to `{ isSystemOwner: true }` — the shape the two internal
       production callers already use. The guard above keeps working if this lands.
-- [ ] delete the "When absent (internal call), skip — backward compatible" comment, which
-      advertises an affordance nothing takes
+- [x] delete the "When absent (internal call), skip — backward compatible" comment, which
+      advertises an affordance nothing takes — **DONE 2026-08-29T07:24:02+0200.** It was a single
+      site, `services/agents-core-service.ts:2604` (hibernateAgent's Gate 0), and it is now
+      replaced by what is actually true and enforceable: every production caller passes
+      `authContext`, and `tests/unit/wake-hibernate-authcontext-required.test.ts` fails the build
+      if one stops — so reaching the `if` with it undefined means the caller is a test, not that
+      a bypass is sanctioned. **wakeAgent's Gate 0 (`:2135`) was fixed in the same pass** although
+      the box named only one comment: it carried the same "when authContext is provided" line
+      **duplicated verbatim on the next line**, which is the same misleading contract stated
+      twice; leaving it would have preserved the affordance at the twin site the card is titled
+      after. `tsc --noEmit` 0 errors; the guard test 3/3 green.
+      **The only remaining box is the OPTIONAL one below**, so nothing non-optional is left here.
 
 ## Approval log
 

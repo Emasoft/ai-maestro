@@ -2133,8 +2133,9 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
-    // When authContext is provided (route call), check caller permissions.
-    // Gate 0: Authorization — when authContext provided, check RBAC
+    // Same contract as hibernateAgent's Gate 0: every production caller passes authContext, and
+    // tests/unit/wake-hibernate-authcontext-required.test.ts fails the build if one stops
+    // (TRDD-FRRJ80YQ). Reaching this with authContext undefined means the caller is a test.
     if (authContext && !authContext.isSystemOwner) {
       const { authorize } = await import('@/lib/authorization')
       const authResult: import('@/lib/agent-auth').AgentAuthResult = {
@@ -2600,8 +2601,12 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     const { sessionIndex = 0, authContext } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
-    // When authContext is provided (route call), check caller permissions.
-    // When absent (internal call), skip — backward compatible.
+    // Every PRODUCTION caller passes authContext; only tests omit it. That is enforced, not
+    // hoped for — tests/unit/wake-hibernate-authcontext-required.test.ts fails the build when a
+    // production caller omits it (TRDD-FRRJ80YQ). So the `if` below is not a bypass anyone may
+    // take: reaching it with authContext undefined means the caller is a test.
+    // It previously read "when absent (internal call), skip — backward compatible", which
+    // advertised an affordance nothing takes and read as a sanctioned way around the gate.
     if (authContext) {
       if (!authContext.isSystemOwner) {
         const { authorize } = await import('@/lib/authorization')

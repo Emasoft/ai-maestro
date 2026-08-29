@@ -1,12 +1,12 @@
 ---
 trdd-id: O4E2LW3U
 title: The global settings tripwire names a cause it never observed and cannot distinguish an external writer from a test escape
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T16:24:52+0200
-updated: 2026-08-29T16:24:52+0200
+updated: 2026-08-29T16:30:49+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -27,7 +27,7 @@ severity: minor
 effort: S
 labels: [tests, diagnostics, false-positive]
 external-refs: []
-implementation-commits: []
+implementation-commits: [9c7821a4]
 ---
 
 # The settings tripwire asserts a cause it never observed
@@ -101,13 +101,34 @@ LOW. Message-only; the trigger condition and the global wiring are untouched. No
 
 ## Acceptance
 
-- [ ] The failure message states the observation and both hypotheses, and asserts no unobserved
+- [x] The failure message states the observation and both hypotheses, and asserts no unobserved
       cause.
-- [ ] The message carries the idle-resample discriminator.
-- [ ] An assertion pins the wording so the unobserved-cause claim cannot drift back in, with a
+      **DONE 2026-08-29T16:29.** It now opens with `WHAT THIS GUARD OBSERVED is exactly that — the
+      bytes differ between this file's beforeAll and its afterAll. It has NO evidence about which
+      process wrote them`, then labels `(a) A TEST ESCAPE` and `(b) ANOTHER PROCESS on this
+      machine`. The `almost always means` claim is gone.
+- [x] The message carries the idle-resample discriminator.
+      **DONE.** `THE DISCRIMINATOR, so you do not have to rediscover it: re-sample this file's
+      mtime, size and content hash … with NO suite running.` It also states that the
+      `settings.json.aim-bak-*` backup is written only by `updateJson`, so its ABSENCE is evidence
+      the write did not come through that path — which is how the external writer was identified.
+- [x] An assertion pins the wording so the unobserved-cause claim cannot drift back in, with a
       recorded neuter run.
-- [ ] The guard's detection behaviour is unchanged: it still fails on a real modification, and no
+      **DONE.** `tests/unit/real-home-untouched-guard.test.ts` gains *"states what it OBSERVED and
+      names BOTH causes, asserting neither"*: `not.toContain('almost always means')` plus
+      `toContain` for the observation header, both cause labels, and the discriminator. It first
+      asserts the captured message is non-empty — without that, a guard that stopped failing would
+      leave every `toContain` asserted against `''` and the test would certify nothing.
+      **Neuter run:** re-inserted `This almost always means a \`vi.mock\` factory.` into the
+      message ⇒ **exactly that one test reddens**, the other 6 stay green. Restored; 7/7 green.
+- [x] The guard's detection behaviour is unchanged: it still fails on a real modification, and no
       suite is exempted.
+      **DONE.** Only the message string and the docstring changed — the snapshot, the byte-compare
+      trigger, the CREATED/DELETED/MODIFIED classification and the global `setupFiles` wiring are
+      untouched. The four pre-existing behaviour tests (untouched / absent / CREATED / DELETED /
+      MODIFIED-with-byte-counts) pass unchanged, and three other suites that consume the guard
+      (`settings-gate`, `marketplaces-route-refuses-to-clobber-settings`, `settings-edit-route`)
+      are 43/43 green. `tsc --noEmit` 0.
 
 ## Notes
 
@@ -118,3 +139,20 @@ defect.
 The external write itself is not this card's subject and is not a defect in this repo — it is
 another session's ad-hoc probe on the host's global config. It is recorded here only as the
 evidence that the guard's asserted cause is not the only reachable one.
+
+**Not carded, and stated so it is not mistaken for an oversight:** the host's global
+`statusLine` was left pointing at `/tmp/slprobe/{first,second}.sh` — as a TWO-ELEMENT ARRAY where
+the schema takes a single object — from at least 14:12 until 16:16 on 2026-08-29, i.e. the
+operator's statusline was broken for roughly two hours. It has since been restored to the real
+single-object value, so there is nothing to repair. Whoever ran that probe should not have run it
+against the real file, but that is another session's conduct on the owner's machine, not a defect
+in this repo, and filing it here would put a finding on the wrong tracker.
+
+## Approval log
+
+- 2026-08-29T16:24:52+0200 — MANDATE issued by ai-maestro-hub-session
+  (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No
+  approval request was sent.
+- 2026-08-29T16:30:49+0200 — COMPLETED by ai-maestro-hub-session. Message-only fix; all four
+  acceptance boxes closed with a recorded neuter run. The guard's trigger and global wiring are
+  unchanged and no suite was exempted.

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-29T12:20:00+0200
+updated: 2026-08-29T12:44:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -144,15 +144,14 @@ result. Fail and report.
       **DONE 2026-08-29 — `471c4c4b`.** The mutator records the base it was handed; it runs
       exactly ONCE, on the retry, against the fresh read. The failed attempt never reaches it,
       which is what "the copy is discarded" means.
-- [ ] PER-STEP budgets, independent: a transaction whose step 2 fails 3× then succeeds on
+- [x] PER-STEP budgets, independent: a transaction whose step 2 fails 3× then succeeds on
       its 4th attempt, and whose step 5 then fails 3× and succeeds on ITS 4th, COMMITS —
       6 cumulative errors, zero steps at 4. A shared global counter fails this test.
-      **PARTIAL 2026-08-29 — the CODE is done (`471c4c4b` splits `readFailures` from
-      `staleFailures`), the TEST is not.** `json-io-prelint-retry.test.ts` proves step 2 can
-      spend its whole budget and still commit; it does NOT drive step 5 in the same
-      transaction, so the cross-step independence this box asks for is UNPINNED. A shared
-      counter would still pass what is written today. Left open deliberately — the missing
-      fixture must fail the staleness re-read 3× AFTER a 3×-failed pre-lint.
+      **DONE 2026-08-29 — the gap flagged earlier the same day is now closed.** The read plan
+      interleaves both steps' faults across 7 passes (3 torn reads, then 3 staleness misses
+      against a file another writer moved, then a stable pass), and the transaction COMMITS at
+      `attempts: 7` with neither step reaching its limit. A shared counter aborts at the 4th
+      fault and reddens it.
 - [x] The 4-attempt boundary, both directions: a step succeeding on its 4th attempt is a
       VALID success (the transaction proceeds); a step failing its 4th attempt fails the
       whole transaction, reported to the caller with the step named.

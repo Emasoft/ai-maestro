@@ -294,7 +294,13 @@ export interface UpdateJsonResult {
   /** false when the mutator produced no change — nothing was written, no backup taken. */
   changed: boolean
   backupPath: string | null
-  /** 1 on a clean first pass; >1 means a non-participating writer forced a re-read. */
+  /**
+   * Total loop passes. 1 on a clean first pass; >1 means a non-participating writer forced a
+   * re-read — but note it now counts BOTH retryable steps (TRDD-TS4G74XA), so it no longer tells
+   * you WHICH one contended, and it can exceed `retries + 1`: a transaction that spent 3 attempts
+   * on a torn read and then 3 on the staleness gate reports 7, with neither step at its limit.
+   * Read it as "how much contention did this transaction absorb", never as one step's counter.
+   */
   attempts: number
   /** false when the post-commit re-read did NOT match what we wrote. See the audit note below. */
   auditOk: boolean
@@ -379,6 +385,14 @@ export async function updateJson(
   //      read has spent NONE of step 5's. A single shared counter fails a transaction that never
   //      repeated the SAME error 4 times — stricter than the spec, and precisely on the contended
   //      hosts the retry exists for. "3 errors at step 2 and 3 at step 5" is a PASSING transaction.
+  // FLOOR CHANGED 3 → 0 DELIBERATELY, and it is a semantics change worth naming. The old
+  // `Math.max(1, retries ?? 3)` read `retries` as TOTAL ATTEMPTS and clamped 0 up to 1, so
+  // `retries: 0` silently meant "one attempt". Under the spec `retries` means what it says —
+  // retries ON TOP OF the first try — so 0 is now a legal value meaning "try once, never retry",
+  // and it is honoured rather than clamped. No caller passes the option (verified repo-wide,
+  // tests included: the only options objects reaching `updateJson` are `{ createIfMissing: true }`),
+  // so nothing observable changed today; this comment exists so the next caller to pass `retries: 0`
+  // gets the behaviour the name promises instead of the old silent clamp.
   const maxRetries = Math.max(0, opts.retries ?? 3)
   let readFailures = 0 // step 2 — pre-lint (a torn read cures on re-read)
   let staleFailures = 0 // step 5 — staleness gate

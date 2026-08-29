@@ -174,6 +174,31 @@ describe('TRDD-TS4G74XA — spec step 2: the pre-lint retries the READ', () => {
     expect(JSON.parse(await onDisk())).toEqual({ keep: 'me', added: 8 })
   })
 
+  it('PER-STEP BUDGETS, CROSS-STEP — step 2 fails 3× AND step 5 fails 3×, and the transaction COMMITS', async () => {
+    // The box this closes: "6 cumulative errors, zero steps at 4. A shared global counter fails
+    // this test." Each loop pass reads the target twice — once at the top (step 2) and once at the
+    // staleness gate (step 5) — so the plan interleaves the two steps' faults deliberately:
+    //   passes 1-3  bad initial read           → readFailures 1,2,3
+    //   passes 4-6  good read, MOVED staleness → staleFailures 1,2,3
+    //   pass  7     good read, stable staleness → COMMIT
+    // With one shared counter the 4th fault aborts and this test reddens.
+    const moved = JSON.stringify({ keep: 'me', movedByAnotherWriter: true })
+    readPlan = [
+      '{ torn a', '{ torn b', '{ torn c', // step 2 spends its whole budget
+      null, moved, //                        pass 4: read ok, staleness sees a different file
+      null, moved, //                        pass 5
+      null, moved, //                        pass 6 — step 5 has now spent its whole budget
+      null, null, //                         pass 7: read ok, staleness stable → commit
+    ]
+    const res = await updateJson(targetFile, d => {
+      d.added = 10
+    })
+    expect(res.changed).toBe(true)
+    expect(readPlan).toEqual([]) // every planned fault was actually served
+    expect(res.attempts).toBe(7) // 3 read faults + 3 staleness faults + the committing pass
+    expect(JSON.parse(await onDisk())).toEqual({ keep: 'me', added: 10 })
+  })
+
   it('a corrupt-at-rest target still fails, and fails as UnreadableTargetError', async () => {
     // The retry must not paper over the OTHER cause of the same symptom. With no plan at all, every
     // read returns the same genuinely-corrupt bytes, so all four attempts fail and the transaction

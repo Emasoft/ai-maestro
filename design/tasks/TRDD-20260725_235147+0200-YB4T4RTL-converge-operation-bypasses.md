@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T09:14:00+0200
+updated: 2026-08-29T09:28:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -210,12 +210,24 @@ between, never as one sweep.
       agents — not a field write.** Its 7 sites: `:802` pushes a new agent into the registry
       (bypasses `CreateAgent`); `:793` replaces an existing agent on `options.overwrite`;
       `:901/:957/:1001/:1028` write `workingDirectory`/`preferences`/`hooks`/`ampIdentity` during
-      import; and **`:1243` DELETES an agent by `agents.filter(a => a.id !== agent.id)`, inside a
-      `catch (deleteError)` block.** That last one is the TRDD-KERM18NX shape exactly — the registry
-      row goes, and the cemetery archive, team-slot clearing, AID-token revocation, tmux teardown
-      and `PersistedSession` unpersist (G05b) do not run — and because it sits on a failure path it
-      fires precisely when the system is already in a bad state. **It is the highest-severity entry
-      in category (a) of this card and was invisible while one ratchet key stood for seven sites.**
+      import; and **`:1243` DELETES an agent by `agents.filter(a => a.id !== agent.id)`.**
+      **CORRECTED SAME DAY — my first write-up of `:1243` was wrong about WHEN it runs, and the
+      error was the persuading sentence.** I read a 10-line window plus the name `deleteError` and
+      called it a rollback that "fires precisely when the system is already in a bad state". It is
+      not. The enclosing function is `transferAgent` (`:1134`) and the site is its
+      **`if (mode === 'move')` branch (`:1222`) — the deliberate local removal after a SUCCESSFUL
+      transfer-out.** The `catch` wraps that teardown; it does not trigger it. Struck: the
+      failure-path framing, and "the highest-severity entry in category (a)".
+      **What survives is the bypass, on a worse footing than a rollback would have been.** This is
+      a hand-rolled agent deletion on the NORMAL path of a user-facing operation: it `fs.rmSync`s
+      the agent dir, wipes the three AMP message dirs, and filters the registry — while the
+      cemetery archive, team-slot clearing, AID-token revocation, tmux teardown and
+      `PersistedSession` unpersist (G05b) never run. **`DeleteAgent` appears nowhere in this file.**
+      That is the TRDD-KERM18NX condition (a `PersistedSession` outliving its agent, resurrecting
+      the workdir) reached by an ordinary user action rather than by a failure. And on partial
+      failure the catch returns **`success: true`** with a `warning` string, so a half-deleted agent
+      reports success to the caller.
+      It was invisible while one ratchet key stood for seven sites.
       Sequencing consequence: transfer's delete converges onto the EXISTING `DeleteAgent` and can
       be done today; repos/docker cannot start until their AIO exists.
 - [ ] `renameAgentSession` routes through `ChangeName`

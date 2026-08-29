@@ -49,6 +49,8 @@ let cliHang: string
 let cliBroken: string
 let recorded: string
 let hangPidFile: string
+/** Written by the hang fixture as its LAST act — present only if the child ran to completion. */
+let hangDoneFile: string
 
 function write(path: string, body: string) {
   writeFileSync(path, body, 'utf-8')
@@ -63,6 +65,7 @@ beforeEach(() => {
   cliBroken = join(dir, 'cli-does-not-exist.sh')
   recorded = join(dir, 'recorded-payload.json')
   hangPidFile = join(dir, 'hang.pid')
+  hangDoneFile = join(dir, 'hang.done')
 
   // The stand-in status line. It echoes the byte COUNT of what it received and then the bytes
   // themselves, so one artifact proves both halves of the pass-through at once: the stdin it was
@@ -89,9 +92,19 @@ beforeEach(() => {
 
   // The black hole. Records its own PID so the suite can reap it — a test that leaks a process is
   // a bug in the test, not an acceptable cost.
+  // It also stamps a COMPLETION marker as its last act. That marker is what makes the detachment
+  // test a happens-before assertion instead of a stopwatch: if the wrapper waited, the child ran to
+  // completion and the marker EXISTS by the time the wrapper returns; if the wrapper detached, the
+  // marker cannot exist yet. `afterEach` SIGKILLs the child, so on the detached path the marker is
+  // never written at all — which is exactly the observation we want.
   write(
     cliHang,
-    ['#!/usr/bin/env bash', `echo $$ > "${hangPidFile}"`, `sleep ${HANG_SECONDS}`].join('\n'),
+    [
+      '#!/usr/bin/env bash',
+      `echo $$ > "${hangPidFile}"`,
+      `sleep ${HANG_SECONDS}`,
+      `echo done > "${hangDoneFile}"`,
+    ].join('\n'),
   )
 })
 
@@ -200,21 +213,26 @@ describe('3. the capture is DETACHED — the wrapper never waits on it', () => {
     const privateTmp = join(dir, 'hang-tmp')
     mkdirSync(privateTmp)
 
-    const started = Date.now()
     const r = runWrapper(PAYLOAD, { cli: cliHang, env: { TMPDIR: privateTmp } })
-    const elapsed = Date.now() - started
 
-    // THE assertion. Claude Code debounces at 300 ms and cancels an in-flight script, so a
-    // synchronous POST would stall the bar and then be killed.
+    // THE assertion, as a HAPPENS-BEFORE rather than a stopwatch. Claude Code debounces at 300 ms
+    // and cancels an in-flight script, so a synchronous POST would stall the bar and then be killed.
     //
-    // The bound is 2000 ms rather than the literal 300 ms, and that is deliberate. MEASURED
-    // end-to-end on this machine against this same hanging ingest: 47 ms mean over 10 runs (vs a
-    // ~41 ms floor that is pure `bash` startup) — comfortably inside the debounce. But a CI box
-    // under load is not a benchmark rig, and a 300 ms bound would make this test a flake detector
-    // for the scheduler rather than a guard on the code. What it must DISCRIMINATE is 47 ms from
-    // 5000 ms, and 2000 ms does that with 2.5x margin on the side that matters: drop the `&` and
-    // this reads ~5000 ms and reddens every time. (Neuter verified 2026-08-02.)
-    expect(elapsed).toBeLessThan(2000)
+    // This used to read `expect(elapsed).toBeLessThan(2000)`, with a comment deriving 2000 ms as
+    // "2.5x margin" over the 5000 ms hang against a measured 47 ms mean. The derivation was sound
+    // and the instrument still failed: under full-suite parallelism it measured 17745 ms and 18006
+    // ms on 2026-08-29 — 9x the bound — because elapsed wall time answers "did it detach?" only on
+    // a quiet machine, and the runner is not one (TRDD-3KN99N6S).
+    //
+    // The marker is exact under any load. The fixture stamps `hang.done` as its LAST act, so the
+    // file's ABSENCE the instant the wrapper returns is precisely "the wrapper did not wait for the
+    // child" — no threshold, nothing to re-tune, and nothing a slow box can perturb. Raising the
+    // bound was the available alternative and is rejected on the card: it weakens the test by
+    // however loaded the machine happened to be the day someone picked the number.
+    //
+    // NEUTER (2026-08-29): drop the `&` in the wrapper's ingest invocation ⇒ the wrapper blocks for
+    // the full hang, the child completes, `hang.done` exists, and this reddens.
+    expect(existsSync(hangDoneFile)).toBe(false)
     expect(r.status).toBe(0)
     expect(r.stdout.toString('utf-8')).toContain('BYTES=')
   })

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T12:54:55+0200
-updated: 2026-08-29T13:00:34+0200
+updated: 2026-08-29T13:10:46+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -27,7 +27,7 @@ severity: minor
 effort: S
 labels: [tests, flake, ci]
 external-refs: []
-implementation-commits: []
+implementation-commits: [pending]
 ---
 
 # Wall-clock assertions flake under full-suite parallelism
@@ -131,8 +131,16 @@ need a duration, in which case say so on this card rather than converting it.
       correction section above. The three are NOT convertible to a happens-before assertion,
       because they assert nothing about time in the first place — they are slow, and the runner's
       30 s limit is what fails them.
-- [ ] `statusline-capture-wrapper`'s detachment test asserts the marker-file property with no
+- [x] `statusline-capture-wrapper`'s detachment test asserts the marker-file property with no
       wall-clock bound, and its neuter (parent awaits the child) reddens it.
+      **DONE 2026-08-29.** The hang fixture now stamps `hang.done` as its LAST act, so the file's
+      ABSENCE the instant the wrapper returns IS "the wrapper did not wait for the child" — exact
+      under any load, no threshold. `expect(elapsed).toBeLessThan(2000)` is gone.
+      **Neuter run:** dropped the `&` at `scripts/aimaestro-statusline-capture.sh:213` ⇒ the one
+      test reddens with `expected true to be false` (the marker existed, because the wrapper
+      waited). Restored; 21/21 green, tsc 0.
+      Note the fixture is SIGKILLed in `afterEach`, so on the detached path the marker is never
+      written at all — which is the observation we want, not a gap.
 - [ ] Three consecutive full-suite `yarn test` runs on a loaded box are green.
 - [ ] No threshold was raised to achieve any of the above.
 

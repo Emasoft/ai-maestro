@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T12:54:55+0200
-updated: 2026-08-29T13:13:54+0200
+updated: 2026-08-29T16:00:28+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -72,12 +72,29 @@ error text — they are **two different classes**, and only the first is what th
 | `statusline-capture-wrapper` | `expected 18006 to be less than 2000` | **wall-clock ASSERTION** |
 | `r17-r11-core-plugin-binding` | `Test timed out in 30000ms` (:746) | runner timeout, subprocess |
 | `aimaestro-governance-dev-login` | `Test timed out in 30000ms` (:95) | runner timeout, subprocess |
-| `fleet-plugins-update` | `Test timed out in 30000ms` | runner timeout, subprocess |
+| `fleet-plugins-update` | `Test timed out in 30000ms` | runner timeout, ~~subprocess~~ **CAUSE UNKNOWN — see below** |
 
 **Only ONE file contains a timing assertion at all.** The other three assert nothing about
 duration; they spawn a real subprocess (`bump-version.sh`, `aimaestro-governance.sh login`, the
 fleet updater) and the RUNNER kills them at its 30 s limit when the box is loaded. That is a
 different defect with a different fix, and grouping them cost the card its accuracy on 3 of 4 rows.
+
+**AND THE CORRECTION ABOVE WAS ITSELF A GENERALISATION — measured 2026-08-29T16:0x, FOURTH
+instance of the same shape in one day.** "They spawn a real subprocess" was written from
+`aimaestro-governance-dev-login` and applied to all three. It is FALSE for
+`fleet-plugins-update.test.ts`:
+
+    grep -cE 'execFileSync|spawnSync|execSync|spawn\(' tests/unit/fleet-plugins-update.test.ts   # 0
+
+Zero spawn sites. Every case in that file injects its dependencies (`updateTarget` and
+`runFleetPluginsUpdate` both take an injected spawner) — nothing in it can be killed by the runner
+for waiting on a child, because it never starts one. Spawn-site counts for the other two:
+`r17-r11-core-plugin-binding` **4**, `aimaestro-governance-dev-login` **6**.
+
+So the classification stands for TWO of the three and the third is **unexplained**. Do NOT write a
+cause for it from this reading either — the measurement above establishes only what it is NOT.
+Naming what it IS needs the failure reproduced under load with that file's own timing, and the
+honest state until then is: cause unknown.
 
 **This is the third time today I generalised from a read sample to an unread population** (the
 others: "nothing non-gated is queued" from 5 of 22 cards; the DeleteAgent gate list). Recording it

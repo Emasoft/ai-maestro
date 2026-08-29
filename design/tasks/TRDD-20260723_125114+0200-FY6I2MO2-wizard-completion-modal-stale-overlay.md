@@ -1,10 +1,12 @@
 ---
 trdd-id: FY6I2MO2
 title: agent-creation wizard completion modal can persist and overlay the dashboard, blocking Delete
-column: planned
+column: dev
 created: 2026-07-23T12:51:14+0200
-updated: 2026-08-16T16:43:00+0200
-current-owner: session
+updated: 2026-08-29T18:17:27+0200
+current-owner: ai-maestro-hub-session
+assignee: ai-maestro-hub-session
+created-by: ai-maestro-hub-session
 task-type: bugfix
 scope: project
 project-id: ai-maestro
@@ -17,13 +19,52 @@ approval-datetime: 2026-07-23T12:51:14+0200
 relevant-rules: []
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [3a9c9041]
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260722T203644Z.report.md (ISSUE-001)
   - reports/scenarios-runner/SCEN-031_20260723T054536Z.report.md (ISSUE-001)
 ---
 
 # TRDD-FY6I2MO2 — Wizard completion modal can persist and overlay the dashboard
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-29
+
+**The code fix has LANDED. What remains is UI verification, and it needs the owner.**
+
+- **The card's diagnosis was half wrong, and the correction is the point.** Boxes 1 and 2
+  named a modal that "navigates behind" and a "dismiss-on-navigate" safeguard. Measured
+  against the source: the modal DOES unmount — both mount sites render it as
+  `{flag && <AgentCreationWizard …/>}` (`components/AgentList.tsx:1663`,
+  `components/MobileDashboard.tsx:441`) and both `onClose` and `onComplete` clear that
+  flag. And "the user navigates away while the modal is mounted" is UNREACHABLE: the
+  wizard is a `fixed inset-0 z-50` overlay, so there is nothing to navigate to.
+  **The real defect is the exact reverse** — the completion screen had only ONE exit.
+  `handleCreate` sets `isCreating` true and never sets it false on success, and the
+  backdrop was `onClick={isCreating ? undefined : onClose}`, so on the completion screen
+  the backdrop was inert and "Let's Go!" was the sole way out of a full-screen overlay.
+  A missed click therefore parked it over the dashboard, blocking Delete.
+- **Fixed** in `components/AgentCreationWizard.tsx`: one shared `dismiss` callback; the
+  backdrop guard narrowed to `isCreating && !creationSuccess`; the header X and "Let's
+  Go!" both routed through `dismiss`. After success every route goes to `onComplete`,
+  never `onClose` — a bare close leaves the parent's `activeAgentId` on the PREVIOUS
+  agent, which is the SCEN-005 wrong-agent-delete near-miss (Proposal 31). That second
+  bug was live on the header X and is closed by the same change.
+- **Test:** `tests/unit/wizard-completion-dismiss.test.tsx`, 6/6 green. Three neuters run,
+  each reddening exactly one distinct test (backdrop guard reverted → the in-flight test;
+  "Let's Go!" calling `onComplete` directly → the id-handoff test; X wired to a no-op →
+  the behavioural X test). The success branch is pinned STRUCTURALLY, not behaviourally:
+  reaching it from a unit test needs a full drive of six wizard steps plus a 6.5 s
+  animation and a POST — so that half carries a positive control instead.
+- `yarn tsc --noEmit` clean.
+
+**NEXT ACTION — needs the owner, do not self-authorize.** Acceptance boxes 3-5 are UI
+checks and the ai-maestro server is STOPPED by owner directive ("do NOT restart"). Ask
+for a go-ahead to start the server, then drive the wizard to completion and confirm (a)
+no residual modal DOM node after "Let's Go!", (b) the backdrop and X now dismiss the
+completion screen, (c) Delete in the Profile panel is immediately clickable.
+
+**Instruments added for that run:** `data-testid="agent-creation-wizard"` (the modal
+root — assert its ABSENCE, not `display:none`), `wizard-close`, `wizard-lets-go`.
 
 ## Problem
 
@@ -70,12 +111,13 @@ No dependencies on other open TRDDs.
 
 ## Acceptance
 
-- [ ] The Wizard completion step's "Let's Go!" click handler closes the modal (unmounts it, not just navigates behind it) — verified by reading the component.
-- [ ] A dismiss-on-navigate safeguard force-closes the completion modal if the user navigates away (selects another agent/tab) without clicking through.
-- [ ] Screenshot/UI check: after clicking "Let's Go!", no residual modal DOM node exists (not just `display:none`), and the Profile panel's Danger Zone Delete control is clickable immediately after.
-- [ ] Screenshot/UI check: switching agents/tabs right after wizard completion, without clicking "Let's Go!", leaves no stale overlay blocking the dashboard.
-- [ ] SCEN-031 (or a lighter wizard-focused scenario) re-run shows no ISSUE-001/ISSUE-002-shaped finding about the completion modal.
+- [x] The Wizard completion step's "Let's Go!" click handler closes the modal (unmounts it, not just navigates behind it) — verified by reading the component. **It already did**: both mount sites are `{flag && <AgentCreationWizard …/>}` and both callbacks clear the flag. The premise was wrong; see STATE.
+- [x] ~~A dismiss-on-navigate safeguard force-closes the completion modal if the user navigates away (selects another agent/tab) without clicking through.~~ **Unreachable as written** — a `fixed inset-0 z-50` overlay leaves nothing to navigate to. Implemented the safeguard the symptom actually calls for: after success the backdrop and the header X dismiss the completion screen (through `onComplete`, keeping the agent-id handoff), so a missed "Let's Go!" no longer traps the user under the overlay.
+- [ ] Screenshot/UI check: after clicking "Let's Go!", no residual modal DOM node exists (not just `display:none`), and the Profile panel's Danger Zone Delete control is clickable immediately after. **BLOCKED — server stopped by owner directive; needs a go-ahead to start it.**
+- [ ] Screenshot/UI check: the backdrop and the X dismiss the completion screen, leaving no stale overlay blocking the dashboard. **BLOCKED — same.** (Restated from the unreachable "switch agents/tabs" phrasing; see STATE.)
+- [ ] SCEN-031 (or a lighter wizard-focused scenario) re-run shows no ISSUE-001/ISSUE-002-shaped finding about the completion modal. **BLOCKED — same.**
 
 ## Approval log
 
 - 2026-07-23T12:51:14+0200 — MANDATE by USER (report→TRDD conversion, "you have my trust").
+- 2026-08-29T18:17:27+0200 — `planned → dev` by ai-maestro-hub-session (min-approval-requirement: none). Code fix landed in `3a9c9041`; boxes 1-2 closed with their premises corrected (see STATE), boxes 3-5 BLOCKED on the owner's go-ahead to start the stopped server.

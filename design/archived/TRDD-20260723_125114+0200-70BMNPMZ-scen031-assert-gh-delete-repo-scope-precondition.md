@@ -132,3 +132,27 @@ touched, no dependencies on other open TRDDs.
   future repairer reading "before S011 creates the real repo" could move the gate to just before
   S011 and believe it still held, when the repo may already exist by S007. The scenario line now
   states the real invariant (the gate MUST hold at S002) instead of a step-number locator.
+
+- 2026-08-29T17:47:00+0200 — CORRECTION to the entry above. Replacing the false locator, I wrote a
+  false ACTOR claim into the same line: "the runner only watches", unqualified. **It is the RUNNER
+  that deletes the repo** — S022's Action is `gh repo delete Emasoft/zipsearcher --yes`, and the
+  runner resumes acting at S018 ("This IS a permitted user action"), then performs every cleanup
+  step itself (S019-S023). Measured this time by reading S014-S024's Action lines: S014-S017 are
+  genuinely "Watch (read-only)"; S018 onward is not.
+
+  This was the worse of the two errors even though both were wording. A locator that is merely
+  wrong misdirects; this one **contradicted the gate's own rationale** — the sentence justifying a
+  `delete_repo` requirement asserted the runner never acts again, when the whole reason the scope
+  is needed is that the runner runs `gh repo delete`. A reader taking it at face value could not
+  reconstruct why the check exists.
+
+  Also fixed here: the rationale is now a `> **Note:**` blockquote after the step rather than a
+  ~40-word justification nested in em-dashes inside a Verify line that already carried two other
+  ABORT conditions. Verify should be scannable at 3am; the reasoning belongs beside the step, and
+  the scenario format explicitly allows a blockquote there.
+
+  **The shape, three times in three turns, each time against evidence already in front of me:** I
+  read a step HEADING for its ACTION, then extended a pattern past the steps I had read, then
+  adopted a reviewer's range as my own measurement. In an observe-only suite the step numbers index
+  WATCHING, not doing — so only an Action line says who acts, and "every step from X to Y is
+  read-only" is a claim about steps X..Y, not about the ones after them.

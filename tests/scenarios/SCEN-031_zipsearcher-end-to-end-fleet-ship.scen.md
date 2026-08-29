@@ -177,7 +177,18 @@ author: Emasoft
 - **Goal:** `gh` is authed, the token can delete what this run will create, the target repo name is free, and the template exists.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** auth ok; `gh auth status 2>&1 | grep -q "'delete_repo'"` exits 0; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it. If `delete_repo` is MISSING, ABORT setup here — the gate MUST hold at S002, because after the S006 brief the fleet creates GitHub state on ITS OWN schedule and the runner only watches (S011 is where the MAINTAINER is EXPECTED to cut the repo, but nothing pins it there) — with the remediation `gh auth refresh -h github.com -s delete_repo`. This gate exists because run `SCEN-031_20260722T203644Z` discovered the missing scope only at S022 cleanup, after the repo already existed, and had to leave it as residue for the user to delete by hand.
+- **Verify:** auth ok; `gh auth status 2>&1 | grep -q "'delete_repo'"` exits 0; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it. If `delete_repo` is MISSING, ABORT setup here with the remediation `gh auth refresh -h github.com -s delete_repo`.
+
+> **Why the `delete_repo` check belongs HERE and nowhere later.** It is the RUNNER itself that runs
+> `gh repo delete Emasoft/zipsearcher --yes` at S022, so a missing scope does not fail loudly — it
+> strands a real public repo, its PRs and its 1.0.0 release as residue for the user to remove by
+> hand. That is what run `SCEN-031_20260722T203644Z` hit, discovering the gap only at cleanup.
+>
+> The check cannot be deferred to "just before the repo is created", because no step number bounds
+> that moment: the runner's last drive is the S006 brief, and from S007 to S017 it only WATCHES
+> while the fleet works on its own schedule (S011 is where the MAINTAINER is EXPECTED to cut the
+> repo, but nothing pins it there — the runner resumes acting at S018). So the gate has to hold at
+> S002, before the brief, while nothing outward exists yet.
 
 #### S003: Log in and baseline the dashboard
 - **Action:** `aim_login`, then screenshot the agent list.

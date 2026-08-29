@@ -1,7 +1,7 @@
 ---
 trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
-column: dev
+column: todo
 created: 2026-07-07T21:56:19+0200
 updated: 2026-08-29T18:46:31+0200
 current-owner: ai-maestro-hub-session
@@ -28,10 +28,20 @@ external-refs: ["reports/code-review/20260707_175225+0200-finder-CLEAN.json"]
 them before doing the rest, because one of them makes the obvious next step a mistake.**
 
 - **DONE:** `readRoleClientMarketplacePlugins` and `readCustomClientMarketplacePlugins`
-  were byte-identical modulo the path helper (verified by `diff`, not by eye) and are now
-  ONE `readClientMarketplacePlugins(marketplaceDir)`. All four call sites already bound
+  are now ONE `readClientMarketplacePlugins(marketplaceDir)`. **The bodies were confirmed
+  identical the RIGHT way, on the second attempt.** The first `diff` compared two
+  hand-picked line RANGES of different lengths (32 vs 35), and its own output showed the
+  role extract had overrun the function end — so it was comparing a body against a body
+  plus six lines of the next function, and could not have detected a difference in a
+  region it never aligned. Since the role copy was then DELETED, that mattered. Re-done
+  brace-delimited (`sed -n '/^async function X/,/^}/p'`) against the PRE-MERGE blob, where
+  both copies still exist, headers and path lines dropped: the only difference is ONE
+  COMMENT line. Zero executable difference; the deletion took nothing with it. All four call sites already bound
   `marketplaceDir` on the preceding line, so the parameter cost nothing. All six functions
-  are module-private with no caller outside this file, so the blast radius is the file.
+  had no caller outside this file. (Evidenced for the ROLE trio by a repo-wide grep; the
+  CUSTOM trio was never searched — a third asymmetric-needle slip this session. The claim
+  still holds indirectly: none carried `export`, and `tsc` would fail an unresolved import.
+  Stated at that strength rather than as a measurement.)
 - **PREMISE WRONG #1 — the `ensure`/`update` halves are NOT near-identical, and merging
   them the way this card describes would change behaviour.** Beyond the name and path they
   differ on `claude`: the ROLE pair early-returns (`if (targetClient === 'claude') return`)
@@ -45,8 +55,10 @@ them before doing the rest, because one of them makes the obvious next step a mi
   that does not exist.** MEASURED: stubbing the merged reader to `return []`
   unconditionally left all 24 tests of the four conversion suites GREEN
   (`change-client-matrix`, `install-element-codex-adapter`, `createagent-g08-cross-client`,
-  `marketplace-supported`). Nothing reached it. So "24/24 still pass" after the refactor was
-  a VACUOUS confirmation. `tests/unit/client-marketplace-manifest-read.test.ts` now covers
+  `marketplace-supported`). Precisely: no conversion test OBSERVES this function's return
+  value — a test that called it and ignored the result would also stay green, so this is
+  "uncovered", not provably "unreached". Either way "24/24 still pass" after the refactor
+  was a VACUOUS confirmation. `tests/unit/client-marketplace-manifest-read.test.ts` now covers
   it directly — 6 tests including both manifest shapes (Claude `source` string vs Codex
   `source` object), the both-present precedence, the no-manifest case, and malformed
   entries. Two neuters attributed: stubbing the reader reds 5 of 6; breaking only the Codex

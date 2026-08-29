@@ -3,7 +3,7 @@ trdd-id: 2K08IAPV
 title: Add a shared useToast hook to replace the hand-rolled toast in 6+ components
 column: complete
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-29T17:16:36+0200
+updated: 2026-08-29T17:17:25+0200
 current-owner: code-review
 assignee: ai-maestro-hub-session
 priority: 3
@@ -142,4 +142,35 @@ state would erase the only trace of the intended feature, so it is recorded here
 
   Commit `30c6b831`'s message carries the same unqualified "have no toast at all" claim and
   cannot be edited; this entry is the correction of record.
+- 2026-08-29T17:17:25+0200 — **CORRECTION 2: "nothing regressed" is carried by a suite that does not test any of the
+  four migrated components. Measured, not assumed.**
+
+  `grep -rlE "MessageCenter|MobileMessageCenter|SecuritySection|SudoContext|SudoProvider" tests/`
+  returns 17 paths, which LOOKS like coverage. Reading them: every hit in a real test file is
+  either a COMMENT (`password-dialog.test.tsx:4` lists SudoContext among "five surfaces" in its
+  header prose) or a **`vi.mock('@/contexts/SudoContext', …)`** — mocking the module away. Zero
+  tests import or render `MessageCenter`, `MobileMessageCenter`, `SecuritySection` or the real
+  `SudoProvider`; the remaining paths are scenario `.md` reports, not tests.
+
+  So the box above claiming "nothing else regressed" on the strength of 502 files / 6600 passed
+  is **uninformative for this change**. Its real support is `tsc --noEmit` 0 and `yarn build` 0,
+  which is defensible for a diff of this shape but is a different and weaker claim than a green
+  suite implies. Read it as: *nothing tsc or the build can see regressed, and no test renders
+  these toasts.*
+
+  **What tsc genuinely does cover here, stated because it was carrying unspoken weight.** The
+  `SecuritySection` rewrite inverts an argument order — `setToast({type, message})` (named
+  fields) became `showToast(message, type)` (positional, two adjacent same-typed strings). A
+  transposition would be invisible to review, and it is the type system, not the tests, that
+  closes it: arg 2 is the `ToastType` union, so `showToast('success', 'Kill switch reset.')`
+  fails to compile. That protection is real but conditional — it would NOT catch a transposition
+  in which both strings happened to be union members.
+
+  **And a tense correction to commit `30c6b831`'s message, which cannot be edited.** It states
+  the MobileMessageCenter failures as observed — *"a second toast inherited the first one's
+  pending timer and was cleared early"*. They were DEDUCED from the source (a bare `setTimeout`
+  with no stored handle cannot be cleared; no cleanup effect means it outlives unmount), never
+  demonstrated against the old code. The deduction is sound and the replacement test pins the
+  property going forward; resurrecting the deleted implementation purely to watch it fail would
+  pin nothing. The honest form is *"could not clear"*, not *"inherited"*.
 

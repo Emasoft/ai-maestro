@@ -3,7 +3,7 @@ trdd-id: 523V1N4I
 title: Wrap the verified PSS and CPV read surfaces for team configuration
 column: todo
 created: 2026-08-19T04:43:53+0200
-updated: 2026-08-19T04:49:50+0200
+updated: 2026-08-29T13:58:00+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -68,6 +68,34 @@ at design.
   could-not-run one).
 - COS's `/amcos-reindex-skills` honesty gap demonstrably closed (wrapper confirms a real
   reindex ran).
+
+## Re-verification (2026-08-29, hub — the card's own decide-on-facts instruction)
+
+**The card's verified versions are STALE, and the cache holds many.** It cites PSS v3.13.0 /
+CPV v5.6.0. Installed today: **CPV 5.7.1, 5.8.0, 5.9.0, 5.10.0, 5.11.0, 5.12.0, 5.13.0, 5.13.1,
+5.14.0, 5.14.1, 5.14.2** and **PSS 3.13.2, 3.14.0, 3.14.1** — neither cited version is present at
+all. Note the trap this walked into first: `find <cache> -name <script> | head -1` returns the
+ALPHABETICALLY-first version (it answered 5.8.0 for one script and 5.9.0 for another in a single
+command), so any shape "verified" that way is verified against an arbitrary build. Enumerate, then
+`sort -V | tail -1`.
+
+**Surface 1's exit contract HOLDS at 5.14.2** — read, not assumed
+(`scripts/cpv_pre_install_scan.py::main`): a fetch/stage failure (missing path, permission error,
+failed clone, corrupt or malicious archive) is mapped deliberately to **exit 2** rather than
+crashing on untrusted input, and the scan's own rc — 0 clean / 1 do-not-install — is returned
+otherwise. So the card's "preserve exit semantics rather than collapsing them" requirement has a
+real three-valued source to preserve, and **exit 2 is a genuine could-not-run**, distinct from a
+clean verdict.
+
+**Worth carrying to TRDD-DQ6XN2VP:** that three-valued shape is exactly what its R51.7 invariant
+work lacks — both readers there are two-valued, so "I could not tell" is indistinguishable from
+"contradicted", which is why that card is now blocked on a ruling. CPV solved the same problem in
+the same repo family; the pattern is available rather than novel.
+
+**Still NOT decided here:** item 1's R27 stamping. The card's own floor note says the floor is
+re-evaluated at `design` and escalates to `manager` if it changes enforcement posture — stamping a
+security verdict into the server install path plainly can — so that call is not the hub's to make
+unilaterally. Facts recorded; decision left.
 
 ## Acceptance
 

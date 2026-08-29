@@ -1,12 +1,15 @@
 ---
 trdd-id: 2LIS20K1
 title: Make APPROVAL and MANDATE signatures cryptographically verifiable, not convention-only
-column: todo
+column: approval
+pre-block-column: todo
+blocker-probe: sh -c 'grep -m1 "^approved:" design/tasks/TRDD-20260821_215850+0200-2LIS20K1-verifiable-approval-and-mandate-signatures.md || echo approved-absent'
+blocker-holds-if: not-match:true
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T05:55:05+0200
+updated: 2026-08-30T00:59:08+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -70,9 +73,30 @@ protocols become enforceable.
 - [x] `verify` surface implemented — DELIVERED: dedicated route `app/api/agents/[id]/portfolio/verify/route.ts` (receiver-readable by design — the verifier is neither subject nor issuer; verification grants nothing) + `aimaestro-portfolio.sh verify` (exits non-zero on an invalid verdict; a 404 is the real answer 'not authentic', distinguished from transport failure — the CLI header documents the contract citing ai-maestro#47 ask 2 and R41).
 - [x] APPROVAL vs MANDATE protocol + tier table enshrined — DELIVERED: **R41** (docs/GOVERNANCE-RULES.md:1461, R41.1-R41.6) incl. the fixed authority ladder (R41.4: no agent holds the user rung), no-self-approval (R41.5), USER-only GOLDEN signing (R41.6), and the objective tier-floor table.
 - [ ] The 2026-08-05 incident's reproduction case (unverifiable mandate → forced human vouch) no longer occurs
-- [ ] Comment posted on Emasoft/ai-maestro#47 confirming the card and status
+- [x] Comment posted on Emasoft/ai-maestro#47 confirming the card and status — **VERIFIED
+      2026-08-30, and true since 2026-08-26.** Two comments cover it: `2026-08-21T20:01:31Z`
+      ("Converted this into tracked work: TRDD-2LIS20K1") and `2026-08-26T03:55:47Z`, which
+      states the status in full — asks 1 and 2 delivered in the tree, ask 3 enshrined as R41,
+      and what remains open. Read from the comment bodies via `gh`, not from this box.
 
 ## Approval log
+
+## ⏵ STATE — 2026-08-30: `todo` → `approval`, because this card says of itself that it is not executable
+
+The 2026-08-26 note below already concluded *"nothing was built under this card (it remains
+`min-approval-requirement: manager`, `mandate: false`, no approval record — **not
+executable**)"* — and the card then sat in `todo`, the column that asserts work is ready to be
+picked up. Both statements cannot be true. `approval` is the one that is: a Tier-2 card with no
+approval record cannot be started by any agent, and `approval` puts it where an approver can
+see it instead of burying it among ready work.
+
+The remaining substantive box is a LIVE forged-vs-genuine mandate round-trip reproducing the
+2026-08-05 incident shape. That needs **two real agents and an operator-scheduled exchange** —
+it is not blocked on code, and no amount of agent time advances it.
+
+Box 5 closed 2026-08-30: the #47 comment had been posted since 2026-08-26. That is the fourth
+card this session carrying an open box over work already done, which is the argument for
+re-reading a queue rather than trusting its columns.
 
 ## ⏵ STATE — 2026-08-26 (hub, premise check on resume; placed after the Approval log for zone honesty — the log itself stays empty)
 

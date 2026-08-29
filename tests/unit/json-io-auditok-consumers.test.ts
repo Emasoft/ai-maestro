@@ -106,8 +106,10 @@ describe('TRDD-HF2DY4VT — the auditOk census is pinned, not asserted in prose'
     expect(
       consumers,
       `A caller now names \`auditOk\`: ${consumers.join(', ')}. That is not a failure — it is the ` +
-        `census in lib/json-io.ts going stale. Re-derive it, update that comment, and update ` +
-        `TRDD-HF2DY4VT, which tracks whether the flag should be acted on at all.`,
+        `census in lib/json-io.ts going stale. THE CENSUS LIVES IN TWO PLACES — fix BOTH or you ` +
+        `recreate the stale prose this ratchet exists to prevent: (1) the block comment above ` +
+        `\`updateJson\` in lib/json-io.ts, and (2) TRDD-HF2DY4VT, which tracks whether the flag ` +
+        `should be acted on at all.`,
     ).toEqual([])
   })
 })

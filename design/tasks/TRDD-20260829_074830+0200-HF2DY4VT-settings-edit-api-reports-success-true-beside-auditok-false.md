@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T07:58:20+0200
+updated: 2026-08-29T08:04:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -116,8 +116,19 @@ are documentation-only and carry no runtime risk.
       what this card disputes.
       POSITIVE CONTROL: with no interfering writer the same path returns `auditOk: true`, so the
       mismatch case cannot be passing because the audit always reports false.
-      NEUTER RUN: flipping the injection off in the mismatch test reddens it (`expected true to be
-      false`), 1 failed / 1 passed; restoring returns 2/2.
+      **NEUTER — and the one first recorded here was a TAUTOLOGY.** Flipping the injection flag off
+      inside the test reddens the mismatch case, but that only proves the injection is load-bearing
+      for the injection; it says nothing about whether the assertions are pinned to the audit
+      comparison at `json-io.ts:427`. The real neuters mutate THAT line, and they come as a pair
+      with **DISJOINT red sets**: `const auditOk = true` reds ONLY the BASELINE case, `const auditOk
+      = false` reds ONLY the POSITIVE CONTROL. Either alone leaves the other green, so neither
+      assertion can be deleted without a neuter noticing. Restored after each; 2/2.
+      Measured the mock's blast radius too, since `vi.mock('fs/promises')` sits over a module the
+      sibling suites also load: the three `json-io-*` files run together **18/18**, so it does not
+      leak. **Full suite: 497 files, 6568 passed, 2 skipped, 0 failed.**
+      The most durable line in the file is not an `auditOk` assertion — it is *"the interfering
+      write SURVIVES"*, which converts the no-auto-rollback ARGUMENT at `:327-331` from prose into a
+      check that fails if anyone reverses it.
       This asserts NO opinion on options 1/2/3 — whichever lands will change these expectations
       deliberately, with this file as the record of what it changed FROM.
 - [ ] The USER picks option 1, 2 or 3 (option 1 alone needs their sign-off — it changes a shipped

@@ -20,6 +20,17 @@ import { join } from 'node:path'
  * narrowest: wrap `rename` so the real rename happens and then one extra key is written to the
  * target, which is what the audit read then sees. Nothing about `updateJson` is stubbed; the
  * write, the lock, the backup and the audit all run for real.
+ *
+ * NEUTER — AND THE FIRST ONE RECORDED FOR THIS FILE WAS A TAUTOLOGY. Flipping the injection flag
+ * off inside the test reddens the mismatch case, but that only proves the injection is
+ * load-bearing for the injection; it says nothing about whether these assertions are pinned to the
+ * audit comparison at `json-io.ts:427`. The real neuters mutate THAT line, and they come in a pair
+ * with DISJOINT red sets, which is what proves each assertion is doing its own work:
+ *   `const auditOk = true`  → reds ONLY the BASELINE case      (the mismatch is no longer detected)
+ *   `const auditOk = false` → reds ONLY the POSITIVE CONTROL   (agreement is no longer reported)
+ * Either mutation alone leaves the other case green, so neither assertion can be deleted without a
+ * neuter noticing. Measured 2026-08-29; three json-io files run together 18/18, so the
+ * `fs/promises` mock does not leak into the sibling suites that share this module.
  */
 
 const mismatchAfterRename = { active: false }

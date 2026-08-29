@@ -196,3 +196,29 @@ touched, no dependencies on other open TRDDs.
   `SCENARIOS_TESTS_RULES.md`, which was already in context. The quote proved verbatim-correct, so
   the conclusion holds and the process was still the proxy. Kept here rather than quietly fixed: a
   lesson recorded in the same breath as its own breach is the most durable form of it.
+
+- 2026-08-29T18:12:00+0200 — FINAL entry. Two things settled from the record, and the honest scope
+  of my own closing recommendation.
+
+  **The shipped check never drifted — now proven by diff, not by recall.** Every prior claim of
+  "byte-identical since 8450bbf6" rested on my having quoted both versions across turns. Extracting
+  S002's five field lines at 8450bbf6 and at HEAD and diffing them: 4 of 5 identical, and the fifth
+  (Verify) differs ONLY by the removal of the false S011 locator and the provenance sentence — the
+  predicate `grep -q "'delete_repo'"`, both ABORT conditions and the remediation are unchanged, and
+  the Action assertion is unchanged. A pre-fix revision (`aa26a6b5`) contains the predicate 0 times,
+  which is the positive control proving the extraction can tell presence from absence at all.
+
+  **Two more instrument bugs, both producing a FALSE ABSENCE, inside the very commands checking
+  that.** (1) `git show "$r:tests/..."` in zsh applies the `:t` history modifier, so the path became
+  `ests/...`; all seven revisions errored and the `grep -c` beside them printed `0` — which reads as
+  "the check is absent from every revision". (2) A needle missing one backtick matched 0 times in
+  BOTH revisions, which reads as agreement. Neither had a positive control; the first is now a
+  lesson in `.claude/rules/lessons-verification.md`. Same shape as everything above: an
+  instrument's silence taken for the world's.
+
+  **On closing: my recommendation was over-broad.** I told the user "the review loop has hit
+  diminishing returns" — a claim about the LOOP generalized from ONE card whose behavioural surface
+  is a single grep predicate that stopped changing after the first commit. That is the same
+  2-of-20 overreach recorded one entry above. The defensible claim, and the only one the evidence
+  supports: **this card's remaining surface is prose in an append-only log that gates nothing, so
+  reviewing IT is finished.** The next card has a larger surface and inherits no such conclusion.

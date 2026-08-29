@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T12:54:55+0200
-updated: 2026-08-29T13:10:46+0200
+updated: 2026-08-29T13:13:54+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -27,7 +27,7 @@ severity: minor
 effort: S
 labels: [tests, flake, ci]
 external-refs: []
-implementation-commits: [pending]
+implementation-commits: [194faf10]
 ---
 
 # Wall-clock assertions flake under full-suite parallelism

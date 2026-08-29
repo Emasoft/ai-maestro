@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-07-26T05:14:00+0200
+updated: 2026-08-29T07:40:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -141,6 +141,28 @@ between, never as one sweep.
 **(a) SECOND PATH — an all-in-one exists; re-route the call (11)**
 
 - [ ] `deleteAgentBySession` call sites route through `DeleteAgent`
+      **⚠ 2026-08-29 — MEASURED BEFORE STARTING, AND THIS BOX MAY BE WORK ON CODE THAT SHOULD
+      ALREADY BE DELETED. It needs an owner ruling, not a refactor.**
+      Both call sites (`services/sessions-service.ts:1238` and `:1251`) are inside ONE function,
+      `deleteSession`, and that function has exactly two callers — the Next.js route
+      `app/api/sessions/[id]/route.ts:39` and its headless twin `services/headless-router.ts:874`,
+      i.e. **the same HTTP endpoint in both server modes**. That endpoint's own header reads:
+      `@deprecated Use /api/agents/[id]/session?kill=true&deleteAgent=true instead.` ·
+      `Removal target: v0.28.0`.
+      **`package.json` is at `0.29.0`, so the removal target is already PAST** — the deprecation is
+      overdue by a full minor version, and the named replacement route **exists**
+      (`app/api/agents/[id]/session/route.ts`).
+      So converging it has a cheaper alternative that also closes the box: **delete the endpoint**,
+      and `deleteSession` with it. Note it is not currently unguarded — the Next route runs
+      `enforceAuth` + `requireSudoToken`, and the headless twin runs `authenticateAgent` — so this
+      is a redundancy/lifecycle question, not a live hole.
+      **Why this is not mine to decide:** removing a shipped HTTP endpoint is a breaking
+      public-API change, which the objective floor (§D3) puts at `min-approval-requirement: user`.
+      Converging it instead is Tier 0, but it would thread `authContext` into `deleteSession` and
+      through both callers to satisfy `DeleteAgent`'s mandatory Gate 0 — real work, on a path
+      already slated to disappear.
+      **OWNER CALL: delete the deprecated endpoint (and this box closes by removal), or keep it and
+      converge it?** Nothing here is blocked on anything else.
 - [ ] The 6 `createAgent` call sites route through `CreateAgent` (with a discovered-session mode)
 - [ ] The 3 `saveAgents` call sites route through the owning `Change*` pipeline
 - [ ] `renameAgentSession` routes through `ChangeName`

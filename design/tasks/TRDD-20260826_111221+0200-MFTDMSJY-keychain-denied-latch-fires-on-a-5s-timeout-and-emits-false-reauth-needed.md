@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-28T21:36:28+0200
+updated: 2026-08-29T07:20:38+0200
 implementation-commits: [c471b66d, bda75f7d]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -316,7 +316,37 @@ contract moves; a purely server-side latch/classification change does not need t
       (`UNREADABLE` beats ÷ `auto:` beats) over the last 12 days: **0.0 / 0.0 / 0.0 / 1.2 / 2.3 /
       5.1 / 12.2 / 12.5 / 12.8 / 13.5 / 16.8 / 42.1 %** — so a blind-but-clean window is not
       hypothetical here, it is what 2026-08-20 was.
-- [ ] X4RK1NUW's 48 h window criterion re-checked against the fix (it is amended in the meantime)
+      **INTERIM 2026-08-29T07:20+0200 — 9.7 h of the 24 h elapsed, both criteria met so far.**
+      Window starts at the fix, `bda75f7d` (2026-08-28T21:36); first post-fix beat 21:37:05, last
+      read 07:20:38 ⇒ **9.73 h**. Measured over **571 `auto:` beats**: **0** `reauth-needed` of any
+      kind, and **11** latch-suppressed beats ⇒ blindness **1.93 %**, coverage **98.07 %** (floor
+      95 %). Those 11 are the fix working, not the bug: each reads *"the keychain denied-latch is
+      set, so this beat did not read any slot"* and carries `stuck: keychain-latched` — the
+      verdict `bda75f7d` introduced — where the old code would have emitted a false
+      `reauth-needed`. Re-derive with:
+      `awk '$0 >= "<fix ts>"' logs/pm2-out.log | grep '\[oauth-rotator\]'` then count `auto:`,
+      `reauth-needed`, and `keychain denied-latch`.
+      ⚠ **Do NOT reuse this box's original numerator needle.** The 12-day series above counted
+      `UNREADABLE` beats; the fix RENAMED that wording, so `grep -ci unreadable` over the post-fix
+      window returns **0** and reports a flawless **100 %** coverage — a needle keyed to the
+      pre-fix spelling, blind to the population it is supposed to count, failing in the reassuring
+      direction. The post-fix numerator is the `keychain denied-latch is set` beats.
+      ⚠ **`rotator.log` is the WRONG source for this box** and reads as clean for the same
+      spurious reason: post-fix it holds **7 lines, 0 `auto:` beats** — the server logs state
+      TRANSITIONS there (`aim-server/` kinds), not beats, so the denominator is zero and the
+      coverage floor is unmeasurable from it in either direction. Per-beat truth is
+      `logs/pm2-out.log` (571 beats over the same span) and `~/.aimaestro/oauth-rotator-tick-status.json`.
+- [x] X4RK1NUW's 48 h window criterion re-checked against the fix (it is amended in the meantime)
+      — **DONE 2026-08-29T07:20+0200.** X4RK1NUW's window closed PASS at 54 h and that card is now
+      `complete`/archived. Its criterion (cookie days > 7 AND the three `expires_at`
+      staggered-and-recent) is **unaffected by this fix and was not weakened by it**: cookies read
+      25.1 d on all three, and the access tokens were minted hours before the reading, so the
+      refresh path ran through the window. The fix is visible INSIDE that window doing the right
+      thing rather than merely not interfering — the two latch events of 2026-08-28T21:52:50/:52
+      appear as `ONSET rotator-stuck:keychain-latched` **with `CLEARED reauth-needed:slot-unreadable`
+      on the same beat**, which is precisely the distinction `bda75f7d` introduced. Recorded in
+      X4RK1NUW's "Observation window — CLOSE" section, which attributes those two alerts to THIS
+      card rather than calling its own window spotless.
 - [ ] Correction posted on ai-maestro#95 (the capture-caused cause clause + the "no card needed"
       line)
 

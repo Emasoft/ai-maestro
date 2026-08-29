@@ -72,7 +72,9 @@ const TIMEOUT_LATCH_THRESHOLD = 3
 // nobody has observed.
 let consecutiveTimeouts = 0
 
-// MONOTONIC count of `security` ops that failed with a spawn error (a timeout, in practice), PER
+// MONOTONIC count of `security` ops that failed with a spawn error — a TIMEOUT in practice, but
+// this branch also catches EACCES/EMFILE/ENOMEM/EAGAIN, so no consumer may ANNOUNCE it as a
+// timeout (measured: `spawnSync('/etc/hosts')` returns EACCES and lands here). PER
 // PROCESS. TRDD-MFTDMSJY: `consecutiveTimeouts` cannot answer "did anything fail during THIS
 // sweep?" because it RESETS on every answered op — including a fast one, which is below
 // `SLOW_SECURITY_LOG_MS` and therefore never even logged. That reset is correct for the latch (a

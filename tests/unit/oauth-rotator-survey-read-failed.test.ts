@@ -4,7 +4,7 @@
 //
 //   1. keychain answered, slot genuinely gone   → reauth-needed: slot-unreadable   (a human acts)
 //   2. denied-latch set, nothing spawned        → stuck: keychain-latched          (self-clears)
-//   3. latch UNSET, a read TIMED OUT  ← HERE    → stuck: keychain-timeout          (retry next beat)
+//   3. latch UNSET, a read DID NOT COMPLETE ←HERE → stuck: keychain-read-failed    (retry next beat)
 //
 // Case 3 is the gap `bda75f7d` left open, and it is not hypothetical: MEASURED 2026-08-29T15:10:12
 // on this box, a 13916 ms TIMED OUT `find-generic-password` produced
@@ -109,8 +109,8 @@ const stubFetch = ((async () => ({
   text: async () => '',
 })) as unknown) as typeof fetch
 
-describe('surveyAlternates — a read that TIMED OUT is not evidence a slot is gone (TRDD-MFTDMSJY)', () => {
-  it('empties `unreadable` and flags readTimedOut when the failure counter moved during the sweep', () => {
+describe('surveyAlternates — a read that did NOT COMPLETE is not evidence a slot is gone (TRDD-MFTDMSJY)', () => {
+  it('empties `unreadable` and flags readFailed when the failure counter moved during the sweep', () => {
     seedLive('live@x', blob('LIVE', H8()))
     registerGhostSlot('ghost@x')
     expect(keychainDeniedLatched()).toBe(false) // THE precondition that separates this from the latch case
@@ -118,7 +118,7 @@ describe('surveyAlternates — a read that TIMED OUT is not evidence a slot is g
     failureReadings = [0, 1] // before the loop / after it — one `security` op failed in between
     const survey = surveyAlternates()
 
-    expect(survey.readTimedOut).toBe(true)
+    expect(survey.readFailed).toBe(true)
     expect(survey.probeSuppressed).toBe(false) // NOT the latch path — some reads did happen
     expect(survey.unreadable).toEqual([]) // we could not ask about this one, so we claim nothing
   })
@@ -130,11 +130,11 @@ describe('surveyAlternates — a read that TIMED OUT is not evidence a slot is g
     failureReadings = [7, 7] // non-zero, and UNCHANGED: a prior failure must not poison this sweep
     const survey = surveyAlternates()
 
-    expect(survey.readTimedOut).toBe(false)
+    expect(survey.readFailed).toBe(false)
     expect(survey.unreadable).toEqual(['ghost@x'])
   })
 
-  it('a timed-out sweep verdicts `stuck: keychain-timeout`, never a call for a human re-login', async () => {
+  it('a failed-read sweep verdicts `stuck: keychain-read-failed`, never a call for a human re-login', async () => {
     seedLive('live@x', blob('LIVE', H8()))
     registerGhostSlot('ghost@x')
 
@@ -142,11 +142,15 @@ describe('surveyAlternates — a read that TIMED OUT is not evidence a slot is g
     const res = await runTick({ fetchImpl: stubFetch })
 
     expect(res.nextAction).toBe('stuck')
-    expect(res.stuck).toBe('keychain-timeout')
+    expect(res.stuck).toBe('keychain-read-failed')
     expect(res.reason).toBeUndefined() // NOT slot-unreadable
     expect(res.decision).not.toContain('reauth')
     expect(res.decision).not.toContain('no action needed') // a partial sweep must not read as health
-    expect(res.decision).toContain('TIMED OUT')
+    // The wording is part of the contract, not incidental: this assertion is what stops the
+    // banner drifting back to naming a cause the branch does not observe (it said "TIMED OUT"
+    // for one commit, and the branch fires on EACCES too — measured).
+    expect(res.decision).toContain('did NOT COMPLETE')
+    expect(res.decision).not.toContain('TIMED OUT')
   })
 
   it('keeps a READ dead-refresh actionable even when another read timed out', async () => {

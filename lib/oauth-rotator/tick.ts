@@ -193,7 +193,7 @@ export type TickReason = 'refresh-dead' | 'slot-unreadable'
  * `rotator-stuck:drain-guard-hold`, and alert-delivery's per-code escalating backoff is what keeps
  * a condition that can hold for many ticks from becoming a 60-second siren.
  */
-export type StuckReason = 'all-maxed' | 'cannot-rotate-offline' | 'drain-guard-hold' | 'keychain-latched' | 'keychain-timeout'
+export type StuckReason = 'all-maxed' | 'cannot-rotate-offline' | 'drain-guard-hold' | 'keychain-latched' | 'keychain-read-failed'
 
 /**
  * PURE. The beat's one-line verdict. Extracted from `runTick` (TRDD-RFQFCCU4) because this is the
@@ -281,13 +281,18 @@ export function deriveDecision(f: {
     // (the latch's half-open probe re-opens it), so the honest verdict is "wait", not "act".
     return 'STUCK: the keychain denied-latch is set, so this beat did not read any slot — the alternates were NOT probed and their state is UNKNOWN (this is credential ACCESS from this process, not a re-login; it clears itself on the latch half-open probe)'
   }
-  if (f.stuck === 'keychain-timeout') {
+  if (f.stuck === 'keychain-read-failed') {
     // TRDD-MFTDMSJY. Distinct from `keychain-latched` above, and the distinction is operational:
     // a latch is a deliberate machine-wide circuit breaker that self-clears on its half-open
-    // probe, whereas this beat was NOT latched — some reads answered and at least one timed out.
-    // Nothing has been blocked and nothing will self-clear on a timer; the next beat simply tries
-    // again. Saying `slot-unreadable` here sent a human to re-login for a stalled read.
-    return 'STUCK: at least one keychain read TIMED OUT during this beat, so the alternates were only PARTIALLY probed and any that looked absent are UNKNOWN — not a credential fault, retrying next beat (TRDD-MFTDMSJY)'
+    // probe, whereas this beat was NOT latched — some reads answered and at least one did not
+    // complete. Nothing has been blocked and nothing will self-clear on a timer; the next beat
+    // simply tries again. Saying `slot-unreadable` here sent a human to re-login for a stalled read.
+    //
+    // "DID NOT COMPLETE", never "timed out": this line said TIMED OUT for one commit and that was
+    // a cause it does not observe — the branch behind it fires on any non-ENOENT spawn failure
+    // (EACCES/EMFILE/ENOMEM included). Announcing the likely cause as the observed one is the
+    // exact mistake the ORIGINAL latch banner made, and the whole reason this card exists.
+    return 'STUCK: at least one keychain read did NOT COMPLETE during this beat (a timeout, or another spawn failure — the cause is not observed here), so the alternates were only PARTIALLY probed and any that looked absent are UNKNOWN — not a credential fault, retrying next beat (TRDD-MFTDMSJY)'
   }
   if (f.stuck === 'drain-guard-hold') {
     return 'HOLDING: the live account still has headroom and a working token, but its stored copy is expiring and at most one healthy alternate remains — not spending the last one on a local expiry; re-login the live account before its stored copy dies'
@@ -1375,13 +1380,20 @@ export interface AlternateSurvey {
    *  the tick publish `reauth-needed` — a call for a human re-login — for a fault entirely on
    *  this side of the keychain. */
   probeSuppressed: boolean
-  /** TRDD-MFTDMSJY. True iff at least one `security` op FAILED (timed out) while this sweep ran,
+  /** TRDD-MFTDMSJY. True iff at least one `security` op FAILED to complete while this sweep ran,
    *  so a slot that read as absent may simply never have been asked. Distinct from
    *  `probeSuppressed`: there the latch was set and NOTHING was asked, here some reads answered
    *  and some did not. When true, `unreadable` is emptied for the same reason it is emptied under
    *  the latch — a MIXED array makes every consumer decide which half to believe — but
-   *  `refreshDead` is KEPT, because it is derived only from blobs that actually came back. */
-  readTimedOut: boolean
+   *  `refreshDead` is KEPT, because it is derived only from blobs that actually came back.
+   *
+   *  NAMED FOR WHAT IS OBSERVED, NOT FOR THE EXPECTED CAUSE. This was `readTimedOut` for one
+   *  commit, and that was the very defect this card exists to kill, re-committed: the counter it
+   *  reads is bumped by EVERY non-ENOENT spawn failure, so an EACCES/EMFILE/ENOMEM would have
+   *  been announced to the operator as a timeout that never happened. Settled by measurement, not
+   *  argument — `spawnSync('/etc/hosts')` returns `EACCES`, reaching the same branch. A timeout is
+   *  the overwhelmingly likely cause here and is still NOT what the flag may claim. */
+  readFailed: boolean
 }
 
 /** Survey EVERY alternate rather than breaking on the first fault. One unreadable slot is a slot
@@ -1390,7 +1402,7 @@ export interface AlternateSurvey {
  * identical, so the operator could not distinguish "re-login one account" from "the server has no
  * credential access", which are not even the same person's job. */
 export function surveyAlternates(): AlternateSurvey {
-  // TRDD-MFTDMSJY: snapshot BEFORE the loop. A `security` op that times out returns a failed read
+  // TRDD-MFTDMSJY: snapshot BEFORE the loop. A `security` op that fails returns a failed read
   // that is indistinguishable from "this slot does not exist", and the difference is exactly what
   // decides between `stuck` (wait) and `reauth-needed` (fetch a human).
   const failuresBefore = securityFailureCount()
@@ -1433,7 +1445,7 @@ export function surveyAlternates(): AlternateSurvey {
   // caught by review, 10× wrong. Then cited the wrong 60 s constant; caught again.)
   // Keeping a MIXED array under a `probeSuppressed` flag would make
   // every consumer decide which half to believe; an empty one cannot be misread.
-  if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true, readTimedOut: false }
+  if (keychainDeniedLatched()) return { unreadable: [], refreshDead: [], probeSuppressed: true, readFailed: false }
   // TRDD-MFTDMSJY. The SUB-THRESHOLD sibling of the latch check above, and the reason it is
   // needed: `runSecurity` latches only at TIMEOUT_LATCH_THRESHOLD (3) CONSECUTIVE timeouts and
   // resets that counter on ANY answered op, so an interleaved timeout/success run — which is what
@@ -1442,8 +1454,24 @@ export function surveyAlternates(): AlternateSurvey {
   // branch's reasoning exactly (an empty one cannot be misread; a mixed one must be adjudicated
   // by each consumer). `refreshDead` survives because a dead refresh was READ, not inferred from
   // silence.
-  if (securityFailureCount() !== failuresBefore) return { unreadable: [], refreshDead, probeSuppressed: false, readTimedOut: true }
-  return { unreadable, refreshDead, probeSuppressed: false, readTimedOut: false }
+  //
+  // THE TRADE, STATED RATHER THAN DISCOVERED LATER: on a box whose keychain is CHRONICALLY slow
+  // every sweep has >= 1 failure, so `unreadable` is emptied every beat and
+  // `reauth-needed: slot-unreadable` can never fire — with NO self-clearing bound. The latch
+  // erasure this mirrors is bounded (its half-open probe re-opens in <= ~11 min); this one is
+  // not. Accepted because the two escape hatches are real: a genuine dead refresh still surfaces
+  // through the KEPT `refreshDead`, and the `rotator-stuck:` alert prefix escalates its backoff,
+  // so a permanently-degraded keychain gets louder rather than quieter. It is still the weaker
+  // half of this fix, and the honest place for that sentence is here.
+  //
+  // NOT A RACE, though it reads like one: `securityFailureCount` is process-global and the
+  // keepalive/live-blob reads bump it too. Nothing can interleave into this window because
+  // `runSecurity` uses `spawnSync` and this whole survey is synchronous — the two readings
+  // bracket a single-threaded span. `surveyAlternates` is called from exactly ONE site
+  // (`runTick`, once per beat), verified by grep over lib/ app/ services/, so a second concurrent
+  // survey cannot consume the change either.
+  if (securityFailureCount() !== failuresBefore) return { unreadable: [], refreshDead, probeSuppressed: false, readFailed: true }
+  return { unreadable, refreshDead, probeSuppressed: false, readFailed: false }
 }
 
 // ── The composed tick (cmd_tick)─────────────────────────────────────────────────────────────
@@ -1494,7 +1522,7 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
     // `unreadable` but keeps `refreshDead`, and a dead refresh that was actually READ is still
     // something a human can fix right now. It must still beat `ok`, because a sweep that could
     // not finish its reads is not evidence of health — which is the whole mistake being repaired.
-    else if (survey.readTimedOut) { nextAction = 'stuck'; rotateOut.stuck = 'keychain-timeout' }
+    else if (survey.readFailed) { nextAction = 'stuck'; rotateOut.stuck = 'keychain-read-failed' }
     // A tick that WANTED to rotate and could not is not `ok`. This is last in the chain on
     // purpose: `reauth-needed` names something a human can act on right now (re-login), while
     // `stuck` usually means "wait for a window", so the actionable verdict keeps precedence.

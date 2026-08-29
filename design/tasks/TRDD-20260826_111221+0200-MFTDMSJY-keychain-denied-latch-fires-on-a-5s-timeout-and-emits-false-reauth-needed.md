@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-29T15:57:35+0200
+updated: 2026-08-29T16:06:14+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -320,14 +320,41 @@ contract moves; a purely server-side latch/classification change does not need t
       alongside `consecutiveTimeouts` — the latter cannot answer "did anything fail during THIS
       sweep?" because it resets on any answered op, including a fast one that is below the SLOW
       threshold and never even logged. `surveyAlternates` snapshots it before its loop and compares
-      after; on a change it empties `unreadable` and sets a new `readTimedOut` flag, which is the
+      after; on a change it empties `unreadable` and sets a new `readFailed` flag, which is the
       SAME treatment the latch branch already gives (an empty array cannot be misread; a mixed one
       makes every consumer adjudicate). `refreshDead` is deliberately KEPT — it comes from blobs
       that actually came back — so a dead refresh stays actionable and still outranks the new
-      `stuck: keychain-timeout` verdict. That verdict is a NEW `StuckReason`, not a reuse of
+      `stuck: keychain-read-failed` verdict. That verdict is a NEW `StuckReason`, not a reuse of
       `keychain-latched`, because the two differ operationally: a latch is a deliberate circuit
       breaker that self-clears on its half-open probe; this beat was never latched and simply
       retries.
+
+      **⚠ THE FIRST CUT OF THIS FIX RE-COMMITTED THE CARD'S OWN DEFECT, and an adversarial review
+      caught it before it could ship a second false cause.** It shipped as `readTimedOut` /
+      `keychain-timeout` / *"at least one keychain read TIMED OUT"* — while the branch feeding the
+      counter fires on EVERY non-ENOENT spawn failure. **Settled by measurement, not argument:**
+      `node -e "const {spawnSync}=require('child_process');const r=spawnSync('/etc/hosts',[]);
+      console.log(r.error&&r.error.code)"` prints **`EACCES`**, which reaches that branch and would
+      have been announced to the operator as a timeout that never happened. That is precisely what
+      the code being replaced did — *"it set the latch on the FIRST timeout and printed '(a
+      keychain unlock/ACL prompt)' — a cause it never observed"* — one layer along. Renamed
+      throughout to `readFailed` / `keychain-read-failed` / *"did NOT COMPLETE"*, and the banner
+      wording is now PINNED by an assertion (`toContain('did NOT COMPLETE')` +
+      `not.toContain('TIMED OUT')`) with its own neuter, so the drift cannot recur silently.
+
+      **THE TRADE, stated rather than left to be discovered.** On a box whose keychain is
+      CHRONICALLY slow every sweep has ≥1 failure, so `unreadable` is emptied every beat and
+      `reauth-needed: slot-unreadable` can never fire — with **no self-clearing bound**, unlike the
+      latch erasure it mirrors (which half-opens in ≤ ~11 min). Accepted because two escape hatches
+      are real: a genuine dead refresh still surfaces through the KEPT `refreshDead`, and the
+      `rotator-stuck:` prefix escalates its backoff, so a permanently-degraded keychain gets louder
+      rather than quieter. It is the weaker half of this fix and is written in the code beside the
+      branch.
+
+      **NOT A RACE, though it reads like one:** the counter is process-global and the keepalive and
+      live-blob reads bump it too, but `runSecurity` uses `spawnSync` and the survey is synchronous,
+      so the two readings bracket a single-threaded span. `surveyAlternates` has exactly **ONE**
+      call site (`runTick`, once per beat) — `grep -rn "surveyAlternates(" lib/ app/ services/`.
       **4 tests** in `tests/unit/oauth-rotator-survey-read-timeout.test.ts`, the third member of a
       triplet whose siblings live in `oauth-rotator-tick.test.ts` — all three seed the same
       registered-but-unreadable slot and differ in exactly one precondition.
@@ -376,8 +403,22 @@ contract moves; a purely server-side latch/classification change does not need t
       slot(s) UNREADABLE`, delivered at `15:10:22` by the supervisor — ONE event appearing in both
       logs, not two. In the SAME second, `15:10:12 [safe-storage] SLOW security op: 13916ms
       (timeout 5000ms, TIMED OUT) verb=find-generic-password service=Claude Code-rotator-slot-backup`.
-      The latch was NOT set (no latch beat after 22:01 the previous night), so `probeSuppressed`
-      was false and `tick.ts:1462` fell through to the `unreadable > 0` arm.
+      The latch was NOT set, so `probeSuppressed` was false and `tick.ts` fell through to the
+      `unreadable > 0` arm.
+
+      **How "not set" is established — by PRESENCE, not by absence.** I first justified it with
+      *"no `keychain denied-latch is set` beat appears after 22:01 the previous night"*, which is
+      the very proxy shape this session keeps failing on: an absence of log lines argued as an
+      absence of state, and unfalsifiable. The conclusion is true, but the sound argument runs the
+      other way — `reauth-needed: slot-unreadable` is reachable ONLY through the
+      `else if (unreadable > 0)` arm, which is reachable ONLY when `probeSuppressed` is false. **The
+      existence of that log line IS the proof the latch was unset at the check.** (Both readings
+      agree here; recorded because the next auditor would otherwise inherit the weak one.)
+
+      **And the fix was verifiably DEPLOYED for the window, not merely committed at its start** —
+      the deploy-vs-commit proxy that has bitten this repo before. The 11 latch-suppressed beats
+      carry the post-fix `stuck: keychain-latched` wording, which does not exist in the pre-fix
+      code, so the log self-evidences that `bda75f7d` was the running build.
 
       **The gap, read from the code, not inferred:** `safe-storage.ts:342` latches only at
       `TIMEOUT_LATCH_THRESHOLD = 3` **consecutive** timeouts, and `:369` resets that counter on

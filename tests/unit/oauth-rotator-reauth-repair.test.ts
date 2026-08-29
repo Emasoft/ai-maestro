@@ -44,7 +44,7 @@ function harness(over: Partial<RepairDeps> = {}) {
     over.drive ?? (async () => ({ ok: true, code: 'thecode', via: null }))
   const deps: RepairDeps = {
     enabledCheck: () => true,
-    survey: () => ({ unreadable: [], refreshDead: [DEAD], probeSuppressed: false, readTimedOut: false }),
+    survey: () => ({ unreadable: [], refreshDead: [DEAD], probeSuppressed: false, readFailed: false }),
     now: () => 1_000_000,
     complete: async () => ({ ok: true, email: DEAD, hasRefreshToken: true, expiresInH: 8 }),
     ...over,
@@ -64,7 +64,7 @@ beforeEach(() => __resetRepairCooldownForTest())
 
 describe('gate 1 — the flag is absent by default, and it is checked FIRST', () => {
   it('returns disabled WITHOUT surveying: an unarmed server pays nothing, not even a keychain read', async () => {
-    const survey = vi.fn<() => AlternateSurvey>(() => ({ unreadable: [], refreshDead: [DEAD], probeSuppressed: false, readTimedOut: false }))
+    const survey = vi.fn<() => AlternateSurvey>(() => ({ unreadable: [], refreshDead: [DEAD], probeSuppressed: false, readFailed: false }))
     const { deps, driveCalls } = harness({ enabledCheck: () => false, survey })
     expect(await repairOneDeadSlot(deps)).toEqual({ outcome: 'disabled' })
     // The survey assertion is the load-bearing one. Were the gate merely LAST, the outcome would
@@ -108,14 +108,14 @@ describe('reauthRepairEnabled — the real reader, against a temp HOME (0-IMPACT
 
 describe('what it will and will not try to repair', () => {
   it('does nothing when no alternate has a dead refresh', async () => {
-    const { deps, driveCalls } = harness({ survey: () => ({ unreadable: [], refreshDead: [], probeSuppressed: false, readTimedOut: false }) })
+    const { deps, driveCalls } = harness({ survey: () => ({ unreadable: [], refreshDead: [], probeSuppressed: false, readFailed: false }) })
     expect(await repairOneDeadSlot(deps)).toEqual({ outcome: 'nothing-to-do' })
     expect(driveCalls).toHaveLength(0)
   })
 
   it('IGNORES unreadable slots — a re-login cannot fix a keychain this process cannot reach', async () => {
     const { deps, driveCalls } = harness({
-      survey: () => ({ unreadable: ['locked@example.com', 'locked2@example.com'], refreshDead: [], probeSuppressed: false, readTimedOut: false }),
+      survey: () => ({ unreadable: ['locked@example.com', 'locked2@example.com'], refreshDead: [], probeSuppressed: false, readFailed: false }),
     })
     expect(await repairOneDeadSlot(deps)).toEqual({ outcome: 'nothing-to-do' })
     // Driving one would spend a human-visible browser window and then file the result somewhere
@@ -190,7 +190,7 @@ describe('failures are RESULTS, not exceptions — and they stay diagnosable', (
 describe('gate 2 — ONE repair per beat', () => {
   it('drives exactly ONE of three dead slots', async () => {
     const { deps, driveCalls } = harness({
-      survey: () => ({ unreadable: [], refreshDead: [DEAD, DEAD2, 'dead3@example.com'], probeSuppressed: false, readTimedOut: false }),
+      survey: () => ({ unreadable: [], refreshDead: [DEAD, DEAD2, 'dead3@example.com'], probeSuppressed: false, readFailed: false }),
     })
     await repairOneDeadSlot(deps)
     // Three dead slots must not open three windows at once. The next beat takes the next one.
@@ -228,7 +228,7 @@ describe('gate 3 — the per-email cooldown, the only thing between armed and a 
   it('is PER-EMAIL: a cooling-down account does not shield a different dead one', async () => {
     let refreshDead = [DEAD]
     const { deps, hints } = harness({
-      survey: () => ({ unreadable: [], refreshDead, probeSuppressed: false, readTimedOut: false }),
+      survey: () => ({ unreadable: [], refreshDead, probeSuppressed: false, readFailed: false }),
       drive: async () => ({ ok: false, reason: 'timeout' }),
     })
     await repairOneDeadSlot(deps)

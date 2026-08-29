@@ -370,10 +370,23 @@ export async function updateJson(
   // nobody calls directly is not an option.
   opts: { createIfMissing?: boolean; retries?: number; allowKeyLoss?: boolean } & JsonLockOpts = {},
 ): Promise<UpdateJsonResult> {
-  const maxAttempts = Math.max(1, opts.retries ?? 3)
+  // PER-STEP retry budgets (USER ruling 2026-08-06, TRDD-TS4G74XA). Two things are load-bearing:
+  //
+  //   1. `retries` is retries ON TOP OF the first try, so the budget is 4 attempts by default —
+  //      "the 4th failure of the same step fails the transaction, and a success ON the 4th attempt
+  //      is a valid success". The previous `attempt >= maxAttempts` form gave 3 total, one short.
+  //   2. The counters are INDEPENDENT PER STEP. A transaction that spent step 2's budget on a torn
+  //      read has spent NONE of step 5's. A single shared counter fails a transaction that never
+  //      repeated the SAME error 4 times — stricter than the spec, and precisely on the contended
+  //      hosts the retry exists for. "3 errors at step 2 and 3 at step 5" is a PASSING transaction.
+  const maxRetries = Math.max(0, opts.retries ?? 3)
+  let readFailures = 0 // step 2 — pre-lint (a torn read cures on re-read)
+  let staleFailures = 0 // step 5 — staleness gate
+  let attempt = 0 // total loop passes; reported to the caller as `attempts`
 
   return withJsonLock(path, async () => {
-    for (let attempt = 1; ; attempt++) {
+    for (;;) {
+      attempt++
       // ⚠ EXACTLY ONE READ. Reading via `readJson` and then again via `readFile` is TWO reads, and a
       // non-participating writer landing between them makes `before.data` the OLD version while
       // `rawBefore` holds the NEW bytes — so the staleness gate compares equal, sees no conflict,
@@ -389,7 +402,25 @@ export async function updateJson(
           throw new Error(`${path} does not exist (pass { createIfMissing: true } to allow creation)`)
         }
       }
-      const baseData = rawBefore === null ? {} : parseOrRefuse(path, rawBefore)
+      // SPEC STEP 2 — lint the copy, and RETRY THE READ (never the write) when it does not parse.
+      // An unparseable read has two causes with the same symptom: corrupt-at-rest, and a TORN READ
+      // caught mid-write by a writer that took no lock of ours (the `claude` CLI, 20+ agents). The
+      // second is transient and a re-read cures it; refusing on the first failure — the shipped
+      // behaviour until now — turned a recoverable race into a hard failure.
+      //
+      // On exhaustion we throw `UnreadableTargetError` and the file is left EXACTLY as found. That
+      // is the whole point: the retry is of the READ. Never "repair" an unparseable target by
+      // writing over it — that is the `{}`-rebuild incident this module exists to prevent.
+      let baseData: Record<string, unknown>
+      try {
+        baseData = rawBefore === null ? {} : parseOrRefuse(path, rawBefore)
+      } catch (err) {
+        if (!(err instanceof UnreadableTargetError)) throw err
+        readFailures++
+        if (readFailures > maxRetries) throw err
+        await new Promise(r => setTimeout(r, 200 * readFailures))
+        continue // whole transaction restarts at step 1 — a FRESH read, never a patched copy
+      }
       const data = structuredClone(baseData)
 
       // A mutator that RETURNS a new object instead of mutating in place leaves `data` untouched,
@@ -433,12 +464,13 @@ export async function updateJson(
         const rawNow = await readFile(path, 'utf-8').catch(() => null)
         if (rawNow !== rawBefore) {
           await rm(tmp, { force: true })
-          if (attempt >= maxAttempts) throw new ConcurrentModificationError(path, attempt)
+          staleFailures++
+          if (staleFailures > maxRetries) throw new ConcurrentModificationError(path, staleFailures)
           // BACK OFF between attempts. Three immediate retries are consumed within milliseconds
           // against a bursty non-participating writer, turning a recoverable race into a hard
           // failure. We keep HOLDING the lock across attempts on purpose: dropping it would let
           // PARTICIPATING writers interleave, which is the larger hazard and the one we can control.
-          await new Promise(r => setTimeout(r, 200 * attempt))
+          await new Promise(r => setTimeout(r, 200 * staleFailures))
           continue // re-read and re-apply the mutator against the NEW base — never clobber
         }
 

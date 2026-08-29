@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T16:24:52+0200
-updated: 2026-08-29T16:40:06+0200
+updated: 2026-08-29T16:42:55+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -190,3 +190,35 @@ in this repo, and filing it here would put a finding on the wrong tracker.
   The shipped fix (`9c7821a4`) and its neuter are unchanged and remain correct.
   `tests/helpers/real-home-untouched.ts` is code, not frozen, so its docstring was corrected in
   place rather than annotated here.
+- 2026-08-29T16:47 — **SECOND CORRECTION. The correction above repeated, one layer in, the exact
+  substitution it was written to fix — a second adversarial review caught it, and the phrase and
+  its own evidence contradicted each other in the same sentence.**
+
+  I wrote that the array form was **"genuinely measured twice"**, citing (a) the 14:12 backup and
+  (b) a key-level diff at ~16:13 that "came back with an identical key set". **A key set is a
+  structural fingerprint, not content.** A flattened path set distinguishes `statusLine.command`
+  (object) from `statusLine[0].command` (array), so (b) does establish the SHAPE — but two arrays
+  of two elements holding completely different commands produce an IDENTICAL path set.
+  Demonstrated rather than argued: flattening `[{…'/tmp/slprobe/first.sh'…},{…'/tmp/slprobe/second.sh'…}]`
+  and `[{…'/usr/bin/true'…},{…'/usr/bin/false'…}]` prints `path sets identical: True`.
+
+  **So the ARRAY SHAPE is measured twice; its CONTENTS are measured ONCE** — at 14:12, in the
+  backup. The `/tmp/slprobe` identification therefore still rests on a single point, which is what
+  the FIRST correction said and what "measured twice" then quietly took back. Strike "genuinely
+  measured twice" wherever it appears in this card, in commit `f02b69db`'s message, and in my
+  report of it.
+
+  **The two lesser gaps in the first correction, both now settled rather than left open:**
+  - Its "all nine others are `dict`" came from a `tail -12` of an **uncounted** population — an
+    assertion about the largest 12 of an unknown total. Counted since: **exactly 10 backups
+    exist**, so the tail truncated nothing and the claim holds on the full set (1 `list`, 9
+    `dict`, none at 54288 / 54408 / 54426). Right answer, wrong instrument, now checked.
+  - Its "46 747 files scanned" figure came from a `find` that pruned only `node_modules` and
+    `.next`, so it includes **2 056 `.git` internals** and must not be quoted as a repo file
+    count. Re-run with `.git` pruned as well, the `slprobe` result is unchanged: the same **3**
+    files, all tracked source, all authored this session.
+
+  **What still stands, unchanged by any of this:** the card's finding — the writer was EXTERNAL,
+  hence the guard's old single-cause message asserted what it cannot observe — rests on three
+  mtime+hash changes with no suite running. The shipped fix (`9c7821a4`), its pinning test and its
+  neuter are untouched and remain correct.

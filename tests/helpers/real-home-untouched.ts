@@ -28,11 +28,14 @@
  * red at 18 files / 1 test while the writer was demonstrably external — the same file changed three
  * more times with NO suite running, which is the whole of what that finding needs.
  *
- * (Colour, stated no more strongly than it was measured: at two points two hours apart the
- * `statusLine` key held a two-element array of `/tmp/slprobe` scripts instead of its single-object
- * value. The sampler in between recorded sizes and hashes ONLY, so the shape at the intermediate
- * write is unidentified and the duration between the two endpoints is an inference, not a
- * measurement. No pre-existing code in this repo produces that path.)
+ * (Colour, and stated no more strongly than it was measured — which took three passes to get
+ * right, so the wording is deliberate. The `statusLine` key held a two-element ARRAY instead of
+ * its single-object value at two points two hours apart; its CONTENTS — `/tmp/slprobe` scripts —
+ * were read at only ONE of them. The second reading was a flattened key-PATH diff, and a path set
+ * cannot separate two different 2-element arrays, so it establishes the shape and not the values.
+ * The sampler in between recorded sizes and hashes ONLY, so the intermediate write is unidentified
+ * and the two-hour span is an inference from two endpoints. No pre-existing code in this repo
+ * produces that path.)
  *
  * The fix was to the MESSAGE ONLY, deliberately. The trigger stays a byte-compare and no suite is
  * exempted: relaxing either would blind the guard to the silent write it exists to catch, and the

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T07:55:40+0200
+updated: 2026-08-29T07:58:20+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -100,8 +100,26 @@ are documentation-only and carry no runtime risk.
 
 ## Acceptance
 
-- [ ] The audit-mismatch path is reachable in a test (forced), and the current response is captured
+- [x] The audit-mismatch path is reachable in a test (forced), and the current response is captured
       verbatim as the baseline
+      **DONE 2026-08-29T07:58+0200 — `tests/unit/json-io-auditok-baseline.test.ts`, 2 cases.**
+      The mismatch is forced by simulating the non-participating writer at its narrowest: `rename`
+      is wrapped so the REAL rename happens and then one extra key is written to the target, which
+      is what the audit read at `json-io.ts:427` then sees. Nothing in `updateJson` is stubbed —
+      the lock, the write, the backup and the audit all run for real against a `mkdtemp` dir.
+      BASELINE PINNED: a write that does not land returns **`changed: true` AND `auditOk: false`,
+      and does NOT throw** — so no caller's `catch` runs and the only signal is the field none of
+      them reads. That is the shape the two spreading consumers inherit verbatim, which is why the
+      HTTP client and the CLI are handed `success: true` beside `auditOk: false` in ONE object.
+      It also pins the interfering write SURVIVING, so the deliberate no-auto-rollback decision
+      (`json-io.ts:327-331`) cannot be reversed by accident — that reasoning is correct and is not
+      what this card disputes.
+      POSITIVE CONTROL: with no interfering writer the same path returns `auditOk: true`, so the
+      mismatch case cannot be passing because the audit always reports false.
+      NEUTER RUN: flipping the injection off in the mismatch test reddens it (`expected true to be
+      false`), 1 failed / 1 passed; restoring returns 2/2.
+      This asserts NO opinion on options 1/2/3 — whichever lands will change these expectations
+      deliberately, with this file as the record of what it changed FROM.
 - [ ] The USER picks option 1, 2 or 3 (option 1 alone needs their sign-off — it changes a shipped
       response shape)
 - [x] `json-io.ts:331`'s "the caller decides" is either made true or replaced by what actually

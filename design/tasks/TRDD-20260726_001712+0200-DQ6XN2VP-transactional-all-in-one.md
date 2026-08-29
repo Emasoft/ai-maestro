@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-08-29T07:35:19+0200
+updated: 2026-08-29T07:37:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1746,6 +1746,49 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       question with a named next step, and it is why no promotion was forced here: the card's own
       warning is that a wrong invariant aborts a correct operation, and a valueless one still costs
       a reader the belief that the ratchet measures rollback coverage.
+      **⚠ SAME-SESSION CORRECTION — "only 4" was an INSTRUMENT LIMIT, not a fact.** The scan above
+      used a fixed **90-line window** after each runner call and a needle of `Final|verified|Verify`.
+      Re-run with a wider needle over the whole file
+      (`Final|final|verif|Verif|post-condition|confirm|assert|landed`) it finds a **fifth** final
+      post-condition my window missed: **`DeleteAgent`'s `G10` at `:9671/:9675`**, whose wording is
+      *"post-condition verification unavailable"* — none of my original needle's words. A negative
+      result produced by a fixed window over prose-shaped source is exactly the "concluded nothing
+      is there from having failed to look" failure, and it is the one I had gone looking for in
+      others this session.
+      **The CONCLUSION survives, but only because G10 is excluded for a THIRD reason I had not
+      enumerated — so the taxonomy, not just the count, was incomplete:**
+      | candidate | excluded because |
+      |---|---|
+      | `ChangePlugin` G11 (`:4944-4950`) | **UNSAFE** — `loadJsonSafe` returns `{}` on a parse failure, so a corrupt settings file would roll back a correct change |
+      | `ChangeSkill` G05 (`:6142`) · `changeSimpleElement` G05 (`:6321`) | **VALUELESS** — single-gate txn, undo is `rm targetPath`, and the check fires exactly when that path is absent |
+      | `DeleteAgent` G10 (`:9671`) | **ROLLBACK IS WRONG BY DESIGN** — its own comment records it (TRDD-KERM18NX): a half-deleted agent cannot be un-deleted by re-creating one, and a fake rollback is worse than an honest report. Its contract is `incomplete: true` + the exact residual stores, which is a DIFFERENT and correct answer to the same question |
+      Three distinct reasons, none interchangeable. "Unsafe to promote", "pointless to promote" and
+      "promoting would be the wrong contract" are separate findings, and a survey that had only the
+      first two would have mis-filed the third.
+      The wider grep also lists mid-pipeline confirmations (`:4498` G23, `:10501` G07b, `:3058` G14)
+      that are **not** final post-conditions; they are named here as SEEN-AND-NOT-ADJUDICATED rather
+      than silently dropped, so the next pass knows the set was bounded by judgement, not by a
+      needle.
+      **RE-MEASURED with a FUNCTION-SCOPED census, which is the instrument this question needed.**
+      Both earlier scans were lexical; this one groups by enclosing function and matches
+      `DENIED|MISMATCH|VIOLATION|!=|still exists|does not exist|not found after|verified|Final|post-condition`,
+      so neither a window nor a phrasing convention bounds it. **18 runner-bearing functions**
+      (19 call sites — `ChangeTeam` has two). The result confirms the table above and adds the
+      number that actually matters:
+      **8 of the 18 have NO post-condition of any kind** — `ChangeMCP`, `ChangeLSP`, `ChangeHook`,
+      `ChangeFolder`, `ChangeAvatar`, `ChangeMetadata`, `ChangeCLIArgs`, `ChangeClient` — and most
+      of the rest score only on **pre-condition** `DENIED` gates, which are not post-conditions at
+      all. So the redirect is not merely "add one somewhere": there is a named list of pipelines
+      that verify nothing about their own result.
+      Two corrections this census forced on the paragraphs above:
+      (a) **"no-op by construction" was one notch too strong.** Both single-gate `run` bodies do
+      `mkdir(baseDir, {recursive:true})` before the copy and neither `undo` removes `baseDir`, so a
+      compensation can leave a newly-created empty parent behind. Immaterial to the conclusion — an
+      empty dir is not a corruption, and the existing early-return leaves the same residue — but it
+      is not literally nothing.
+      (b) **the census mis-attributes `DeleteAgent`'s runner (`:9562`) to `compensateG08c`**, a
+      nested helper declared just above it. The hit is real and the function label is wrong; noted
+      so the next reader does not chase a helper that owns no pipeline.
 - [x] The tmux-kill compensation question decided and recorded here (R51.10 — re-launch is valid;
       a pid is not part of "the exact state")
 - [x] tsc clean, full suite green — **measured at `790cd8cb`**: `bash scripts/with-node.sh npx tsc

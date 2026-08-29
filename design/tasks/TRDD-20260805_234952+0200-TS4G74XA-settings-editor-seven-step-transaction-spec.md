@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-29T12:44:00+0200
+updated: 2026-08-29T13:10:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,7 +25,7 @@ release-via: none
 relevant-rules: []
 labels: [settings-gate, json-io, safe-editor, owner-ours]
 external-refs: []
-implementation-commits: [471c4c4b, b8fe744a]
+implementation-commits: [471c4c4b, b8fe744a, ff4d8081, a678109f]
 ---
 # Bring the settings safe-editor to the USER's seven-step transaction spec
 
@@ -161,10 +161,24 @@ result. Fail and report.
       pre-lint path (the file's bytes are untouched after 3 failures).
       **DONE 2026-08-29 — `471c4c4b`.** After an exhausted pre-lint the on-disk bytes are
       asserted byte-identical to the pre-transaction read.
-- [ ] Post-edit schema lint: a `set` op writing a schema-invalid value for a covered key
+- [x] Post-edit schema lint: a `set` op writing a schema-invalid value for a covered key
       FAILS the transaction with a typed error, no retry, file untouched.
-- [ ] Schema lint is NARROW: a pre-existing oddity in an UNRELATED key does not block an
+      **DONE 2026-08-29.** `SettingsSchemaError` from `lintTouchedKeys`, called inside
+      `editSettings`'s mutator so the throw precedes serialisation — no write, no retry
+      (the read-retry catches only `UnreadableTargetError`). Pinned in
+      `tests/unit/settings-gate-schema-lint.test.ts`; neuter reddens it.
+- [x] Schema lint is NARROW: a pre-existing oddity in an UNRELATED key does not block an
       edit to a covered key (pinned — this is the boundary most likely to be widened).
+      **DONE 2026-08-29, and the narrowness is STRUCTURAL, not a promise:** `lintTouchedKeys`
+      reads the OPS, never the document, so no code path can reach an untouched key.
+      **THE DESIGN QUESTION THIS BOX ASKED IS ANSWERED "NEITHER".** There is no published
+      claude-code settings schema. Vendoring one goes stale every Claude Code release and
+      rejects files Claude Code itself accepts — the whole-file audit this box forbids. The
+      whole write surface of this repo is FOUR key paths (`permissions.deny`,
+      `extraKnownMarketplaces.<name>`, `…<name>.autoUpdate`, `crossSessionInbound`), so the
+      lint is a 2-rule table over the shapes we actually define; an unknown key PASSES,
+      because we cannot validate what we do not define. Widen the table when we write a
+      fifth key — not into a schema library.
 - [x] Existing conformant behaviour unchanged: staleness-gate retry, queue isolation,
       atomic swap, backups — the current test suite stays green.
       **DONE 2026-08-29 — `471c4c4b`.** Full suite: **497 files / 6577 passed / 2 skipped**,

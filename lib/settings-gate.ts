@@ -194,6 +194,49 @@ export interface EditSettingsOpts extends JsonLockOpts {
   allowKeyLoss?: boolean
 }
 
+export class SettingsSchemaError extends Error {
+  constructor(public readonly keyPath: string[], public readonly why: string) {
+    super(`settings key "${keyPath.join('.')}" ${why}`)
+    this.name = 'SettingsSchemaError'
+  }
+}
+
+/**
+ * Spec step 4's "still a valid claude code settings file", as narrowly as it can honestly be done.
+ *
+ * THERE IS NO PUBLISHED CLAUDE-CODE SETTINGS SCHEMA. Vendoring one would go stale on every Claude
+ * Code release and would reject files Claude Code itself accepts — turning every edit into a
+ * whole-file audit, which is the failure the card explicitly warns against. So this checks only
+ * the key paths THIS repo writes, and only the ones whose shape we actually know. An unknown key
+ * passes: we cannot validate what we do not define.
+ *
+ * ponytail: 2 rules because the whole write surface is 4 key paths. Add a rule when we write a
+ * 5th — not a schema library.
+ */
+const SETTINGS_RULES: { match: (k: string[]) => boolean; ok: (v: unknown) => boolean; why: string }[] = [
+  {
+    match: k => k.length === 2 && k[0] === 'permissions' && ['allow', 'deny', 'ask'].includes(k[1]),
+    ok: v => Array.isArray(v) && v.every(x => typeof x === 'string'),
+    why: 'must be an array of strings',
+  },
+  {
+    match: k => k.length === 2 && k[0] === 'extraKnownMarketplaces',
+    ok: v => typeof v === 'object' && v !== null && !Array.isArray(v),
+    why: 'must be an object',
+  },
+]
+
+/** Lint ONLY what this transaction touched — a pre-existing oddity elsewhere must not block it.
+ *  It reads the OPS, not the document, which is what makes the narrowness structural rather than a
+ *  promise: there is no code path here that could look at an untouched key. */
+function lintTouchedKeys(ops: SettingsOp[]): void {
+  for (const op of ops) {
+    if (op.op !== 'set') continue // a delete removes a key; there is no value to be invalid
+    const rule = SETTINGS_RULES.find(r => r.match(op.keyPath))
+    if (rule && !rule.ok(op.value)) throw new SettingsSchemaError(op.keyPath, rule.why)
+  }
+}
+
 /**
  * THE ONE WAY to mutate a settings file from outside `lib/json-io.ts`'s own module.
  * Validates the path, then applies `ops` under the shared cross-process lock via
@@ -209,7 +252,10 @@ export async function editSettings(
     throw new TypeError('editSettings requires a non-empty ops array')
   }
   const path = resolveSettingsPath(rawPath)
-  return updateJson(path, data => { applySettingsOps(data, ops) }, {
+  return updateJson(path, data => {
+    applySettingsOps(data, ops)
+    lintTouchedKeys(ops) // spec step 4 — throws before anything is written, no retry
+  }, {
     createIfMissing: opts.createIfMissing ?? true,
     allowKeyLoss: opts.allowKeyLoss ?? true,
     staleMs: opts.staleMs,

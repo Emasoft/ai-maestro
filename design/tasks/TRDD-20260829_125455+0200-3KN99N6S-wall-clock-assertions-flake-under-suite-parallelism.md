@@ -1,12 +1,12 @@
 ---
 trdd-id: 3KN99N6S
-title: Wall-clock assertions flake under full-suite parallelism and cost an isolation run each time
+title: Load-sensitive tests flake under full-suite parallelism - one wall-clock assertion and three subprocess timeouts
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T12:54:55+0200
-updated: 2026-08-29T12:54:55+0200
+updated: 2026-08-29T13:00:34+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -61,6 +61,37 @@ being measured on a box whose load the suite does not control. Both runs happene
 whether a failure is genuine, and it happened **three times in one session**. A suite that
 cannot be trusted on a red is a suite whose reds get ignored.
 
+## ⚠ CORRECTED 40 MINUTES AFTER FILING — "four files assert a wall-clock bound" is FALSE
+
+I read ONE file (`statusline-capture-wrapper`) and wrote the framing for FOUR. Classified
+properly — `grep -nE "toBeLessThan|elapsed|Date.now|timeout"` on each, then each failure's actual
+error text — they are **two different classes**, and only the first is what this card's title says:
+
+| file | failure | class |
+|---|---|---|
+| `statusline-capture-wrapper` | `expected 18006 to be less than 2000` | **wall-clock ASSERTION** |
+| `r17-r11-core-plugin-binding` | `Test timed out in 30000ms` (:746) | runner timeout, subprocess |
+| `aimaestro-governance-dev-login` | `Test timed out in 30000ms` (:95) | runner timeout, subprocess |
+| `fleet-plugins-update` | `Test timed out in 30000ms` | runner timeout, subprocess |
+
+**Only ONE file contains a timing assertion at all.** The other three assert nothing about
+duration; they spawn a real subprocess (`bump-version.sh`, `aimaestro-governance.sh login`, the
+fleet updater) and the RUNNER kills them at its 30 s limit when the box is loaded. That is a
+different defect with a different fix, and grouping them cost the card its accuracy on 3 of 4 rows.
+
+**This is the third time today I generalised from a read sample to an unread population** (the
+others: "nothing non-gated is queued" from 5 of 22 cards; the DeleteAgent gate list). Recording it
+here rather than silently editing, because the pattern is the finding.
+
+**What survives unchanged:** the 1 → 4 escalation in two hours with no source change, and the cost
+(an isolation re-run each time). Both classes are load-sensitive; they just fail by different
+mechanisms.
+
+**Note the dev-login file already documents its own history here** (`:165-167`): its timeout was
+raised once because it "was measured FLAKY at the default", with the comment observing that such a
+test gets "re-run until green and then believed". Raising it again is the move that comment warns
+against.
+
 ## Root cause
 
 A wall-clock bound is a **proxy** for the property under test. What
@@ -92,9 +123,14 @@ need a duration, in which case say so on this card rather than converting it.
 
 ## Acceptance
 
-- [ ] Each of the four is classified: happens-before property vs genuinely durational, with the
+- [x] Each of the four is classified: happens-before property vs genuinely durational, with the
       classification written down per file (a duration kept must say WHY, and that is a finding
       worth recording, not a failure to convert).
+      **DONE 2026-08-29 — and it REFUTED this card's own title.** One wall-clock assertion
+      (`statusline-capture-wrapper`), three runner timeouts on subprocess tests. Table in the
+      correction section above. The three are NOT convertible to a happens-before assertion,
+      because they assert nothing about time in the first place — they are slow, and the runner's
+      30 s limit is what fails them.
 - [ ] `statusline-capture-wrapper`'s detachment test asserts the marker-file property with no
       wall-clock bound, and its neuter (parent awaits the child) reddens it.
 - [ ] Three consecutive full-suite `yarn test` runs on a loaded box are green.

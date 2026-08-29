@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-25T23:51:47+0200
-updated: 2026-08-29T11:02:00+0200
+updated: 2026-08-29T11:26:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -238,9 +238,16 @@ between, never as one sweep.
       **G08** (registry delete) · **G08b** (on-disk verification of that delete) · **G08c** (local
       plugin-record uninstall) — all handed to `runGateSequence` at `:9562`.
       **10 of those 11 declare an `undo`** (`grep -c "^\s*undo:"` over `:9090-9563`). The one that
-      does not is **G08b**, the read-only on-disk verification of the registry delete — a gate that
-      writes nothing has nothing to compensate, so the exception is correct by construction, not a
-      hole. State it this way rather than as a bare "with compensation": the count is measured, the
+      does not is **G08b**, and this is STRUCTURAL, not inferred from the log strings: the entry
+      carries an explicit **`readOnly: true`** field at `:9403`, and its `run` body only
+      `readFileSync`s `registry.json`, `find`s the row, and either throws or pushes an op — it
+      writes nothing. Its own comment states the mechanism both ways: *"Declaring it so is what
+      lets the pre-flight accept it without an `undo` — and what makes its failure roll G08 back."*
+      So the missing `undo` is not a tolerated gap, it is the **contract** — and G08b's failure is
+      what triggers G08's compensation. (It exists because `registryDelete()` can return true while
+      the on-disk write silently failed — SCEN-002 P0-003 — leaving an agent that resurrects on the
+      next restart.)
+      State it this way rather than as a bare "with compensation": the count is measured, the
       adjective was not, and it is the adjective that argues FOR converging.
       **Four further steps run but are deliberately NOT sequence entries**, and calling them gates
       was the error: **G01** and **G01b** are pre-flight refusals before the transaction opens

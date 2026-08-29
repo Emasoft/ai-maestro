@@ -1,12 +1,12 @@
 ---
 trdd-id: X4RK1NUW
 title: oauth-rotator-tick beats but its verdict is not yet clean — one 48h observation window stands before the 2026-08-30 deadline
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-27T17:14:13+0200
+updated: 2026-08-29T07:18:14+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -81,7 +81,7 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 - [x] Server-side scheduled keepalive for oauth-rotator-tick actually executes (not just accepted via the absorption contract)
 - [x] The 2026-08-21 `refresh-dead` misdiagnosis root-caused and fixed
 - [x] Two janitor-side fixes referenced in the issue ported to the TS daemon
-- [ ] Verified clean across a 48h+ window ~~before the 2026-08-30 deadline~~ (deadline struck 2026-08-27: the owner renewed all 3 accounts on 08-26; cookies read 27.4 d ≈ 2026-09-23, refresh tokens alive. Window start 2026-08-27T01:25:33+0200. Re-derive with the three commands in the STATE block; PASS = cookie days still >7 AND the three `expires_at` still staggered-and-recent after 48h)
+- [x] Verified clean across a 48h+ window ~~before the 2026-08-30 deadline~~ (deadline struck 2026-08-27: the owner renewed all 3 accounts on 08-26; cookies read 27.4 d ≈ 2026-09-23, refresh tokens alive. Window start 2026-08-27T01:25:33+0200. Re-derive with the three commands in the STATE block; PASS = cookie days still >7 AND the three `expires_at` still staggered-and-recent after 48h) — **CLOSED 2026-08-29T07:18+0200 at 54h elapsed; measurements + the two in-window alerts are in the window section below**
 - [x] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
 
 ## Blocker probe — source positive controls (2026-08-27, TRDD-CV5KDCB7)
@@ -319,6 +319,11 @@ identically at HEAD with this change stashed). tsc clean on touched files.
 
 ## Approval log
 
+- 2026-08-29T07:18:14+0200 — COMPLETED by ai-maestro-hub-session (min-approval-requirement: none;
+  self-mandated). The last open box (the 48h observation window) closed at **54h elapsed** on its
+  own stated PASS criteria, re-derived first-hand — see "Observation window — CLOSE" below. All 5
+  acceptance boxes ticked; `npt:` and `eht:` both empty, so the completion gate is satisfied.
+
 ## Observation window — 2026-08-22T14:25+0200 (evidence for the one open box)
 
 **The tick BEATS. The card's TITLE is stale; its body already knew.** Status file written
@@ -487,3 +492,46 @@ on ai-maestro#95:** the latch was NOT caused by the janitor's browser capture �
 any capture. It is a routine 5 s `security` TIMEOUT (350/350 recorded latches are timeouts; **zero**
 are real denials). And it DOES need a card — this is precisely the alarm-noise defect this STATE
 block asked to be carded "if it persists after 3GU9V70H's recovery": **TRDD-MFTDMSJY**.
+
+## Observation window — CLOSE, 2026-08-29T07:18+0200 (54h elapsed; PASS)
+
+Window ran **2026-08-27T01:25:33+0200 → 2026-08-29T07:18+0200 = 54h**, past the 48h the box
+required. Re-derived with the STATE block's own three commands, not read off any prior claim.
+
+| PASS criterion (the box's own words) | measured 2026-08-29T07:17+0200 | verdict |
+|---|---|---|
+| cookie days still **> 7** | `lifetime-status.sh` → **25.1 d** on all three accounts (≈2026-09-23); verdict line `nothing due`, no `ACTION DUE` | **PASS** |
+| the three `expires_at` still **staggered-and-recent** | 13:15:18Z · 13:13:25Z · 11:29:18Z — all minted **today**, 8h lifetime ⇒ minted 05:15 / 05:13 / 03:29 UTC, i.e. 2 min and ~1h48 apart | **PASS** |
+
+The blocker probe was exercised as the card specifies: `blocker-holds-if: match:ACTION DUE` did
+**not** match, and the canary `match:cookie/session` **did** — so the probe ran and the blocker is
+genuinely absent, rather than the output being empty for some unrelated reason.
+
+**Why the mint times settle it and did not merely repeat the 08-27 reading.** An 8-hour access
+token minted at 05:13/05:15 UTC **today** cannot descend from the owner's manual 08-26 logins —
+those expired on 08-27. Something performed a real token exchange against the refresh tokens
+within hours of this reading. That is the one thing the STATE block said would settle the
+"refresh tokens unproven in both directions" question, and it is the thing itself, not a proxy:
+not `refresh=yes` (presence of a string), not `refresh_failures 0` (reset by recapture), not a
+401 on `/api/sessions` (proves only that an HTTP server answers).
+
+**Box 1's evidence is now sound at source, not by inference.** The STATE block withdrew the
+"server IS running the absorbed chore" claim as a proxy read and left box 1 neither closeable nor
+re-openable. `rotator.log` now carries entries prefixed **`aim-server/`** — at
+`2026-08-28T21:52:50`, `21:52:52` and `2026-08-29T01:28:18`, i.e. inside this window. That prefix
+is written by exactly one thing: `lib/oauth-rotator/decision-log.ts:50` sets `const SOURCE =
+'aim-server'`, and its own comment records the split ("the janitor writes bare kinds (`auto:`,
+`beacon:`, `capture:`); ours are `aim-server/<kind>:`"). The ai-maestro server therefore ran the
+absorbed tick during the window, measured at the writer rather than assumed from a live port.
+
+**The window was not silent, and saying "clean" without this would be the proxy habit again.**
+Two alerts fired inside it. Neither is a defect of THIS card, and both are already owned:
+
+| in-window alert | reading | owner |
+|---|---|---|
+| `rotator-stuck:keychain-latched` (08-28T21:52:50, 21:52:52; CLEARED 08-29T01:28:18) | the keychain denied-latch suppressed a beat's slot read — the alert's own text says it clears on the half-open probe, and it did | **TRDD-MFTDMSJY** (open, `todo`, priority 0) — the latch fires on a 5 s timeout and emits a false `reauth-needed` |
+| `rotator-stuck:all-maxed` (08-29T01:28:18) | its own text: the live **account** is not exhausted (5h 0% / 7d 77%); only the **Fable** window is spent (100%), so the remedy is moving agents off Fable, not rotating the credential — the same not-a-false-alarm case `lib/oauth-rotator/tick.ts:230-252` already handles | **TRDD-DPPYVLVH** (model-fallback leg + rotation policy) |
+
+So: clean **on this card's criteria** — credentials healthy, refresh path demonstrably live, the
+server demonstrably running the chore. Not "no alert fired", which was never the box's test and
+would have been false.

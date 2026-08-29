@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useToast } from '@/hooks/useToast'
 import {
   Shield, ChevronDown, ChevronRight, Save, RefreshCw,
   AlertTriangle, CheckCircle, Lock, Key, Clock, Users,
@@ -373,7 +374,8 @@ export default function SecuritySection() {
   const [status, setStatus] = useState<SecurityStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  // TRDD-2K08IAPV — was a local toast state plus its own 4000ms auto-dismiss effect.
+  const { toast, showToast } = useToast(4000)
   const [resettingKillSwitch, setResettingKillSwitch] = useState(false)
 
   const fetchConfig = useCallback(async () => {
@@ -405,13 +407,6 @@ export default function SecuritySection() {
     return () => clearInterval(interval)
   }, [fetchStatus])
 
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 4000)
-      return () => clearTimeout(timer)
-    }
-  }, [toast])
-
   const handleSave = async () => {
     if (!config || saving) return
     setSaving(true)
@@ -428,14 +423,14 @@ export default function SecuritySection() {
       if (res.ok) {
         const data = await res.json()
         setConfig(data.config)
-        setToast({ type: 'success', message: 'Security settings saved.' })
+        showToast('Security settings saved.', 'success')
         fetchStatus()
       } else {
         const err = await res.json().catch(() => ({ error: 'Save failed' }))
-        setToast({ type: 'error', message: err.error || 'Save failed' })
+        showToast(err.error || 'Save failed', 'error')
       }
     } catch {
-      setToast({ type: 'error', message: 'Network error saving settings.' })
+      showToast('Network error saving settings.', 'error')
     } finally {
       setSaving(false)
     }
@@ -450,7 +445,7 @@ export default function SecuritySection() {
         body: JSON.stringify({ action: 'reset-kill-switch' }),
       })
       if (res.ok) {
-        setToast({ type: 'success', message: 'Kill switch reset.' })
+        showToast('Kill switch reset.', 'success')
         fetchStatus()
       }
     } catch { /* network error */ }

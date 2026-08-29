@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Mail, Send, Inbox, Archive, Trash2, AlertCircle, Clock, CheckCircle, Forward, Copy, ChevronDown, Server, ShieldCheck, Globe, HelpCircle, Lock, AlertTriangle, X } from 'lucide-react'
 import type { Message, MessageSummary } from '@/lib/messageQueue'
+import { useToast } from '@/hooks/useToast'
 
 /**
  * Agent recipient info for messaging
@@ -60,23 +61,16 @@ export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const copyDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Toast notification state (replaces native alert/confirm)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  // Toast notification (replaces native alert/confirm) — TRDD-2K08IAPV.
+  // This copy was the CORRECT one of the four; useToast is that behaviour extracted, so the
+  // migration is a no-op here by design and the delete-confirmation timer below is untouched.
+  const { toast, showToast } = useToast(3000)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Show a toast notification that auto-dismisses
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    setToast({ message, type })
-    toastTimerRef.current = setTimeout(() => setToast(null), 3000)
-  }, [])
-
-  // Cleanup toast and delete confirmation timers on unmount
+  // Cleanup the delete-confirmation timer on unmount. The toast timer is the hook's own.
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
     }
   }, [])

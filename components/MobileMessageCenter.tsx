@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Send, Inbox, Archive, Trash2, AlertCircle, Clock, CheckCircle, Forward, Copy, Edit, MoreVertical, Server, ShieldCheck, Globe, HelpCircle } from 'lucide-react'
 import type { Message, MessageSummary } from '@/lib/messageQueue'
 import type { AgentRecipient } from './MessageCenter'
+import { useToast } from '@/hooks/useToast'
 
 // Timeout for message API calls - 15 seconds for remote hosts
 const MESSAGE_API_TIMEOUT = 15000
@@ -77,15 +78,12 @@ export default function MobileMessageCenter({ sessionName, agentId, allAgents, h
   const toInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
-  // Toast notification state (replaces native alert/confirm)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  // Toast notification (replaces native alert/confirm) — TRDD-2K08IAPV.
+  // The local copy this replaces stored no handle for its setTimeout, so a second toast inherited
+  // the first one's pending timer and was cleared early, and an unmount mid-toast fired setState
+  // on a dead component. useToast owns the timer; do not re-hand-roll one here.
+  const { toast, showToast } = useToast(3000)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
-
-  // Show a toast notification that auto-dismisses
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
-  }, [])
 
   // External agent info toggle
   const [showExternalAgentInfo, setShowExternalAgentInfo] = useState(false)

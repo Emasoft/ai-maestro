@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-29T07:48:30+0200
-updated: 2026-08-29T07:50:12+0200
+updated: 2026-08-29T07:55:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -112,6 +112,19 @@ are documentation-only and carry no runtime risk.
       points at this card for the open decision. The no-auto-rollback argument above it is
       untouched — it was never the part that was wrong. Comment-only: `tsc --noEmit` 0 errors,
       `tests/unit/json-io-update.test.ts` 13/13 green.
+      **PINNED, because the census had a half that was not a measurement.** The counts are dated
+      and cite this card, so their rot is visible — but *"ZERO branch on the flag"* is an INVARIANT,
+      and it fails in the reassuring direction: after someone adds a branch, the comment still says
+      nobody does, and a reader who believes it may delete the flag or the audit as dead code. This
+      repo already pins exactly this shape (`MIN_WITH_INVARIANTS` in `r51-7-invariants.test.ts`), so
+      the census now lives in `tests/unit/json-io-auditok-consumers.test.ts` — 3 cases, with
+      positive controls on the walker (>200 files, the definition by name) and the extractor (≥10
+      caller files, three by name). NEUTER RUN: seeding `lib/zz-probe-auditok-consumer.ts` with
+      `if (!res.auditOk) throw` reddens it and names the file; removing the probe returns 3/3.
+      ⚠ The test is an IDENTIFIER scan and pins *"nobody BRANCHES"* only — the two spread consumers
+      receive the field without naming it, so a green run must never be read as "no consumer".
+      **If the USER picks option 1**, the comment's paragraph describing delegation-to-the-consumer
+      as the status quo needs rewriting; this box is settled for options 2 and 3, not permanently.
 - [ ] The chosen behaviour is pinned by a test with a recorded neuter run
 - [ ] `tsc --noEmit` clean; json-io + settings-gate suites green
 

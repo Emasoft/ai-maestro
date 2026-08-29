@@ -350,6 +350,11 @@ export class KeyLossRefused extends Error {
  * only the sites that BIND or DESTRUCTURE it can, plus anything reached through a propagating
  * wrapper (`return updateJson(…)` — today only `settings-gate.ts::editSettings`).
  *
+ * The "ZERO branch" half is an INVARIANT, not a measurement, so it is PINNED rather than asserted
+ * here: `tests/unit/json-io-auditok-consumers.test.ts` fails the build the moment a caller names
+ * `auditOk`. Without that, a comment claiming nobody branches would keep saying so after someone
+ * did — and a reader who believed it could delete the flag, or the audit, as dead code.
+ *
  * ⚠ `mutator` MUST mutate the object it is given (or return void). Building a fresh object and
  * returning it is the 2026-07-07 shape — the minimal-object rebuild that wiped a 57.8 KB config —
  * so the return value is deliberately ignored, and the key-loss tripwire catches it anyway.

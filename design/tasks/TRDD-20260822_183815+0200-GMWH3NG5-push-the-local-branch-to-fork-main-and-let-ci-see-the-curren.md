@@ -2,8 +2,11 @@
 trdd-id: GMWH3NG5
 title: Push the local branch to fork main and let CI see the current tree
 column: todo
+blocked-by: []
+blocker-probe: sh -c 'git branch -r --contains HEAD 2>/dev/null | grep -q "fork/main" && echo on-fork-main || echo not-pushed'
+blocker-holds-if: not-match:on-fork-main
 created: 2026-08-22T18:38:15+0200
-updated: 2026-08-22T18:39:41+0200
+updated: 2026-08-30T02:17:14+0200
 current-owner: user
 created-by: user
 task-type: infra
@@ -15,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-08-22T18:38:15+0200
 assignee: ai-maestro-hub
 priority: 1
-labels: [ci, main-branch, owner-act, durability]
+labels: [ci, main-branch, owner-act, durability, hub-blocked]
 external-refs: [TRDD-N4SDG0ML]
 ---
 
@@ -85,8 +88,28 @@ FIXTURES if they redden, never the tests.
 
 ## Approval log
 
-## Approval log
-
+- 2026-08-30T02:17:14+0200 — column UNCHANGED (`todo`); a runnable canaried probe added, and one
+  measurement recorded. **A `todo` → `blocked` move was attempted here and REVERTED**, because the
+  premise was wrong and the linter is the thing that said so — worth writing down so the next
+  session does not re-attempt it.
+  The reasoning was: box 1 is *"the owner authorizes and performs the push"*, an act no agent may
+  perform, so a card asserting `todo` looked like it was claiming agent-pickable work.
+  `BLOCKED-WITHOUT-BLOCKER` refused it: `column: blocked` REQUIRES a non-empty `blocked-by:`
+  naming a real TRDD, and `GRAPH-UNKNOWN-BLOCKER` refused a free-text blocker
+  (`owner-act-push-to-fork-main` was truncated to `OWNER-AC` and demanded to exist). So **in this
+  corpus `blocked` means "blocked on another CARD", and `todo` does NOT assert agent-workability**
+  — it asserts open-and-not-card-blocked. By that model this card was never lying, and the four
+  sibling `owner-act` cards (`YUK66AJO`, `N6V7WB69`, `L58QB3FR`, `WMNE9OU3`) are not either.
+  Minting a blocker card whose only content is "the owner must push" would be ceremony duplicating
+  box 1, so it was not done. The `approval` column is not the answer either: this card is already
+  `approved: true` (USER mandate), so parking it there would contradict its own approval record —
+  which is why the `2LIS20K1` precedent does not transfer (that card carries no `approved:` field).
+  **What IS new and verified:** `git branch -r --contains HEAD` returns **nothing** — HEAD
+  `7c6b364e` is on no remote branch at all — and `fork/main` is at `f75f72fa`. CI has never seen
+  this tree; the block is real and current, only not expressible as a `blocked-by:` edge.
+  The probe is canaried the safe way (`not-match:`): a timeout or a moved path yields no
+  `on-fork-main`, so it reads as STILL-BLOCKED rather than as cleared (`BLOCKER-PROBE-NO-CANARY`
+  — a bare `match:` here would have been fail-open). Positive-controlled: it prints `not-pushed`.
 - 2026-08-22T18:38:15+0200 — MANDATE issued by user (min-approval-requirement: user). Pre-approved: issuer authority >= required approver. No approval request was sent.
 
 ### Fleet addition — 2026-08-22T20:03:45+0200 — ai-maestro-chief-of-staff

@@ -1,6 +1,6 @@
 ---
 name: agent-claims-the-api-was-never-delivered
-description: "a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build X) — five times now it already existed: absent, unannounced, unauthorized, or BUILT AND SWITCHED OFF. Look before you build."
+description: "a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build X) / why does a feature that is fully built look absent / the API 403s or 401s but the endpoint exists / a config toggle was never decided so the feature is dark — five times now it already existed: absent, unannounced, unauthorized, or BUILT AND SWITCHED OFF. Look before you build."
 ocd: 2026-07-14
 lmd: 2026-07-14
 metadata:
@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: reliability-patterns
+publish-globally: false
 ---
 
 When anyone — a fleet agent, an issue, your own plan — reports that ai-maestro never

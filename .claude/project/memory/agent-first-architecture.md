@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # agent-first-architecture

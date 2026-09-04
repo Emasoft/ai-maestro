@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: architecture-and-runtime
+publish-globally: false
 ---
 
 # custom-server-and-websocket-pty

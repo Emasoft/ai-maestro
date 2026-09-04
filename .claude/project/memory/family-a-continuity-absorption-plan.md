@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: reliability-patterns
+publish-globally: false
 ---
 
 The ai-maestro server absorbs the janitor daemon's **Family A** (continuity/guardian) work;

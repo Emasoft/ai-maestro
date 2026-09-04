@@ -1,6 +1,6 @@
 ---
 name: plugin-install-no-git-tag-satisfying
-description: "a plugin install fails with 'has no git tag satisfying >=X <Y' even though the tags exist — role-plugins refuse to install, ChangeTitle G16 warns, agents end up with no ROLE"
+description: "a plugin install fails with 'has no git tag satisfying >=X <Y' even though the tags exist / role-plugins refuse to install / ChangeTitle G16 warns / agents end up with no ROLE / why does a version-constrained plugin dependency fail to resolve"
 ocd: 2026-07-13
 lmd: 2026-07-13
 metadata:
@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: plugins-and-marketplaces
+publish-globally: false
 ---
 
 ^plugin-dep-tags-need-the-name-prefix [desc:"version_constrained_plugin_dependencies_resolve_only_against_tags_named_pluginname__vversion", keywords:"has_no_git_tag_satisfying no-matching-tag plugin_dependency_version_constraint claude_plugin_tag_--push role_plugin_will_not_install", ocd: 2026-07-13, lmd: 2026-07-30]

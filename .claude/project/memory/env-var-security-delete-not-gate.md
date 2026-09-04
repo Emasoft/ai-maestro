@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: aspect
   topic: security-and-auth
+publish-globally: false
 ---
 **RULE (USER-ratified, TRDD-CC9PY337, 2026-07-17): an env var that can weaken a security
 property is DELETED — not read, not validated, not documented, not in `.example.env`.** Doubt

@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: plugins-and-marketplaces
+publish-globally: false
 ---
 
 # cross-client-conversion

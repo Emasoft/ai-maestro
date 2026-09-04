@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: aspect
   topic: reliability-patterns
+publish-globally: false
 ---
 
 # lenient-json-reader-destroys-the-file

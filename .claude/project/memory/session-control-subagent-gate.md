@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # Stop/restart safe-state gate for CC ≥2.1.198 background subagents (TRDD-O8NCNRWO)

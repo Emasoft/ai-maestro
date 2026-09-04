@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 **An agent is not a folder.** Deleting one touches the registry record, the cemetery archive, team

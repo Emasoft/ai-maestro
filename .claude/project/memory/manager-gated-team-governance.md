@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: teams-and-governance
+publish-globally: false
 ---
 
 # manager-gated-team-governance

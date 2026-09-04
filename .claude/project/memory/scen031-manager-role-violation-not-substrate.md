@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: teams-and-governance
+publish-globally: false
 ---
 SCEN-031 (zipsearcher end-to-end fleet-ship readiness proof) FAILs, and the harness is
 NOT ready — but for a **role-behaviour** reason, not a substrate reason.

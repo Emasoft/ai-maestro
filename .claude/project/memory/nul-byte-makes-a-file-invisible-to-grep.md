@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: tooling-and-testing
+publish-globally: false
 ---
 
 # nul-byte-makes-a-file-invisible-to-grep

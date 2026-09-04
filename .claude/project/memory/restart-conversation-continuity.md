@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 Restarting an agent's session used to be a **cold start**: both restart routes

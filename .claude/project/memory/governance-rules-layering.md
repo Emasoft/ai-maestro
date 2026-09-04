@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: aspect
   topic: teams-and-governance
+publish-globally: false
 ---
 
 # governance-rules-layering

@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: aspect
   topic: teams-and-governance
+publish-globally: false
 ---
 
 **A missing authorization check does not produce an error. It produces a SUCCESS that should

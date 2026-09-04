@@ -9,6 +9,7 @@ metadata:
   tier: component
   topic: architecture-and-runtime
   globs: [lib/context-limits.ts, rust-tools/aim-jsonl-reader/src/context.rs]
+publish-globally: false
 ---
 
 # model-context-window-classification

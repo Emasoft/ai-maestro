@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: messaging
+publish-globally: false
 ---
 
 # amp-communication-graph

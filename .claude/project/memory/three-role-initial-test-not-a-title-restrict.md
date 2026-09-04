@@ -8,6 +8,7 @@ metadata:
   type: feedback
   tier: component
   topic: teams-and-governance
+publish-globally: false
 ---
 
 **Why:** The USER's finalization ask — *"a version capable of running the current governance rules with only 3

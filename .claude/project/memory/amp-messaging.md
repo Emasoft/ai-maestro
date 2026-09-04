@@ -9,6 +9,7 @@ metadata:
   tier: hub
   topic: messaging
   globs: [scripts/amp-*.sh, app/api/v1/**]
+publish-globally: false
 ---
 
 # amp-messaging

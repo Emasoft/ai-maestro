@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: plugins-and-marketplaces
+publish-globally: false
 ---
 
 # Registering a plugin in the ai-maestro-plugins marketplace

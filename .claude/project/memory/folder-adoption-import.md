@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # Folder adoption — `allowExternalFolder` (TRDD-57EBNB72)

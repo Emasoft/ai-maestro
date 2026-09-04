@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # AI Maestro agent control + monitor API (and the permanent script layer)

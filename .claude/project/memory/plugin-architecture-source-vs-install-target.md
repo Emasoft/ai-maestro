@@ -1,6 +1,6 @@
 ---
 name: plugin-architecture-source-vs-install-target
-description: "where does a plugin actually live / is ~/agents/role-plugins/ the installed location / R20.29 source vs install target / why can't I find an installed plugin under ~/agents / LOCAL vs USER scope uninstall semantics / R20.30 R20.31"
+description: "where does a plugin actually live / is the role-plugins folder under the agents home directory the installed location / R20.29 source vs install target / why can't I find an installed plugin under the agents home directory / LOCAL vs USER scope uninstall semantics / R20.30 R20.31"
 ocd: 2026-08-02
 lmd: 2026-08-02
 metadata:
@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: plugins-and-marketplaces
+publish-globally: false
 ---
 
 # plugin-architecture-source-vs-install-target

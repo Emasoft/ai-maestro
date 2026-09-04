@@ -8,6 +8,7 @@ metadata:
   type: project
   tier: aspect
   topic: architecture-and-runtime
+publish-globally: false
 ---
 
 # nextjs-full-route-cache-freezes-api-responses

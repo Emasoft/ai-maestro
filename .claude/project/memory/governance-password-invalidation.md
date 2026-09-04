@@ -10,6 +10,7 @@ metadata:
   topic: security-and-auth
   functionality: security
   globs: ["app/api/governance/password/invalidate/route.ts", "lib/peer-address.mjs", "lib/governance.ts", "lib/setup-bootstrap.ts", "server.mjs"]
+publish-globally: false
 ---
 
 # Revoke the password with the password; prove presence with a desktop code (TRDD-P7XKV3N9)

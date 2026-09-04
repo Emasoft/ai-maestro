@@ -1,6 +1,6 @@
 ---
 name: ai-maestro-overview
-description: "the project's front door — what AI Maestro is, how its parts fit together, and which page owns each subject; start here when you do not know which page to read"
+description: "the project's front door — what AI Maestro is, how its parts fit together, and which page owns each subject / where do I start when I do not know which page to read / what is the entry point to the ai-maestro wiki / project map and topic index"
 ocd: 2026-08-02
 lmd: 2026-08-02
 metadata:
@@ -10,6 +10,7 @@ metadata:
   topic: overview
   functionality: entry point to the ai-maestro project wiki
   globs: []
+publish-globally: false
 ---
 
 # ai-maestro-overview

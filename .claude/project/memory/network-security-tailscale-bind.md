@@ -8,6 +8,7 @@ metadata:
   type: reference
   tier: component
   topic: security-and-auth
+publish-globally: false
 ---
 
 # network-security-tailscale-bind

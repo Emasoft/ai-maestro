@@ -68,9 +68,15 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
     expect(r.ok).toBe(true)
   })
 
-  it('still refuses moving an already-mismatched card to a DIFFERENT contradicting column', () => {
-    // The exemption is narrow: same value in, same value out. Changing one bad column
-    // for another bad one is still an edit that asserts a contradiction, and is refused.
+  it('still refuses a changed column on a card whose CURRENT column is also mismatched', () => {
+    // WHAT THIS DOES AND DOES NOT PIN. It was written as a "the exemption is narrow"
+    // test and it is NOT one: MEASURED by neutering `!columnUnchanged` (making the
+    // exemption unconditional), only the unchanged-re-write test above reds — this one
+    // stays green, because `columnUnchanged` is false here so the guard takes the same
+    // branch it always took. It re-tests the ORIGINAL rule on a distinct fixture (a card
+    // whose current column is itself already mismatched), which is worth having.
+    // The exemption's narrowness is pinned by the FIRST test in this file: widen the
+    // exemption to every column write and that one reds.
     const r = validateTrddFieldEdits(
       { column: 'refused', updated: ISO },
       baseFm({ column: 'proposal' }),

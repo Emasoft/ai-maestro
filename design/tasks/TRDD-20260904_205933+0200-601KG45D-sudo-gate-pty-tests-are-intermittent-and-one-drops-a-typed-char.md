@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:26:39+0200
+updated: 2026-09-05T00:34:39+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2, e3787efb, c74d8798]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2, e3787efb, c74d8798, c6f8252e]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -48,16 +48,21 @@ stability.
 **FOUR THINGS THIS RESULT ESTABLISHES THAT THE FIRST WRITE-UP DID NOT DRAW.** Each is free from
 data already in hand; three were surfaced by review after I had recorded only the two kills.
 
-1. **Every FIXED-ABSOLUTE-OFFSET mechanism is dead.** The `^C` lands at 300 ms and the write at
-   1200 ms in both batches, so if the loss were keyed to a position in the byte stream — an
-   offset, an index, a buffer mark — a 40-char payload would lose its byte at a different
-   *relative* place. It does not. The loss tracks the payload's END. No hypothesis on this card
-   had named this class, which is exactly why nothing had eliminated it.
-2. **TAIL-1-EXACTLY at two lengths is an off-by-one at a boundary, not a partial transfer.**
-   Every partial-transfer story — a short write, a truncated copy, a racing reader — owes an
-   explanation of why it stops one byte short at 23 bytes AND one byte short at 41. An
-   off-by-one owes nothing. **This is evidence against H5 in its short-write form specifically**,
-   which the H5 section below does not yet credit.
+1. **Every mechanism keyed to an offset MEASURED FROM THE START of the stream is dead.** If the
+   loss sat at a fixed position counted forward — an index, a buffer mark, a byte budget — a
+   40-char payload would lose its byte at a different *relative* place than a 22-char one. It
+   does not. The loss tracks the payload's END. **"From the start" is load-bearing:** the
+   SURVIVING hypothesis is itself a fixed offset (one byte, from the end), so the unqualified
+   "every fixed-absolute-offset mechanism is dead" that an earlier draft of this line asserted
+   contradicts the survivor named two rows below it. No hypothesis on this card had named this
+   class, which is why nothing had eliminated it.
+2. **TAIL-1-EXACTLY at two lengths is hard to reconcile with a partial transfer.** An inference
+   to the best explanation, not a deduction — an earlier draft asserted it flatly, which
+   over-claims. **The argument that does the work is about VARIANCE:** a partial transfer is
+   scheduling-dependent, so it predicts a loss that VARIES with how the race falls. Observed:
+   8 of 8 at exactly 1, across two payload lengths. An off-by-one at a boundary predicts that
+   constant and owes nothing further. **Evidence against H5 in its short-write form
+   specifically**, which the H5 section below does not yet credit.
 3. **THE TERMINATOR SURVIVED, IN ALL 8 EVENTS.** `read -rs` returned, so the `\r` reached the
    line discipline; the byte immediately before it did not. Verified by construction, not
    inferred: the shim records a length only when `jq -Rnc` runs, and `common.sh` reaches `jq`
@@ -68,25 +73,39 @@ data already in hand; three were surfaced by review after I had recorded only th
    complete line as far as bash is concerned. Whatever happens, happens below the interface the
    gate can see — so no hardening inside `common.sh` around `read` could ever detect it.
 
-**ONE SURVIVOR THE CARD HAD NOT LISTED: a chunk boundary in the harness's own write.** "One byte
-at the end regardless of length" is NOT the same claim as "the mechanism ignores length". A
-mechanism keyed to the terminator's ARRIVAL produces this at any length — that is hypothesis 2,
-the held survivor. So does a mechanism keyed to the LAST CHUNK'S EDGE, if node-pty splits the
-41-byte payload differently from the 23-byte one. Both predict identically here, so this datum
-separates neither. It is unlikely at these sizes (41 bytes to a pty master is one `write(2)`,
-far under any buffer) and it is UNMEASURED — which is the point: the card was about to record a
-sole survivor it had not earned.
+**WHICH 8 — because this card also carries a "7" and an "11", and they are three different
+sets.** The 8 are the SHIM-RECORDED events (batch 1's 4 + batch 2's 4); claims 3 and 4 hold for
+those and ONLY those, because the 3 earlier truncations predate the shim, so no `jq` length was
+ever captured for them and the read-returned chain cannot be asserted there. **Total truncations
+observed to date is 11** (3 pre-shim + 8 shim-recorded). See the correlation block below for
+what that does to the 7-vs-0 arithmetic.
 
-**And it has a two-line discriminator.** The harness writes `SECRET + '\r'` in ONE `p.write`
-(`:390`). Split it — `p.write(SECRET)`, then `p.write('\r')` a few ms later. A chunk-boundary
-mechanism moves or vanishes; a terminator-keyed one is untouched, because the line discipline
-sees the identical byte sequence either way.
+**A SURVIVOR I BRIEFLY PROMOTED, AND HAVE NOW RETIRED — H6, a chunk boundary in the harness's
+own write.** The reasoning that raised it was sound: "one byte at the end regardless of length"
+is NOT the same claim as "the mechanism ignores length", and a mechanism keyed to the LAST
+CHUNK'S EDGE predicts identically to one keyed to the terminator IF node-pty splits the 41-byte
+payload differently from the 23-byte one. **But that `if` is false, and it was checkable in two
+minutes rather than by experiment.** `node-pty` does no chunking anywhere in the path:
+`Terminal.write` → `this._write(data)` (`node_modules/node-pty/lib/terminal.js:88`) →
+`this._socket.write(data)` (`unixTerminal.js:167-168`) on a `PipeSocket` over the pty master fd.
+There is no size-dependent branch to split on, and 41 bytes into an empty master buffer is one
+`write(2)`. With one write, "the last chunk's edge" and "the payload's end" are the SAME
+POSITION — so H6 is a redescription of hypothesis 2, not a rival to it.
+
+**And promoting it was the same error this section was written to correct**, committed in the
+same breath: I flagged "the card was about to record a sole survivor it had not earned", then
+earned a second survivor no better. The split-write experiment it came with is also withdrawn —
+and it was confounded anyway: `p.write(SECRET)` then `p.write('\r')` a few ms later removes
+hypothesis 2's own precondition (the terminator arriving in the same feed as the last data
+byte), so both hypotheses would have predicted "vanishes" and the cell would have discriminated
+nothing. Splitting in the MIDDLE, same tick, is what a chunk-boundary test would have needed —
+noted only so the next reader does not re-derive the broken version.
 
 ## ⏵ THE CAUSAL READING OF THE TYPING CORRELATION IS UNSUPPORTED — and one arm is a PRODUCT BUG
 
 **The correlation is statistically real; my attribution of it was not.** I wrote that it is
 "evidence for H5 (harness artifact)". It is evidence for a **DISJUNCTION**, and at least one
-member is gate-side. **THREE variables are perfectly collinear across all 7 events** — there is
+member is gate-side. **THREE variables are perfectly collinear across all 11 events** — there is
 no cell in the design where any two differ:
 
 | | P1–P5 | P8/P9/P10 |
@@ -102,13 +121,26 @@ of a disjunction and discards the one that would matter most.
 **The proposed experiment would MASK it.** Switching P8/P9/P10 to wait-for-readiness changes
 the write timing while LEAVING THE `^C` IN PLACE, so a null result is consistent with both "the
 harness raced the tty" and "waiting long enough lets a gate-side resume race resolve itself" —
-and I would have closed the card calling `common.sh` innocent. **TWO cells are needed — and they
-separate TWO of the three variables, not three:**
-- **`^C` + polling** — truncations persist ⇒ the signal path is implicated, not write timing.
+and I would have closed the card calling `common.sh` innocent. **TWO cells were proposed — and
+they separate TWO of the three variables, not three. Only ONE of the two turned out to be
+constructible.**
+- ~~**`^C` + polling** — truncations persist ⇒ the signal path is implicated, not write
+  timing.~~ **NOT CONSTRUCTIBLE**, discovered by trying to write it (2026-09-05). The card
+  already knew the reason and had not connected it to the design: `typeWhenNoEcho` is not a
+  readiness check, it polls for `-echo`, which the gate sets at `:749` BEFORE `read` at `:753`,
+  so the flag is already true when the poll starts and the loop breaks on its first iteration.
+  Scheduled before the `^C` it types AHEAD of the signal (a different cell); scheduled at
+  1200 ms to match the other cell's delay it breaks immediately and reduces to P8 exactly.
+  Either way it varies the DELAY, not the readiness — so it cannot hold timing fixed while
+  removing the signal. **That cell needs a real "is `read` blocked and consuming" probe, which
+  nothing here has**, and inventing one is its own task.
 - **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
+  **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power: at ~0.91% per typing,
+  1 typing/run over 40 runs expects ~0.36 events and a zero would mean nothing, while 8 gives
+  ~320 typings and a real result either way. Costs ~12 s per run.
 
-The second is the one that can implicate the harness AFFIRMATIVELY rather than by absence, and
-this card already has a surplus of nulls.
+The surviving cell is the one that can implicate the harness AFFIRMATIVELY rather than by
+absence, which is the better half to keep — this card already has a surplus of nulls.
 
 **But "prior `^C`" and "`read` resumed after a signal" are NOT separable by either cell, because
 the `^C` is what CAUSES the resume** — they are one manipulation seen at two layers, and every
@@ -132,9 +164,16 @@ each write took before trusting 7-vs-0.
 
 **The exposure asymmetry runs the OTHER way and the signal survives it:** per run the polling
 group gets ~5 typings to the fixed group's 6 (P1/P2/P3 = 3, P4/P5 = 2, P8/P9/P10 × COPIES = 6).
-Over 40 runs: ~200 polling typings with **zero** events vs ~240 with 4. Under a common rate you
-would expect ~3.3 in the polling arm; observing 0 is **p ≈ 0.03**. The correlation is real — only
-its CAUSE is unlocated.
+
+**RECOMPUTED 2026-09-05 over BOTH shim batches — the earlier version of this paragraph was
+arithmetic from before batch 2 and I edited the block above it without touching it.** Countable
+denominator = the 80 runs with full logs (batch 1 at 22 chars, batch 2 at 40): ~400 polling
+typings with **zero** events vs ~480 with **8**. Pooled rate 8/880 ≈ 0.91%, so the polling arm
+expects ~3.6; observing 0 is **p ≈ 0.026**. The 3 pre-shim truncations are ALSO in the fixed
+arm — making the raw count **11-vs-0** — but they have no countable denominator (different
+suite composition, per-run typing counts never recorded), so they are excluded from the
+statistic rather than folded in with a guessed exposure. The correlation is real; only its CAUSE
+is unlocated.
 
 **AND THE "OFF-BY-ONE vs TERMINATOR-EARLY" DICHOTOMY IS FALSE — I renamed the hypothesis.** Both
 describe the same observable and the same mechanism class, with no differing prediction, so no
@@ -145,13 +184,15 @@ the open question, and the real alternatives are the three collinear variables a
 
 ## ⏵ THE STRONGEST CORRELATION ON THIS CARD, and it was mislabelled for the whole session
 
-**All 7 truncations are in the FIXED-DELAY typing path. Zero are in the wait-for-readiness
-path.** Verified by reading the file, not inferred:
+**All 11 truncations are in the FIXED-DELAY typing path. Zero are in the wait-for-readiness
+path.** Verified by reading the file, not inferred. (Was "all 7" until 2026-09-05: batch 2 added
+4 more — `run-007` P8, `run-009` P9, `run-012` P8, `run-039` P8, every one `common.sh` — and the
+count was not carried forward when the blocks above it were edited.)
 
 | typing strategy | site | tests | truncations |
 |---|---|---|---|
 | `typeWhenNoEcho` — POLLS the tty until it reports `-echo`, then writes | `:225` (`runAtTerminal`), `:486` (`runGate`) | P1, P2, P3, P4, P5 | **0, ever** |
-| `setTimeout(() => p.write(SECRET + '\r'), 1200)` — writes BLIND on a timer | `:561`, `:602`, `:624` | P8, P9, P10 | **all 7** |
+| `setTimeout(() => p.write(SECRET + '\r'), 1200)` — writes BLIND on a timer | `:561`, `:602`, `:624` | P8, P9, P10 | **all 11** |
 
 **The card has carried this as "the P8/P9 concentration" since it was first noticed, which
 framed it as *which test*. The real variable is *which typing strategy*** — and that has an
@@ -300,7 +341,10 @@ now shown it, so it remains copy-independent; the split within one batch is nois
   [common.sh]` in run 23, and `P8 [agent-helper.sh]` on an incidental run at 22:41. Timeouts:
   3 observed. Earlier revisions pooled the two modes.
 - **The truncation position is TAIL, 1 char, three for three**, measured by a validated
-  classifier on the last two. **Both COPIES exhibit it** (`common.sh` and `agent-helper.sh`),
+  classifier on the last two. **Both COPIES exhibit it** — but that rests on BATCH 1 ALONE, and
+  batch 2 did not reconfirm it: batch 2 was 4/4 `common.sh`, zero `agent-helper.sh` (p = 6.25%
+  under batch 1's uniform model, so not a finding either way — just not a second confirmation)
+  (`common.sh` and `agent-helper.sh`),
   so it is not copy-specific — the two files are verified-identical, so this is a consistency
   check that passed rather than a surprise.
 - **The CURRENT wiring is now validated end-to-end.** `diagnoseBody` (not just `fc3b6f76`'s
@@ -319,7 +363,7 @@ account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f9
 | # | claim | status |
 |---|---|---|
 | 1 | a `stty` TCSAFLUSH eats queued input | **CONTRADICTED by the code path as read** (idle-machine timing; UNMEASURED under load). The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing. **Not "REFUTED"** — every step is a source READ, not an instrumented handler, and the one condition batch A ran under (load) is the one not checked. Using the strongest verb for the one refutation nobody instrumented is the wrong asymmetry on a card with four dead mechanisms |
-| 2 | the line terminated one byte early | **OPEN.** Favoured, but NOT the sole survivor — see H5, which seven review rounds failed to list, and the harness-write CHUNK BOUNDARY (H6), which review found only after the 40-char result was written up as having a single survivor |
+| 2 | the line terminated one byte early | **OPEN.** Favoured, but NOT the sole survivor — see H5, which seven review rounds failed to list. (H6, a chunk boundary in the harness's write, sat here for one commit and is **RETIRED**: node-pty does no chunking, so with a single `write(2)` it names the same position as this row — a redescription, not a rival. Evidence in the STATE block) |
 | 5 | **the HARNESS's own write loses the byte** — `p.write(password + '\r')`, node-pty pushing 23 bytes into the pty master | **OPEN, NEVER PREVIOUSLY LISTED, and it is the one that decides whether there is a product bug at all.** The card's localisation is *"at or before `read`"*, and the harness write IS before `read` — so every one of the seven events is equally consistent with the byte being lost on the WRITE side. If it is, `common.sh` is innocent and these tests are flaky for a reason unrelated to the gate. **Discriminator:** split `p.write(password + '\r')` into two writes with a gap, or write char-by-char; if the loss changes shape or vanishes, it is the write path. NB the card already calls a NEIGHBOURING claim a non-sequitur (*"one `p.write`, so the line discipline holds the line"*) — correctly, because that was about the RECEIVER. The WRITER-side question is different and was never asked |
 | 3 | the loss is in the shell→curl leg | **EXCLUDED BY MEASUREMENT 2026-09-04T23:37** (`jq -Rnc stdin: 21` on two runs), superseding the composition argument that had excluded it by reasoning. The argument was right; it is the class of thing this card has been wrong about four times, so the measurement is what the exclusion now rests on |
 | 4 | a wall-clock timing slip (§Proposed fix step 2) | **OPEN for the TIMEOUTS, with two objections.** It came from the card rather than from me and that does NOT pre-validate it — §Proposed fix is a *proposal*, never a finding |

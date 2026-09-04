@@ -181,6 +181,11 @@ function pwOf(body: string | undefined): string | undefined {
  * available, and there is no live credential in this file to leak.
  */
 function diagnoseBody(expected: string, body: string | undefined): string {
+  // KEEP THIS TOTAL — it must never throw. It is passed as `expect(actual, message)`, and
+  // vitest evaluates that message EAGERLY, on every run, pass or fail. So a throw here does
+  // not produce a bad message on a failing test; it converts a PASSING test into an error,
+  // and the error would point at the diagnostic rather than at anything real. `pwOf` catches
+  // its own parse, and nothing below can throw on any string. Keep it that way.
   if (body === undefined) return 'no request reached the server at all'
   const pw = pwOf(body)
   if (pw === undefined) return `body present but no string \`password\` field parsed out of it — raw body: ${JSON.stringify(body)}`

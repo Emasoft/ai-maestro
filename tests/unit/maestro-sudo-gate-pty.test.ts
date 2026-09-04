@@ -395,16 +395,19 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
-    // The timeout context rides the FIRST assertion, and the original ORDER is preserved.
-    // A prior revision instead moved `RC=1` to the front so the context would print on a
-    // timeout — which worked, and silently DEMOTED `not.toContain(SECRET)` behind a liveness
-    // check. That is the wrong trade in this file: the echo guarantee is what P6/P8/P9/P10
-    // exist for, and a genuine leak co-occurring with a wrong RC would have gone unevaluated
-    // until someone fixed the RC. Attaching the message to whichever assertion is already
-    // first buys the same diagnosis at no cost to assertion priority.
+    // The context is attached to BOTH assertions a timeout can land on, and the original
+    // ORDER is untouched. Two earlier attempts each got exactly half of this:
+    //   - moving `RC=1` to the front made the context print, and DEMOTED
+    //     `not.toContain(SECRET)` behind a liveness check — the echo guarantee is what
+    //     P6/P8/P9/P10 exist for, so that was the wrong trade;
+    //   - reverting the order and attaching to the first assertion protected priority and
+    //     lost the diagnosis again: a timeout whose handler COMPLETED has `PRIOR-INT`
+    //     present, so assertion 1 passes and the failure lands bare on `RC=1`.
+    // Attaching twice costs nothing and covers both subsets — handler-failed timeouts fail
+    // on the first, handler-completed ones on the third.
     expect(out, timeoutContext(out, seen.length)).toMatch(/PRIOR-INT/)
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
-    expect(out).toMatch(/RC=1/)
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
   })
@@ -430,7 +433,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // First assertion carries the context — see P8. P9 has no PRIOR-INT to assert (the
     // caller's trap body is empty by construction), so the echo guarantee IS first here.
     expect(out, timeoutContext(out, seen.length)).not.toContain(SECRET) // typed after the ^C, still not echoed
-    expect(out).toMatch(/RC=1/)              // the gate ran to its refusal, the ^C was ignored as asked
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/) // the gate ran to its refusal, ^C ignored as asked
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
@@ -448,9 +451,9 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
-    expect(out, timeoutContext(out, seen.length)).toMatch(/PRIOR-INT/) // context on the first — see P8
+    expect(out, timeoutContext(out, seen.length)).toMatch(/PRIOR-INT/) // both landing spots — see P8
     expect(out).not.toContain(SECRET)
-    expect(out).toMatch(/RC=1/)
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
   })
 
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {

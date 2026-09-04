@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:46:08+0200
+updated: 2026-09-04T22:49:12+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -122,14 +122,26 @@ as a stranded read.
 freeze `requests=${seenCount}` → P11h; re-add the raw `out` tail → **P11j**, the secret-leak
 regression; drop the size clause → P11h+P11i. Restores verified byte-identical.
 
-**THE RC-FIRST REORDER WAS A REGRESSION AND IS REVERTED.** I moved `RC=1` to the front so the
-timeout context would print — and thereby DEMOTED `expect(out).not.toContain(SECRET)` behind a
-liveness check in P8 and P10. **That is the wrong trade in this file**: the echo guarantee is
-what P6/P8/P9/P10 exist for, and a genuine leak co-occurring with a wrong RC would have gone
-unevaluated until someone fixed the RC. The original order is restored and the message now
-rides whichever assertion is ALREADY first (`PRIOR-INT` in P8/P10; `not.toContain(SECRET)` in
-P9, which has no `PRIOR-INT` to assert because its trap body is empty by construction). Same
-diagnosis, no cost to assertion priority.
+**THE ASSERTION-PLACEMENT QUESTION TOOK THREE ATTEMPTS, and the first two were each half
+right.** Recorded in full because both wrong versions were shipped and described as the fix:
+
+1. **`RC=1` moved to the front** — the context printed, and it DEMOTED
+   `expect(out).not.toContain(SECRET)` behind a liveness check in P8/P10. Wrong trade: the
+   echo guarantee is what P6/P8/P9/P10 exist for.
+2. **Order reverted, message on whichever assertion is already first** — priority protected,
+   **and the diagnosis lost again**, which the card wrongly called "same diagnosis, no cost".
+   A message surfaces only when ITS OWN assertion fails, and on a timeout whose handler
+   COMPLETED, `PRIOR-INT` is present, so P8/P10's first assertion PASSES and the failure lands
+   bare on `RC=1`. In P9 the message rode `not.toContain(SECRET)`, which passes on every
+   timeout — so the context printed in **zero** P9 cases. Worse than attempt 1, which at least
+   covered the larger subset.
+3. **Attached to BOTH landing spots, order untouched** — current. Handler-failed timeouts fail
+   on the first assertion, handler-completed ones on `RC=1`, and neither costs a demotion.
+
+**Still OPEN, recorded and NOT fixed** (see the stop note below): an `afterEach` reading the
+failed task's state would carry the context out of *whichever* assertion failed, with one hook
+instead of six attachments — strictly smaller than what is shipped. It is the right design and
+it is instrument work, so it waits behind the shim.
 
 **"Both copies exhibit it" is nearly a tautology and is recorded as weak.** The two files are
 verified-identical, so the only thing the copy split can rule out is per-copy state — load
@@ -159,9 +171,12 @@ P9 run the same handler, differing only in the body it `eval`s.
 
 **THE INSTRUMENT.** `diagnoseTyped`, `pwOf`, `diagnoseBody` in the pty test (`fc3b6f76`,
 `1a2a1b2c`), used as the failure message on every assertion pinning the password's arrival.
-Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden**. What they pin, in
-three categories — the two-way split published earlier over-claimed, then the correction
-under-claimed:
+Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden, and all 11 were run
+against the CURRENT arrangement** — A and B had been run pre-split and their attributions
+carried forward across a refactor that changed the test boundaries they depend on, which is the
+"asserted, not measured" defect this card keeps finding. Re-run: A now reds P11b+P11c+P11g,
+B reds P11d alone. What they pin, in three categories — the two-way split published earlier
+over-claimed, then the correction under-claimed:
 
 - **branch EXISTENCE** (delete the branch): C, D, F, H
 - **branch DISCRIMINATION** (both predicates compute and select distinctly): A
@@ -169,11 +184,18 @@ under-claimed:
 - **security**: J — re-adding the raw `out` tail reddens P11j, the only assertion here whose
   failure has a consequence beyond a worse message
 
-**STOP INSTRUMENTING. The next thing to touch is the `jq` shim, not this file.** Six revisions
-of the instrument against ONE 24-run experiment; the diagnostic ceiling is reached (position is
-TAIL three-for-three, and no further message refinement separates hypothesis 2 from the
-shell-side remnant). Everything since `1a2a1b2c` has been instrument-polish driven by review
-findings on instrument-polish.
+**STOP INSTRUMENTING. The next thing to touch is the `jq` shim, not this file.** Seven
+revisions of the instrument against ONE 24-run experiment; the diagnostic ceiling is reached
+(position is TAIL three-for-three, and no further message refinement separates hypothesis 2
+from the shell-side remnant).
+
+**WITH A CLOSING CONDITION, because the first version of this note shipped inside a commit
+that did more instrument work and so taught its reader it was aspirational:** from here,
+**instrument findings are RECORDED on this card, not fixed**, until the shim exists. That is
+what makes the note terminable — the review loop keeps surfacing instrument defects (it has
+found a real one every pass), so "stop" cannot mean "stop when the findings stop". The one
+carve-out is a claim of RECORD that is false: a wrong statement on the card gets corrected,
+because leaving it is worse than the churn.
 
 21 pty tests pass, tsc 0 lines. **The DETECTOR half is validated for `fc3b6f76`'s wiring
 only** — run 23 fired it on a real loss end-to-end, and `1a2a1b2c` then replaced that wiring

@@ -11,8 +11,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * its persona, browse the owner's filesystem through the picker, and read its uploads.
  *
  * WHY OWNER-ONLY, AND WHY THESE SIX AND NOT THE WHOLE SUBTREE. A per-route caller census
- * (2026-09-04) measured browser callers against persona callers for all thirteen routes. These
- * six are called from `components/` and NEVER by the persona, whose shipped instructions
+ * (2026-09-04) measured browser callers against persona callers for all thirteen routes.
+ *
+ * THE FIRST CENSUS WAS TOO NARROW TO CARRY THE RULING, and an adversarial review said so before
+ * it was believed. It searched only `components/ hooks/ app/page.tsx` — excluding most of `app/`
+ * — for a LITERAL route path, so it could not have seen a caller assembling the URL from a
+ * variable, nor any `.mjs`/`scripts/` caller. Its `grep -c ... || echo 0` also emitted TWO lines
+ * per row for eleven of thirteen routes (grep's own `0` plus the fallback's), i.e. the instrument
+ * was malformed and read as data anyway. RE-RUN over all of `app/ components/ hooks/ lib/
+ * scripts/ tests/` with `.mjs`/`.js` included and LINE CONTEXT instead of a count: every caller
+ * is a literal `fetch('/api/agents/creation-helper/<name>', …)` in `components/` —
+ * HaephestosEmbeddedView, AgentCreationHelper, TerminalView — plus tests and two scenario docs.
+ * No `app/` caller, no dynamic construction, no `.mjs`, no script. The ruling holds; the first
+ * evidence for it did not.
+ *
+ * These six are called from `components/` and NEVER by the persona, whose shipped instructions
  * (`agents/haephestos-creation-helper.md`) curl exactly two routes — `element-descriptions` and
  * `publish-plugin` — which are therefore deliberately EXCLUDED here and left agent-callable.
  * `clear-banner` has no caller at all outside the spec and the coverage ledger. The persona
@@ -29,10 +42,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * calls cannot break it further. The credential half is a live defect in its own right and is
  * carved out rather than used to hold this half hostage.
  *
- * SAFE FOR THE UI, on the same empirical precedent as `convert-skill`: a browser cookie session
- * resolves to the system owner (`lib/agent-auth`: "Valid session cookie (aim_session) → system
- * owner (web UI)"), which is why the settings UI already calls several enforceSystemOwner routes
- * successfully.
+ * SAFE FOR THE UI **UNDER THE DEFAULT**, and the qualifier is load-bearing. Read in
+ * `lib/agent-auth.ts::buildAuthContext` rather than taken from a docstring:
+ *
+ *   - user-authority model OFF (the DEFAULT): `isSystemOwner = !agentId`, so ANY browser session
+ *     is the system owner and all six wizard fetches pass. This is what ships.
+ *   - model ON: `isSystemOwner` means the ACTIVE MAESTRO (`userTitle ∈ {maestro,
+ *     maestro-delegate}`). A normal user has a session and `isSystemOwner === false`, so the
+ *     wizard is refused for them.
+ *
+ * That second row is the INTENDED semantics of `enforceSystemOwner` — the same docstring says
+ * the existing 24 such routes "correctly reject" a normal user — and creating agents is
+ * plausibly a maestro capability. It is recorded here because it is a real consequence of this
+ * change that the phrase "the UI is unaffected" would have hidden.
+ *
+ * ITS FAILURE MODE IS SILENT, WHICH IS THE PART THAT NEEDS FIXING ELSEWHERE.
+ * `components/HaephestosEmbeddedView.tsx:129-140` polls `heartbeat` and, on a non-ok response,
+ * throws into a `catch` that only schedules an exponential-backoff retry — it never surfaces the
+ * status. So under model ON a normal user's Haephestos session is reaped by the watchdog with no
+ * error shown: the wizard "mysteriously dies". A 2026-04-13 scenario report already flagged the
+ * same swallow for a 503; this change gives it a second, deterministic trigger. Carded
+ * separately — an auth decision must not be reverted to paper over a UI that hides its errors.
+ *
+ * ALSO CHANGED, AND NOT VISIBLE TO THESE TESTS: `file-picker` previously called
+ * `authenticateFromRequest` directly and now goes through `enforceSystemOwner`, which begins with
+ * `checkWriteBlock(request.method)`. So it gains a write-block check it did not have. The other
+ * five already had it via `enforceAuth`. The mocks here cannot see this — `checkWriteBlock` runs
+ * before the mocked call — so it is stated rather than tested.
  *
  * NEUTER RUN — see the recorded result at the bottom of this file.
  */
@@ -48,7 +84,6 @@ vi.mock('@/lib/agent-auth', async (orig) => {
 // cleanup has already wiped ~/agents/haephestos/ is not a refusal.
 const svc = {
   cleanupCreationHelper: vi.fn(async () => ({ status: 200, data: { success: true } })),
-  clearBanner: vi.fn(async () => ({ status: 200, data: { success: true } })),
   heartbeatCreationHelper: vi.fn(() => undefined),
   ensurePersonaFile: vi.fn(async () => ({ status: 200, data: { success: true } })),
   getRawMaterialsState: vi.fn(async () => ({ status: 200, data: {} })),
@@ -57,6 +92,20 @@ const svc = {
 vi.mock('@/services/creation-helper-service', async (orig) => {
   const actual = await orig<typeof import('@/services/creation-helper-service')>()
   return { ...actual, ...svc }
+})
+
+// `clear-banner` reaches NO service — it shells out to tmux directly. An earlier draft of this
+// file mocked a `clearBanner` service export that the route never calls, so the mock matched
+// nothing, the real execFile ran, tmux failed in the test env, and the owner path 500'd. The
+// weak `not.toBe(403)` control passed straight over it; strengthening the control to `< 400` is
+// what surfaced it.
+vi.mock('child_process', async (orig) => {
+  const actual = await orig<typeof import('child_process')>()
+  return {
+    ...actual,
+    execFile: (_f: string, _a: string[], cb: (e: unknown, o: unknown, s: unknown) => void) =>
+      cb(null, { stdout: '', stderr: '' }, undefined),
+  }
 })
 
 const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitle: 'member', teamId: null }
@@ -71,16 +120,28 @@ const ROUTES: { dir: string; method: 'POST' | 'GET'; url: string; body?: unknown
   { dir: 'ensure-persona', method: 'POST', url: 'http://localhost/api/agents/creation-helper/ensure-persona', body: {} },
   // file-picker exports POST, not GET — measured, after a GET assumption produced
   // `handler is not a function` on all three of its cases.
-  { dir: 'file-picker', method: 'POST', url: 'http://localhost/api/agents/creation-helper/file-picker', body: { path: '/' } },
+  { dir: 'file-picker', method: 'POST', url: 'http://localhost/api/agents/creation-helper/file-picker', body: uploadBody() },
   { dir: 'raw-materials', method: 'GET', url: 'http://localhost/api/agents/creation-helper/raw-materials' },
 ]
 
 function req(url: string, method: string, body?: unknown) {
+  // file-picker is an UPLOAD route — it reads `req.formData()`, so a JSON body throws inside the
+  // handler and 500s. Send the shape each route actually parses, or the POSITIVE CONTROL measures
+  // the fixture rather than the gate.
+  if (body instanceof FormData) {
+    return new Request(url, { method, headers: { authorization: 'Bearer tok' }, body }) as never
+  }
   return new Request(url, {
     method,
     headers: { 'content-type': 'application/json', authorization: 'Bearer tok' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }) as never
+}
+
+function uploadBody(): FormData {
+  const fd = new FormData()
+  fd.append('file', new File(['x'], 'raw.txt', { type: 'text/plain' }))
+  return fd
 }
 
 async function call(r: (typeof ROUTES)[number]) {
@@ -119,8 +180,10 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
       /** Validates the gate can say yes, so the refusals above are a decision and not a blanket 403 */
       mockAuthenticate.mockReturnValue(OWNER)
       const res = await call(r)
-      // What happens past the gate is not this file's subject; being stopped BY it is.
-      expect(res.status).not.toBe(403)
+      // Being stopped BY this gate is the subject; what happens past it is not. But `not.toBe(403)`
+      // alone is satisfied by a route that throws and 500s, so the control would survive the route
+      // being broken in any non-403 way — bound it below 400 instead.
+      expect(res.status).toBeLessThan(400)
     })
   }
 
@@ -149,6 +212,10 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
  *    correctly stayed green, without which "2 red" would be equally consistent with having
  *    broken the route for its only legitimate caller.
  *
+ * 1b. RE-RUN after an adversarial review forced the POSITIVE CONTROL from `not.toBe(403)` to
+ *    `< 400`: same result, **2 red / 17 green**, same two cases. The attribution survives the
+ *    stronger control, which is the point of re-running it rather than assuming it does.
+ *
  * 2. The scope guard (the last case) was neutered by seeding `enforceSystemOwner(` into an
  *    agent-callable sibling → **1 red / 18 green**, naming exactly that case.
  *
@@ -160,4 +227,23 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
  *    anchor) with an explicit `assert count == 1` and a printed `probe landed: True`, it
  *    reddened immediately. Recorded because a silently-unapplied neuter is indistinguishable
  *    from a vacuous guard, and both look like a pass.
+ */
+
+/**
+ * WHAT THE STRONGER POSITIVE CONTROL FOUND, recorded because the weak one hid it for a full
+ * verification cycle. `expect(res.status).not.toBe(403)` passed on `clear-banner` and
+ * `file-picker` while BOTH were returning **500** on the owner path — so for two of the six
+ * routes the control proved only "not this specific status", and the run reported 19/19 green
+ * over a fixture that never reached either handler's body.
+ *
+ * Neither was a route defect; both were defects in THIS FILE, which is worse in the way that
+ * matters — a fixture bug is invisible to the suite it is supposed to be measuring:
+ *   - `clear-banner` reaches NO service. It shells out to tmux. The draft mocked a `clearBanner`
+ *     service export the route never calls, so the mock matched nothing and the real execFile ran.
+ *   - `file-picker` is an UPLOAD route reading `req.formData()`; the draft sent a JSON body, which
+ *     throws inside the handler. This is the SECOND time this file's fixture assumed the wrong
+ *     shape for that one route — the first was assuming it exported GET when it exports POST.
+ *
+ * A positive control bounded only by the status it is refuting cannot tell "the gate let me
+ * through" from "the gate let me through and everything after it failed".
  */

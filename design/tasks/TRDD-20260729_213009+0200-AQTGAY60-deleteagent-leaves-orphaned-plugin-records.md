@@ -1,10 +1,10 @@
 ---
 trdd-id: AQTGAY60
 title: DeleteAgent leaves the agent's local plugin records behind in installed_plugins.json
-column: todo
+column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-08-26T05:04:25+0200
+updated: 2026-09-05T01:30:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -162,6 +162,18 @@ until the user rules on it.
 **The NPT is terminal.** TRDD-FHBGF0WG reached `complete` (5/5 boxes, each neutered) and sits in
 `design/archived/`, so the record-scoped remover this card was waiting on exists and is exported.
 `column:` moved `todo → dev` — the code landed, the card had simply never been advanced.
+
+**⏹ COLUMN CORRECTED AGAIN 2026-09-05: the frontmatter still said `todo` — the `→ dev` above was
+recorded in this BODY and never written to the field, so the board has been counting a
+6-of-7-done card as unstarted backlog for five weeks.** Now `human_review`, which is the honest
+column, because the remaining box is OPERATOR-GATED by the card's own text — a real create +
+hard-delete on this host against a sudo-gated route, i.e. a UI-driven scenario run plus a
+destructive op on an untracked directory, which the card says in as many words must NOT be run
+from the main context. It is not `blocked` (no `blocked-by:` TRDD gates it) and it is not `dev`
+(the pending step is not agent work). It waits on a human, which is what `human_review` means.
+
+**Not touched, deliberately:** the open box itself. Nothing about finding a stale column
+authorizes running the destructive verification the box defers.
 
 **What is actually in the tree** (read, not inferred):
 

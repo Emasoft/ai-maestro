@@ -274,6 +274,13 @@ beforeEach(() => {
 // listAgents
 // ============================================================================
 
+// TRDD-FRRJ80YQ: wakeAgent/hibernateAgent now REQUIRE an authContext — omitting it is a 401
+// refusal, not a silent skip. These cases exercise NON-auth behaviour, so they pass the same
+// system context the internal production callers already pass (boot-restore-service,
+// fleet-hard-recovery-runner); Gate 0 short-circuits on isSystemOwner, so behaviour is
+// byte-identical to the old omission — the bypass is closed without changing what is pinned.
+const SYS_CTX: import('@/lib/agent-auth').AuthContext = { isSystemOwner: true }
+
 describe('listAgents', () => {
   it('returns empty list when no agents and no sessions', async () => {
     const result = await listAgents()
@@ -612,6 +619,30 @@ describe('lookupAgentByName', () => {
 // ============================================================================
 
 describe('wakeAgent', () => {
+  // TRDD-FRRJ80YQ — Gate 0 is UNCONDITIONAL. `authContext` is a required param, and a caller
+  // that omits it is REFUSED (401) rather than silently authorized. The type stops a TS caller;
+  // these cases stop everything the type cannot see — a `.mjs` caller, a JS consumer, anything
+  // that reaches the service past an `as any`. Without them the runtime guard is unpinned and a
+  // future "simplification" back to `if (authContext && ...)` would go unnoticed, because the
+  // OLD behaviour on omission was a SUCCESS: silent, and indistinguishable from authorization.
+  // NEUTER (run 2026-09-04): restoring `if (authContext && !authContext.isSystemOwner)` in
+  // wakeAgent reds exactly the first case; restoring `if (authContext) { ... }` in
+  // hibernateAgent reds exactly the second (see the hibernateAgent describe).
+  it('refuses a wake whose caller passed NO authContext — omission is a 401, never a skipped gate', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    // The cast is the point: it models the caller the TYPE cannot reach.
+    const result = await wakeAgent('agent-1', { startProgram: false } as unknown as Parameters<typeof wakeAgent>[1])
+
+    expect(result.status).toBe(401)
+    expect(result.error).toMatch(/Authorization context is required/i)
+    // The refusal happens BEFORE any side effect — a context-less wake never starts a session.
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
+
   // R17.24 (TRDD-C455WHV3): the whitelist gate is WIRED, not merely tolerated. The default mock
   // above returns a clean pass, so a wakeAgent that never called the gate would look identical
   // to one that did — these two cases are what separate them. Neuter (observed 2026-08-27):
@@ -623,7 +654,7 @@ describe('wakeAgent', () => {
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
     mockWhitelist.enforceUserScopePluginWhitelist.mockClear()
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(200)
     expect(mockWhitelist.enforceUserScopePluginWhitelist).toHaveBeenCalledTimes(1)
@@ -639,7 +670,7 @@ describe('wakeAgent', () => {
       ok: false, disabled: [], alreadyDisabled: [], wrote: false, error: 'cannot read user-scope settings: corrupt',
     })
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(500)
     expect(result.error).toMatch(/whitelist could not be enforced.*corrupt/)
@@ -655,7 +686,7 @@ describe('wakeAgent', () => {
     // loadAgents for updateAgentSessionInRegistry
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(200)
     expect(result.data?.woken).toBe(true)
@@ -680,7 +711,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await wakeAgent('agent-1', {})
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.alreadyRunning).toBe(true)
@@ -690,7 +721,7 @@ describe('wakeAgent', () => {
   it('returns 404 when agent not found', async () => {
     mockAgentRegistry.getAgent.mockReturnValue(null)
 
-    const result = await wakeAgent('nonexistent', {})
+    const result = await wakeAgent('nonexistent', { authContext: SYS_CTX })
 
     expect(result.status).toBe(404)
   })
@@ -699,7 +730,7 @@ describe('wakeAgent', () => {
     const agent = makeAgent({ id: 'agent-1', name: '' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await wakeAgent('agent-1', {})
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(400)
   })
@@ -710,7 +741,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await wakeAgent('agent-1', { startProgram: false })
+    await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(mockSessionPersistence.persistSession).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'my-agent', agentId: 'agent-1' })
@@ -728,7 +759,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await wakeAgent('agent-1', { startProgram: false })
+    await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith(
       'agent-1', 'my-agent', '/home', { incrementLaunch: true }
@@ -746,7 +777,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await wakeAgent('agent-1', {})
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.data?.alreadyRunning).toBe(true)
     expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith('agent-1', 'my-agent', '/home')
@@ -758,7 +789,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await wakeAgent('agent-1', { startProgram: false })
+    await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(mockAmpInboxWriter.initAgentAMPHome).toHaveBeenCalledWith('my-agent', 'agent-1')
   })
@@ -769,7 +800,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await wakeAgent('agent-1', { sessionIndex: 2, startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, sessionIndex: 2, startProgram: false })
 
     expect(result.data?.sessionName).toBe('my-agent_2')
     expect(result.data?.sessionIndex).toBe(2)
@@ -781,7 +812,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockRuntime.createSession.mockRejectedValue(new Error('tmux error'))
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(500)
   })
@@ -859,7 +890,7 @@ describe('wakeAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(200)
     expect(mockAuthorization.authorize).not.toHaveBeenCalled()
@@ -873,7 +904,7 @@ describe('wakeAgent', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(501)
     expect(result.error).toMatch(/not yet implemented for client "gemini"/i)
@@ -895,7 +926,7 @@ describe('wakeAgent', () => {
       stderr: 'permission denied',
     })
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(400)
     expect(result.error).toBe('role_missing_core')
@@ -922,7 +953,7 @@ describe('wakeAgent', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(409)
     expect(result.error).toBe('role_plugin_required')
@@ -936,13 +967,26 @@ describe('wakeAgent', () => {
 // ============================================================================
 
 describe('hibernateAgent', () => {
+  // TRDD-FRRJ80YQ — the twin of wakeAgent's Gate 0 case above. Same reasoning, same neuter.
+  it('refuses a hibernate whose caller passed NO authContext — omission is a 401, never a skipped gate', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+
+    const result = await hibernateAgent('agent-1', {} as unknown as Parameters<typeof hibernateAgent>[1])
+
+    expect(result.status).toBe(401)
+    expect(result.error).toMatch(/Authorization context is required/i)
+    expect(mockRuntime.killSession).not.toHaveBeenCalled()
+  })
+
   it('hibernates an active agent', async () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.hibernated).toBe(true)
@@ -955,7 +999,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.hibernated).toBe(true)
@@ -965,7 +1009,7 @@ describe('hibernateAgent', () => {
   it('returns 404 when agent not found', async () => {
     mockAgentRegistry.getAgent.mockReturnValue(null)
 
-    const result = await hibernateAgent('nonexistent', {})
+    const result = await hibernateAgent('nonexistent', { authContext: SYS_CTX })
 
     expect(result.status).toBe(404)
   })
@@ -974,7 +1018,7 @@ describe('hibernateAgent', () => {
     const agent = makeAgent({ id: 'agent-1', name: '' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(400)
   })
@@ -985,7 +1029,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await hibernateAgent('agent-1', {})
+    await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
   })
@@ -999,7 +1043,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await hibernateAgent('agent-1', {})
+    await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1', 0)
     expect(mockAgentRegistry.saveAgents).not.toHaveBeenCalled()
@@ -1011,7 +1055,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await hibernateAgent('agent-1', {})
+    await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1', 0)
   })
@@ -1022,7 +1066,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await hibernateAgent('agent-1', {})
+    await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     // SCEN-013 013.03: hibernate now uses per-client cancel + exit verbs
     // from client-capabilities.ts. For Claude (the test fixture default):
@@ -1072,7 +1116,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    await hibernateAgent('agent-1', {})
+    await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(mockAuthorization.authorize).not.toHaveBeenCalled()
   })
@@ -1087,7 +1131,7 @@ describe('hibernateAgent', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockAgentRegistry.loadAgents.mockReturnValue([agent])
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.hibernated).toBe(true)
@@ -1102,7 +1146,7 @@ describe('hibernateAgent', () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: 'gemini' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(501)
     expect(result.error).toMatch(/not yet implemented for client "gemini"/i)
@@ -1116,7 +1160,7 @@ describe('hibernateAgent', () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: '' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await hibernateAgent('agent-1', {})
+    const result = await hibernateAgent('agent-1', { authContext: SYS_CTX })
 
     expect(result.status).toBe(501)
     expect(result.error).toMatch(/not yet implemented for client "unknown"/i)

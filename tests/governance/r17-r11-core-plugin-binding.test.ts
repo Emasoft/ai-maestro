@@ -289,6 +289,13 @@ afterAll(() => {
 // ============================================================================
 // R11.2 / R11.3 — TITLE_PLUGIN_MAP (lib/ecosystem-constants.ts)
 // ============================================================================
+// TRDD-FRRJ80YQ: wakeAgent/hibernateAgent now REQUIRE an authContext — omitting it is a 401
+// refusal, not a silent skip. These cases exercise NON-auth behaviour, so they pass the same
+// system context the internal production callers already pass (boot-restore-service,
+// fleet-hard-recovery-runner); Gate 0 short-circuits on isSystemOwner, so behaviour is
+// byte-identical to the old omission — the bypass is closed without changing what is pinned.
+const SYS_CTX: import('@/lib/agent-auth').AuthContext = { isSystemOwner: true }
+
 describe('R11.2 / R11.3 — TITLE_PLUGIN_MAP (lib/ecosystem-constants.ts)', () => {
   it('R11.2: pins MEMBER -> ai-maestro-programmer-agent — the ChangeTitle pipeline reads this map to decide which role-plugin a MEMBER gets', async () => {
     const { TITLE_PLUGIN_MAP, ROLE_PLUGIN_PROGRAMMER } = await import('@/lib/ecosystem-constants')
@@ -672,7 +679,7 @@ describe('R17.5 / R17.21 / R17.23 — wakeAgent core-plugin gate (services/agent
     })
 
     const { wakeAgent } = await import('@/services/agents-core-service')
-    const result = await wakeAgent('agent-1', { startProgram: false })
+    const result = await wakeAgent('agent-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(result.status).toBe(400)
     expect(result.error).toBe('role_missing_core')
@@ -701,7 +708,7 @@ describe('R17.5 / R17.21 / R17.23 — wakeAgent core-plugin gate (services/agent
       // resolveLaunchArgs' role-plugin/persona resolution and the keychain
       // preflight, neither of which this test is about) while still reaching
       // the unconditional `startProgram && isFirstLaunch` trust-accept call.
-      const result = await wakeAgent('agent-2', { startProgram: true, program: 'none' })
+      const result = await wakeAgent('agent-2', { authContext: SYS_CTX, startProgram: true, program: 'none' })
 
       expect(result.status).toBe(200)
       // Drain whatever the detached handleTrustAutoAccept() background chain

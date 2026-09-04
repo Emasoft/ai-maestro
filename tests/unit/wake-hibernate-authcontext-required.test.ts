@@ -9,41 +9,45 @@ import { stripComments } from '../helpers/strip-comments'
 /**
  * TRDD-FRRJ80YQ — every PRODUCTION call to wakeAgent/hibernateAgent passes an authContext.
  *
- * `WakeAgentParams.authContext` and `HibernateAgentParams.authContext` are declared `?:`, and
- * both functions gate their authorization on the field being PRESENT:
+ * HISTORY, because this guard's reason changed and a guard whose stated reason is stale is
+ * worse than no guard. Until 2026-09-04 `WakeAgentParams.authContext` and
+ * `HibernateAgentParams.authContext` were declared `?:` and BOTH functions gated authorization
+ * on the field being PRESENT:
  *
  *     // When authContext is provided (route call), check caller permissions.
  *     // When absent (internal call), skip — backward compatible.   ← DELETED 2026-08-29
  *     if (authContext) { if (!authContext.isSystemOwner) { … authorize(…) } }
  *
- * The two comment lines above are QUOTED AS THEY WERE, not as they are: they were deleted on
- * 2026-08-29 because they advertised the bypass as supported. The `if` is unchanged, so the
- * shape this guard exists for is still live — only the prose inviting it is gone.
+ * So omitting the field SKIPPED the gate and the call SUCCEEDED unauthorized — the exact bypass
+ * `element-management-service.ts` abolished, and that file records why in `gate0Auth`'s own
+ * comment: *"Previously, a missing authContext was silently treated as 'authorized' which
+ * allowed any route that forgot to pass it to bypass all security checks."*
  *
- * That is the exact bypass `element-management-service.ts` abolished, and that file records why
- * in `gate0Auth`'s own comment: *"Previously, a missing authContext was silently treated as
- * 'authorized' which allowed any route that forgot to pass it to bypass all security checks."*
+ * THAT IS NOW CLOSED AT THE SOURCE. Both fields are REQUIRED, both Gate 0s are unconditional,
+ * and omission returns a 401 refusal — pinned behaviourally by two cases in
+ * `tests/services/agents-core-service.test.ts` ("refuses a wake/hibernate whose caller passed
+ * NO authContext"), each proven by its own neuter. The 32 test call sites the earlier estimate
+ * flagged as the cost were migrated to `authContext: SYS_CTX` (`{ isSystemOwner: true }` — the
+ * shape the two internal production callers already use), and because Gate 0 short-circuits on
+ * `isSystemOwner` that migration is behaviour-preserving: 104/104 green, unchanged.
  *
- * WHY A GUARD AND NOT A TYPE CHANGE. Making the field required is the tidier fix and it is not
- * the cheaper one: measured 2026-08-22, **34 call sites omit `authContext` and 32 of them are
- * TESTS** (`tests/services/agents-core-service.test.ts` alone has 27). Those tests pin real
- * behaviour through a path production never takes, so requiring the field would churn 32
- * assertions to close a bypass that — measured — no production caller uses. The card's own
- * estimate said "zero call-site changes"; that is true of production and false overall, and it
- * said to re-verify before relying on it. This guard closes the risk the card actually names —
- * *the NEXT caller* — at a fraction of the cost, and it keeps working if the field is made
- * required later.
+ * WHY THIS GUARD STILL EARNS ITS KEEP, now that the type enforces the same thing. The type only
+ * binds callers TypeScript checks. This walker scans `lib services app scripts` and accepts
+ * `.mjs` — `server.mjs` and the `scripts/` tree are not type-checked, so a caller there can omit
+ * the field with nothing to stop it but this. It also catches a caller that reaches the service
+ * past an `as any`. Type, runtime refusal, and this scan are three layers over one invariant,
+ * and only the first is visible to `tsc`.
  *
  * The two genuinely-internal callers already do the right thing, passing
  * `authContext: { isSystemOwner: true }` (`lib/fleet-hard-recovery-runner.ts:52`,
  * `services/boot-restore-service.ts:181`) — which is what `gate0Auth`'s comment prescribes
- * (`buildSystemAuthContext()`), not omission. So the comment advertises an affordance that
- * nothing takes.
+ * (`buildSystemAuthContext()`), not omission.
  */
 
 const REPO = path.resolve(__dirname, '..', '..')
-// PRODUCTION only. `tests/` is deliberately excluded — see the header: 32 test call sites
-// legitimately omit the field today, and this guard is about the code that ships.
+// PRODUCTION only. `tests/` is deliberately excluded: the type now forces every TS caller,
+// tests included, to pass the field, so scanning them would add cost and find nothing. What
+// this walker is FOR is the untyped surface — `.mjs`, `scripts/` — which tsc never sees.
 const ROOTS = ['lib', 'services', 'app', 'scripts']
 
 function sourceFiles(): string[] {
@@ -140,9 +144,10 @@ describe('TRDD-FRRJ80YQ — no production caller may omit authContext', () => {
     }
     expect(
       offenders,
-      'wakeAgent/hibernateAgent gate authorization on `if (authContext)`, so omitting it SKIPS the ' +
-        'check entirely and the call succeeds unauthorized. Pass one — `{ isSystemOwner: true }` for a ' +
-        'genuinely internal caller, as fleet-hard-recovery-runner and boot-restore-service already do.',
+      'wakeAgent/hibernateAgent REQUIRE an authContext and refuse a context-less call with a 401. ' +
+        'A caller reaching them without one is either untyped (.mjs / scripts) or casting past the ' +
+        'type — both are the shape this guard exists to catch. Pass one — `{ isSystemOwner: true }` ' +
+        'for a genuinely internal caller, as fleet-hard-recovery-runner and boot-restore-service do.',
     ).toEqual([])
   })
 })

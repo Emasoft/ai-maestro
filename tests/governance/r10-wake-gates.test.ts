@@ -151,13 +151,22 @@ describe('R10.5 — no MANAGER on the host ⇒ no team agent may be woken, by AN
     expect(res.error).toMatch(/no MANAGER exists/i)
   })
 
-  it('refuses an internal call that passes no authContext at all', async () => {
-    // Gate 0 is skipped when authContext is absent (internal callers). Gate 1 is not —
-    // its comment says "runs ALWAYS, even for internal calls". Pinned so a future
-    // refactor cannot quietly move it under the `if (authContext)`.
+  it('refuses an INTERNAL system-owner call — Gate 1 runs even for the callers Gate 0 waves through', async () => {
+    // Gate 1's comment says it "runs ALWAYS, even for internal calls". Pinned so a future
+    // refactor cannot quietly move it under Gate 0's authorization branch.
+    //
+    // THE STAND-IN FOR "internal call" CHANGED (TRDD-FRRJ80YQ, 2026-09-04). This case used to
+    // pass `{}` — no authContext — because Gate 0 was CONDITIONAL on the field's presence and
+    // omitting it skipped the gate. That affordance is gone: authContext is required and a
+    // context-less call is refused 401 at Gate 0, so `{}` would now assert 403 on a request that
+    // never reaches Gate 1 — it would test Gate 0 while claiming to test Gate 1.
+    // An internal call is `{ isSystemOwner: true }`, which is what the two real internal callers
+    // pass (fleet-hard-recovery-runner, boot-restore-service) and what Gate 0 short-circuits on.
+    // That is the input that actually exercises "Gate 1 runs for a caller Gate 0 exempts".
+    // The 401-on-omission behaviour is pinned separately in tests/services/agents-core-service.test.ts.
     const wakeAgent = await freshWake()
 
-    const res = await wakeAgent(TARGET, {} as never)
+    const res = await wakeAgent(TARGET, { authContext: { isSystemOwner: true } } as never)
 
     expect(res.status).toBe(403)
     expect(res.error).toMatch(/no MANAGER exists/i)

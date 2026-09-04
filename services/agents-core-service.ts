@@ -138,8 +138,8 @@ export interface WakeAgentParams {
   startProgram?: boolean
   sessionIndex?: number
   program?: string
-  /** Auth context from the route — when provided, Gate 0 checks authorization */
-  authContext?: import('@/lib/agent-auth').AuthContext
+  /** Auth context. REQUIRED — see HibernateAgentParams.authContext for why. */
+  authContext: import('@/lib/agent-auth').AuthContext
   /**
    * Relaunch the client so it CONTINUES its previous conversation instead of starting a fresh
    * one (TRDD-NIU5RQ1S). Set by boot-restore after a crash or blackout: an agent that comes back
@@ -157,8 +157,13 @@ export interface WakeAgentParams {
 
 export interface HibernateAgentParams {
   sessionIndex?: number
-  /** Auth context from the route — when provided, Gate 0 checks authorization */
-  authContext?: import('@/lib/agent-auth').AuthContext
+  /**
+   * Auth context. REQUIRED, and deliberately not optional (TRDD-FRRJ80YQ).
+   * An optional authContext plus a `if (authContext)` gate means OMITTING it succeeds — the
+   * silent bypass element-management-service.gate0Auth already paid to remove. Internal callers
+   * pass `buildSystemAuthContext()` / `{ isSystemOwner: true }`, which the gate short-circuits.
+   */
+  authContext: import('@/lib/agent-auth').AuthContext
 }
 
 export interface AgentSessionCommandParams {
@@ -2133,10 +2138,17 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
-    // Same contract as hibernateAgent's Gate 0: every production caller passes authContext, and
-    // tests/unit/wake-hibernate-authcontext-required.test.ts fails the build if one stops
-    // (TRDD-FRRJ80YQ). Reaching this with authContext undefined means the caller is a test.
-    if (authContext && !authContext.isSystemOwner) {
+    // UNCONDITIONAL (TRDD-FRRJ80YQ). authContext is a REQUIRED param, and omitting it is a
+    // REFUSAL, not a skip. The previous `if (authContext && ...)` made the gate conditional on
+    // its own input, so a caller that forgot the context got a silent SUCCESS — the exact shape
+    // element-management-service.gate0Auth already paid to remove, and the one
+    // agents-messaging-service.sendMessage refuses with a 401.
+    // The runtime check is the belt to the type's brace: a JS caller, or one past an `as any`,
+    // cannot reach the wake by omission.
+    if (!authContext) {
+      return { error: 'Authorization context is required', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
       const { authorize } = await import('@/lib/authorization')
       const authResult: import('@/lib/agent-auth').AgentAuthResult = {
         agentId: authContext.agentId,
@@ -2601,24 +2613,23 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     const { sessionIndex = 0, authContext } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
-    // Every PRODUCTION caller passes authContext; only tests omit it. That is enforced, not
-    // hoped for — tests/unit/wake-hibernate-authcontext-required.test.ts fails the build when a
-    // production caller omits it (TRDD-FRRJ80YQ). So the `if` below is not a bypass anyone may
-    // take: reaching it with authContext undefined means the caller is a test.
-    // It previously read "when absent (internal call), skip — backward compatible", which
-    // advertised an affordance nothing takes and read as a sanctioned way around the gate.
-    if (authContext) {
-      if (!authContext.isSystemOwner) {
-        const { authorize } = await import('@/lib/authorization')
-        const authResult: import('@/lib/agent-auth').AgentAuthResult = {
-          agentId: authContext.agentId,
-          governanceTitle: authContext.governanceTitle,
-          teamId: authContext.teamId,
-        }
-        const authz = authorize(authResult, 'hibernate-agent', agentId)
-        if (!authz.allowed) {
-          return { error: authz.reason || 'Not authorized to hibernate this agent', status: 403 }
-        }
+    // UNCONDITIONAL (TRDD-FRRJ80YQ) — see wakeAgent's Gate 0 for the full reasoning. authContext
+    // is REQUIRED; omitting it is a 401 refusal, never a skip. This block previously read
+    // "when absent (internal call), skip — backward compatible", advertising an affordance
+    // nothing takes and reading as a sanctioned way around the gate.
+    if (!authContext) {
+      return { error: 'Authorization context is required', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: authContext.agentId,
+        governanceTitle: authContext.governanceTitle,
+        teamId: authContext.teamId,
+      }
+      const authz = authorize(authResult, 'hibernate-agent', agentId)
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to hibernate this agent', status: 403 }
       }
     }
 

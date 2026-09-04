@@ -492,6 +492,13 @@ afterAll(() => {
 //        GATE 7, lines 2291-2303 — the enforcement map's 2249-2256 is stale;
 //        that range is GATE 3's R9.13 role-plugin check)
 // ============================================================================
+// TRDD-FRRJ80YQ: wakeAgent/hibernateAgent now REQUIRE an authContext — omitting it is a 401
+// refusal, not a silent skip. These cases exercise NON-auth behaviour, so they pass the same
+// system context the internal production callers already pass (boot-restore-service,
+// fleet-hard-recovery-runner); Gate 0 short-circuits on isSystemOwner, so behaviour is
+// byte-identical to the old omission — the bypass is closed without changing what is pinned.
+const SYS_CTX: import('@/lib/agent-auth').AuthContext = { isSystemOwner: true }
+
 describe('R3.2 — only ONE agent may hold MANAGER (ChangeTitle GATE 7)', () => {
   it('refuses to make a second agent MANAGER while another already holds the title — deleting GATE 7 lets two MANAGERs coexist and the whole manager-gated cascade (R9) loses its single owner', async () => {
     seedAgents([
@@ -1121,7 +1128,7 @@ describe('R9.5 — the MANAGER wake-gate binds TEAM agents only (wakeAgent Gate 
     mockGovernance.getManagerId.mockReturnValue(null)
 
     const { wakeAgent } = await import('@/services/agents-core-service')
-    const res = await wakeAgent('team-agent', { startProgram: false })
+    const res = await wakeAgent('team-agent', { authContext: SYS_CTX, startProgram: false })
 
     expect(res.status).toBe(403)
     expect(res.error).toMatch(/Cannot wake team agent: no MANAGER exists/i)
@@ -1134,7 +1141,7 @@ describe('R9.5 — the MANAGER wake-gate binds TEAM agents only (wakeAgent Gate 
     mockGovernance.getManagerId.mockReturnValue(null)
 
     const { wakeAgent } = await import('@/services/agents-core-service')
-    const res = await wakeAgent('auto-1', { startProgram: false })
+    const res = await wakeAgent('auto-1', { authContext: SYS_CTX, startProgram: false })
 
     expect(res.status).toBe(200)
     expect(res.error).toBeUndefined()
@@ -1147,7 +1154,7 @@ describe('R9.5 — the MANAGER wake-gate binds TEAM agents only (wakeAgent Gate 
     mockGovernance.getManagerId.mockReturnValue('mgr-1')
 
     const { wakeAgent } = await import('@/services/agents-core-service')
-    const res = await wakeAgent('team-agent', { startProgram: false })
+    const res = await wakeAgent('team-agent', { authContext: SYS_CTX, startProgram: false })
 
     expect(res.status).toBe(200)
     expect(mockRuntime.createSession).toHaveBeenCalled()

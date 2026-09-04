@@ -298,6 +298,14 @@ SETTLED:
    (Gate VERSION does not separate them: `git log -S "P9 ["` shows P9 was INTRODUCED by
    `e4393a49`, so it cannot predate that rewrite. A review claimed it did; measured, it
    does not.)
+2b. **A correction that belongs to a commit message, which cannot be edited.** `1a2a1b2c`
+   justifies the `diagnoseBody` split by calling the unparseable-body case "the instrument's
+   own most likely real failure" — and §"The clue worth chasing first" **rules that out**:
+   *"Ruled out: a truncated HTTP body. The JSON parsed cleanly and only the value was
+   short."* The split is still worth having (it is honest, it is cheap, P11g pins it), but
+   its justification is **"a case that would otherwise be described falsely,"** not "the most
+   likely failure." Recorded here because a reader following `implementation-commits:` back
+   would otherwise inherit a claim this card contradicts two sections earlier.
 3. **The `fc3b6f76` wiring fired end-to-end.** Run 23 exercised `diagnoseTyped(SECRET,
    pwOf(...))` on a REAL loss through the real pipeline and printed the right answer — the
    one thing a synthetic mutation could not supply. **But that is not the code in the tree**:

@@ -52,7 +52,7 @@ const resolveNone = () => false
 
 describe('validateTrddFieldEdits — column vocabulary', () => {
   it('refuses an out-of-vocabulary column value, naming the value and the legal set', () => {
-    const r = validateTrddFieldEdits({ column: 'not-started', updated: ISO }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ column: 'not-started', updated: ISO }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.error).toContain('not-started')
@@ -61,28 +61,28 @@ describe('validateTrddFieldEdits — column vocabulary', () => {
   })
 
   it('accepts a ratified column value (positive control)', () => {
-    const r = validateTrddFieldEdits({ column: 'testing', updated: ISO }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ column: 'testing', updated: ISO }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(true)
   })
 })
 
 describe('validateTrddFieldEdits — column must never end up ABSENT', () => {
   it('refuses a write that explicitly blanks column', () => {
-    const r = validateTrddFieldEdits({ column: '', updated: ISO }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ column: '', updated: ISO }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/ABSENT/)
   })
 
   it('refuses an edit of an unrelated field when the CURRENT card already has no column', () => {
     const current = baseFm({ column: undefined })
-    const r = validateTrddFieldEdits({ severity: 'HIGH', updated: ISO }, current, resolveAll)
+    const r = validateTrddFieldEdits({ severity: 'HIGH', updated: ISO }, current, resolveAll, 'tasks')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/ABSENT/)
   })
 
   it('accepts an edit that supplies the missing column (positive control)', () => {
     const current = baseFm({ column: undefined })
-    const r = validateTrddFieldEdits({ column: 'todo', updated: ISO }, current, resolveAll)
+    const r = validateTrddFieldEdits({ column: 'todo', updated: ISO }, current, resolveAll, 'tasks')
     expect(r.ok).toBe(true)
   })
 })
@@ -93,6 +93,7 @@ describe('validateTrddFieldEdits — blocked-by ⟺ column: blocked', () => {
       { 'blocked-by': '[ABCDEFGH]', updated: ISO },
       baseFm({ column: 'dev' }),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/blocked-by/)
@@ -103,6 +104,7 @@ describe('validateTrddFieldEdits — blocked-by ⟺ column: blocked', () => {
       { column: 'blocked', updated: ISO },
       baseFm({ column: 'dev', 'blocked-by': [] }),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/blocked-by/)
@@ -113,6 +115,7 @@ describe('validateTrddFieldEdits — blocked-by ⟺ column: blocked', () => {
       { 'blocked-by': '[ABCDEFGH]', column: 'blocked', updated: ISO },
       baseFm({ column: 'dev' }),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(true)
   })
@@ -124,6 +127,7 @@ describe('validateTrddFieldEdits — referenced TRDD ids must resolve', () => {
       { 'blocked-by': '[ZZZZZZZZ]', column: 'blocked', updated: ISO },
       baseFm(),
       resolveNone,
+      'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toContain('ZZZZZZZZ')
@@ -134,12 +138,13 @@ describe('validateTrddFieldEdits — referenced TRDD ids must resolve', () => {
       { 'blocked-by': '[ZZZZZZZZ]', column: 'blocked', updated: ISO },
       baseFm(),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(true)
   })
 
   it('refuses a dangling parent-trdd (bare-scalar reference shape)', () => {
-    const r = validateTrddFieldEdits({ 'parent-trdd': 'ZZZZZZZZ', updated: ISO }, baseFm(), resolveNone)
+    const r = validateTrddFieldEdits({ 'parent-trdd': 'ZZZZZZZZ', updated: ISO }, baseFm(), resolveNone, 'tasks')
     expect(r.ok).toBe(false)
   })
 
@@ -148,6 +153,7 @@ describe('validateTrddFieldEdits — referenced TRDD ids must resolve', () => {
       { 'superseded-by': '[ZZZZZZZZ]', updated: ISO, column: 'superseded' },
       baseFm(),
       resolveAll,
+      'archived',
     )
     expect(r.ok).toBe(true)
   })
@@ -159,6 +165,7 @@ describe('validateTrddFieldEdits — mandate authority', () => {
       { mandate: 'true', 'mandated-by': 'orchestrator', 'min-approval-requirement': 'manager', updated: ISO },
       baseFm(),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/forged/)
@@ -169,6 +176,7 @@ describe('validateTrddFieldEdits — mandate authority', () => {
       { mandate: 'true', 'mandated-by': 'manager', 'min-approval-requirement': 'manager', updated: ISO },
       baseFm(),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(true)
   })
@@ -178,6 +186,7 @@ describe('validateTrddFieldEdits — mandate authority', () => {
       { mandate: 'true', 'mandated-by': 'self', 'min-approval-requirement': 'none', updated: ISO },
       baseFm(),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(true)
   })
@@ -187,6 +196,7 @@ describe('validateTrddFieldEdits — mandate authority', () => {
       { mandate: 'true', 'mandated-by': 'nonsense-rank', updated: ISO },
       baseFm(),
       resolveAll,
+      'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/does not know/)
@@ -195,20 +205,20 @@ describe('validateTrddFieldEdits — mandate authority', () => {
 
 describe('validateTrddFieldEdits — date fields', () => {
   it('refuses an unparseable updated value', () => {
-    const r = validateTrddFieldEdits({ updated: 'not-a-date' }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ updated: 'not-a-date' }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/ISO-8601/)
   })
 
   it('refuses an updated value in the future', () => {
     const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    const r = validateTrddFieldEdits({ updated: future }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ updated: future }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/future/)
   })
 
   it('accepts a past ISO updated value (positive control)', () => {
-    const r = validateTrddFieldEdits({ updated: '2026-01-02T00:00:00+0100' }, baseFm(), resolveAll)
+    const r = validateTrddFieldEdits({ updated: '2026-01-02T00:00:00+0100' }, baseFm(), resolveAll, 'tasks')
     expect(r.ok).toBe(true)
   })
 })
@@ -219,6 +229,7 @@ describe('validateTrddFieldEdits — terminal column freeze (IND base §12)', ()
       { severity: 'HIGH', updated: ISO },
       baseFm({ column: 'complete' }),
       resolveAll,
+      'archived',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/frozen/)
@@ -229,6 +240,7 @@ describe('validateTrddFieldEdits — terminal column freeze (IND base §12)', ()
       { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
       baseFm({ column: 'complete' }),
       resolveAll,
+      'archived',
     )
     expect(r.ok).toBe(true)
   })

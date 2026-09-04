@@ -20,7 +20,14 @@ const CORE = '.claude/rules/lessons-verification.md'
 const REF = '.claude/rules-reference/lessons-verification-full.md'
 const CEILING = 96 * 1024
 const ENTRY_MAX = 500
+// ANCHORED to end-of-line, deliberately. A bare `entry.includes(MARKER)` scans the whole
+// multi-line entry, so a FUTURE lesson that merely quotes this marker while explaining the
+// mechanism would excuse itself — and this corpus is full of lessons that quote the machinery
+// they describe. End-of-any-line admits a real marker (including on a multi-line entry, where
+// it sits on the entry's first line) and rejects a mid-sentence mention.
+// One source for the string: the regex is BUILT from it, so the two cannot drift apart.
 const RELOCATION_MARKER = '<!-- moved-for-file-cap -->'
+const RELOCATED = new RegExp(`${RELOCATION_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[ \\t]*$`, 'm')
 
 function entries(text: string): string[] {
   const out: string[] = []
@@ -52,7 +59,7 @@ describe('lessons-verification.md budget (TRDD-IIXYIU7G)', () => {
     expect(es.length).toBeGreaterThan(100)
     // Naming the offenders rather than asserting a bare boolean: `every(...)` reports only
     // `false` and leaves the reader grepping a 196 KB file for which entry broke it.
-    const unearned = es.filter((e) => e.length <= ENTRY_MAX && !e.includes(RELOCATION_MARKER))
+    const unearned = es.filter((e) => e.length <= ENTRY_MAX && !RELOCATED.test(e))
     expect(unearned.map((e) => e.slice(0, 80))).toEqual([])
   })
 })

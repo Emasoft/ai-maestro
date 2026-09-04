@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:10:30+0200
+updated: 2026-09-04T21:16:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -76,21 +76,34 @@ What every one of those readings shared was treating a clean batch of 6-8 as evi
 absence. It is not: even at the corrected 19%, six clean runs happen 28% of the time.
 
 **Two confounders that survive all of this.** Batch A ran while a background agent was live,
-so machine load is confounded with the P0 variable in exactly the batch that carries most of
-the failures. And C's P0, though it allocated no pty, still ran `beforeEach` — an HTTP
-`listen(0)` plus a `mkdtemp` — so "no extra pty" was never the same condition as "no P0".
-**Step 0 therefore re-measures with P0 absent, on a quiet machine, at n >= 24.**
+so machine load is confounded with the P0 variable in exactly the batch that carries **three
+of the four** failures — see the statistics below, where excluding A leaves nothing. And C's
+P0, though it allocated no pty, still ran `beforeEach` — an HTTP `listen(0)` plus a
+`mkdtemp` — so "no extra pty" was never the same condition as "no P0".
 
-**Where that leaves it: leaning toward P0-active mattering, at about p = 0.05, not settled.**
-With P0 active the rate is 4/21 ≈ **19%**, and at that rate a clean 14-run P0-free stretch
-comes up by luck only **5.2%** of the time. An earlier version of this card said "neither
-hypothesis is established", which was the right instinct applied to the wrong denominator —
-once B moves to the correct side of the split, the data leans one way and saying otherwise
-is over-caution, which is its own kind of wrong. Step 0's n >= 24 stands regardless.
+**A limit on the skip finding**, since the split rests on it: it was measured for a *static*
+`it.skip`, which is what batch B used. A runtime `ctx.skip()` inside a body runs `beforeEach`
+first, and `describe.skip` and `-t` filtering are untested here. Do not generalise the
+result past the form batch B actually used.
 
-Note what it would mean if it holds: the flake is not pre-existing, and *adding almost
-anything* to this file destabilises it — a statement about the harness's margins rather
-than about P0.
+**Where that leaves it: suggestive at p ≈ 0.11, and the whole of it lives in the one batch
+that was confounded.** The right test is two-sample — do the buckets differ? — which is
+Fisher exact on 4/21 vs 0/14: `C(21,4)/C(35,4)` = 5985/52360 = **0.114**. An earlier version
+of this card quoted **0.052** from `(1 − 4/21)^14`, which tests one sample against a point
+estimate drawn from the other and treats 21 runs as if they gave the true rate. That is
+overstatement, arrived at while correcting over-caution — the opposite error, one revision
+later.
+
+**Now exclude batch A**, which ran while a background agent was live: what remains is C's
+1/8 with P0 against B+D's 0/14 without, i.e. **one failure in 22 runs**, Fisher `8/22` =
+**0.36**. No signal whatever. So the honest summary is not "leans toward P0" — it is:
+
+> Three of the four failures are in a single load-confounded batch, and with that batch
+> removed the data supports nothing at all. The confounder is not a footnote; it carries
+> the entire apparent result.
+
+Step 0's n >= 24 on a quiet machine is therefore the only thing that can settle this, and it
+should re-measure BOTH arms rather than assume the P0-free one is clean.
 
 ## A separate gap this turned up: nothing executes the shebang
 
@@ -101,10 +114,20 @@ the scripts into an already-running bash (5 such sites) and **never execute the 
 all**. So no test in this file ever depended on the answer.
 
 But production *does* invoke these scripts through that shebang, and **no test exercises
-that path** — `scripts/agent-helper.sh` carries the line and nothing runs it as a program.
-That is a real, previously unstated gap. It is NOT this card's job: it belongs in its own
-file, where an extra pty costs nothing, and it should execute the script directly rather
-than sourcing it. Recorded here because this is where it surfaced.
+that path**. A review challenged this as fabricated, on the grounds that
+`aimaestro-agent-ctrl-c.test.ts` runs the agent script — so it was measured, and the gap is
+real. Every invocation in the suite passes the script as an ARGUMENT to bash:
+
+- `ptySpawn('bash', [AGENT, 'probe', …])` — aimaestro-agent-ctrl-c.test.ts:42
+- `execFileSync('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), …])` — cli-help-exit-contract, capabilities
+- `source ${copy}` — the five gate-pty sites
+
+**`bash <script>` does not use the shebang line either** — that is the part the challenge
+missed, and it is why "a test runs the script" is not the same as "a test exercises the
+shebang". A search for any `.sh` invoked directly as a program returns nothing.
+
+It is NOT this card's job: it belongs in its own file, where an extra pty costs nothing, and
+it must invoke the script as a program (`execFileSync(SCRIPT, …)`), not under `bash`.
 
 ## The clue worth chasing first
 
@@ -149,11 +172,19 @@ Investigate in this order, and do not skip to the third:
 
 ## Verification
 
-- The file passes **30 consecutive runs**. The number is not arbitrary — it is where "clean"
-  stops being cheap across the plausible range of the underlying rate: 30 clean runs happen
-  by luck **0.2%** of the time at the P0-active rate (4/21) and **2.6%** at the pooled rate
-  (4/35). Ten runs would come up clean 12-30% of the time, i.e. prove almost nothing. Do not
-  trim this without redoing the arithmetic against whatever rate step 0 measures.
+- The file passes **30 consecutive runs** — but read what that does and does not buy, because
+  it depends entirely on the true rate, which is the thing in dispute:
+
+  | assumed rate | 30 clean runs by luck |
+  |---|---|
+  | 19.0% (P0-active, 4/21) | 0.2% |
+  | 11.4% (pooled, 4/35) | 2.6% |
+  | **4.5% (batch A excluded, 1/22)** | **24.8%** |
+
+  So if the A-excluded picture is the true one — and §Evidence says it may well be — then
+  **30 green runs prove almost nothing**, coming up clean a quarter of the time anyway. Do
+  not read a 30-run sweep as closure until step 0 has fixed the rate; and do not trim the
+  number without redoing this arithmetic against whatever step 0 measures.
 - If step 1 finds real input loss, that becomes its own fix with its own pty test, and this
   card cites it.
 

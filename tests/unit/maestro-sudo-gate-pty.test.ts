@@ -177,10 +177,11 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   // no test covers that — a real gap, but one for a separate file; see TRDD-601KG45D.)
   // Both spellings failed anyway, in opposite ways. Through ptySpawn it perturbed the file
   // (P8/P9 then failed intermittently). Through execFileSync it perturbed nothing and
-  // measured nothing: libuv sets the child's environ from the `env` option before execvp,
-  // and `/usr/bin/env` is itself an execvp wrapper, so both operands walk the identical
-  // PATH and the assertion was `x === x`. A fake `bash` planted first on PATH satisfied it
-  // (measured) — corroboration, though the mechanism above is the actual proof.
+  // measured nothing: MEASURED — with a fake `bash` planted first on PATH, BOTH operands
+  // returned it, so the assertion was `x === x` and held. (The likely mechanism, that libuv
+  // sets the child's environ before execvp and `/usr/bin/env` is itself an execvp wrapper,
+  // is second-hand and UNVERIFIED here — it explains the measurement, it is not the
+  // evidence for it. Stated in that order deliberately.)
   it('P4: after a REFUSED exchange (the return-1 path) the tty has echo back on', async () => {
     const out = await runGate('true', 'stty -a < /dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"')
     expect(out).toMatch(/RC=1/)

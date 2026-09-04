@@ -9,7 +9,7 @@ blocker-probe: sh -c 'f=scripts/shell-helpers/common.sh; t=$(grep -c "trap ._mae
 blocker-holds-if: not-match:(trap=0|read=0)
 blocker-probe-canary: match:PROBE-RAN
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:25:38+0200
+updated: 2026-09-05T01:27:55+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -105,9 +105,23 @@ character" — which reads as credential handling. Fact 5 (fails closed) is what
 worst case is a spurious auth refusal.
 
 **On the probe below — read it for what it is, and this is now MEASURED, not attitude.** **Nothing
-in this repo EXECUTES a blocker probe.** `grep -rn 'blocker-probe'` over `lib/` and `scripts/`
-returns hits in `lib/trdd-doctor.ts` and NOWHERE else, and the doctor only checks that the field
-EXISTS and that `blocker-holds-if` matches a SHAPE regex
+in this repo EXECUTES a blocker probe.**
+
+**The first version of this paragraph searched only `lib/` and `scripts/` and stated the result as
+measured — an overstatement, and review predicted exactly where the gap was.** Re-run over the
+WHOLE tree (`*.ts|tsx|mjs|js|py|sh|json`, excluding `node_modules`/`.next`/`.git` and the card
+corpus), `blocker-probe` appears in **exactly two files**: `lib/trdd-doctor.ts` (11 hits) and
+**`tests/unit/trdd-doctor-blocker-probe.test.ts` (6)** — the file I had missed.
+
+**Reading it strengthens the finding rather than overturning it.** Every `it()` there asserts
+whether a FINDING fires (F1-F5, U1-U2, E1, S1, B1, C1-C2); none executes a probe. Its fixture is
+`'blocker-probe': 'bash /x/probe.sh'` — **a path that does not exist**, which is positive evidence
+nothing runs it: a suite that executed probes would fail or hang on that constant.
+
+**Residual, stated rather than papered over:** the search matched the literal string
+`blocker-probe`, so an executor reading the field through a GENERIC frontmatter walk (no literal
+key) would still be invisible to it. The doctor only checks that the field EXISTS and that
+`blocker-holds-if` matches a SHAPE regex
 (`BLOCKER_HOLDS_IF_RE = /^(exit-0|exit-nonzero|match:\S.*|not-match:\S.*)$/`, `:292`). So the
 review's open question — *is the operand compiled as a regex, or as a literal substring?* — has no
 answer in this repo: **the semantics belong to a consumer I have not identified.** My

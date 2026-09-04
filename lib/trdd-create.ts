@@ -21,7 +21,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
-import { AUTHORITY_RANK, VALID_COLUMNS } from '@/lib/trdd-vocabulary'
+import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone } from '@/lib/trdd-vocabulary'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
 
@@ -137,6 +137,17 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   const column = isMandate ? (opts.column ?? 'backburner') : 'proposal'
   if (isMandate && !VALID_COLUMNS.includes(column)) {
     throw new Error(`invalid starting column "${column}"`)
+  }
+  // ZONE-MISMATCH guard (TRDD-MWKCBLQN): VALID_COLUMNS admits bracket values
+  // (proposal/refused/archived states), so a mandate author could otherwise mint
+  // `column: proposal` straight into tasks/ — a card the doctor immediately flags
+  // and every write verb refuses. `createTrdd` writes no `release-via`, so `{}` is
+  // the correct frontmatter to check `complete` against.
+  if (isMandate) {
+    const wantZone = expectedZone(column, {})
+    if (wantZone !== null && wantZone !== zone) {
+      throw new Error(`column "${column}" belongs in zone "${wantZone}", not "${zone}"`)
+    }
   }
 
   // Mint with a cross-scope collision check; re-roll on a hit. 36^8 makes a loop of

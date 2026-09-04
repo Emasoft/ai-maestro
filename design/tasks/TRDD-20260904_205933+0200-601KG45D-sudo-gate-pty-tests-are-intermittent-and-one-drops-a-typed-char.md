@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:55:09+0200
+updated: 2026-09-04T23:57:18+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -182,7 +182,8 @@ account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f9
 | # | claim | status |
 |---|---|---|
 | 1 | a `stty` TCSAFLUSH eats queued input | **CONTRADICTED by the code path as read** (idle-machine timing; UNMEASURED under load). The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing. **Not "REFUTED"** — every step is a source READ, not an instrumented handler, and the one condition batch A ran under (load) is the one not checked. Using the strongest verb for the one refutation nobody instrumented is the wrong asymmetry on a card with four dead mechanisms |
-| 2 | the line terminated one byte early | **OPEN and now the SOLE survivor** — and no longer merely by elimination: the boundary is measured upstream of `jq`, and TAIL-1 is what H2 predicts and H1 does not |
+| 2 | the line terminated one byte early | **OPEN.** Favoured, but NOT the sole survivor — see H5, which seven review rounds failed to list |
+| 5 | **the HARNESS's own write loses the byte** — `p.write(password + '\r')`, node-pty pushing 23 bytes into the pty master | **OPEN, NEVER PREVIOUSLY LISTED, and it is the one that decides whether there is a product bug at all.** The card's localisation is *"at or before `read`"*, and the harness write IS before `read` — so every one of the seven events is equally consistent with the byte being lost on the WRITE side. If it is, `common.sh` is innocent and these tests are flaky for a reason unrelated to the gate. **Discriminator:** split `p.write(password + '\r')` into two writes with a gap, or write char-by-char; if the loss changes shape or vanishes, it is the write path. NB the card already calls a NEIGHBOURING claim a non-sequitur (*"one `p.write`, so the line discipline holds the line"*) — correctly, because that was about the RECEIVER. The WRITER-side question is different and was never asked |
 | 3 | the loss is in the shell→curl leg | **EXCLUDED BY MEASUREMENT 2026-09-04T23:37** (`jq -Rnc stdin: 21` on two runs), superseding the composition argument that had excluded it by reasoning. The argument was right; it is the class of thing this card has been wrong about four times, so the measurement is what the exclusion now rests on |
 | 4 | a wall-clock timing slip (§Proposed fix step 2) | **OPEN for the TIMEOUTS, with two objections.** It came from the card rather than from me and that does NOT pre-validate it — §Proposed fix is a *proposal*, never a finding |
 
@@ -532,23 +533,64 @@ The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted 
    All four received strings are **BYTE-IDENTICAL**: `wrong-pw-9MZQ4T7E-x7q`, i.e. exactly the
    expected string's 21-byte prefix, 4/4.
 
-   **What that DOES establish** (and it is more than the classifier's per-run verdict): the
-   loss is deterministic in WHAT it drops, not merely in position. No substitution, no interior
-   loss, no shift — always the same single final character.
+   **What it establishes is a POSITIVE CONTROL ON THE CLASSIFIER, not new mechanism data — my
+   "more than the classifier's per-run verdict" was false.** Work `diagnoseTyped` backwards:
+   `TAIL loss: 1` is emitted only when `received.length === 21` AND `expected.startsWith(received)`,
+   and a 21-char prefix of a FIXED 22-char string is uniquely `expected.slice(0,21)`. So the four
+   verdicts already ENTAILED four byte-identical strings. Reading the raw bodies confirms the
+   classifier was not lying — worth having, and a different thing from what I claimed.
 
-   **What it does NOT establish:** terminator-timing over a buffer effect. A 21-byte cap and a
-   terminator arriving one character early **both** produce a 21-byte prefix, so the prefix
-   property cannot separate them. That is precisely what steps 2 and 3 are for, and it is why
-   they are still worth running.
-2. **CHANGE THE LAST CHARACTER of `SECRET`** (end it with `#`). If the loss is always "the
-   final character, whatever it is", terminator; if it correlates with the character's value,
-   something stranger. One constant, no new machinery — cheaper and sharper than (3).
-3. **VARY THE PASSWORD LENGTH** (22 → 40 → 60), only if 1 and 2 do not settle it. Constant
-   TAIL-1 ⇒ terminator-related; scaling ⇒ buffer-related. **Note it is now LESS discriminating
-   than when first proposed:** H1 is excluded, so this characterises the sole survivor rather
-   than separating two hypotheses.
+   **And "always the same single final character" is half tautology:** the final character is
+   `2` every run because the password is a CONSTANT. The non-trivial half is that the position
+   and magnitude were identical across four firings (tail, exactly 1) when they could have
+   varied. The trivial half was carrying the emphasis.
 
-**THE CARD IS CLOSED FOR REVIEW, 2026-09-04T23:55 — pending NEW MEASUREMENT only.** Seven
+   **What it does NOT establish:** terminator-timing over a buffer effect — a 21-byte cap and a
+   one-early terminator both produce a 21-byte prefix.
+
+   **BUT THE RETRACTION WENT TOO FAR, and this is the THIRD time tonight.** The prefix property
+   does not discriminate; a PRIOR does, and I discarded it along with the claim. **A 21-byte cap
+   has no candidate implementation anywhere in this pipeline:** `MAX_CANON` is 1024 (4096 on some
+   systems), `PIPE_BUF` ≥ 512, bash's `read -rs` has no small fixed cap, `jq -Rnc` none. **21 is
+   not a power of two and not a documented constant of any layer here.** Terminator-timing has an
+   obvious candidate mechanism; a 21-byte cap has none.
+
+   Correct statement: *the prefix alone does not discriminate, but the cap branch has no
+   candidate implementation, so terminator-timing is favoured on PRIOR grounds — and the length
+   experiment makes the cap hypothesis decisively testable.*
+
+   **The pattern, named because it has now recurred three times:** a reviewer challenges a claim,
+   I concede the reviewer's LOCAL point, and discard a PRIOR the reviewer never addressed. The
+   local point has been right every time; the concession too broad every time.
+2. **~~Change the last character of `SECRET`.~~ DROPPED — no live hypothesis needs it.** Name
+   the hypothesis under which the character's VALUE matters: the tty does not care, `read -rs`
+   is value-blind, `jq -Rnc` treats digits and symbols identically. It was a speculative test,
+   and step 3 subsumes it anyway — a 40-character password ends in a different character, so
+   "the last char, whatever it is" gets tested for free.
+
+3. **VARY THE PASSWORD LENGTH — THE NEXT EXPERIMENT, and it is DECISIVE, not marginal.** An
+   earlier version called it "LESS discriminating now that H1 is excluded". Wrong: at 40
+   characters the two branches predict **21 vs 39 bytes** — a divergence nothing else on this
+   card comes close to. One constant, no new machinery.
+
+4. **THE HARNESS-WRITE DISCRIMINATOR (H5), which may matter more than 3.** Split
+   `p.write(password + '\r')` into two writes with a gap, or write char-by-char. If the loss
+   changes shape or vanishes, the byte is being lost on the WRITE side and there is no product
+   bug. Run it alongside 3 — they answer different questions and neither settles the other.
+
+**AMENDED 2026-09-04T23:57 — round 7 EARNED ITSELF and the "closed" call was one round early.**
+It surfaced H5 (the harness's own write, never listed in seven rounds, and the hypothesis that
+decides whether there is a product bug at all) and a third over-retraction. A stopping rule
+that fires one round before the best finding is mis-tuned, so the condition is sharpened:
+
+> **STOP REVIEWING when a round's findings are all about how a claim is WORDED, rather than
+> about what is TRUE or what to DO next.**
+
+Round 7 produced two of each, so it passes. Rounds 4-6 were mostly wording and did not. The
+next round producing only wording-shaped findings is the signal to stop — and the tokens go to
+the measurement instead. **The card is closed for review AFTER this amendment.**
+
+**THE ORIGINAL CLOSING NOTE, 2026-09-04T23:55 — pending NEW MEASUREMENT only.** Seven
 rounds ran tonight. The experimental content settled at 23:37 when the batch returned 4/4 at
 N=21; rounds 4-7 adjusted the WORDING of claims about a result that has not changed since.
 Each round's fixes generated the next round's findings — three separate paragraphs on this

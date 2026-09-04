@@ -3,9 +3,9 @@ trdd-id: 5MN01NO8
 title: editTrdd can still write a column its zone contradicts — the half MWKCBLQN did not close
 scope: project
 project-id: ai-maestro
-column: dev
+column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T17:31:32+0200
+updated: 2026-09-04T17:36:03+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -288,7 +288,7 @@ instead of inheriting it, which is the only reason it was caught.
 ## Acceptance
 - [x] `validateTrddFieldEdits` takes the card's `zone` and refuses an edit whose resulting `column` belongs in a different zone
 - [x] The no-op exemption lets an unchanged column re-write through, so a card already in a zone/column mismatch does not become harder to repair than before the guard existed
-- [ ] The guard keys on the EFFECTIVE column (covering the v1 `status:` fallback), not on the presence of a `column` field — with a test pinning the `status:`-only route and a recorded neuter
+- [x] The guard keys on the EFFECTIVE column (covering the v1 `status:` fallback), not on the presence of a `column` field — with a test pinning the `status:`-only route and a recorded neuter. Landed `95b23663`: `const columnChanged = resultColumn !== currentColumn`, which is SHORTER than the field-keyed form it replaces. Neuters RE-MEASURED against the new predicate in `0127bce9` rather than renamed — and the count moved: neuter B (`columnChanged = false`) now reds **3** tests, not the 2 recorded under the old form, because the new v1-status test also depends on the guard firing. Verified independently: `tsc --noEmit` 0 lines, 4 files / 45 tests pass, `V1_STATUS_TO_COLUMN` has 7 mappings with 0 targets outside `VALID_COLUMNS` (so the vocabulary check is unreachable via `status:` alone and was correctly left untouched)
 - [x] `tests/unit/trdd-edit-zone-column.test.ts` covers the refusal, a positive control, the `complete` + `release-via` case, the unchanged re-write, and a changed column on an already-mismatched card
 - [x] Complementary neuter pair recorded on the card: removing the exemption reds one named test, widening it to always-true reds two
 - [x] Every pre-existing call site passes the new required 4th argument (commit ccf0de95); `tsc --noEmit` exits 0 and the four affected test files report 43 passed

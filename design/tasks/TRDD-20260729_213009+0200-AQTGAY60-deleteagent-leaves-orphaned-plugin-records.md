@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T01:30:20+0200
+updated: 2026-09-05T01:35:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -170,11 +170,21 @@ recorded in this BODY and never written to the field". **It WAS written:** `41d4
 (2026-08-02) — *"triage the last 9 dev cards — dev 18 → 1, and the board reconciles"* — moved it
 **back** `dev → todo` as part of a WIP-reduction sweep.
 
-That sweep was not wrong at the time: nothing was working the card, so clearing it out of `dev`
-was correct WIP discipline. What it could not express is that the card was **6/7 done with the
-remainder operator-gated** — `todo` says "unstarted backlog", and for five weeks that is what the
-board reported. The defect is a vocabulary gap, not an omission by whoever moved it, and stating
-it as an omission blamed a past editor for a decision they made deliberately.
+**What git shows, and nothing beyond it:** the field was `dev`, and a 2026-08-02 bulk triage
+moved it back to `todo`. **Whether that sweep assessed this card individually is UNREAD** — I saw
+its subject line and its two-line diff for this one file, nothing else.
+
+**A first correction of this paragraph said the sweep "was not wrong at the time… correct WIP
+discipline". That is retracted too, as a second unverified claim in the charitable direction.**
+It asserted three things I had not checked — that nothing was working the card, that the sweep
+exercised judgment, that the defect is nobody's omission — all from the same two lines that the
+original blame came from. **Version 1 blamed a past editor for an omission; version 2 credited
+them with deliberate correct judgment; neither warrant exceeds "the field changed in a commit
+whose subject mentions triage."** Replacing an unfavourable invention with a flattering one is
+not a correction.
+
+What IS observable: `todo` cannot express "6/7 done, remainder operator-gated", so for five weeks
+the board reported this card as unstarted backlog.
 
 Now `human_review`, which is the honest
 column, because the remaining box is OPERATOR-GATED by the card's own text — a real create +
@@ -183,8 +193,23 @@ destructive op on an untracked directory, which the card says in as many words m
 from the main context. It is not `blocked` (no `blocked-by:` TRDD gates it) and it is not `dev`
 (the pending step is not agent work). It waits on a human, which is what `human_review` means.
 
+**And the column history supplies an argument for `human_review` that I had not made:** the
+mechanism that produced the wrong column was a **`dev`-reduction sweep**, so any column inside
+that sweep's target set is one this card can silently fall back into. `human_review` is not in
+it — the sweep moves cards OUT of `dev` — so it is more stable against a repeat than `dev` would
+be.
+
 **Not touched, deliberately:** the open box itself. Nothing about finding a stale column
 authorizes running the destructive verification the box defers.
+
+**⚠ AN OPEN CONTRADICTION AGAINST THIS CARD — FILED AS TRDD-XNW6THVC (2026-09-05).** The "what is
+actually in the tree" table above places G09b AFTER the workdir removal, and box 2's
+no-compensation argument DEPENDS on that placement. TRDD-OWO449MR (`completed`, archived) is
+described as relocating the cleanup to BEFORE the workdir is deleted. Both cannot be current —
+and if the relocation landed, box 2's argument does not hold and its tick is unearned. **I have
+not read OWO449MR, only this card's description of it**, so XNW6THVC asserts the DISAGREEMENT and
+deliberately names no stale side. It lived only in a commit message until now, which is where
+findings go to be lost.
 
 **What is actually in the tree** (read, not inferred):
 

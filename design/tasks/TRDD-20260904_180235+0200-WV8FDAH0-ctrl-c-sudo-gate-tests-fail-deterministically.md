@@ -3,11 +3,12 @@ trdd-id: WV8FDAH0
 title: Three Ctrl-C and sudo-gate tests fail deterministically and appear nowhere on the board
 scope: project
 project-id: ai-maestro
-column: todo
+column: ai_review
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T18:02:35+0200
+updated: 2026-09-04T20:21:12+0200
 current-owner: user
 created-by: ai-maestro-hub-session
+assignee: claude-opus-session
 task-type: bugfix
 priority: 1
 severity: high
@@ -20,8 +21,40 @@ approval-datetime: 2026-09-04T18:02:35+0200
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [5542ca89, b93f1ada]
 ---
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+**All three failures are fixed and the four gate test files are green (19/19, exit 0).**
+They were **two independent defects**, not one:
+
+1. **Test #1** — `_chk_auth_args[@]: unbound variable` under bash 3.2's `set -u`. Fixed in
+   `5542ca89`; the remaining unguarded arrays are their own card, **TRDD-FPE86FIF**.
+2. **P6 (both copies)** — an **echo-ordering bug in the gate's own SIGINT handler**, fixed
+   here. `kill -INT $$` raised INSIDE a trap is **DEFERRED** until that trap returns (bash
+   will not re-enter a trap it is running), so the handler's trailing `stty -echo` — which
+   exists for the resume case — ran BEFORE the caller's trap. Measured at a real pty: the
+   caller saw `-echo`, and **a ^C at the password prompt left the user's own terminal
+   echo-off**. That is the user-visible bug P6 was reporting; the test was right.
+
+**The fix** (`_maestro_sudo_on_int`, added identically to both copies) runs the caller's
+prior trap **body inline** instead of re-raising, so the ordering is ours: restore echo →
+caller's trap → re-disable **only if that trap returned** (the read resumes). `kill -INT $$`
+survives for the no-prior-trap case (P7), where there is nothing to order against.
+
+**Both halves neuter-proven at a pty (2026-09-04):** drop the leading `stty echo` → the prior
+trap sees `-echo` (P6 red); drop the trailing `stty -echo` → the text typed after the ^C is
+echoed (P8 red). The pre-fix run is itself the third neuter — the old shape reddened exactly
+P6, both copies, everything else green.
+
+**`tests/unit/maestro-sudo-gate-order.test.ts` was updated, and that is the one thing to check
+if you distrust anything here.** Its Ctrl-C assertion was `/trap '[^']*stty echo[^']*' INT/` —
+keyed on the trap having an INLINE body, a shape the fix necessarily breaks. The CONTRACT is
+unchanged and is now pinned *more* tightly: the order INSIDE the handler, which is the
+property that actually regressed and which the old regex could not express.
+
+**NEXT ACTION.** None. Card closed.
 
 ## Problem
 
@@ -87,16 +120,24 @@ investigation; see Acceptance.
 
 ## Acceptance
 
-- [ ] Reproduce at a commit predating the suspected regression to establish
-      when the three failures began.
-- [ ] Determine whether the three failures share one root cause or are
-      separate defects (test #1's `_chk_auth_args[@]: unbound variable` +
-      server-connect error looks unrelated to #2/#3's echo-state ordering).
-- [ ] Decide per failure whether the TEST or the CODE is wrong — the tests
-      encode a deliberate Ctrl-C / INT-trap contract, so making the suite
-      pass may require changing either side.
-- [ ] `bash scripts/with-node.sh yarn vitest run tests/unit/aimaestro-agent-ctrl-c.test.ts tests/unit/maestro-sudo-gate-pty.test.ts`
-      exits 0.
+- [x] ~~Reproduce at a commit predating the suspected regression to establish
+      when the three failures began.~~ **SUPERSEDED, and NOT measured — do not
+      read this box as a bisect.** The mechanism was established directly at a
+      pty (bash defers a `kill -INT $$` raised inside a trap), which is the
+      thing the archaeology would have been evidence *for*. *When* it began
+      changes nothing that remained to be decided.
+- [x] Determine whether the three failures share one root cause or are
+      separate defects. **SEPARATE**, as the card suspected: #1 is the bash-3.2
+      empty-array crash (fixed `5542ca89`), #2/#3 are the echo-ordering defect
+      fixed here. Nothing links them but the run they appeared in.
+- [x] Decide per failure whether the TEST or the CODE is wrong.
+      **#1 CODE. #2/#3 CODE** — P6 was reporting a real user-visible bug (^C at
+      the prompt left the terminal echo-off). One test file DID change:
+      `maestro-sudo-gate-order.test.ts` was keyed on the trap having an inline
+      body, which is a SHAPE, not the contract; its contract is unchanged and
+      now pinned tighter. See the STATE block.
+- [x] `bash scripts/with-node.sh yarn vitest run tests/unit/aimaestro-agent-ctrl-c.test.ts tests/unit/maestro-sudo-gate-pty.test.ts`
+      exits 0. **Exit 0, 11/11.** All four gate files together: 19/19, exit 0.
 
 ## Approval log
 

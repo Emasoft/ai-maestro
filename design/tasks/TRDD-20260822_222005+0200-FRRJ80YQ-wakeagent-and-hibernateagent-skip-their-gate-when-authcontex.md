@@ -1,9 +1,9 @@
 ---
 trdd-id: FRRJ80YQ
 title: wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
-column: todo
+column: ai_review
 created: 2026-08-22T22:20:05+0200
-updated: 2026-08-29T07:31:05+0200
+updated: 2026-09-04T13:20:40+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T22:20:05+0200
+implementation-commits: [a11c7126]
 ---
 
 # wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
@@ -139,9 +140,9 @@ sequence inside a string literal, which can only make the guard MISS a call, nev
 - [x] PROVEN to fire on a seeded violation, and to go green when it is removed
 - [x] positive controls on both the walker (scan set non-empty) and the extractor (finds >=6)
 - [x] comment-stripping, so the guard cannot report prose as a call
-- [ ] OPTIONAL, deliberately deferred: make `authContext` required on both param types and
-      migrate the 32 test call sites to `{ isSystemOwner: true }` — the shape the two internal
-      production callers already use. The guard above keeps working if this lands.
+- [x] ~~OPTIONAL, deliberately deferred~~ **DONE 2026-09-04** — `authContext` is now REQUIRED on
+      both param types, both Gate 0s are unconditional, and 33 test call sites were migrated to
+      `authContext: SYS_CTX` (`{ isSystemOwner: true }`). See the closing section below.
 - [x] delete the "When absent (internal call), skip — backward compatible" comment, which
       advertises an affordance nothing takes — **DONE 2026-08-29T07:24:02+0200.** It was a single
       site, `services/agents-core-service.ts:2604` (hibernateAgent's Gate 0), and it is now
@@ -188,6 +189,63 @@ sequence inside a string literal, which can only make the guard MISS a call, nev
       `rm` removed a COPY whose source still sits on disk — but the premise was false, and applied
       to a file that is *not* duplicated it would have authorised real loss.
       **The only remaining box is the OPTIONAL one below**, so nothing non-optional is left here.
+
+## CLOSED 2026-09-04 — the deferred type change landed, and it found a test asserting a false premise
+
+The optional box is done. What shipped, and what it cost:
+
+**Source (`services/agents-core-service.ts`).** `WakeAgentParams.authContext` and
+`HibernateAgentParams.authContext` are now `authContext: AuthContext`, not `?:`. Both Gate 0s
+lost their presence condition: `if (authContext && !authContext.isSystemOwner)` and
+`if (authContext) { if (!authContext.isSystemOwner) … }` became a **401 refusal** followed by an
+unconditional check. The 401 is deliberate rather than relying on the type alone — it is the
+`agents-messaging-service.sendMessage` pattern (the third row of this card's own table, and the
+strongest of the three), and it is what stops the callers `tsc` cannot see: `.mjs`, `scripts/`,
+and anything reaching the service past a cast.
+
+**Cost, measured not estimated.** `tsc --noEmit` after the type change: **33 errors, every one in
+a test, zero in production** — which confirms the card's original "zero production call-site
+changes" claim while vindicating the 2026-08-22 caveat that it was false *overall*. Migration is
+behaviour-preserving by construction: Gate 0 short-circuits on `isSystemOwner`, so
+`{ isSystemOwner: true }` and the old omission take the identical path. Measured: the three
+touched suites were 177/177 green before and after.
+
+**The behavioural pin this card asked for and could not have.** The Verification section said *"A
+test calling wakeAgent/hibernateAgent with NO authContext is REFUSED rather than silently
+authorized. **That test cannot be written today** — the omission is legal and returns success —
+which is itself the finding."* It can be written now, and it is:
+`tests/services/agents-core-service.test.ts`, two cases (`refuses a wake/hibernate whose caller
+passed NO authContext`), each casting past the type to model the caller the type cannot reach.
+**NEUTER (run, not assumed):** restoring both presence conditions reds **exactly those 2** of 104
+— attributed one per gate — and restoring the fix returns 104/104.
+
+**THE FIND — a governance test whose premise this fix invalidated.** The full suite (504 files)
+surfaced `tests/governance/r10-wake-gates.test.ts::refuses an internal call that passes no
+authContext at all`, which failed 401-vs-403. It was **not** a regression. That case exists to pin
+that **Gate 1** (the manager gate) runs even for callers Gate 0 exempts, and it used `{} as never`
+— *omission* — as its stand-in for "an internal call". That stand-in was only ever valid while
+omission skipped Gate 0; with the bypass closed, the case would have asserted 403 on a request
+that never reaches Gate 1 — **testing Gate 0 while claiming to test Gate 1**. Rewritten to
+`{ authContext: { isSystemOwner: true } }`, which is what the two real internal callers pass and
+what actually exercises the claim. Its subject is unchanged; only its false premise is gone.
+
+Worth stating because it is the general lesson: `as never` is exactly why `tsc` could not find
+this one. **The type change was caught by the TEST SUITE, not the type checker** — a cast is a
+hole in the instrument that is supposed to prove the migration complete, so "tsc clean" was a
+necessary and insufficient verification here.
+
+**The source-scanning guard STAYS**, with its header corrected rather than left asserting the old
+world (it said the fields are `?:` and gated `if (authContext)` — both now false, and a guard
+whose stated reason is stale is worse than none). Its reason is now the one that survives: `tsc`
+binds only the callers it checks, and this walker accepts `.mjs` and scans `scripts/`, neither of
+which is type-checked. Three layers over one invariant — type, runtime refusal, source scan — and
+only the first is visible to `tsc`.
+
+**Implementation commit:** `a11c7126`.
+
+**Verification:** `tsc --noEmit` exit 0 · full suite **504 files / 6622 passed / 2 skipped**,
+exit 0 · both neuters run and attributed. No advisor verdict was obtained: the Fable weekly
+window measured `exhausted` (100%), which the advisor policy names as a sanctioned skip.
 
 ## Approval log
 

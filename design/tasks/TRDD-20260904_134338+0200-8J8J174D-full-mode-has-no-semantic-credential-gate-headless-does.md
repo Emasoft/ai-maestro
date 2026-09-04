@@ -39,10 +39,15 @@ one subtree have NO auth call —
 
 Both are GET, and I checked each before claiming anything:
 
-- **`toml-preview` is NOT an arbitrary file read.** It confines to `~/agents/haephestos/`,
+- **`toml-preview` is NOT an arbitrary file read — with one branch worth carrying.** It confines to `~/agents/haephestos/`,
   `normalize()`s BEFORE the prefix check, then `realpathSync`es and RE-checks containment
   against the symlink target. Properly defended. The residual exposure is reading a file
   under that one directory, plus a heartbeat side effect, with an unverified bearer.
+  **The confinement is conditional:** the allowed prefix is `${HOME}/agents/haephestos/` only
+  when `HOME` is set, and falls back to **`/tmp/`** when it is not. On a process with no `HOME`,
+  any file under `/tmp/` is readable by an unverified bearer. Named here because the card
+  otherwise describes the route as simply "confined", which is true of the branch that runs on a
+  normal host and not of the fallback.
 - **`response`** returns the Haephestos pane capture — the persona's own output, to a caller
   that proved nothing.
 

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:16:00+0200
+updated: 2026-09-04T21:17:30+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -34,8 +34,10 @@ labels: [flaky-test, pty, sudo-gate]
 `tests/unit/maestro-sudo-gate-pty.test.ts` has failed intermittently — 4 failures in 35 runs,
 and not always the same test. **Read that rate as conditional, not as the file's baseline.**
 Split by whether the since-deleted P0 was present, it is **4 / 21 with** and **0 / 14
-without**. The intermittency is real and was observed; what it depends on is open, and that
-is step 0. This matters more than an ordinary flake because P6, P8,
+without** — but **three of those four failures are in one batch that ran under background
+load, and excluding it the data supports nothing** (p 0.11 → 0.36; see §Evidence). The
+intermittency is real and was observed; what it depends on is open, and that is step 0.
+This matters more than an ordinary flake because P6, P8,
 P9 and P10 in that file are the *only* behavioural pin on TRDD-WV8FDAH0's fix — the one that
 stops a ^C at the password prompt leaving the terminal echo-off or putting the typed password
 on screen. **An unreliable pin on a security fix is close to no pin**: a real regression would
@@ -56,8 +58,10 @@ Batch B counts as P0-ABSENT, and an earlier version of this card had it the othe
 `it.skip` does not merely stop the assertion — **a skipped test's `beforeEach` does not run
 either**, so B's runs carried no extra HTTP `listen(0)`, no `mkdtemp`, and no pty. Measured
 with a throwaway probe rather than assumed: a describe with one skipped and one real test
-saw the hook fire **once**, not twice. The wrong reading made the P0 hypothesis look weaker
-than the data supports, by moving 6 clean runs onto the wrong side of the split.
+saw the hook fire **once**, not twice; a second probe with two real tests and one skipped saw
+**two**, which removes the "counter read too early" reading of the first. Correcting it moved
+6 clean runs across the split — it changed the numbers, and what those numbers support is
+settled further down, not here.
 
 The order matters, because three of the four batches overturned the reading of the one
 before, and two of those readings were nearly committed as fact (A was the first data and
@@ -68,9 +72,8 @@ overturned nothing):
   clean sweep small-`n` luck and the flake "pre-existing".
 - **D** undercuts that in turn: C's P0 still ran `beforeEach`, so C was never a clean
   P0-free condition, and with P0 fully gone the file is 0/8.
-
-- Re-classifying **B** as P0-absent then moved 6 clean runs across the split, which is what
-  produced the numbers in the table above.
+- Re-classifying **B** as P0-absent then moved 6 clean runs across the split, producing the
+  table above — and the statistics below then removed most of what it appeared to show.
 
 What every one of those readings shared was treating a clean batch of 6-8 as evidence of
 absence. It is not: even at the corrected 19%, six clean runs happen 28% of the time.

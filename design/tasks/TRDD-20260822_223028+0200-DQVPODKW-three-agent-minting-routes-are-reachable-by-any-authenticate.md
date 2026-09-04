@@ -1,15 +1,16 @@
 ---
 trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
-column: todo
+column: ai_review
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:41:52+0200
+updated: 2026-09-04T13:44:42+0200
 current-owner: user
 created-by: user
 task-type: security
-implementation-commits: [7e044958, a65e06f9, da061b32, 1a88fe48, f221cdbd, 9530cc2a]
+implementation-commits: [7e044958, a65e06f9, da061b32, 1a88fe48, f221cdbd, 9530cc2a, 85865270]
 external-refs: [TRDD-F1SL03CK, TRDD-CAVCTULL, TRDD-R268J32X]
 min-approval-requirement: manager
+eht: [1LFRP6GJ]
 mandate: true
 mandated-by: user
 approved: true
@@ -236,21 +237,30 @@ Adding it:
         ~/.claude/agents/ (content not attacker-controlled). Any agent can trigger the
         overwrite. Bounded; same enforceSystemOwner candidate.
       - `heartbeat` — auth'd; keeps the helper session alive. Nuisance-only.
-- [ ] FOLLOW-UP (carved from the verification above): decide the creation-helper subtree's
-      uniform policy. Recommendation: `enforceSystemOwner` on cleanup, clear-banner,
-      heartbeat, ensure-persona, file-picker, raw-materials (the wizard is a human-only
-      dashboard surface; siblings startup/normalize-hosts/directory-sync already use it) —
-      but `element-descriptions` (and `publish-plugin`, outside this card) must stay
-      agent-callable because Haephestos curls them, and its curls carry no auth header, so
-      the persona's auth story must be settled in the same change or the wizard breaks.
-      MEASURED 2026-08-26: the persona's bare curls are ALREADY broken — authenticateAgent
-      with no header and no cookie refuses (BYPASS-2 closed), and creation-helper-service
-      injects NO credential into the Haephestos session (0 hits for
-      AID_AUTH|Bearer|Authorization|aim_tk). So the follow-up's real shape is: (a) give
-      Haephestos a credential (or move its two lookups to files/stdin like
-      raw-materials-state.json already does), THEN (b) enforceSystemOwner on the six
-      wizard-only routes. Both halves in one change; (b) alone breaks nothing further but
-      fixes only the griefing surface.
+- [x] FOLLOW-UP (carved from the verification above): decide the creation-helper subtree's
+      uniform policy. **DONE 2026-09-04, and SPLIT — because this box's own coupling was void by
+      its own measurement.** It required "(a) give Haephestos a credential, THEN (b)
+      enforceSystemOwner on the six wizard-only routes … both halves in one change", on the stated
+      ground that (b) alone would break the wizard. Two lines later it records the measurement that
+      refutes that: the persona's curls are ALREADY refused. Re-verified first-hand 2026-09-04 —
+      the persona file's two curl blocks carry no auth header, `creation-helper-service` has **0**
+      hits for `AID_AUTH|Bearer|Authorization|aim_tk`, and `middleware.ts` refuses a
+      credential-less `/api/*` before any handler. A path that is already broken cannot be broken
+      further by tightening six routes it never calls, so holding (b) hostage to (a) bought
+      nothing and cost a live griefing surface.
+      **(b) SHIPPED — `85865270`.** `cleanup` `clear-banner` `heartbeat` `ensure-persona`
+      `file-picker` `raw-materials` are `enforceSystemOwner`. Scoped by a per-route CALLER CENSUS,
+      not swept: `element-descriptions` and `publish-plugin` are the only routes the persona
+      curls and stay agent-callable, pinned by the test's last case so a later subtree sweep
+      reddens. `cleanup` looked like a third exception — the persona names it — but that is PROSE
+      describing what the wizard does to its directory, and reading the mention as a call would
+      have excluded the most destructive route of the six (it deletes the whole tree).
+      19 cases in `tests/unit/creation-helper-wizard-system-owner.test.ts`; collection ledger
+      11 → 5; full suite 507 files / 6646 passed.
+      **(a) CARVED OUT as TRDD-1LFRP6GJ**, because it is a LIVE DEFECT and not merely a
+      prerequisite: the persona's shipped instructions document a path that 401s today. It needs
+      its own ruling (mint a scoped credential vs move the two lookups to files/stdin like
+      `raw-materials-state.json` already does), which is not this card's subject.
 - [x] `role-plugins/sync-defaults` — RULED and FIXED 2026-08-26 (`9530cc2a`): NOT intended.
       Measured: `migrateDefaultPluginSettings` executes with implicit system authority (passes
       `{isSystemOwner: true}` into DeleteMarketplace; rewrites USER_GLOBAL_SETTINGS + every
@@ -292,3 +302,40 @@ Adding it:
 ## Approval log
 
 - 2026-08-22T22:30:28+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## CLOSED 2026-09-04 — and one finding this card's ledgers could not have seen
+
+The last box is done and the card's authorization work is complete. Two carve-outs were FILED
+rather than folded in, because each is a different subject:
+
+- **TRDD-1LFRP6GJ** — the (a) half above. A live defect: the Haephestos persona has no credential,
+  so its two documented curls are refused. Not a precondition; a bug with its own ruling to make.
+- **TRDD-8J8J174D** — **full mode has no SEMANTIC credential gate, while headless closed exactly
+  that hole for all 252 of its handlers** (TRDD-8Q5EVGV1). `middleware.ts` says so itself:
+  *"Credentials present — defer full verification to the route handler."* So a Next.js route that
+  omits an auth call is reachable with a hand-typed bearer. Two exist in THIS subtree —
+  `creation-helper/response` and `creation-helper/toml-preview` — and **both are invisible to
+  every ledger this card family uses, because those ledgers scan MUTATING verbs and these are
+  GETs.** That is the same blind spot that once carried `export`'s GET — a zip containing
+  `keys/private.pem` — as low-risk debt.
+
+  Severity was MEASURED before claiming, and it is lower than it first looked: `toml-preview`
+  confines to `~/agents/haephestos/`, normalizes BEFORE the prefix check, then `realpathSync`es
+  and re-checks against the symlink target. It is properly defended, not an arbitrary read. **The
+  finding is the ASYMMETRY between the modes, not those two routes** — fixing them and stopping
+  would leave the class open.
+
+### Verification
+
+`tsc --noEmit` exit 0 · full suite **507 files / 6646 passed / 2 skipped**, exit 0 · the cleanup
+neuter reds exactly its 2 denials with its positive control green and the other five routes
+untouched · collection ledger 11 → 5.
+
+**One neuter reported GREEN having measured nothing**, and is recorded in the test file rather
+than quietly re-run: the scope-guard probe was anchored on a string the target file does not
+contain, so the seed never landed and "19 passed" said only that an unmodified file is
+unmodified. Re-run with an assert on the anchor count, it reddened immediately. A
+silently-unapplied neuter and a vacuous guard produce the identical output.
+
+No advisor verdict was obtained: the Fable weekly window measured `exhausted` (100%), which the
+advisor policy names as a sanctioned skip.

@@ -3,7 +3,7 @@ trdd-id: VAXLW6RI
 title: The wizard heartbeat cannot tell a permanent refusal from a transient blip so it retries forever
 column: ai_review
 created: 2026-09-04T13:53:44+0200
-updated: 2026-09-04T15:27:22+0200
+updated: 2026-09-04T17:25:41+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -152,6 +152,14 @@ permanently-failing heartbeat reports rather than looping to the watchdog deadli
 ## Estimated risk
 
 LOW. One `catch` block in one component; no server change.
+
+## Acceptance
+- [x] A permanent heartbeat refusal (401/403) stops the polling interval and the backoff timer and sets a visible error, instead of retrying like a transient failure
+- [x] A 503 still retries with backoff and recovers — the fix does not turn every non-2xx into a hard stop
+- [x] The error banner renders on BOTH the mobile and desktop branches, from a single hoisted element, because the heartbeat effect is gated on `isOnline` alone and so runs on a phone
+- [x] `tests/unit/haephestos-heartbeat-permanent-failure.test.ts` pins all of the above plus the clear-on-recovery path via `visibilitychange`
+- [x] The teardown restores `window.innerWidth` and `document.visibilityState` shape-agnostically, and a test asserts their opposite descriptor shapes in this environment so the claim cannot drift
+- [ ] Reviewed and moved out of `ai_review` by an approver other than the implementer
 
 ## Approval log
 

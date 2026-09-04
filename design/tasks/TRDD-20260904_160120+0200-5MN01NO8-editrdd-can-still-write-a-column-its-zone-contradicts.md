@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T16:51:42+0200
+updated: 2026-09-04T17:25:27+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -253,6 +253,14 @@ The first question a reviewer asks, and it would be a real regression: if a card
 `merged` is `{ ...current, ...fields }` (`lib/trdd-edit-guard.ts:132`), so it picks up a
 `release-via` that lives in the card and is absent from this edit's fields. That is what makes the
 `complete` + `release-via: publish` case pass for the right reason rather than by accident.
+
+## Acceptance
+- [x] `validateTrddFieldEdits` takes the card's `zone` and refuses an edit whose resulting `column` belongs in a different zone
+- [x] The `columnUnchanged` exemption lets a no-op column re-write through, so a card already in a zone/column mismatch does not become harder to repair than before the guard existed
+- [x] `tests/unit/trdd-edit-zone-column.test.ts` covers the refusal, a positive control, the `complete` + `release-via` case, the unchanged re-write, and a changed column on an already-mismatched card
+- [x] Complementary neuter pair recorded on the card: removing the exemption reds one named test, widening it to always-true reds two
+- [x] Every pre-existing call site passes the new required 4th argument (commit ccf0de95); `tsc --noEmit` exits 0 and the four affected test files report 43 passed
+- [ ] Reviewed and moved out of `ai_review` by an approver other than the implementer
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: MWKCBLQN
 title: create with column proposal mints a card no write verb can act on
 column: ai_review
 created: 2026-08-22T17:37:09+0200
-updated: 2026-09-04T16:01:20+0200
+updated: 2026-09-04T17:25:14+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -37,6 +37,13 @@ the unreachable state.
 ## Verification
 Create with `--column proposal` at owner authority; the card must be actionable by `refuse`
 without a manual move, and `trddgrep validate` must report no ZONE-MISMATCH.
+
+## Acceptance
+- [x] `createTrdd` refuses a mandate mint whose `column` belongs in a different zone, using `expectedZone` from `lib/trdd-vocabulary.ts` rather than a second column-to-zone table
+- [x] `tests/unit/trdd-create-zone-column.test.ts` covers the refusal, an ordinary working-column mint, and a below-floor-authority mint
+- [x] Neuter run recorded: disabling the guard reddens exactly the refusal test and leaves the other two green
+- [x] Caller census done: both production callers (the create route and the CLI) are covered, and no headless-router caller exists
+- [ ] Reviewed and moved out of `ai_review` by an approver other than the implementer
 
 ## Approval log
 

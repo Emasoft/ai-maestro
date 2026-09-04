@@ -237,6 +237,23 @@ they are non-vacuous.
 (241 pre-existing findings, none new); `grep -ic "5MN01NO8\|MWKCBLQN"` over the full doctor output →
 0 — neither this card nor its parent is named by any finding.
 
+## Does the guard LOCK an already-mismatched card? No — measured and reasoned
+
+The first question a reviewer asks, and it would be a real regression: if a card already sits in
+`tasks/` with `column: proposal`, does this guard refuse the very edit that would FIX it?
+
+- **No such card exists today.** `trdd:doctor` reports **0** ZONE-MISMATCH findings across the
+  corpus, so nothing is currently in that state to lock.
+- **And the guard could not lock one anyway.** It fires only when `'column' in fields`, so every
+  non-column edit passes untouched. The CORRECTIVE edit passes too: writing `column: dev` onto a
+  mismatched `tasks/` card gives `expectedZone('dev', merged) === 'tasks'`, which agrees with the
+  zone. What it refuses is only a write that CREATES or RE-ASSERTS a mismatch — including a no-op
+  re-write of the bad value, which is correct.
+
+`merged` is `{ ...current, ...fields }` (`lib/trdd-edit-guard.ts:132`), so it picks up a
+`release-via` that lives in the card and is absent from this edit's fields. That is what makes the
+`complete` + `release-via: publish` case pass for the right reason rather than by accident.
+
 ## Approval log
 
 - 2026-09-04T16:01:20+0200 — Tier 0 self-mandate (`min-approval-requirement: none`): an EHT closing

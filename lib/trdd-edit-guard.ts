@@ -152,7 +152,15 @@ export function validateTrddFieldEdits(
   // e.g. `column: proposal` written onto a card sitting in `design/tasks/`. Reuse
   // `expectedZone` (the single arbiter `createTrdd`/`advanceColumn`/the doctor already
   // share) rather than a second column→zone table.
-  if ('column' in fields) {
+  // The exemption is load-bearing: this rule exists to stop an edit CREATING a
+  // zone/column contradiction, never to freeze a card already in one. Without it, a
+  // pre-existing ZONE-MISMATCH card becomes harder to edit than before this guard
+  // existed — any edit bundling an UNCHANGED `column` with the fields a repair needs
+  // would 400, and the error would point at promote/refuse/archive, which is not the
+  // verb that fixes an already-mismatched card (the doctor's remedy is `git mv`).
+  // A no-op re-write of the same value cannot make the state worse.
+  const columnUnchanged = String(current['column'] ?? '') === String(fields['column'] ?? '')
+  if ('column' in fields && !columnUnchanged) {
     const wantZone = expectedZone(resultColumn, merged)
     if (wantZone && wantZone !== zone) {
       return {

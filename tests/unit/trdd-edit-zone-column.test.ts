@@ -52,4 +52,31 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
     )
     expect(r.ok).toBe(true)
   })
+
+  it('does NOT lock an already-mismatched card: an UNCHANGED column re-write is allowed', () => {
+    // The guard must stop an edit CREATING a contradiction, never freeze a card already
+    // in one. A card sitting in tasks/ with column: proposal is a ZONE-MISMATCH the
+    // doctor reports and repairs with `git mv` — if editing it required not touching
+    // `column`, an ordinary repair edit that bundles the unchanged column with other
+    // fields would 400, making the card HARDER to fix than before this guard existed.
+    const r = validateTrddFieldEdits(
+      { column: 'proposal', priority: '1', updated: ISO },
+      baseFm({ column: 'proposal' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it('still refuses moving an already-mismatched card to a DIFFERENT contradicting column', () => {
+    // The exemption is narrow: same value in, same value out. Changing one bad column
+    // for another bad one is still an edit that asserts a contradiction, and is refused.
+    const r = validateTrddFieldEdits(
+      { column: 'refused', updated: ISO },
+      baseFm({ column: 'proposal' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(false)
+  })
 })

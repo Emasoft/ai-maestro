@@ -37,8 +37,15 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     vi.stubGlobal('fetch', fetchMock)
   })
 
+  // jsdom does NOT reset window between tests in a file, so the mobile test's
+  // innerWidth=400 leaked forward and silently ran the NEXT test against the
+  // mobile branch — found by neutering the mobile banner, which reddened two
+  // tests instead of one. Restoring it keeps each test's branch its own choice.
+  const realInnerWidth = window.innerWidth
+
   afterEach(() => {
     cleanup()
+    Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, writable: true, configurable: true })
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -66,7 +73,7 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     expect(heartbeatCallsLater).toBe(1)
   })
 
-  it('keeps retrying a 503 with backoff and clears the error once it recovers', async () => {
+  it('keeps retrying a 503 with backoff until it recovers', async () => {
     let heartbeatCount = 0
     fetchMock.mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('/heartbeat')) {
@@ -88,6 +95,58 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     // Second retry after 2s backoff — this one succeeds (status 200).
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     expect(heartbeatCount).toBe(3)
+
+    // DELIBERATELY NOT asserting "no banner" here. A 503 goes to the `catch`,
+    // which never calls setHeartbeatError — so `queryByText(/rejected/i) === null`
+    // would hold no matter what the component did, and would still pass with
+    // setHeartbeatError(null) deleted. The clear-on-recovery claim is pinned by
+    // the visibilitychange test below, which actually enters the error state first.
+  })
+
+  it('shows the banner on the MOBILE branch too — the heartbeat is not desktop-only', async () => {
+    // The heartbeat effect is gated on `isOnline` alone, so it runs on a phone.
+    // The first fix put the banner only in the desktop return, which left a 403
+    // setting state that nothing rendered — the card's own bug, surviving in the
+    // branch nobody read. useDeviceType classifies width < 768 as 'phone'.
+    Object.defineProperty(window, 'innerWidth', { value: 400, writable: true, configurable: true })
+    fetchMock.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/heartbeat')) {
+        return Promise.resolve({ ok: false, status: 403 } as Response)
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ exists: false }) } as Response)
+    })
+
+    render(React.createElement(HaephestosEmbeddedView, { agent }))
+    await act(async () => { await Promise.resolve() })
+
+    expect(screen.getByText(/rejected \(403\)/i)).toBeTruthy()
+  })
+
+  it('clears the banner when a tab-resume heartbeat succeeds after a 403', async () => {
+    // This is the ONLY path that reaches setHeartbeatError(null): a 403 stops the
+    // poll, and `handleVisibility` re-issues one heartbeat on tab-show. If auth was
+    // restored meanwhile it succeeds and the banner must go. Without this test that
+    // line is dead code, and the resume path has no coverage at all.
+    let permanent = true
+    fetchMock.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/heartbeat')) {
+        return permanent
+          ? Promise.resolve({ ok: false, status: 403 } as Response)
+          : Promise.resolve({ ok: true, status: 200 } as Response)
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ exists: false }) } as Response)
+    })
+
+    render(React.createElement(HaephestosEmbeddedView, { agent }))
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText(/rejected \(403\)/i)).toBeTruthy()
+
+    permanent = false
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+    })
 
     expect(screen.queryByText(/rejected/i)).toBeNull()
   })

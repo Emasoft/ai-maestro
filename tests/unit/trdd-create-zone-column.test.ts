@@ -39,4 +39,26 @@ describe('createTrdd — zone/column mismatch at mint', () => {
     expect(r.zone).toBe('proposals')
     expect(r.column).toBe('proposal')
   })
+
+  it('also refuses column: complete, which archives — a wider effect than the reported bug', () => {
+    // createTrdd writes no `release-via`, so expectedZone('complete', {}) is
+    // 'archived'. Refusing is CORRECT per the rule, but it is a behaviour change
+    // beyond the `proposal` case the card reported, so it gets its own pin rather
+    // than riding along unnoticed on the fix for something else.
+    expect(() => createTrdd(design, {
+      title: 'born complete', taskType: 'feature',
+      authorAuthority: 'user', author: 'owner', column: 'complete',
+    })).toThrow(/complete.*belongs in zone "archived"/)
+  })
+
+  it('still allows column: planned, a bracket value that legitimately lives in tasks/', () => {
+    // Guards against over-refusing: `planned` is in BRACKET_COLUMNS but is NOT a
+    // working column, so expectedZone returns null and the mint must proceed.
+    const r = createTrdd(design, {
+      title: 'planned mandate', taskType: 'feature',
+      authorAuthority: 'user', author: 'owner', column: 'planned',
+    })
+    expect(r.zone).toBe('tasks')
+    expect(r.column).toBe('planned')
+  })
 })

@@ -320,11 +320,22 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
     )
   }
 
+  // ONE banner, rendered by EVERY branch that runs the heartbeat (TRDD-VAXLW6RI).
+  // The heartbeat effect is gated on `isOnline` alone, so it runs on mobile too — a
+  // per-branch copy of this markup is how the first fix left a 403 invisible on a
+  // phone, i.e. the exact bug the card is about, surviving in the branch nobody read.
+  const heartbeatBanner = heartbeatError ? (
+    <div className="mx-3 mt-2 px-4 py-2 rounded text-sm font-semibold" style={{ backgroundColor: '#3a1010', color: '#f5b0b0', border: `1px solid ${FRAME_RED_BASE}` }}>
+      {heartbeatError}
+    </div>
+  ) : null
+
   // Mobile layout
   if (isMobile) {
     return (
       <TerminalProvider>
         <div className="flex flex-col h-full" style={{ backgroundColor: PAGE_BG }}>
+          {heartbeatBanner}
           {/* Mobile header */}
           <header className="flex-shrink-0 px-3 py-2 flex items-center justify-between"
             style={{ borderBottom: `1px solid ${BORDER_COLOR}`, backgroundColor: '#120c0c' }}>
@@ -374,11 +385,7 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
   return (
     <TerminalProvider>
       <div className="flex flex-col h-full" style={{ backgroundColor: PAGE_BG }}>
-        {heartbeatError && (
-          <div className="mx-3 mt-2 px-4 py-2 rounded text-sm font-semibold" style={{ backgroundColor: '#3a1010', color: '#f5b0b0', border: `1px solid ${FRAME_RED_BASE}` }}>
-            {heartbeatError}
-          </div>
-        )}
+        {heartbeatBanner}
         {/* Two-frame content area */}
         <div className="flex-1 flex gap-3 mx-3 mt-2 mb-2 min-h-0 overflow-hidden">
 

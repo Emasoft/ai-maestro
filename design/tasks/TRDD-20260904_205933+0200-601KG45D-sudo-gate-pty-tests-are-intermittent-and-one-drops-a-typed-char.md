@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:26:10+0200
+updated: 2026-09-04T23:32:43+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -242,7 +242,24 @@ recorded length was a function of the gate's stdin at all. MEASURED, not argued:
 mutation reddens P12f alone, 5 of 6 still green. Two different input lengths make a constant
 impossible.
 
-**Pinned by P12a-f, one `it()` per branch, four neuters run and ATTRIBUTED:** guard never
+**P12e COVERED ONLY ONE OF THREE SPAWN SHAPES, and not the one that matters.** It drives
+`runAtTerminal`; `runGate` and the P8/P9/P10 inline `ptySpawn`s are separate shapes, and
+**all three observed truncations happened in P8/P9** — so "the shim is on that PATH too" was
+asserted by nobody. P8 and P9 now carry the coverage assertion, deliberately LAST: on a
+truncating run the body assertion fails first and `diagnose` already reports the number, so
+the new line runs only on an otherwise-green run, which is exactly the uncovered case.
+MEASURED — a single-but-WRONG recorded value (`sed 's/^/9/'`) reddens **7**: P12a, P12e,
+P12f, and all four P8/P9 variants.
+
+**That same neuter settles what the second review challenged about P12e's `toEqual` form.**
+It produces `['922']`, an array of length ONE — so `toHaveLength(1)` would PASS and
+`toEqual(['22'])` FAILS. The value form is therefore load-bearing on all three gate paths,
+by arithmetic on the neuter's own output rather than by argument. **What it does NOT do is
+isolate P12e from P12a** — both call the shim with identical argv and stdin, so no shim
+mutation can redden one without the other. P12e's unique contribution is PATH coverage, not
+value coverage, and saying otherwise would over-claim.
+
+**Pinned by P12a-f, one `it()` per branch, five neuters run and ATTRIBUTED:** guard never
 matches (`-RnZ`) → P12a+P12e · guard matches everything (`-n "$a"`) → P12d+P12e · `wc -c`
 → `wc -l` → P12a · forward replaced by `echo '{}'` → P12b. The last two ran TOGETHER; they
 are independent by construction (one writes the record file, one writes stdout, and each
@@ -269,16 +286,32 @@ the line terminating a byte early) resolve at or before `read`, i.e. strictly UP
 every line the shim adds. So the shim cannot perturb the truncation window at all, and the
 rate SHOULD be unchanged.
 
-That inverts what a rate change would mean. Under the old caveat, a rate that moved was
-noise to be discounted. Under the corrected one, **a rate that visibly moves is itself a
-finding** — evidence for a mechanism nobody has proposed, since no current hypothesis has
-anything downstream of `read` to be perturbed. The only residual is second-order: ~4 extra
-forks per gate call raise machine load across a long batch, which is a whole-machine
-effect, not a gap in the gate's own pipeline.
+**"Cannot perturb at all" was itself too strong, and the second review caught it one
+revision later.** It is true WITHIN one gate invocation and false ACROSS runs, which is the
+scale the batch actually operates at: one vitest process runs P1, P2, P3, P8×2, P9×2 and
+P12a-f in sequence, so the shim's extra forks consume wall-clock and change machine state
+BEFORE the next test's `ptySpawn` and its `stty`-vs-type race — and the batch is 40 such
+processes back to back. Batch A's truncation is recorded as having happened UNDER LOAD,
+which is the one condition this card has never checked.
 
-Found by the adversarial review of `e3787efb`. The caveat was written to be conservative
-and was conservative about the wrong axis — which is not a safe failure, because "discount
-any rate change" would have thrown away the one signal this shim can produce for free.
+**So a rate change is AMBIGUOUS, and cannot be read as either answer.** Two revisions of
+this paragraph have now over-claimed in opposite directions — first "discount any rate
+change", then "a rate change is a finding" — and both were reaching for a conclusion the
+design cannot support, because **there is no control arm.** Installing the shim at all six
+spawn sites DELETED the shim-off condition; comparing a shim-on batch against a remembered
+"1 in 24" from another session, another machine state and a different test count (24 then,
+30 now) is not a comparison.
+
+**If the RATE is ever to be claimed, it needs an env-gated shim** (`AIM_JQ_SHIM=0` → plain
+PATH) with the two arms INTERLEAVED — the same discipline this card already invokes for
+two-arm comparisons. Nothing below depends on that: the POSITION reading (N=21 vs 22 when
+a truncation fires) is unaffected by load, and position is what the shim was built for.
+
+Found by the adversarial reviews of `e3787efb` and `8e169da2`. The original caveat was
+written to be conservative and was conservative about the wrong axis; the correction then
+over-corrected. What survives both is narrow and worth keeping: **the shim is downstream of
+`read` within a gate call, so it cannot explain a truncation — and it is upstream of
+nothing that would let a rate comparison stand without a control arm.**
 
 **The `jqStdinNote` message rides `expect(actual, message)` and is TOTAL** — vitest
 evaluates it EAGERLY on every run, so a missing record file returns a sentence, never a
@@ -361,11 +394,28 @@ validated and then thrown away.
      asserts `['22']` rather than a length of 1, so a green suite IS the control. It follows
      that P12e also fires on a real truncation — intended, and the note separates the two
      (`NOT RECORDED` = the shim never ran; `21 byte(s) for 22 expected` = the answer).
+     **"Cannot be forgotten" was claimed for this control and is WITHDRAWN:** an edit
+     reverting the assertion to `toHaveLength(1)` removes it and leaves all 30 tests green,
+     and no neuter can catch that — a test cannot pin the FORM of its own assertion. The
+     control is taken by every green run; it is not protected against being deleted.
+   - **THREE tests now fire on ONE truncation** — the failing gate test via `diagnose`, plus
+     P12e or the P8/P9 coverage line. Do not read a count of failed test names as a count of
+     truncations: one event, several reporters.
 
-   **Exit codes 90/91/92 from the shim are HARNESS failures, never the bug.** `mktemp` and
-   `cat` both fail toward a SHORT length — a full disk mid-`cat` leaves a truncated file, and
-   the shim would record a short length AND hand `jq` short input, manufacturing exactly the
-   observation this card is hunting. They are guarded; if one fires, discard the run.
+   **`SHIM-ERROR-90/91/92` in the note means a HARNESS failure, never the bug — discard that
+   run.** `mktemp` and `cat` both fail toward a SHORT length (a full disk mid-`cat` leaves a
+   truncated file, so the shim would record a short length AND hand `jq` short input,
+   manufacturing exactly the observation this card hunts).
+
+   **Two defects in the first cut of those guards, both found by the second review:**
+   `wc -c … | tr … || exit 92` tested **`tr`'s** status, not `wc`'s — the
+   `$?`-after-a-pipeline trap, from this repo's own lessons file — so the guard was
+   unreachable in the case it was added for; fixed with `set -o pipefail`. And an `exit` was
+   INVISIBLE: the gate calls the shim inside `_body="$(… | jq …)"`, so command substitution
+   swallows the code and the reader sees only a generic refusal. "Discard the run" was an
+   instruction nobody could follow — the same un-executable-procedure defect as the baseline
+   control, one commit later. The guards now WRITE the marker into the record file, so
+   `jqStdinNote` prints it and the failure identifies itself.
 
    **The runner prints EVERY note, never the first.** Passing tests emit none (measured: 0 in
    a green run, 1 in a neutered one), so every note in a log belongs to a failed test — but

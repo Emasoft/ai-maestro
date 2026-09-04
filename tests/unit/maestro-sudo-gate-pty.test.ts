@@ -88,16 +88,26 @@ function installJqShim(dir: string, recordFile: string): string | undefined {
     path.join(dir, 'jq'),
     `#!/bin/bash\n` +
       `# TRDD-601KG45D test shim — see installJqShim() in maestro-sudo-gate-pty.test.ts.\n` +
+      // Without this, `wc -c < "$t" | tr … || exit 92` tests TR's status, not wc's — the
+      // $?-after-a-pipeline trap, which is in this repo's own lessons file. `tr` succeeds even
+      // when `wc` wrote nothing, so the guard added to catch a failed measurement was
+      // unreachable in exactly the case it was added for.
+      `set -o pipefail\n` +
+      // A guard that exits is invisible: the gate calls this inside `_body="$(… | jq …)"`, so
+      // command substitution swallows the exit code and the reader sees a generic refusal.
+      // The MARKER is what makes "if one fires, discard the run" an instruction anyone can
+      // actually follow — jqStdinNote prints it verbatim.
+      `fail() { printf 'SHIM-ERROR-%s\\n' "$1" >> '${recordFile}'; exit "$1"; }\n` +
       `for a in "$@"; do\n` +
       `  [ "$a" = "-Rnc" ] || continue\n` +
-      `  t="$(mktemp '${dir}/jq-stdin.XXXXXX')" || exit 90\n` +
+      `  t="$(mktemp '${dir}/jq-stdin.XXXXXX')" || fail 90\n` +
       // BOTH guards fail toward a SHORT length, which is indistinguishable from the bug this
       // whole card is chasing. A `cat` that hits a full disk leaves a truncated file, and the
       // shim would then record a short length AND hand jq short input — manufacturing the
       // exact observation, on the exact test, that would be read as the defect reproducing.
       // Exit loudly instead; a shim that dies is obvious, a shim that lies is not.
-      `  cat > "$t" || exit 91\n` +
-      `  wc -c < "$t" | tr -d ' ' >> '${recordFile}' || exit 92\n` +
+      `  cat > "$t" || fail 91\n` +
+      `  wc -c < "$t" | tr -d ' ' >> '${recordFile}' || fail 92\n` +
       `  '${realJq}' "$@" < "$t"\n` +
       `  rc=$?\n` +
       `  rm -f "$t"\n` +
@@ -118,6 +128,11 @@ function installJqShim(dir: string, recordFile: string): string | undefined {
  * `expected` is a JS char count and the shim reports bytes; both secrets here are ASCII, so
  * they agree. A non-ASCII password would need the comparison done in bytes on both sides.
  */
+/** Every length the shim recorded this test. TOTAL — an absent file means it never fired. */
+function recordedLens(): string[] {
+  try { return fs.readFileSync(jqLenFile, 'utf8').split('\n').filter((l) => l.trim() !== '') } catch { return [] }
+}
+
 function jqStdinNote(expected: number): string {
   let raw = ''
   try { raw = fs.readFileSync(jqLenFile, 'utf8') } catch { return 'jq -Rnc stdin: NOT RECORDED (shim inactive — jq absent, or the gate never reached it)' }
@@ -415,9 +430,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // to catch — the shim never fired, so the record file was never created — and a throw in
     // the body means the assertion never runs and its message is never printed. Measured: the
     // first neuter of this test reported a bare failure with no note at all.
-    let raw = ''
-    try { raw = fs.readFileSync(jqLenFile, 'utf8') } catch { /* the shim never fired — that IS the finding, so assert it */ }
-    const lens = raw.split('\n').filter((l) => l.trim() !== '')
+    const lens = recordedLens()
     // Asserts the VALUE, not just the count, and that is what makes the card's "baseline
     // control" real rather than aspirational: `fakeHome` is torn down in afterEach, so no
     // later step can ever read this number back — if it is not asserted HERE it is not
@@ -557,6 +570,12 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
     expect(seen[0]?.body, diagnose(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
+    // LAST deliberately. P12e proves the shim covers `runAtTerminal`'s spawn; this spawn is a
+    // THIRD shape (inline ptySpawn), and it is where 2 of the 3 observed truncations actually
+    // happened — so "the shim is on this PATH too" was asserted by nobody. On a truncating run
+    // the assertion above fails first and `diagnose` already reports the number, so this line
+    // only ever runs on an otherwise-green run, which is precisely the uncovered case.
+    expect(recordedLens(), jqStdinNote(SECRET.length)).toEqual([String(Buffer.byteLength(SECRET))])
   })
 
   // P9/P10 — the two caller shapes the FIRST cut of _maestro_sudo_on_int leaked on, found by
@@ -582,6 +601,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out, timeoutContext(out, seen.length)).not.toContain(SECRET) // typed after the ^C, still not echoed
     expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/) // the gate ran to its refusal, ^C ignored as asked
     expect(seen[0]?.body, diagnose(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
+    expect(recordedLens(), jqStdinNote(SECRET.length)).toEqual([String(Buffer.byteLength(SECRET))]) // shim coverage — see P8
   })
 
   for (const copy of COPIES) it(`P10 [${copy}]: a prior trap ending in \`return\` does not skip the re-disable`, async () => {

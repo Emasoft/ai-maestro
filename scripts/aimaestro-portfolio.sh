@@ -80,12 +80,12 @@ _api() {
     local resp code out
     if [ -n "$body" ]; then
         resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" \
+            "${auth_args[@]+"${auth_args[@]}"}" \
             -H "Content-Type: application/json" -d "$body" "${base}${path}")" || {
             echo "Error: request to ${path} failed (network)" >&2; return 1; }
     else
         resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" "${base}${path}")" || {
+            "${auth_args[@]+"${auth_args[@]}"}" "${base}${path}")" || {
             echo "Error: request to ${path} failed (network)" >&2; return 1; }
     fi
 

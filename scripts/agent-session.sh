@@ -78,7 +78,7 @@ cmd_session_add() {
 
     print_info "Adding session to agent..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -128,7 +128,7 @@ cmd_session_remove() {
 
     print_info "Removing session..."
     local response
-    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "$url")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "$url")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -183,7 +183,7 @@ cmd_session_exec() {
     _build_auth_args auth_args
 
     local response
-    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
+    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -237,7 +237,7 @@ cmd_session_command() {
     local -a auth_args=()
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
-    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/${session}/command" \
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/${session}/command" \
         -H "Content-Type: application/json" -d "$payload")
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
@@ -267,7 +267,7 @@ cmd_session_activity_update() {
     local -a auth_args=()
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
-    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/activity/update" \
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/activity/update" \
         -H "Content-Type: application/json" -d "$payload")
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
@@ -281,7 +281,7 @@ cmd_session_user_input() {
     local -a auth_args=()
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
-    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/me/user-input" \
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/me/user-input" \
         -H "Content-Type: application/json")
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
@@ -318,13 +318,13 @@ HELP
     if [[ -n "$cwd" ]]; then
         [[ -n "$name" ]] && { print_error "Provide a name OR --cwd, not both"; return 1; }
         local rcwd; rcwd=$(realpath -m "$cwd" 2>/dev/null) || rcwd="$cwd"
-        local all; all=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents")
+        local all; all=$(curl -s --max-time 15 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents")
         agent_json=$(echo "$all" | jq -c --arg d "$rcwd" '((.agents // .) // []) | map(select(.workingDirectory == $d)) | .[0] // empty')
         [[ -z "$agent_json" || "$agent_json" == "null" ]] && { print_error "No agent found with workingDirectory: $rcwd"; return 1; }
     else
         [[ -z "$name" ]] && { print_error "Provide an agent name or --cwd <path>"; return 1; }
         resolve_agent "$name" || return 1
-        local full; full=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}")
+        local full; full=$(curl -s --max-time 15 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}")
         agent_json=$(echo "$full" | jq -c '.agent // empty')
         [[ -z "$agent_json" || "$agent_json" == "null" ]] && { print_error "Could not fetch agent: $name"; return 1; }
     fi
@@ -368,7 +368,7 @@ cmd_hibernate() {
 
     print_info "Hibernating agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -407,7 +407,7 @@ cmd_wake() {
 
     print_info "Waking agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

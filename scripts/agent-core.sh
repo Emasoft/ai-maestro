@@ -413,7 +413,7 @@ restart_agent() {
 
     # Get the agent's session name and programArgs from registry
     local agent_json
-    agent_json=$(curl -s --max-time 10 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}")
+    agent_json=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}")
     local session_name
     session_name=$(echo "$agent_json" | jq -r '.agent.session.tmuxSessionName // .agent.name // .agent.alias // empty' 2>/dev/null)
     local program_args
@@ -427,7 +427,7 @@ restart_agent() {
     # 1. Send /exit to Claude Code (graceful shutdown — keeps tmux alive)
     local payload
     payload=$(jq -n --arg cmd "/exit" '{"command": $cmd, "requireIdle": false}')
-    curl -s --max-time 10 -X POST "${auth_args[@]}" "${api_base}/api/sessions/${session_name}/command" \
+    curl -s --max-time 10 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/${session_name}/command" \
         -H "Content-Type: application/json" \
         -d "$payload" >/dev/null 2>&1
 
@@ -443,14 +443,14 @@ restart_agent() {
         start_cmd="claude $program_args"
     fi
     payload=$(jq -n --arg cmd "$start_cmd" '{"command": $cmd, "requireIdle": false}')
-    curl -s --max-time 10 -X POST "${auth_args[@]}" "${api_base}/api/sessions/${session_name}/command" \
+    curl -s --max-time 10 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/${session_name}/command" \
         -H "Content-Type: application/json" \
         -d "$payload" >/dev/null 2>&1
 
     # 4. Verify agent comes back online
     sleep 3
     local response
-    response=$(curl -s --max-time 10 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}")
+    response=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}")
     local status
     status=$(echo "$response" | jq -r '.agent.session.status // "unknown"' 2>/dev/null)
 

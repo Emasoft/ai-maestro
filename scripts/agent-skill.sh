@@ -97,7 +97,7 @@ cmd_skill_list() {
     _build_auth_args auth_args
 
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills")
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills")
 
     echo "$response" | jq -r '.skills[] | "  - \(.id // .name) (\(.type // "unknown"))"' 2>/dev/null || \
         echo "  (no skills)"
@@ -145,7 +145,7 @@ cmd_skill_add() {
     _build_auth_args auth_args
 
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -190,7 +190,7 @@ cmd_skill_remove() {
     encoded_skill_id=$(printf '%s' "$skill_id" | jq -sRr @uri 2>/dev/null) || encoded_skill_id="$skill_id"
 
     local response
-    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills/${encoded_skill_id}")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills/${encoded_skill_id}")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

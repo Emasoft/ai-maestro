@@ -70,12 +70,12 @@ _api() {
         # already a jq-built JSON string here; -d @- reads it from stdin so a
         # large HTML document never becomes a multi-megabyte argv entry (ARG_MAX).
         resp="$(printf '%s' "$body" | curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" "${sudo_args[@]}" \
+            "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" \
             -H "Content-Type: application/json" --data-binary @- "${base}${path}")" || {
             echo "Error: request to ${path} failed (network)" >&2; return 1; }
     else
         resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" "${sudo_args[@]}" "${base}${path}")" || {
+            "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" "${base}${path}")" || {
             echo "Error: request to ${path} failed (network)" >&2; return 1; }
     fi
 

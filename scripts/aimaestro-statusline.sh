@@ -106,7 +106,7 @@ _read_api() {
 
     local resp code out
     resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-        "${auth_args[@]}" "${base}${path}")" || {
+        "${auth_args[@]+"${auth_args[@]}"}" "${base}${path}")" || {
         echo "Error: request to ${path} failed (network)" >&2; return 1; }
 
     code="$(printf '%s' "$resp" | tail -n1)"

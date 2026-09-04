@@ -63,7 +63,7 @@ _resolve_agent_by_cwd() {
     local base; base="$(get_api_base)"
     local -a auth_args=(); get_auth_args auth_args
     local resp
-    resp="$(curl -s --max-time 5 "${auth_args[@]}" "${base}/api/agents" 2>/dev/null)" || return 1
+    resp="$(curl -s --max-time 5 "${auth_args[@]+"${auth_args[@]}"}" "${base}/api/agents" 2>/dev/null)" || return 1
     printf '%s' "$resp" | jq -c --arg cwd "$cwd" '
         (.agents // []) | map(
             (((.workingDirectory // .session.workingDirectory) // "")) as $wd
@@ -78,7 +78,7 @@ _post() {
     local -a auth_args=(); get_auth_args auth_args
     local -a sudo_args=()
     [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ] && sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
-    curl -s --max-time 10 -X POST "${auth_args[@]}" "${sudo_args[@]}" \
+    curl -s --max-time 10 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" \
         -H "Content-Type: application/json" -d "$body" "${base}${path}"
 }
 
@@ -192,7 +192,7 @@ cmd_check_messages() {
     local -a auth_args=(); get_auth_args auth_args
     local enc; enc="$(printf '%s' "$aid" | jq -sRr @uri)"
     local resp
-    resp="$(curl -s --max-time 10 "${auth_args[@]}" "${base}/api/messages?agent=${enc}&box=inbox&status=unread" 2>/dev/null)" || true
+    resp="$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${base}/api/messages?agent=${enc}&box=inbox&status=unread" 2>/dev/null)" || true
     if [ "$json" = true ]; then
         printf '%s\n' "${resp:-[]}"
     else

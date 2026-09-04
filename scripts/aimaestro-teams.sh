@@ -73,11 +73,11 @@ _api() {
     local resp code out rc=""
     if [ -n "$body" ]; then
         resp="$(curl -s -w $'\n%{http_code}' --max-time "$max_time" -X "$method" \
-            "${auth_args[@]}" "${sudo_args[@]}" \
+            "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" \
             -H "Content-Type: application/json" -d "$body" "${base}${path}")" || rc=$?
     else
         resp="$(curl -s -w $'\n%{http_code}' --max-time "$max_time" -X "$method" \
-            "${auth_args[@]}" "${sudo_args[@]}" "${base}${path}")" || rc=$?
+            "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" "${base}${path}")" || rc=$?
     fi
     if [ -n "$rc" ]; then
         # curl 28 = --max-time expired. The request REACHED the server, which is

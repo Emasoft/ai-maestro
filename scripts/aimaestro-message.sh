@@ -97,11 +97,11 @@ _api_raw() {
     local resp
     if [ -n "$body" ]; then
         resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" -H "Content-Type: application/json" \
+            "${auth_args[@]+"${auth_args[@]}"}" -H "Content-Type: application/json" \
             -d "$body" "${base}${path}")" || return 1
     else
         resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" "${base}${path}")" || return 1
+            "${auth_args[@]+"${auth_args[@]}"}" "${base}${path}")" || return 1
     fi
     API_CODE="$(printf '%s' "$resp" | tail -n1)"
     API_OUT="$(printf '%s' "$resp" | sed '$d')"

@@ -264,7 +264,7 @@ cmd_presence() {
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/users/me/presence" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/users/me/presence" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch presence"
         return 1
@@ -306,7 +306,7 @@ cmd_probe() {
         sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
     fi
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${sudo_args[@]}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent probe"
         return 1
@@ -373,7 +373,7 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}/subconscious" 2>/dev/null)
+    response=$(curl -s --max-time 15 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}/subconscious" 2>/dev/null)
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch subconscious status for ${RESOLVED_ALIAS:-$agent}"
@@ -469,7 +469,7 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/hibernation" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/hibernation" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch the hibernation roster"
         return 1
@@ -536,7 +536,7 @@ cmd_config() {
     _build_auth_args auth_args
 
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" \
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" \
         "${api_base}/api/agents/${RESOLVED_AGENT_ID}/full" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch config for agent '${agent}'"
@@ -587,7 +587,7 @@ cmd_show() {
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}" 2>/dev/null)
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent data"
@@ -976,7 +976,7 @@ HELP
     _build_auth_args auth_args
     local response
     # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -1096,7 +1096,7 @@ HELP
     local response http_code
     # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
     # can detect the "sudo_required" 403 and print a user-facing message.
-    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}${query}")
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}${query}")
     http_code=$(echo "$response" | tail -n1)
     response=$(echo "$response" | sed '$d')
 
@@ -1222,7 +1222,7 @@ HELP
     # governanceTitle, githubRepo) — any update through cmd_update with
     # one of these fields will trip this gate when invoked by an agent
     # (agents cannot earn sudo tokens per Rule 12).
-    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
     http_code=$(echo "$response" | tail -n1)
@@ -1332,7 +1332,7 @@ HELP
     # PROP #1: agent rename is a sudo-required Change*-owned field now —
     # renaming hijacks AMP identity, so agents must not rename without
     # explicit human approval.
-    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
     http_code=$(echo "$response" | tail -n1)
@@ -1396,7 +1396,7 @@ HELP
                 # a far worse state than "rename refused cleanly").
                 local dir_payload dir_response dir_http_code
                 dir_payload=$(jq -n --arg d "$new_dir" '{workingDirectory: $d}')
-                dir_response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+                dir_response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
                     -H "Content-Type: application/json" \
                     -d "$dir_payload")
                 dir_http_code=$(echo "$dir_response" | tail -n1)
@@ -1567,7 +1567,7 @@ HELP
 
     print_info "Importing agent..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
         -d "$agent_data")
 

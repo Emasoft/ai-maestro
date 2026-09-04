@@ -27,7 +27,7 @@ _init_self_host() {
     local -a _id_auth_args=()
     get_auth_args _id_auth_args
     local identity
-    identity=$(curl -s --max-time 5 "${_id_auth_args[@]}" "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
+    identity=$(curl -s --max-time 5 "${_id_auth_args[@]+"${_id_auth_args[@]}"}" "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
     if [ -n "$identity" ]; then
         _SELF_HOST_ID=$(echo "$identity" | jq -r '.host.id // empty' 2>/dev/null)
         _SELF_HOST_URL=$(echo "$identity" | jq -r '.host.url // empty' 2>/dev/null)
@@ -233,7 +233,7 @@ lookup_agent_by_session() {
     get_auth_args _lookup_auth_args
 
     local response
-    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]+"${_lookup_auth_args[@]}"}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1
@@ -281,7 +281,7 @@ lookup_agent_by_directory() {
 
     # Query the agents API and find agent with matching workingDirectory
     local response
-    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]+"${_lookup_auth_args[@]}"}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1
@@ -339,7 +339,7 @@ _resolve_agent_id() {
         base="$(get_api_base)"
         local -a auth_args=()
         get_auth_args auth_args
-        resp="$(curl -s --max-time 30 "${auth_args[@]}" "${base}/api/agents/me")" || {
+        resp="$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${base}/api/agents/me")" || {
             echo "Error: request to /api/agents/me failed (network)" >&2
             return 1
         }
@@ -378,7 +378,7 @@ _resolve_agent_id() {
     get_auth_args auth_args
 
     local resp
-    resp="$(curl -s --max-time 30 "${auth_args[@]}" "${base}/api/agents?q=${encoded}")" || {
+    resp="$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${base}/api/agents?q=${encoded}")" || {
         echo "Error: request to /api/agents failed (network)" >&2
         return 1
     }
@@ -625,7 +625,7 @@ api_query() {
     local url="${api_base}${endpoint}"
     local response
 
-    response=$(curl -s --max-time 30 -X "$method" "${auth_args[@]}" "${extra_args[@]}" "$url" 2>/dev/null)
+    response=$(curl -s --max-time 30 -X "$method" "${auth_args[@]+"${auth_args[@]}"}" "${extra_args[@]}" "$url" 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo "Error: API request failed" >&2

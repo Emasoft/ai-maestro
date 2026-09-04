@@ -2,11 +2,12 @@
 name: never-log-a-security-argv
 description: "I want to log which keychain item is slow or failing / can I log the security argv / my log prints argv.join and it looked safe / the -w flag prints to stdout so no secret is on the command line — WRONG for writes / an email address showed up in pm2-error.log / how do I identify a keychain account in a log without leaking it / my fix shipped the next leak / the allowlist proves omission not commission / a test pinned the leak in as a requirement / my safety claim was scoped to the wrong hazard"
 ocd: 2026-08-26
-lmd: 2026-08-26
+lmd: 2026-09-04
 metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: security-and-auth
 publish-globally: false
 ---
 

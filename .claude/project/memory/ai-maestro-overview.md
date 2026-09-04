@@ -100,10 +100,12 @@ exist ONLY there.
 
 ### Security and Auth
 
+- **`agent-isolation-is-not-enforced`** — can one agent read another agent's token or impersonate it
 - **`env-var-security-delete-not-gate`** — adding a new process.env read / env var — is it safe? does a security-weakening env var get deleted or gated?…
 - **`env-vars-and-the-governance-password`** — which env vars does ai-maestro actually read
 - **`governance-password-invalidation`** — how does the user rotate / revoke
 - **`network-security-tailscale-bind`** — why does a LAN IP get dropped / 192.168.x.x cannot reach the dashboard
+- **`never-log-a-security-argv`** — I want to log which keychain item is slow or failing
 - **`password-and-credential-system`** — which password or token do I need
 - **`public-repo-personal-data`** — this repo is PUBLIC and a personal email
 

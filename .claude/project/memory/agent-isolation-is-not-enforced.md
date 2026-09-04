@@ -2,11 +2,12 @@
 name: agent-isolation-is-not-enforced
 description: "can one agent read another agent's token or impersonate it / is AID_AUTH visible in ps / can agent A drive agent B's tmux pane / why does per-agent identity not survive a shared tmux server / where should the isolation boundary be / is a container required to isolate agents / are containers the only fix / can an agent patch the ai-maestro server / can an agent read another agent private key"
 ocd: 2026-08-26
-lmd: 2026-08-26
+lmd: 2026-09-04
 metadata:
   node_type: memory
   type: project
   tier: component
+  topic: security-and-auth
 publish-globally: false
 ---
 

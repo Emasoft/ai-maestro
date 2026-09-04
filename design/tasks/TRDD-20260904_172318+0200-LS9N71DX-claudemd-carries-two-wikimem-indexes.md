@@ -3,10 +3,11 @@ trdd-id: LS9N71DX
 title: CLAUDE.md carries two wikimem indexes over the same corpus
 column: ai_review
 created: 2026-09-04T17:23:18+0200
-updated: 2026-09-04T18:52:12+0200
+updated: 2026-09-04T18:57:14+0200
 implementation-commits: [164aad16]
-current-owner: user
+current-owner: claude-opus-session
 created-by: user
+assignee: claude-opus-session
 task-type: refactor
 min-approval-requirement: none
 mandate: true
@@ -26,12 +27,18 @@ acceptance list demanded are done, and one of them settled it outright.
   workflow, no test, no `package.json` script — every hit is prose (docs, TRDDs, reports) or the
   generated fence markers themselves. Its documented `--check` mode is invoked by nobody, so
   retiring the CLAUDE.md write path breaks no gate.
-- **The hand-run block was the stale half — measured.** `node scripts/wikimem-index.mjs --check`
-  exits **1**, naming two pages (`agent-isolation-is-not-enforced`,
-  `never-log-a-security-argv`) that carry no `metadata.topic:` and are therefore **absent from
-  the project index entirely**. Writing the generator's current output to a scratch copy of
-  CLAUDE.md and diffing showed **3 committed entries already out of date**. The janitor's block,
-  written by its own hook, carries all 69 pages and cannot fall behind the same way.
+- **The hand-run block was the stale half — measured.** Writing the generator's current output
+  to a scratch copy of CLAUDE.md and diffing it against the committed block showed **3 entries
+  already out of date**. The janitor's block, written by its own hook, cannot fall behind the
+  same way.
+- **A SEPARATE finding, which an earlier draft of this block filed under the one above —
+  wrongly.** `node scripts/wikimem-index.mjs --check` exited **1**, naming two pages
+  (`agent-isolation-is-not-enforced`, `never-log-a-security-argv`) carrying no
+  `metadata.topic:`. That is a **content defect in two memory pages**, not staleness in
+  CLAUDE.md, and its fix is to add the topics — not to delete an index. Both point the same
+  way, so the decision is unaffected, but they are different facts and stacking them under one
+  heading inflates the evidence for the decision. **Now fixed** (`topic: security-and-auth` on
+  both, written through `memgrep update-mem-topic`); `--check` exits **0** again.
 - **Only one of the two write paths is mine to retire.** The janitor's runs from a plugin hook in
   another project (cross-project rule: file an issue, never edit). This repo's script is entirely
   local and manual. Keeping the block that maintains itself and dropping the one that needs a
@@ -40,11 +47,44 @@ acceptance list demanded are done, and one of them settled it outright.
 **What is deliberately NOT changed:** `--check` and the `--write .claude/project/memory/ai-maestro-overview.md`
 target both stay. The script keeps its other two jobs; only `CLAUDE.md` is refused.
 
+**`metadata.topic:` is NOT orphaned by this change, and a review caught me implying it was.**
+The surviving overview target still builds a topic-grouped index from exactly that field, so
+`--check` remains a **live gate over live data** rather than a vestige. The framing I used
+while briefing the review — *"the two topic-less pages stay invisible to a block that no longer
+exists"* — was wrong: they were invisible in the overview index too, which is why fixing them
+was worth doing rather than moot.
+
+**Supersession recorded here because the other card is frozen.** `TRDD-5TELESBL` (archived,
+`complete`) fixed five topic-less pages, and its stated rationale is CLAUDE.md-specific —
+*"A page with no topic never appears in it"*, citing `--write CLAUDE.md`. That sentence is now
+half-false: the mechanism survives, but through the overview page, not CLAUDE.md. Terminal
+cards are frozen (IND base step 12), so the correction lives on this card. Its acceptance had
+also **regressed** — it closed at `--check` exit 0 and had drifted back to exit 1 with two
+*different* pages, tracked by nothing. Restored to exit 0 in this card's work.
+
+Concretely, so a future reader is not ambushed: **5TELESBL's verification step 3 is
+`node scripts/wikimem-index.mjs --write CLAUDE.md --write .claude/project/memory/ai-maestro-overview.md`,
+and half of that command now exits 1 by design.** Run it as written and you get a refusal citing
+a TRDD id you then have to go find. Drop the `--write CLAUDE.md` half; the rest still works and
+still does 5TELESBL's job. Its fix now serves one consumer instead of two — it was not
+invalidated.
+
 **Cost accepted, stated so nobody re-opens it as a defect:** the janitor's block groups by `tier:
 hub` + wikilinks, so the project block's 11 named `metadata.topic:` sections are lost. That is a
 real reduction in browsability, and it is the right trade: CLAUDE.md's own header says recall runs
 through `memgrep recall`, not through reading this file top-to-bottom, and a topic index nobody
 re-generates is worse than a flat one that is always current.
+
+**Why `todo` → `ai_review` skips five columns, stated so an in-harness reader is not confused.**
+The DEP overlay's Part B2 table walks `verify_assumptions → plan → dispatch → dev → testing`
+before `ai_review`, and none of those ran. That is correct HERE and would not be inside the
+harness: this is an external Claude session, where only the IND base binds, and the IND base
+mandates a column *vocabulary*, not a sequential walk. The column has to be TRUE, and
+`ai_review` is — the work is done and under adversarial review. `complete` is what it may not be
+yet, because IND step 12 freezes a terminal body and its exceptions (the closing edit, the
+append-only `## Approval log`, archival, removing a machine-verifiably false line) do not cover
+*"a review came back with a finding I must write into STATE"* — which is exactly what happened
+twice while this card sat here.
 
 **NEXT ACTION.** None pending beyond the acceptance boxes below. If the topic grouping is missed,
 the follow-up is a janitor issue asking `claudemd_slim` to group by `metadata.topic:` — not a
@@ -115,11 +155,23 @@ that before anything is removed.
 - [x] Grep the whole repo for every consumer of `scripts/wikimem-index.mjs`
       (tests, CI workflows, `package.json` scripts, docs, README, other
       TRDDs) BEFORE removing anything — the script documents a `--check`
-      mode that may be pinned by a gate. **No gate pins it.** Every hit is
-      prose (docs / TRDDs / reports_dev) or a generated fence marker; there
-      is no CI workflow, no test, and no `package.json` script that runs it.
-      `--check` is invoked by nobody, so retiring the CLAUDE.md write path
-      cannot redden a gate.
+      mode that may be pinned by a gate. **No gate pins it.** Every hit of a
+      repo-wide grep for `wikimem-index` is prose (docs / TRDDs /
+      `reports_dev`) or a generated fence marker. **That grep alone was not
+      enough** — it passed `--exclude-dir=.git`, so a `.git/hooks/` gate was
+      never searched, and this repo demonstrably runs a pre-commit hook. Three
+      direct checks close it: `.github/` → no hit, `.git/hooks/` → no hit,
+      `package.json` → no hit. **And a free argument settles it without any
+      grep at all:** `--check` was exiting **1** all day today and every commit
+      in this session succeeded, so nothing in the commit path can have been
+      gating on it. A wrapper invoking the script through a variable is the one
+      shape none of this would catch; the exit-1 argument covers that too, for
+      any gate on the local commit path. **What actually makes the residual
+      gap tolerable is the guard's failure mode, not the grep:** it was written
+      to `exit 1`, not to silently skip, so a caller nobody found fails LOUDLY
+      on its first run and names this card — instead of quietly reintroducing
+      the duplicate block, which is the outcome the card exists to prevent.
+      A missed invoker is therefore a nuisance, not a regression.
 - [x] Grep the whole repo (and the janitor plugin cache, if reachable) for
       every trigger of `claudemd_slim.py` (SessionStart hook, PostCompact
       hook, any script/cron invoking it) before removing anything. **Found,

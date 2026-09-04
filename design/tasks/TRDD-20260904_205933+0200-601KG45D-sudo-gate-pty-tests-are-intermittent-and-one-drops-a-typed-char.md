@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:23:44+0200
+updated: 2026-09-04T22:28:05+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -32,15 +32,23 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
-**The instrument is validated and it has fired on a real loss. The hypothesis space it was
-built to discriminate turned out to be missing an entry — that is now the open work.**
+**THE FLAKE HAS TWO FAILURE MODES AND EACH NOW HAS A LEADING EXPLANATION.** Timeouts (3 of 4
+historical) ← a `stty` TCSAFLUSH, which blocks `read` forever rather than shortening it.
+Truncations (1 historical + 1 today) ← a line ending one byte early. **That pairing is the
+current state of the card**; everything below is how it was arrived at, including three
+retractions of my own reasoning.
 
-- **DONE — step (a), by a different route than the body prescribes.** `diagnoseTyped`,
-  `pwOf` and `diagnoseBody` live in `tests/unit/maestro-sudo-gate-pty.test.ts` (`fc3b6f76`,
-  `1a2a1b2c`) and supply the failure message on every assertion that pins the password
-  reaching the server. Pinned by P11a-g, one `it()` per branch; **six neuters run, and every
-  one of the seven tests reddens under at least one** (E→P11a+g · G→P11b/c/d · C→P11e ·
-  F→P11f · D→P11g). 21 passed, tsc 0 lines.
+- **DONE — step (a)'s CLASSIFIER half, by a different route than the body prescribes.**
+  `diagnoseTyped`, `pwOf` and `diagnoseBody` live in
+  `tests/unit/maestro-sudo-gate-pty.test.ts` (`fc3b6f76`, `1a2a1b2c`) and supply the failure
+  message on every assertion that pins the password reaching the server. Pinned by P11a-g,
+  one `it()` per branch; **seven neuters run, every one of the seven tests reddens under at
+  least one, and FIVE of the seven pin a BRANCH rather than message text** (A→P11b · B→P11d ·
+  C→P11e · D→P11g · F→P11f · **H→P11c**; E and G perturb only interpolated text). 21 passed,
+  tsc 0 lines.
+- **The DETECTOR half is validated for `fc3b6f76`'s wiring only.** Run 23 fired it on a real
+  loss end-to-end; `1a2a1b2c` then replaced that wiring with `diagnoseBody`, which has never
+  fired on real data. Do not read "the instrument works" as covering the code in the tree.
 - **The route change, stated because the body still reads the old way.** The body ordered
   (a) rebuild a throwaway probe under `scripts_dev/`, then (c) port it to the shipped gate.
   The probe was SKIPPED: the shipped harness already has a real pty, a real server and the
@@ -58,13 +66,23 @@ instrument named the position on its first real firing: TAIL loss, 1 char, on
 box 1 was taken and then WITHDRAWN, "4.2%" is a per-run number whose denominator moved this
 session, and the flake has at least two distinct failure modes that earlier revisions pooled.
 
-**NEXT ACTION — one cheap probe, before any more tty work.** §Step 2 found the hypothesis
-space was two-valued and both entries were TTY-layer, while the observation is SERVER-side:
-nothing has ever excluded the shell→curl leg. Print `${#pw}` (**length only, never the
-value**) inside the gate right after `read`, run until a truncation fires, and compare it to
-the body length the server saw. That splits the space in half and decides whether this is a
-user-facing gate bug or a harness-only artifact — i.e. it decides this card's severity, not
-just its mechanism. Everything else on this card is downstream of that answer.
+**NEXT ACTION — instrument the `jq` boundary FROM THE TEST, never from the gate.** The
+question is whether the line `read` returned was already short (§Step 2 hypothesis 3 shows
+the loss must be at or before `read`, so this is the whole remaining question).
+
+**Do NOT do it the way an earlier version of this line said**, which was *"print `${#pw}`
+inside the gate right after `read`"*. `scripts/shell-helpers/common.sh` is SHIPPED and runs
+against the owner's REAL governance password — that instruction was "add a debug print to a
+production credential path", and a length derived from a live secret is still derived from a
+live secret. It also would not have worked: `_pw` is `local`, and the gate `unset`s it one
+line after composing the body.
+
+**Do it with a PATH shim instead.** The pty tests already run `bash -c "source <copy>;
+maestro_sudo_ensure"` with a controlled `PATH`; put a `jq` wrapper first on that PATH which
+records the byte length of its stdin to a file and then `exec`s the real `jq`. That measures
+the exact boundary, touches **zero shipped code**, and cannot reach a real credential because
+it exists only inside the test's own environment. Run until a truncation fires and compare
+the recorded length with what the server received.
 
 **Waiting on nothing and nobody** — no `blocked-by:`, no owner decision. It sits in `todo`
 because the turn ended, not because it is parked; the sibling `TRDD-BAXXIG0J` is the one
@@ -356,11 +374,27 @@ never established.** It was assumed on the first occurrence and has been inherit
 through every revision since, including the ones that were busy correcting other overreach.
 So:
 
-3. **The loss is in the shell→curl leg, after `read` already had the full line.** Nothing on
-   this card excludes it, and nothing has ever tested for it. It is cheap to test: print
-   `${#pw}` (length only, never the value) inside the gate right after `read` and compare it
-   to what the server receives. That single probe splits the space in half and should come
-   before any further tty work.
+3. **The loss is in the shell→curl leg, after `read` already had the full line.** **CORRECTED
+   the same session, and mostly CLOSED — I over-stated it, using the accusation that the card
+   was sloppy to introduce a hypothesis the card had already narrowed.** The gate's actual
+   chain is `IFS= read -rs _pw < /dev/tty` → `printf '%s' "$_pw" | jq -Rnc '{password:
+   input}'` → `curl -d @-`. Two consequences I should have derived before writing the
+   hypothesis:
+   - **The JSON is CONSTRUCTED by `jq` from `$_pw`**, so a well-formed body carrying a short
+     value means `jq` already received a short input. A loss anywhere AFTER `jq` would cut
+     the JSON mid-string (`…x7q` with no closing quote or brace) — and the observed body was
+     `{"password":"wrong-pw-9MZQ4T7E-x7q"}`, intact. §"The clue" said exactly this
+     (*"Ruled out: a truncated HTTP body. The JSON parsed cleanly and only the value was
+     short"*) and I quoted that very line in `11c90b6e` while leaving this hypothesis
+     over-broad in `ab90429f`.
+   - The only shell-side survivor is a short write on the `printf`→`jq` pipe, and that is not
+     credible for 22 bytes: `printf` is a builtin issuing one write, far under `PIPE_BUF`,
+     where writes are atomic.
+
+   **So the loss is at or before `read`, and hypotheses 1 and 2 are the live space after
+   all.** What hypothesis 3 leaves behind is not a candidate but a MEASUREMENT worth taking,
+   because it is the only thing that separates "the line `read` returned was short" from
+   every story about what happened later.
 
 **And the tty reasoning I published an hour ago was broken in two places, though its
 conclusion survives.** Recorded rather than quietly rewritten, because a reader who checks a
@@ -377,9 +411,26 @@ broken argument discards the conclusion with it:
   queued, and a flush there discards all 22 and produces **no request at all**, not a tail
   loss. Worked through properly, a flush predicts a **LEADING or total** loss at every point.
 
-So hypothesis 1 (TCSAFLUSH) is **disfavoured more strongly than I claimed**, for a reason I
-had stated wrongly. What remains genuinely open is hypothesis 2 versus the new hypothesis 3,
-and the observation to date cannot separate them at all.
+**So hypothesis 1 (TCSAFLUSH) is not refuted and not merely disfavoured — it is RELOCATED,
+and this is the sharpest thing on the card.** Follow the flush through: `read -rs` is blocked
+in the kernel waiting for a line terminator; a flush discards the queue, including the
+terminator; so `read` does not return short — **it keeps blocking**, and nothing types again
+(the 1200 ms write already happened). It blocks until the harness's 25 s `SIGKILL`. **A flush
+therefore predicts a TIMEOUT.**
+
+And timeouts are **3 of the 4 historical failures**. So hypothesis 1 stops being a candidate
+for the truncation and becomes a live candidate for the *other* failure mode — the majority
+one, which had no explanation at all until now.
+
+**How this was missed is worth more than the finding.** `a4da6e47`, one commit earlier in
+this same session, established that the flake has two distinct failure modes and warned
+against pooling them. `ab90429f` then reasoned about hypothesis 1 as though only the
+truncation existed, and concluded "disfavoured" about a hypothesis that had simply moved to
+the other mode. **I split the modes and immediately went back to reasoning about one.**
+Splitting a population is worthless if the next paragraph re-merges it.
+
+What remains open for the TRUNCATION is hypothesis 2 versus the narrow remnant of
+hypothesis 3, and the observation to date cannot separate those two at all.
 
 **If the loss is at the tty (hypothesis 2), this is a USER-FACING bug, not a test problem** —
 a human typing while the gate re-disables echo loses their last character and gets an

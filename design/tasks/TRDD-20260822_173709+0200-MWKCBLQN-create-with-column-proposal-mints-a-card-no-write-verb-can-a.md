@@ -111,9 +111,16 @@ at all, so it cannot mint the contradiction. Its own comment already names the f
 ("a second write path with a second (absent) predicate"). Checked rather than assumed, because
 this repo's signature defect is exactly a guard applied to one of two paths.
 
-Verdict: two production callers, both should be guarded, both are; the third write surface
-refuses column writes outright. The finding was legitimate and resolves clean — but the census
-belonged before the commit, not after a reviewer asked.
+Verdict: two production callers, both should be guarded, both are. **The clause that stood here —
+"the third write surface refuses column writes outright" — is FALSE and is struck**: it is true of
+`setTrddField` and false of the file, because `editTrdd` writes columns with no zone check
+(TRDD-5MN01NO8). Left visible rather than deleted, but corrected IN PLACE: a strike header above a
+section does not neutralise a false sentence at its foot, where a grep or a skim lands on it with
+no marker attached. That is the same defect as the stale comment removed from
+`haephestos-heartbeat-permanent-failure.test.ts:202` — a correction placed above, the falsehood
+left intact below.
+
+The census belonged before the commit, not after a reviewer asked.
 
 ## Implementation
 

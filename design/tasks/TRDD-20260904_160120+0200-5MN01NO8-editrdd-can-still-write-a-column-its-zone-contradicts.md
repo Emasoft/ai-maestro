@@ -61,6 +61,43 @@ contains no reference to `zone` at all. The guard polices the terminal-column fr
 presence, the ratified vocabulary, and the `blocked-by` ⟺ `blocked` invariant. It has no notion of
 which zone the card sits in, so it cannot check agreement.
 
+## The asymmetry, measured — CREATE is guarded twice, EDIT zero times
+
+A review asked the right question: is this hole already closed one layer up, by the same
+post-write `validateTrddCandidate` gate the CLI runs after `create`? **No — and the contrast is
+the clearest statement of the defect.**
+
+| path | mint/edit-time zone check | post-write candidate gate |
+|---|---|---|
+| **create** | YES (TRDD-MWKCBLQN, `lib/trdd-create.ts`) | YES — `scripts/trddgrep.mjs:1065` runs `validateTrddCandidate`, which calls `expectedZone` (`lib/pillar/trdd-candidate.ts:75`) and DELETES the file on violation |
+| **edit** | **NO** | **NO** |
+
+Measured: `grep -c expectedZone` returns **0** for `app/api/trdd/[id]/route.ts` and **0** for
+`lib/trdd-edit-guard.ts`, and the CLI's edit verb (`scripts/trddgrep.mjs:625-665`) calls no
+candidate validation at all — `validateTrddCandidate` is imported at `:991` and used only at
+`:1065`, both inside the create block.
+
+So the edit path has no zone check at ANY layer. That also answers where the fix belongs: adding
+one is not duplicating a gate that already exists elsewhere on this path.
+
+**And `move` — the verb the 409 points users to — is CORRECT, which completes the picture.**
+`scripts/trddgrep.mjs:1213` imports `expectedZone` and `:1229` computes
+`const want = expectedZone(targetColumn, card.frontmatter ?? {}) ?? 'tasks'`, then dispatches to
+the verb that OWNS that zone move — `archiveTrdd`, `refuseTrdd`, `promoteTrdd`, or `advanceColumn`.
+Its own comment says why: *"`expectedZone` is the arbiter, not a table local to this file."*
+
+So every sanctioned column writer already consults the arbiter, and exactly one does not:
+
+| surface | writes `column`? | consults `expectedZone`? |
+|---|---|---|
+| `setTrddField` | no — 409 | n/a |
+| `trddgrep move` → promote/refuse/archive/advance | yes | **YES** (`:1229`) |
+| `createTrdd` | yes | **YES** (TRDD-MWKCBLQN) + post-write gate |
+| **`editTrdd`** | **yes** | **NO — this card** |
+
+That is what makes this a hole rather than a design choice: `editTrdd` is the odd one out among
+four, not a path the design deliberately left open.
+
 ## The other four write surfaces, since a half-census is what caused this
 
 `lib/trdd-store.ts` is **1086 lines** and exports five functions that write frontmatter. Measured

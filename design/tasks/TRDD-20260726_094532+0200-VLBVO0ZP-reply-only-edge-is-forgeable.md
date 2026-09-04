@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-07-26T09:45:32+0200
-updated: 2026-08-21T18:37:26+0200
+updated: 2026-09-04T15:27:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,6 +18,7 @@ approval-judge: manager (emasoft-assistant-manager)
 approval-datetime: 2026-08-15T01:30:26+0200
 relevant-rules: [R6, R38]
 blocked-by: []
+unblock-when: decision:USER or MANAGER picks Option A or Option B
 npt: []
 eht: []
 implementation-commits: []
@@ -32,6 +33,26 @@ filed now because that deadline is currently recorded nowhere but a code comment
 NEXT ACTION: decide (USER/MANAGER) whether to strengthen the check or to accept it with an explicit
 expiry tied to the Phase-2 work. Do not "fix" it silently — the current behaviour is what the rule
 text describes, so changing it changes governance.
+
+**PARKED 2026-09-04T15:25:25+0200 — and Option B's second half is UNSATISFIABLE as written.**
+`unblock-when: decision:…` now records the blocker in frontmatter instead of in prose, because
+this card had been sitting in `todo` claiming to be workable while its first acceptance box is a
+ruling no agent may make. Two things a resumer needs, both measured today rather than assumed:
+
+- **There is no Phase-2 auth TRDD.** Option B says the expiry is recorded *"as a blocking item on
+  the Phase-2 auth TRDD"* — searched the whole corpus (`design/{tasks,proposals,archived}`) for
+  `maestro auth` / `Phase-2 maestro` / `AMP recipient`: **two hits, this card and
+  `TRDD-80557822` (R6 Communication Graph Downstream Sync), neither of which is that card.** The
+  search is not a false negative — it returned hits, so the corpus was really scanned. So choosing
+  B means AUTHORING the Phase-2 card first; B is not the cheap option it reads as.
+- **The park is inert in this repo, deliberately.** `unblock-when:` is read by the janitor's
+  `trdd-drift.py`, and **nothing in this repo's `lib/` or `scripts/` reads it** (grepped: zero
+  hits). It also does not move the column: per the IND rule `column: blocked` requires a non-empty
+  `blocked-by:` naming an open card, and there is no card to name — so `todo` stays, and this note
+  is what makes the stall visible to a human.
+
+The ponytail judgement that produced this instead of code: all four call sites were censused below
+and none can reach the reply-only branch, so hardening it now is speculative work on a dead branch.
 
 ## ⏹ 2026-08-21T18:37 — the escalation below is **REFUTED**. Priority is NOT raised.
 

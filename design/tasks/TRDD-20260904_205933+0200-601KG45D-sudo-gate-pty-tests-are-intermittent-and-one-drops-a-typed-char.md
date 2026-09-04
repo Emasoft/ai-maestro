@@ -34,12 +34,26 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ THE EXPERIMENT FIRED — 2026-09-04T23:37, N = 21, TWICE
 
-**`jq -Rnc stdin: 21 byte(s) for 22 expected`**, TWICE WITHIN ONE BATCH, four runs apart:
+**BATCH COMPLETE — 4 truncations in 40 runs, and all four read `jq -Rnc stdin: 21 byte(s)
+for 22 expected`, TAIL loss 1 char. Zero `SHIM-ERROR` in any run**, so the instrument was
+clean throughout and no run needs discarding.
 
 ```
-run-008  P9 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
-run-012  P8 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
+run-008  P9 [agent-helper.sh]        TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) for 22 expected
+run-012  P8 [agent-helper.sh]        TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) for 22 expected
+run-027  P8 [shell-helpers/common.sh] TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) for 22 expected
+run-033  P9 [shell-helpers/common.sh] TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) for 22 expected
 ```
+
+**THE DISTRIBUTION IS SYMMETRIC, and it kills a standing worry.** One firing in each of the
+four (test × copy) cells: P8 and P9 twice each, `common.sh` and `agent-helper.sh` twice each.
+**The "P8 concentration" recorded further down — all 3 presumed timeouts on P8 — is REFUTED
+for the TRUNCATIONS**: they do not favour P8, and the card was already treating that
+concentration as weak (3 events, 2 in one batch). Copy-independence is likewise no longer the
+near-tautology it was recorded as: with 2 firings per copy it is now measured on real events
+rather than inferred from the files being identical.
+
+**n is 4 here, 7 across the card's history, and every single one is TAIL-1.**
 
 **FIRST, THE CONFOUND, because the conclusion is worthless without it.** The shim measures
 `wc -c < "$t"` and feeds `"$REAL" "$@" < "$t"` — the SAME file — so *"the gate handed jq 21"*

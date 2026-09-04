@@ -2,12 +2,16 @@
 trdd-id: MFTDMSJY
 title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-needed for 10 minutes each time
 column: human_review
+review-after: 2026-09-11
+blocker-probe: sh -c 'c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:23000/api/sessions); case "$c" in [0-9][0-9][0-9]) printf "PROBE-RAN %s" "$c";; *) printf "PROBE-FAILED";; esac'
+blocker-holds-if: match:PROBE-RAN 000
+blocker-probe-canary: match:PROBE-RAN
 pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-09-04T23:40:17+0200
+updated: 2026-09-04T23:45:17+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -42,10 +46,48 @@ not, and it never has been.
 | `curl /api/sessions` | `000` — connection refused |
 | last `[oauth-rotator]` beat in `logs/pm2-out.log` | **2026-08-29 15:10:12** |
 | `logs/pm2-out.log` mtime | **Aug 29 15:10** — the whole log, not just the rotator's lines |
+| `logs/pm2-error.log` (31.7 MB, LARGER than out) | first line 2026-07-11, **last line Aug 29 15:10:22**, mtime Aug 29 15:10 |
 
-`lib/oauth-rotator/tick.ts` runs only inside the server process. The server stopped on
-**2026-08-29 15:10**; the fixes this card records landed **after** that. **So the shipped fix
-has never once executed**, and there are ZERO beats of any class in the window.
+**BOTH streams stop at the same second**, which is what makes the mtime argument carry weight:
+stderr is the stream a dying or quiet process is most likely to still write. I had counted this
+file's contents (2157 `reauth-needed`, 632 `UNREADABLE`) and never checked its date range — my
+`ls -la logs/ | grep pm2-out` had filtered it out of view, so the larger of the two logs went
+unexamined while I reasoned from the smaller. It corroborates rather than falsifies, but that
+was luck, not method.
+
+**`status=stopped` proves NOW, not CONTINUOUSLY, and `restart_time=9` is a lifetime counter
+that constrains nothing.** The claim rests on the MTIMES — pm2 appends across restarts rather
+than rotating, so any post-Aug-29 run writing any output would have moved them. Corroborating
+that premise from the card's own data: `pm_uptime` decodes to 2026-08-28 21:44, giving only
+~2.3 h on 08-28, yet the log carries **1447** beats that day against a baseline of ~118/h ≈ 276.
+So 08-28's beats span more than one process instance ⇒ pm2 did append across a restart. State it
+as *"the server has written no output since Aug 29 15:10 and is stopped now"*, not *"it never ran"*.
+
+**CORRECTED 2026-09-04T23:45, one hour after it was written — "the shipped fix has never once
+executed" is FALSE, and the review that challenged it was right to.** The check that settles
+it is one `grep`, which I should have run before asserting:
+
+- `oauth-rotator-tick-status.json` is written by **`lib/oauth-rotator/server-tick.ts:227`** —
+  **THIS repo**, via `writeTickStatus` in `lib/oauth-rotator/tick-status.ts`. I had attributed
+  it to "the janitor's own rotator daemon, a separate subsystem". **Wrong**, and the evidence
+  was already in front of me: the file lives under `~/.aimaestro/` (ai-maestro's state dir, not
+  the janitor's plugin-data dir) and my own grep had surfaced `lib/oauth-rotator/tick-status.ts`.
+  The janitor's tree contains **zero** references to that path.
+- That file's **content timestamp matches its mtime exactly** (`at: 2026-09-04T18:43:33.496Z`
+  = 20:43:33 local). So it was genuinely WRITTEN today by `writeTickStatus`, not touched and
+  not restored from a backup — **the tick executed at least once, today, with `nextAction: ok`.**
+
+**What survives, and it is still the card's conclusion: the SOAK has not run.** One tick is not
+a soak, and the beat record is empty regardless — see the table above and the corroboration
+below. The wrong part was "never once executed"; the right part is that there is no sustained
+tick and no window to score.
+
+**Still unexplained, and recorded as unexplained rather than guessed at a second time:** how
+`server-tick.ts` ran at 20:43 with no ai-maestro process alive. Measured at 23:44: nothing is
+listening on port 23000, and a `ps` snapshot (taken to a file, then searched — never `ps | grep`)
+shows no ai-maestro server process. Candidates not yet checked: a short-lived `yarn headless`
+run, a test that exercises the path, or a one-shot invocation. **I guessed this attribution once
+already and was wrong; it stays open.**
 
 **This is exactly the failure the ≥95 % floor was written to catch, arriving by a route the
 floor cannot see.** Criterion (a) — *zero latch-attributable false `reauth-needed` beats over
@@ -69,20 +111,56 @@ the box is indistinguishable from the measurement that proves nothing happened.
 2. I then saw the rotator's beats stop on Aug 29 and was about to write "the rotator went
    silent for six days". The **whole log** stops there and `oauth-rotator-tick-status.json` was
    written today at 20:43, so the log looked stale rather than the rotator quiet — until
-   `pm2 jlist` showed the process is stopped and the tick-status file has a different writer
-   (the janitor's own rotator daemon, a separate subsystem from `tick.ts`).
+   `pm2 jlist` showed the process is stopped.
+3. **And the fix for near-miss 2 was ITSELF a third near-miss**, which is why it is numbered
+   here: I explained the 20:43 write by asserting the file "has a different writer — the
+   janitor's own rotator daemon". That was a GUESS dressed as an explanation, and one `grep`
+   refuted it (see the correction above). Three times on one card, the pattern is identical:
+   an unexplained observation, a plausible attribution, no measurement. The rule that would
+   have caught all three is the same one — **name the writer before naming the cause.**
 
 **NEXT ACTION — OWNER ONLY, and it is why the column moved.** The soak needs the server
-RUNNING (`pm2 restart ai-maestro`). I have not started it: it was stopped deliberately
-(`unstable_restarts=0` — no crash loop), and starting a service on the owner's machine to
-serve a test window is theirs to authorise, not mine. Once it runs ≥24 h, score BOTH criteria
+RUNNING (`pm2 restart ai-maestro`). I have not started it — but **the reason I first gave was
+overstated**: I wrote that it was *"stopped deliberately (`unstable_restarts=0` — no crash
+loop)"*. That flag proves it did NOT crash-loop; it does **not** prove a human stopped it (a
+script, a reboot, an OOM kill or a plain `pm2 stop` all fit). The defensible reason is the
+simpler one: **starting it commits the owner's machine to an unattended ≥24 h window**, and
+that is theirs to authorise.
+
+**Naming an asymmetry rather than leaving it to be noticed:** I killed and restarted my own
+test batch twice tonight without asking, then declined a routine documented command here. That
+is consistent — my harness versus a shared service on the owner's machine — but it reads as
+inconsistent unless said out loud.
+
+**`unblock-when:` was considered and NOT used.** The IND rule provides it for machine-checkable
+wait conditions, and its `decision:` kind ("the only human-only kind, never auto-clears") fits
+"the owner must start the server". Against it: the same rule says `blocked` applies *whenever
+`blocked-by:` is non-empty*, so `blocked` + `unblock-when:` with an EMPTY `blocked-by:` may be
+malformed, and `human_review` already carries the HF2DY4VT precedent for waits-on-the-USER.
+Recorded so the next reader does not re-litigate it.
+
+**`review-after:` is set so a `priority: 0` card cannot park silently.** A P0 in `human_review`
+with nothing pulling it is the "filed, therefore handled" failure the drain rule names. Once it runs ≥24 h, score BOTH criteria
 against `logs/pm2-out.log`, splitting `reauth-needed` by reason — `UNREADABLE from this
 process` is the latch-attributable class, `dead refresh` is the real one (the split is already
 documented in the correction below).
 
-**Amend criterion (b) when scoring:** it must require a MINIMUM BEAT COUNT, not only a ratio.
-At ~1 beat/min a 24 h window should carry ~1 440; anything near zero means the window is empty
-and the criterion did not apply, rather than passed.
+**Amend criterion (b) when scoring:** it must require a MINIMUM BEAT COUNT, not only a ratio —
+a ratio over an empty window is 0/0.
+
+**The floor is ~2 800 per 24 h, NOT the ~1 440 I first wrote — that was wrong by 2× and wrong
+in the direction that defeats the amendment's own purpose.** From this card's own data the rate
+is ~2/min, not ~1/min:
+
+```
+08-22   2834 / 24 h    = 118/h = 1.97/min
+08-24   2878 / 24 h    = 120/h
+08-29   1712 / 15.17 h = 113/h     (process stopped 15:10)
+```
+
+A floor of 1 440 would PASS a window in which half the rotator was dead — reintroducing, at
+half scale, exactly the vacuity the amendment exists to prevent. Set it near ~2 800, or state
+it as "≥ 80 % of the observed baseline rate for the window's duration".
 
 ## ⏵ Superseded STATE — 2026-08-30: the fix is LANDED. Only a soak window is left, so this is `testing`.
 

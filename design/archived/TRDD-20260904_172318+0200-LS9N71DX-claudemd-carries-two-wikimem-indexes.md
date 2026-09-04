@@ -1,10 +1,10 @@
 ---
 trdd-id: LS9N71DX
 title: CLAUDE.md carries two wikimem indexes over the same corpus
-column: ai_review
+column: complete
 created: 2026-09-04T17:23:18+0200
-updated: 2026-09-04T19:03:35+0200
-implementation-commits: [164aad16]
+updated: 2026-09-04T19:05:29+0200
+implementation-commits: [164aad16, 214199d6, ca54e352]
 current-owner: claude-opus-session
 created-by: user
 assignee: claude-opus-session
@@ -101,8 +101,19 @@ all along, so it is filed now rather than held.
 `todo` → `ai_review` skips five columns: legal here because only the IND base binds an external
 session, and it mandates a column vocabulary, not a sequential walk.
 
+**Left for whoever writes the next lesson, recorded here because this card is its last editable
+moment.** `.claude/rules/lessons-verification.md` is at **97538 of its 98304-byte cap — 766 bytes,
+roughly one and a half entries.** The next author hits the cap mid-commit. The mechanism already
+exists and needs no design: the file's own header says an entry that outgrows the budget is
+**MOVED VERBATIM** to `.claude/rules-reference/lessons-verification-full.md`, under the same
+heading. Relocation, never deletion — do not go hunting for an entry "superseded by" newer work
+to retire, which is the judgement that gets made too eagerly.
+
 **NEXT ACTION.** None here. The topic grouping is now janitor#299's to restore — not this
-repo's, and never by reviving the second generator.
+repo's, and never by reviving the second generator. #299 is deliberately NOT a `blocked-by:` or
+an EHT: that field takes TRDD-id citations, not issue URLs, and an EHT would gate this card's
+`complete` on another repo's schedule forever. The retirement is complete and correct without
+it; the grouping is a follow-up improvement, not a hole this change opened.
 
 ## Problem
 
@@ -226,3 +237,4 @@ that before anything is removed.
 ## Approval log
 
 - 2026-09-04T17:23:18+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-04T19:05:29+0200 — COMPLETED by claude-opus-session. All six boxes driven, not asserted. Four adversarial reviews; the first three each found real defects (a wrong mechanism claim in a commit body, a bug in the fix proposed on janitor#298, a coverage finding filed under a staleness heading, an unverified zone/column claim, a missing assignee, a mispriced three-way decision), and the fourth returned "the card is done, stop reviewing it" — which is the signal that stopped the review ratchet rather than a fifth round.

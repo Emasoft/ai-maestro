@@ -410,7 +410,16 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   // NOT re-run this file — so a red suite sat committed for ~30 minutes. The lesson is the
   // guard's, not mine to restate elsewhere: changing ANY route's guard changes this ledger's
   // needle, so this file is part of the change, not a separate chore.
-  'sessions/[id]/rename/route.ts',
+  // REMOVED 2026-09-04: 'sessions/[id]/rename/route.ts'. RAISED to enforceSystemOwner
+  // (TRDD-OYNUJRSB), so STRONG_AUTHZ matches it and the needle no longer returns it.
+  // `renameSession` has NO ownership check of any kind, so authentication alone let any agent
+  // rename any OTHER agent's tmux session — the session name is that agent's runtime identity,
+  // and the rename orphans it from its dashboard binding. Owner-only rather than a per-caller
+  // ownership check because the route is @deprecated, PAST its own removal target (docstring
+  // says v0.28.0, package is 0.29.0), and its replacement `PATCH /api/agents/[id]` is already
+  // gated. Pinned in BOTH modes — tests/unit/session-rename-system-owner.test.ts and
+  // tests/unit/headless-session-rename-system-owner.test.ts — because headless reimplements it.
+  // The ledger shrinks again, which is the only direction it may move without a deliberate edit.
   'sessions/activity/update/route.ts',
   'sessions/restore/route.ts',
   'settings/mcp-discover/route.ts',

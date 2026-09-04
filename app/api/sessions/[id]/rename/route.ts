@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { renameSession } from '@/services/sessions-service'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,20 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   // #114: Authenticate before any side effect.
-  const authErr = enforceAuth(request)
+  // TRDD-OYNUJRSB: and AUTHORIZE, not merely authenticate. `renameSession` has no ownership
+  // check of any kind, so authentication alone let ANY agent holding a valid AID token rename
+  // ANY other agent's tmux session — the session name is that agent's runtime identity, so the
+  // rename orphans it from its dashboard binding. A denial of service against a peer.
+  //
+  // SYSTEM-OWNER-ONLY, matching the peer route teams/[id]/batch-create-agents, and chosen over
+  // a per-caller ownership check for three measured reasons: this route is @deprecated with a
+  // documented replacement (PATCH /api/agents/[id]) that is already properly gated; it is PAST
+  // its own stated removal target (v0.28.0, package is 0.29.0); and an ownership check needs a
+  // session->agent lookup that the sibling sessions/activity/update explicitly REJECTED on perf
+  // grounds. Building that lookup for a route scheduled for deletion buys nothing.
+  // No browser code calls this route (verified with a positive control on the same grep), so the
+  // surface is CLI/agent callers only, and any agent reaching it was using the ungated hole.
+  const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
 
   logDeprecation()

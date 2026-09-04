@@ -902,8 +902,19 @@ const routes: Route[] = [
   }},
   { method: 'PATCH', pattern: /^\/api\/sessions\/([^/]+)\/rename$/, paramNames: ['id'], handler: async (req, res, params) => {
     // SVC2-MAJ-12 (2026-05-06): authenticate before renaming a tmux session.
+    // TRDD-OYNUJRSB: authentication is not authorization. renameSession has NO ownership check,
+    // so this route let any agent with a valid AID token rename any other agent's session —
+    // orphaning that agent from its dashboard binding. SYSTEM-OWNER-ONLY, the same ruling and
+    // the same reasoning as the Next.js twin (app/api/sessions/[id]/rename/route.ts), applied
+    // here in the SAME commit because this router REIMPLEMENTS the route: a guard added to only
+    // one mode is half-applied by construction, which is exactly how sessions/restore shipped
+    // the identical gap twice (TRDD-R268J32X, d6f78e2b).
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) {
+      sendJson(res, 403, { error: 'Forbidden — system owner only' })
+      return
+    }
     const body = await readJsonBody(req)
     sendServiceResult(res, await renameSession(params.id, body.name))
   }},

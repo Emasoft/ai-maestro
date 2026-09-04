@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T17:45:54+0200
+updated: 2026-09-04T17:49:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -314,13 +314,24 @@ right is still unverified when it is made, and only the check tells the two apar
    "refuses a zone-contradicting column reached through the v1 status fallback", and "still
    refuses a changed column on a card whose CURRENT column is also mismatched".
 
-   **The three B names needed a second pass, and a reviewer was wrong about why.** My first
-   extraction printed a noisy, ANSI-laden excerpt in which only two names were legible and a
-   third carried a green `0ms` marker, so a review concluded I had reproduced the worker's
-   third name rather than measured it. Re-extracted from the SAME saved run with the escape
-   codes stripped, `/tmp/nB.txt` carries all three FAIL lines — the claim was true and the
-   evidence was in the data; what was inadequate was the excerpt I displayed. Verified rather
-   than conceded, because a reviewer's claim about my measurement is itself a claim to check.
+   **The three B names needed a second pass. A reviewer was right about my evidence and wrong
+   about the file** — and the distinction matters, because recording it as flatly wrong would
+   misrepresent a correct catch. My first extraction printed a noisy, ANSI-laden excerpt in
+   which only two names were legible and a third carried a green `0ms` marker; that excerpt
+   genuinely did NOT establish the third name, which is what the reviewer said. It was wrong
+   only that the name was absent from the run.
+
+   My first rebuttal was also weak: it argued `/tmp/nB.txt` "carries all three FAIL lines",
+   but vitest prints the failing roster TWICE (inline as `× suite > name`, then again under
+   the `Failed Tests` banner), so appearing in that grep proves a name was printed in a
+   failure CONTEXT, not that it failed. The decisive measurement is the per-test marker:
+   stripped of escapes, the run carries **3 `×` lines and 4 `✓` lines** — 3 + 4 = 7, the
+   file's test count — and "still refuses a changed column on a card whose CURRENT column is
+   also mismatched" sits on a `×`. That is one-to-one and does not depend on which sections
+   vitest chose to reprint.
+
+   Verified rather than conceded, because a reviewer's claim about my measurement is itself a
+   claim to check — and then re-verified, because my first check was the wrong instrument.
 
    Restore proven byte-exact by `git diff HEAD` returning empty (git compares content, so a
    one-byte difference would show), AND the suite re-run afterwards: 4 files / 45 tests pass.

@@ -396,7 +396,13 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   // path the GATE takes — a real pty, a real `read`, the real `jq -Rnc` at common.sh:761.
   it('P12e: a real gate run goes THROUGH the shim — exactly one -Rnc call is recorded', async () => {
     await runAtTerminal(['delete', TEAM_ID], SECRET)
-    const lens = fs.readFileSync(jqLenFile, 'utf8').split('\n').filter((l) => l.trim() !== '')
+    // Read TOTALLY. An `fs.readFileSync` here THROWS ENOENT in the one case this test exists
+    // to catch — the shim never fired, so the record file was never created — and a throw in
+    // the body means the assertion never runs and its message is never printed. Measured: the
+    // first neuter of this test reported a bare failure with no note at all.
+    let raw = ''
+    try { raw = fs.readFileSync(jqLenFile, 'utf8') } catch { /* the shim never fired — that IS the finding, so assert it */ }
+    const lens = raw.split('\n').filter((l) => l.trim() !== '')
     expect(lens, jqStdinNote(SECRET.length)).toHaveLength(1)
   })
 

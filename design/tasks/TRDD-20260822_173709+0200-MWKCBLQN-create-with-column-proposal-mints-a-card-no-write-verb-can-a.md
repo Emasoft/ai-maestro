@@ -54,7 +54,7 @@ card skipped. Measured now (`grep -rn "createTrdd" app lib services scripts test
 |---|---|---|
 | `app/api/trdd/create/route.ts:52` | yes (`column` from the request body) | refuses before any write — the intended fix |
 | `scripts/trddgrep.mjs:1041` | yes (`column: columnVal` from `--column`) | refuses before any write; the CLI catches and exits 2 with `refusing to create — <message>` |
-| `tests/unit/trdd-create.test.ts` (7 cases) | some | **7/7 still pass** — no regression |
+| `tests/unit/trdd-create.test.ts` (7 cases) | one, at BELOW-floor authority | 7/7 pass — but see the limit below |
 | `lib/trdd-store.ts:903` | no — a COMMENT referencing this guard, not a call | none |
 
 **No headless-router caller exists** — the grep covered `services/` and returned none, which
@@ -66,9 +66,38 @@ runs `validateTrddCandidate`, and DELETES it on a violation. So that path was pa
 before; the guard now refuses earlier, before anything touches disk. The route had no such
 gate, which is where an inert card could actually survive.
 
-Verdict: two production callers, both should be guarded, both are, and the pre-existing suite
-is green. The finding was legitimate and resolves clean — but the census belonged before the
-commit, not after a reviewer asked.
+### The limit of the "7/7 still pass" evidence — it is weaker than I first wrote
+
+A review asked whether the pre-existing suite even REACHES the guard. It does not. Measured:
+`tests/unit/trdd-create.test.ts` carries exactly one `column:` (`:40`, `column: 'dev'`) and it
+sits at `authorAuthority: 'none'` — BELOW the floor, so routing ignores the override and the
+guard is never consulted. Its only mandate-authority case (`:24`) passes no column at all and
+defaults to `backburner`, a working column.
+
+So those 7 pass identically with the guard present or removed. They establish **no collateral
+breakage** — the guard does not over-refuse the ordinary mandate path — which is worth having
+and is NOT nothing. They are not evidence about the guard's own behaviour. That comes solely
+from `tests/unit/trdd-create-zone-column.test.ts`, whose refusal case is pinned on the new
+message and would fail against the pre-fix code.
+
+I first wrote this row as "7/7 still pass — no regression", which reads as though the suite
+had been exercised against the change. It had not. Same vacuity shape this session kept
+finding elsewhere, this time in my own census.
+
+### The OTHER write path — asked, checked, no gap
+
+`lib/trdd-store.ts:903`'s comment names "the other write path", which would be the classic
+half-applied guard. It is `setTrddField`, and it does not need this guard because it carries a
+STRICTER one: `if (field === 'column')` returns **409 — "refusing to set `column:` directly — a
+column change is half of a transition, and writing it without the zone `git mv` is how a card
+ends terminal in the OPEN zone"** (`lib/trdd-store.ts:894-899`). That path cannot set a column
+at all, so it cannot mint the contradiction. Its own comment already names the failure mode
+("a second write path with a second (absent) predicate"). Checked rather than assumed, because
+this repo's signature defect is exactly a guard applied to one of two paths.
+
+Verdict: two production callers, both should be guarded, both are; the third write surface
+refuses column writes outright. The finding was legitimate and resolves clean — but the census
+belonged before the commit, not after a reviewer asked.
 
 ## Implementation
 

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:00:21+0200
+updated: 2026-09-05T00:22:17+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -31,6 +31,64 @@ labels: [flaky-test, pty, sudo-gate]
 # The sudo-gate pty tests are intermittent, and these are the tests that pin a security fix
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+## ⏵ LENGTH EXPERIMENT — ANSWERED 2026-09-05T00:21. 39 bytes, TAIL-1, 4/4 at 40 chars.
+
+```
+run-007  run-009  run-012  run-039   jq -Rnc stdin: 39 byte(s) for 40 expected · TAIL loss: 1
+```
+
+Exactly the pre-registered **expected** row. **The loss is ONE BYTE AT THE END, INDEPENDENT OF
+LENGTH.** This kills two branches outright: an absolute cap would have given 21, and a
+proportional/streaming effect would have given ≤38. Rate held at **4/40 at both lengths** (still
+not a rate claim — no control arm).
+
+## ⏵ THE CAUSAL READING OF THE TYPING CORRELATION IS UNSUPPORTED — and one arm is a PRODUCT BUG
+
+**The correlation is statistically real; my attribution of it was not.** I wrote that it is
+"evidence for H5 (harness artifact)". It is evidence for a **DISJUNCTION**, and at least one
+member is gate-side. **THREE variables are perfectly collinear across all 7 events** — there is
+no cell in the design where any two differ:
+
+| | P1–P5 | P8/P9/P10 |
+|---|---|---|
+| write timing | polls for `-echo` | fixed 1200 ms, blind |
+| prior `^C` | never | always, at 300 ms |
+| **gate state when the write lands** | first `read`, never interrupted | **`read` RESUMED AFTER A SIGNAL**, INT handler ran, traps re-armed |
+
+**The third is a real product bug** — a signal-interrupted `read` losing a byte on resume is
+`common.sh`'s problem, not the harness's. Reading 7-vs-0 as "harness artifact" picks one member
+of a disjunction and discards the one that would matter most.
+
+**The proposed experiment would MASK it.** Switching P8/P9/P10 to wait-for-readiness changes
+the write timing while LEAVING THE `^C` IN PLACE, so a null result is consistent with both "the
+harness raced the tty" and "waiting long enough lets a gate-side resume race resolve itself" —
+and I would have closed the card calling `common.sh` innocent. **TWO cells are needed:**
+- **`^C` + polling** — truncations persist ⇒ the signal path is implicated, not write timing.
+- **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
+
+Neither alone resolves it; the pair does. The second is the one that can implicate the harness
+AFFIRMATIVELY rather than by absence, and this card already has a surplus of nulls.
+
+**`typeWhenNoEcho` MAY HAVE CONTAMINATED THE GROUPING, and nothing logs it.** On any
+`execFileSync` throw it hits `catch`, sleeps 200 ms, `break`s, and **writes anyway** — degrading
+to a *fixed 200 ms blind write*, i.e. a worse version of the thing it is being contrasted with.
+It also only polls for `-echo`, which the gate sets at `:749` BEFORE `read` at `:753`, so even
+the success path proves "echo is off", not "`read` is blocked and consuming". Log which path
+each write took before trusting 7-vs-0.
+
+**The exposure asymmetry runs the OTHER way and the signal survives it:** per run the polling
+group gets ~5 typings to the fixed group's 6 (P1/P2/P3 = 3, P4/P5 = 2, P8/P9/P10 × COPIES = 6).
+Over 40 runs: ~200 polling typings with **zero** events vs ~240 with 4. Under a common rate you
+would expect ~3.3 in the polling arm; observing 0 is **p ≈ 0.03**. The correlation is real — only
+its CAUSE is unlocated.
+
+**AND THE "OFF-BY-ONE vs TERMINATOR-EARLY" DICHOTOMY IS FALSE — I renamed the hypothesis.** Both
+describe the same observable and the same mechanism class, with no differing prediction, so no
+experiment separates them. Correcting "I refuted a hypothesis nobody proposed" by MINTING A
+SECOND NAME for the one that is held reproduces that error in mirror image. There is **one**
+surviving mechanism class — *the line is cut one byte short at its terminator* — whose CAUSE is
+the open question, and the real alternatives are the three collinear variables above.
 
 ## ⏵ THE STRONGEST CORRELATION ON THIS CARD, and it was mislabelled for the whole session
 

@@ -3,7 +3,7 @@ trdd-id: NNNR4IYL
 title: The lessons file is 315 bytes from its cap and the documented relief mechanism does not cover the file-level cap
 column: todo
 created: 2026-09-04T19:08:46+0200
-updated: 2026-09-04T19:08:46+0200
+updated: 2026-09-04T19:18:15+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -22,6 +22,52 @@ labels: [tooling, governance, lessons]
 ---
 
 # The lessons file is at its cap and the documented relief does not apply
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+**The chore was attempted and is BLOCKED by a pinned invariant. The blocker is the whole
+finding, and it is a stronger version of this card's premise than the one the card was filed
+with.**
+
+`tests/governance/lessons-file-budget.test.ts` third case:
+
+```ts
+it('the full reference exists and holds only long entries (positive control that the split is real)', () => {
+  const es = entries(ref)
+  expect(es.length).toBeGreaterThan(100)
+  expect(es.every((e) => e.length > ENTRY_MAX)).toBe(true)
+})
+```
+
+**The reference is MECHANICALLY SPECIFIED to hold only entries that exceeded the 500-char
+per-entry cap.** Relocating a conforming entry there — which is exactly what file-cap relief
+requires — turns that case red. So the second trigger is not merely undocumented; it is
+**pinned against**, and adding it is a spec change, not a chore.
+
+**A review recommended withdrawing this card**, on the reading that the header states an
+invariant ("nothing is ever deleted") plus one instance of honoring it, so nothing forbade
+relocating a conforming entry and only a *selection policy* was missing. That reading is
+reasonable from the prose and **is refuted by the test.** Both the reviewer and I reasoned from
+the header; neither of us read the spec. The lesson is the general one: **prose describes,
+a test decides** — when a rule's scope is in question, the thing that mechanically enforces it
+is the authority.
+
+**What was attempted, and where it is.** Five incident-specific entries were moved to the
+reference and two misfiled entries re-homed inside CORE (97989 → 96125 bytes, comfortably under
+the cap), with the header updated to name both triggers. It works and it reddens the suite.
+Preserved, not discarded, as **`git stash@{0}`** — *"TRDD-NNNR4IYL: file-cap relocation attempt
+— blocked by the reference's only-long-entries positive control"*. Recover with
+`git stash pop stash@{0}`, or inspect with `git stash show -p stash@{0}`.
+
+**Why the control cannot simply be deleted.** Its stated job is to prove *the split is real* —
+that the reference is a routed destination and not a junk drawer. Weakening it to
+`es.length > 100` would pin nothing and would be suppressing a rule to pass a gate. A
+replacement control has to express what makes the split real under TWO triggers, and that is
+the design decision this card now owns.
+
+**NEXT ACTION.** Decide the replacement control, then pop the stash. Candidate: every reference
+entry is EITHER over 500 chars OR carries an explicit relocation marker, so a short entry can
+only be there deliberately and the reference still cannot become a dumping ground.
 
 ## Problem
 
@@ -90,8 +136,14 @@ are in the always-loaded half. Getting the selection wrong is worse than the cap
 
 ## Acceptance
 
-- [ ] Decide and record the selection policy (oldest-first / by-section / other), with the
-      reason, in the file's own header so the next author does not re-derive it.
+- [ ] Decide the REPLACEMENT positive control for the reference file, so the split stays
+      provably real under two triggers instead of one. This is the gating decision — the
+      relocation itself is already done and stashed, and reddens the suite without it.
+- [ ] Update `tests/governance/lessons-file-budget.test.ts` third case to the new control, and
+      run the neuter: a version that lets ANY short entry into the reference unmarked must
+      redden. A control that passes on a junk drawer is not a control.
+- [ ] Decide and record the selection policy (oldest-first / by-section / lowest-recurrence),
+      with the reason, in the file's own header so the next author does not re-derive it.
 - [ ] Update the header's relief rule to name BOTH triggers (per-entry >500 chars, and the
       file at its byte cap) and correct "96 KB" to the enforced 98304 bytes.
 - [ ] Relocate enough entries to restore working headroom (target: room for at least five

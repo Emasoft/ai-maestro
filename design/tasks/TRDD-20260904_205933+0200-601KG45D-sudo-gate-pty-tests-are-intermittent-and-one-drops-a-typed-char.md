@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:31:53+0200
+updated: 2026-09-04T22:33:56+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -43,20 +43,55 @@ labels: [flaky-test, pty, sudo-gate]
 - **The loss is at or before `read`** — the gate builds its body with `jq -Rnc` from the
   variable, so a well-formed body with a short value cannot come from a downstream cut.
 
-**FOR THE TIMEOUTS THE LEADING EXPLANATION WAS ALREADY ON THIS CARD, in §Proposed fix step
-2, and I invented a kernel mechanism instead of reading two sections down.** The tests type
-at FIXED wall-clock offsets — `^C` at 300 ms, password at 1200 ms — which *assumes the
-caller's trap ran and the read resumed inside 900 ms*. Under load that assumption can fail:
-the password is typed before `read` is listening again, and the run times out. It needs no
-new physics, and it **predicts the load correlation the data already shows** (batch A, under
-background load, holds 3 of the 4 historical failures).
+**FOR THE TIMEOUTS: a CANDIDATE was already on this card (§Proposed fix step 2), and I
+invented a kernel mechanism instead of reading two sections down — but it is UNMEASURED too,
+and it has an objection I owe it.** The tests type at FIXED offsets — `^C` at 300 ms,
+password at 1200 ms — which *assumes the caller's trap ran and the read resumed inside
+900 ms*. It needs no new physics and it **predicts the load correlation the data shows**
+(batch A, under background load, holds 3 of the 4 historical failures).
 
-**And the P8 concentration supports it.** Taking §"The clue"'s statement that batch A's P9
-was *not* a timeout, **all three timeouts are P8** (A: P8×2, C: P8×1). P8's prelude is
-`trap 'echo PRIOR-INT' INT` and P9's is `trap '' INT` — so P8 does strictly MORE work in the
-resume window. That is exactly what a timing slip predicts and exactly what a flush does NOT
-(a flush fires identically on both, since both handlers call the same two `stty`s). **I had
-this table in front of me and drew the opposite conclusion from it.**
+**The objection, which I did not state when I adopted it an hour ago.** A canonical-mode tty
+BUFFERS characters typed while no one is reading, and delivers them when `read` resumes. So a
+merely-late resume predicts a **PASS**, or — if the password lands in the window where echo is
+back ON — an immediate `expect(out).not.toContain(SECRET)` failure. **Neither is a timeout.**
+For `read` to hang to the 25 s `SIGKILL`, the terminator has to never arrive at it at all,
+and a plain timing slip does not obviously produce that. So this is a candidate with a hole
+in it, not an explanation.
+
+**And the evidence that would settle it is GONE.** No log from batches A or C survives
+(`/tmp/batch*.txt` are unrelated files; `/tmp/flake601/` holds only today's 24 runs, whose
+single failure was the truncation). So nobody can now check what those three timeouts
+actually LOOKED like — whether `out` held the secret, what RC was, whether the server saw a
+request. **That is the measurement to take: keep the failing run's full log next time a
+timeout fires**, because "it timed out" is a symptom and the harness captures enough to
+distinguish several causes behind it.
+
+**So this is the FOURTH mechanism story on this card, and the fact that it came from the card
+rather than from me does not pre-validate it.** It is better supported than the three that
+died — it needs no new physics and it predicts the load correlation — and it is still
+untested, with a stated objection.
+
+**The P8 concentration points the same way, weakly.** Taking §"The clue"'s statement that
+batch A's P9 was *not* a timeout, all three timeouts are P8 (A: P8×2, C: P8×1). P8's prelude
+is `trap 'echo PRIOR-INT' INT` and P9's is `trap '' INT`, so P8 does strictly MORE work in
+the resume window — what a timing slip predicts, and not what a flush does (a flush fires
+identically on both, since both handlers call the same two `stty`s). I had this table in
+front of me and drew the opposite conclusion from it.
+
+**Two limits on that, both real.** (i) It is **3 events across 2 batches**, on one of ~7
+tests that could time out — a concentration that size is suggestive and nothing more.
+(ii) The classification rests on ONE inherited sentence ("One P9 failure was not a timeout"),
+never independently verified, and this card has already had to retract two other claims that
+were inherited unexamined in exactly that way. If the P8/P9 split matters to a future
+decision, re-derive it from a log rather than from that sentence.
+
+**One thing that IS verified, because it was queried:** the handler runs in P9 too. A reader
+may reasonably suspect that `trap '' INT` (SIGINT ignored) means `_maestro_sudo_on_int` never
+fires there, which would make P9 a different path rather than the same path with less work.
+It does fire: `maestro_sudo_ensure` installs `trap '_maestro_sudo_on_int' INT` **before** the
+`read`, replacing the caller's disposition for the duration; the caller's `''` is only saved
+in `_MAESTRO_PREV_INT` and restored *inside* the handler. So P8 and P9 run the same handler
+and differ only in the body it `eval`s — empty for P9, `echo PRIOR-INT` for P8.
 
 **FOR THE TRUNCATION no mechanism is established.** Hypothesis 1 (TCSAFLUSH) is refuted on
 TIMING — see §Step 2; hypothesis 3 (shell→curl) is excluded by the `jq` composition;

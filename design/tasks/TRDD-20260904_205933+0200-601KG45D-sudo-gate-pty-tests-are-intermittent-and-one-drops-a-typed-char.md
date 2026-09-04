@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:32:43+0200
+updated: 2026-09-04T23:37:13+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -32,6 +32,38 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
+## ⏵ THE EXPERIMENT FIRED — 2026-09-04T23:37, N = 21, TWICE
+
+**`jq -Rnc stdin: 21 byte(s) for 22 expected`**, on two independent runs of the same batch:
+
+```
+run-008  P9 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
+run-012  P8 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
+```
+
+**WHAT THIS ESTABLISHES.** The gate handed `jq` a line that was ALREADY short. "The loss is
+at or before `read`" stops being an argument from the pipeline's composition and becomes a
+MEASUREMENT. **Hypothesis 3 (the shell→curl leg) is now excluded by measurement, not by
+reasoning** — the same conclusion the composition argument reached, but this card has
+retracted four mechanisms that were reasoned rather than measured, so the distinction is the
+point. Two independent firings, both 21, both TAIL, so it is not a one-off reading.
+
+**WHAT IT DOES NOT ESTABLISH.** Which of hypothesis 1 or 2 — both live at or before `read`.
+The position is TAIL, which fits H2 (the line terminated one byte early) and does not fit H1
+(a flush discards the whole queued line, giving a LEADING/total loss or a stranded `read`,
+never a one-char tail). That is the same position argument the card already had; what is new
+is only that the boundary is now pinned upstream of `jq`. **And per the review's FINDING N,
+the position argument is circular against H1 under load** — see the load caveat below.
+
+**HYPOTHESIS 2 IS THE ONLY SURVIVOR, and it is now the thing to instrument.** The next
+question is why a canonical-mode line delivers its terminator one byte early.
+
+**RATE IS STILL NOT CLAIMABLE:** 2 in 13 here vs 1 in 24 before is exactly the comparison
+the missing control arm forbids (see the load caveat). Do not quote it as a rate change.
+
+**Both firings were on `agent-helper.sh`.** Across the card's whole history both copies have
+now shown it, so it remains copy-independent; the split within one batch is noise at n=2.
+
 **WHAT IS MEASURED — this is the headline, and every mechanism story on this card has died.**
 
 - **Two distinct failure modes.** Truncations: **3 observed** — the batch-A P9, `P8
@@ -57,8 +89,8 @@ account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f9
 | # | claim | status |
 |---|---|---|
 | 1 | a `stty` TCSAFLUSH eats queued input | **CONTRADICTED by the code path as read** (idle-machine timing; UNMEASURED under load). The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing. **Not "REFUTED"** — every step is a source READ, not an instrumented handler, and the one condition batch A ran under (load) is the one not checked. Using the strongest verb for the one refutation nobody instrumented is the wrong asymmetry on a card with four dead mechanisms |
-| 2 | the line terminated one byte early | **OPEN**, untested. The only survivor for the TRUNCATION |
-| 3 | the loss is in the shell→curl leg | **EXCLUDED.** The gate builds its body with `jq -Rnc` from the variable, so a well-formed body with a short value cannot come from a cut after `jq`; the only remnant is a short write on a 22-byte pipe from a builtin, far under `PIPE_BUF` |
+| 2 | the line terminated one byte early | **OPEN and now the SOLE survivor** — and no longer merely by elimination: the boundary is measured upstream of `jq`, and TAIL-1 is what H2 predicts and H1 does not |
+| 3 | the loss is in the shell→curl leg | **EXCLUDED BY MEASUREMENT 2026-09-04T23:37** (`jq -Rnc stdin: 21` on two runs), superseding the composition argument that had excluded it by reasoning. The argument was right; it is the class of thing this card has been wrong about four times, so the measurement is what the exclusion now rests on |
 | 4 | a wall-clock timing slip (§Proposed fix step 2) | **OPEN for the TIMEOUTS, with two objections.** It came from the card rather than from me and that does NOT pre-validate it — §Proposed fix is a *proposal*, never a finding |
 
 **The two objections to #4, because it is the one currently doing work.** (i) A canonical-mode
@@ -313,6 +345,21 @@ over-corrected. What survives both is narrow and worth keeping: **the shim is do
 `read` within a gate call, so it cannot explain a truncation — and it is upstream of
 nothing that would let a rate comparison stand without a control arm.**
 
+**AND "POSITION IS UNAFFECTED BY LOAD" IS CIRCULAR — third review, FINDING N, the most
+substantive of that round.** I wrote that rate needs a control arm but position does not.
+That holds only under H2, where the tail is fixed by construction. Under **H1** the loss
+position depends on how many characters sit in the canonical buffer when the flush lands,
+which is a function of the writer's rate against the flush's timing — so a loaded machine
+buffers fewer characters and the loss moves toward the START. **The claim therefore assumes
+H2, which is exactly what the position reading is supposed to test** — the same circularity
+this card already flags in the P10 objection, committed again one paragraph away from it.
+
+Corrected: *position is load-independent under H2 and load-DEPENDENT under H1, so a position
+reading taken under one load condition cannot by itself separate them.* Recorded with the
+evidence that cuts the other way, because it should not be buried: batch A's truncation is
+the one noted as having happened UNDER LOAD, and it was **TAIL** — n=1, and it points toward
+H2.
+
 **The `jqStdinNote` message rides `expect(actual, message)` and is TOTAL** — vitest
 evaluates it EAGERLY on every run, so a missing record file returns a sentence, never a
 throw. Same trap this card hit with `diagnoseBody`, now recorded in
@@ -353,6 +400,25 @@ cases" and leave it lost.
 "Stop" cannot mean "stop when the findings stop": the gate fires on every commit, findings are
 always available, and each fix is itself reviewable. **The loop cannot self-terminate; the exit
 is to stop committing code here.**
+
+**THE STOPPING RULE, ADOPTED 2026-09-04 — per-FINDING, not per-round.** Three review rounds
+each produced code commits while each round's findings were individually defensible as small,
+which is what a self-sustaining loop looks like from the inside. The rule that ends it:
+
+> **Fix a finding only if leaving it unfixed would change the NUMBER the experiment reports,
+> or make a reader mis-read that number. Everything else is RECORDED and not fixed.**
+
+It is falsifiable without waiting for findings to cease, because each finding is tested
+against a fixed question instead of against judgement. Applied to round three: findings K
+(marker unreachable for 90), M (a harness failure reads as a security failure), N (the
+position/load circularity) and O (`['922']`'s length inferred, not read back) all change how
+a reader INTERPRETS the number, never the number — so all four are recorded above and **zero
+code changed**. That is the loop terminating under its own rule.
+
+**BACKSTOP, in case a later round argues past it: the batch RUNS TO COMPLETION before any
+further instrument edit.** Two batches were already killed mid-flight for instrument fixes; a
+third would be evidence the instrument had become the subject. An instrument revised between
+every run measures nothing.
 
 21 pty tests pass, tsc 0 lines. **The DETECTOR half is validated for `fc3b6f76`'s wiring
 only** — run 23 fired it on a real loss end-to-end, and `1a2a1b2c` then replaced that wiring
@@ -416,6 +482,18 @@ validated and then thrown away.
    instruction nobody could follow — the same un-executable-procedure defect as the baseline
    control, one commit later. The guards now WRITE the marker into the record file, so
    `jqStdinNote` prints it and the failure identifies itself.
+
+   **The marker covers 91 and 92 ONLY — `fail 90` cannot write it** (third review, FINDING K).
+   `mktemp` fails almost exclusively for reasons that ALSO break the append (`fakeHome` gone,
+   unwritable, full), so a 90 degrades to `NOT RECORDED`. **Left unfixed deliberately** under
+   the stopping rule below: `NOT RECORDED` is already classified as a harness finding, so
+   nothing is misread as the bug — the guard is incomplete, not misleading.
+
+   **A shim failure now turns FOUR SECURITY-NAMED TESTS RED** (P8×2, P9×2 — third review,
+   FINDING M). Test names are what a reader scans, so "P8 and P9 failed" reads as an
+   echo/secret regression when it may only mean the shim did not fire. The note disambiguates
+   *if read*. The cost is accepted for green-run coverage; it is written here so the next
+   reader is not sent hunting a security bug that is not there.
 
    **The runner prints EVERY note, never the first.** Passing tests emit none (measured: 0 in
    a green run, 1 in a neutered one), so every note in a log belongs to a failed test — but

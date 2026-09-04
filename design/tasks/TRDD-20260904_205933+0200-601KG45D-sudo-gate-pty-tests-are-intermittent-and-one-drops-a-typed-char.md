@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:49:12+0200
+updated: 2026-09-04T22:50:41+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -171,12 +171,18 @@ P9 run the same handler, differing only in the body it `eval`s.
 
 **THE INSTRUMENT.** `diagnoseTyped`, `pwOf`, `diagnoseBody` in the pty test (`fc3b6f76`,
 `1a2a1b2c`), used as the failure message on every assertion pinning the password's arrival.
-Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden, and all 11 were run
-against the CURRENT arrangement** — A and B had been run pre-split and their attributions
-carried forward across a refactor that changed the test boundaries they depend on, which is the
-"asserted, not measured" defect this card keeps finding. Re-run: A now reds P11b+P11c+P11g,
-B reds P11d alone. What they pin, in three categories — the two-way split published earlier
-over-claimed, then the correction under-claimed:
+Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden.** Provenance,
+because "all 11 hold against the current file" was asserted once and is only two-thirds
+measured: **A and B were RE-RUN** after the split (A reds P11b+P11c+P11g, B reds P11d) — their
+earlier attributions had been carried across a refactor that moved the test boundaries they
+depend on. **C-H were run against the P11a-g arrangement and are NOT re-run**; they still hold
+DEDUCTIVELY, because neither the function each mutates nor the test each reddens has changed
+since (P11h-j are additions, and the P8/P9/P10 message attachments touch no classifier code).
+That is an argument, not a measurement, and it is labelled as one — re-running six neuters to
+confirm what follows from "nothing they touch changed" is the over-work the stop note forbids.
+
+What they pin, in three categories — the two-way split published earlier over-claimed, then
+the correction under-claimed:
 
 - **branch EXISTENCE** (delete the branch): C, D, F, H
 - **branch DISCRIMINATION** (both predicates compute and select distinctly): A

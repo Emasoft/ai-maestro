@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:57:24+0200
+updated: 2026-09-05T00:59:12+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -37,15 +37,31 @@ labels: [flaky-test, pty, sudo-gate]
 **40 runs. 3 truncations, ALL in the fixed arm (`run 10 [P8 P9]`, `run 15 [P9]`). P13: zero.**
 The no-signal blind-write cell did not truncate once.
 
-**WHAT THIS LICENSES.** Blind writing ALONE does not reproduce the fixed-arm rate, so *"the
-harness types into an unready tty and that is the whole story"* is rejected — **`common.sh` is
-NOT exonerated, and the product-bug arm is the live one.**
+**WHAT THIS LICENSES — exactly one thing.** Blind writing ALONE does not reproduce the fixed-arm
+rate, so *"the harness types into an unready tty and that is the whole story"* is rejected: **the
+`^C`/signal path is implicated as a NECESSARY CO-FACTOR.** That is the payoff of breaking the
+collinearity, and it is all of it.
+
+**"IMPLICATED" IS NOT "DEFECTIVE", AND THE CARD HAD ALREADY SLID INTO SAYING SO.** It claimed a
+signal-interrupted `read` losing a byte "is `common.sh`'s problem, not the harness's". But
+`common.sh` does an entirely ordinary thing — `stty -echo`, `trap INT`, `IFS= read -rs`. If a
+byte dies when bash restarts a `read` after a trapped signal, the defect plausibly lives in
+**bash's read-restart path or the tty line discipline**, and `common.sh` is merely where it
+SURFACES. Any change there would then be a WORKAROUND, not a fix. Ownership is unresolved;
+"product bug" pre-judged it, and in the direction I had been building toward all session.
+
+**AND AN INTERACTION MAY MEAN THERE IS NO USER-FACING BUG AT ALL.** The card kept treating
+"harness artifact" and "product bug" as exclusive — an interaction makes both partly true. P13
+removes the `^C` and keeps the blind write; its zero says blind-write-without-signal is safe. It
+says NOTHING about whether the signal alone, with a human-realistic write, truncates. If the loss
+needs BOTH a signal AND a write landing in a machine-precise window, **no human ever reproduces
+it**, and the honest verdict is "harness artifact with a signal precondition" — nobody at risk.
 
 **WHAT IT DOES NOT LICENSE, and the second row is the one that hurts:**
 
 | framing | number | verdict |
 |---|---|---|
-| unpaired, pooled fixed rate 2.29% (11/480 over 120 runs) | P(0 in 320) ≈ **0.065%** | strong — **IF the trials are independent** |
+| unpaired, pooled fixed rate 2.29% (11/480 over 120 runs) | P(0 in 320) ≈ **0.065%** | strong — **IF the trials are independent, AND if the batches are poolable at all (they may not be — see below)** |
 | unpaired, this batch's own rate 1.875% (3/160) | P(0 in 320) ≈ **0.25%** | strong, same proviso |
 | **paired within-run, clustering-robust** | only **2 discordant runs** ⇒ `(1/2)^2` = **0.25** | **WEAK — not significant** |
 
@@ -55,14 +71,36 @@ and nearly powerless for P13-vs-fixed, because this batch produced only 3 events
 only 2 discordant runs. So the strong P13 numbers rest entirely on the independence assumption
 the card has NOT been able to defend — the same assumption the sign test exists to avoid needing.
 
+**THE BATCHES MAY NOT BE POOLABLE, and I pooled them without checking.** Batches 1-2 (the 80
+logged runs) PREDATE P13; batch 3 contains it, and per-run duration went **14.5 s → 25.8 s**. The
+entire hypothesis space here is load- and timing-sensitive, so a suite that now takes 78% longer
+per run is not obviously the same experiment. The `11/480` pooled rate silently assumes it is.
+The per-batch rates are close (1.875% in batch 3 vs 2.5% over batches 1-2), which is reassuring
+and is not a test.
+
 **Honest summary: the interaction is IMPLICATED, not established.** The continuum caveat still
 stands too — a zero rules out "blind writing reproduces the fixed-arm rate" and does NOT rule
 out "blind writing contributes a smaller amount" (at 0.5% a zero has P ≈ 20%).
 
-**NEXT, AND IT IS A MECHANISM QUESTION, NOT A MEASUREMENT ONE:** does the byte FAIL TO REACH the
-line discipline, or reach it and get DROPPED at commit? Hypothesis 2 is the sole survivor by
-ELIMINATION, never by direct measurement, and that localization is the whole remaining question.
-A probe with echo left ON would show what the discipline actually received — 40 echoed chars with
+**NEXT ACTION — SWEEP THE WRITE DELAY AND MEASURE THE WIDTH OF THE VULNERABLE WINDOW.** Vary the
+one number in P8's shape — write at 400 / 600 / 800 / 1000 / 1200 / 1600 / 2400 ms after the
+`^C`, several iterations each — and find where truncations start and stop. One harness change,
+one batch, and it answers BOTH open questions at once:
+
+- **MECHANISM** — a narrow window pins the loss to a specific transition in the resume sequence
+  (the handler's `stty` calls, the `read` restart); a wide one falsifies the transitional-window
+  story outright.
+- **USER IMPACT, which is the question that decides whether this card matters** — window width
+  versus human typing latency IS the product-bug question. Microseconds ⇒ nobody is at risk and
+  this closes as a harness artifact with a signal precondition. ~100 ms ⇒ a paste could hit it
+  and it is real.
+
+Nobody proposed measuring the window through five review rounds, and it dominates every
+remaining binary cell.
+
+**THEN the localization probe:** does the byte FAIL TO REACH the line discipline, or reach it and
+get DROPPED at commit? Hypothesis 2 is the sole survivor by ELIMINATION, never by direct
+measurement. A probe with echo left ON shows what the discipline received — 40 echoed chars with
 `read` getting 39 means it arrived and was dropped at commit; 39 echoed means it never arrived.
 
 ## ⏵ LENGTH EXPERIMENT — ANSWERED 2026-09-05T00:21. 39 bytes, TAIL-1, 4/4 at 40 chars.
@@ -168,8 +206,19 @@ constructible.**
   Scheduled before the `^C` it types AHEAD of the signal (a different cell); scheduled at
   1200 ms to match the other cell's delay it breaks immediately and reduces to P8 exactly.
   Either way it varies the DELAY, not the readiness — so it cannot hold timing fixed while
-  removing the signal. **That cell needs a real "is `read` blocked and consuming" probe, which
-  nothing here has**, and inventing one is its own task.
+  removing the signal.
+
+  **⚠ RETRACTED 2026-09-05T00:58 — THE CELL IS BUILDABLE, and I committed "NOT CONSTRUCTIBLE,
+  discovered by trying to write it" as a verified finding.** What I actually established is that
+  `typeWhenNoEcho` cannot do it. That is a limitation of ONE probe, not of the idea, and I
+  generalized from the probe I had to the cell being impossible. **The readiness signal already
+  exists and P8 already asserts it: the prelude is `trap 'echo PRIOR-INT' INT`, so `PRIOR-INT`
+  appears in the pty stream ONLY AFTER the handler has run** — precisely the post-signal,
+  `read`-resuming state the cell needs to detect. Wait for that token plus a settle margin
+  instead of a fixed 1200 ms: three lines, holds the `^C`, varies only the readiness. (P9 cannot
+  use it — `trap '' INT` prints nothing — but one cell on P8's shape suffices.) Superseded in
+  priority by the window sweep, which subsumes it, but the card must not keep asserting an
+  impossibility that is merely an unwritten test.
 - **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
   **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power, and all 8 DETECT (it
   asserts every length). **Power is computed against the ALTERNATIVE, so the rate is the fixed
@@ -277,6 +326,7 @@ if a 1-byte loss would MAKE ITS TEST FAIL. Most cannot:
 | P8 ×2 copies | fixed | **YES** | the `:585` coverage line |
 | P9 ×2 copies | fixed | **YES** | the `:611` coverage line |
 | P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value. **RE-READ AT FULL WIDTH (`614-657`) after the P2 discovery — exactly 3 assertions, no fourth hiding below.** The risk was live and specific: P10's classification had been carried forward from the truncated-window pass, and if it detected, the fixed arm would be 6/run and the p would move again. It does not |
+| P11a-j, P12a-d, P12f | — | n/a | **They type NOTHING — now READ, not inferred:** `grep -c 'runAtTerminal\|runGate\|ptySpawn'` over `336-433` returns **0**, so not one of them drives a real gate. An earlier version asserted the table was "complete" while carrying these from partial reads — the third consecutive round of claiming a completeness warrant I had not earned |
 | P6, P7 | — | n/a | **They type NOTHING.** `runGateCtrlC` writes only `\x03` and never the password, so they are in neither denominator. Checked because the boundary sweep surfaced P6's 3 assertions and an unclassified test with assertions is exactly the shape of the P2 error |
 
 > **⏹ THE STATISTIC IS FROZEN AS OF 2026-09-05T00:56. It is post-hoc, non-decisive, and

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:57:19+0200
+updated: 2026-09-04T23:16:40+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2, e3787efb]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -228,7 +228,45 @@ the correction under-claimed:
 - **security**: J — re-adding the raw `out` tail reddens P11j, the only assertion here whose
   failure has a consequence beyond a worse message
 
-**STOP INSTRUMENTING. The next thing to touch is the `jq` shim, not this file.** Seven
+**THE `jq` SHIM IS BUILT (`e3787efb`), and the stop note is discharged for exactly that
+item — nothing else.** A PATH shim over `jq`, installed only for these tests, records the
+BYTE LENGTH (never the content) of what the gate hands `jq -Rnc` at `common.sh:761` /
+`agent-helper.sh:279`. Argv-filtered on `-Rnc`; every other call `exec`s through BEFORE
+stdin is touched (common.sh calls `jq` ~20 times, one on the RESPONSE at `:770`, several
+with a filter and a file and no stdin at all). Zero shipped code changed.
+
+**Pinned by P12a-e, one `it()` per branch, four neuters run and ATTRIBUTED:** guard never
+matches (`-RnZ`) → P12a+P12e · guard matches everything (`-n "$a"`) → P12d+P12e · `wc -c`
+→ `wc -l` → P12a · forward replaced by `echo '{}'` → P12b. The last two ran TOGETHER; they
+are independent by construction (one writes the record file, one writes stdout, and each
+test reads only one of those) and the prediction was stated before the run. Restored,
+verified by diff. 29 pass, tsc 0 lines.
+
+**P12e is the only one of the five that is not vacuous alone, and that is why it exists.**
+P12a-d drive the shim DIRECTLY, so all four pass with the shim absent from the child's
+PATH entirely — in which case `jqStdinNote` prints "NOT RECORDED" forever, which reads
+exactly like a run that lost nothing. P12e drives the REAL gate at a real pty and asserts
+the shim was in that path. Measured: it is.
+
+**WHAT THE SHIM BUYS, stated narrowly.** "The loss is at or before `read`" was an ARGUMENT
+from the pipeline's composition, and it is now MEASURABLE: a short length at `jq -Rnc`
+confirms it, a full length REFUTES it. The measurement has NOT been taken — no truncation
+has fired since the shim landed.
+
+**THE CAVEAT THAT MUST BE READ BEFORE ANY POST-SHIM RATE IS QUOTED.** The shim adds an
+`mktemp` + `cat` + `wc` + a fork INSIDE the gate's own pipeline, so it perturbs the timing
+of the very window the surviving hypotheses live in. A post-shim rate is therefore NOT
+comparable to the pre-shim 1-in-24, in either direction, and a truncation that stops
+appearing is NOT evidence it was fixed. What the shim is trusted for is the POSITION of
+the boundary when a loss does occur — not the rate at which it occurs.
+
+**The `jqStdinNote` message rides `expect(actual, message)` and is TOTAL** — vitest
+evaluates it EAGERLY on every run, so a missing record file returns a sentence, never a
+throw. Same trap this card hit with `diagnoseBody`, now recorded in
+`lessons-verification.md`. `diagnoseBody` itself is UNTOUCHED and keeps its ten pinning
+tests; the three message call sites use `diagnose()`, which composes the two.
+
+**STOP INSTRUMENTING THE DIAGNOSTIC. The three defects below stay unfixed.** Seven
 revisions of the instrument against ONE 24-run experiment; the diagnostic ceiling is reached
 (position is TAIL three-for-three, and no further message refinement separates hypothesis 2
 from the shell-side remnant).
@@ -277,13 +315,23 @@ validated and then thrown away.
 1. **Wait for the next TIMEOUT and read its own message.** Free, already built: `seen[] === []`
    discriminates a timing slip, and `diagnoseBody` prints "no request reached the server at
    all" when it holds. **Keep the full run log** either way.
-2. **For the TRUNCATION, instrument the `jq` boundary FROM THE TEST, never from the gate.**
-   Prepend a tmpdir to the test's `PATH` (the spawns pass `PATH: process.env.PATH ?? ''` — the
-   INHERITED path, so this is a small harness change, not something that already exists) and
-   put a `jq` wrapper there that records stdin length **only when its argv contains `-Rnc`**
-   (the gate's own call at `:81`; `:90` reads the RESPONSE and must not be counted, and
-   `common.sh` calls `jq` ~20 times overall), then `exec`s the real `jq`. Zero shipped code,
-   no reach to a real credential.
+2. **~~Instrument the `jq` boundary from the test.~~ DONE — `e3787efb`.** The shim exists,
+   is pinned, and is proven to sit in the gate's own path (P12e). Nothing to build.
+
+3. **RUN THE BATCH AND WAIT FOR A TRUNCATION — this is the whole remaining experiment, and
+   it is a MEASUREMENT, not a code change.** At the pre-shim rate (1 in 24 runs, and see the
+   caveat above about why that number no longer predicts anything) a truncation needs tens of
+   consecutive runs. When one fires, the failure message now carries `jq -Rnc stdin: N
+   byte(s) for 22 expected`, and N is the answer:
+   - **N = 21** → the loss is at or before `read`. Hypothesis 2 (the line terminated one byte
+     early) is the only survivor and becomes the thing to instrument next.
+   - **N = 22** → the loss is AFTER `jq`, which REFUTES the composition argument this card
+     has been resting on since `38f995c1`, and re-opens hypothesis 3.
+   - **NOT RECORDED** → the shim did not fire on that run. That is a finding about the
+     HARNESS, not about the gate; do not read it as either answer.
+
+   **Keep the full run log either way** — no log survives from batches A or C, which is why
+   nobody can now say what those three presumed timeouts looked like.
 
 **NOT the way two earlier versions of this line said** — *"print `${#pw}` inside the gate"*
 would have added a debug print to `scripts/shell-helpers/common.sh`, which is SHIPPED and runs

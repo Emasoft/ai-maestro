@@ -169,34 +169,15 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
   }
 
-  // P0 — a HARNESS precondition, not a gate behaviour. Every test below spawns bare `bash`
-  // and drives the SHIPPED scripts, whose shebang is `#!/usr/bin/env bash`. If those two
-  // ever resolve to different binaries, every assertion in this file silently stops being
-  // about the bash that actually runs the gate — and this file's subject is precisely the
-  // bash-version-sensitive corner (`trap -p` from a command substitution, `set -u` on empty
-  // arrays; see TRDD-FPE86FIF). On this machine both are 3.2.57, but the point is the
-  // EQUALITY, not the number: pinning a version would redden on a box with a modern bash,
-  // while pinning the equality keeps meaning the same thing everywhere.
-  // Deliberately NOT driven through ptySpawn, though that is what the other tests use.
-  // Measured: allocating one extra pty in this file made P8/P9 fail intermittently
-  // (3 failures in 13 runs with a pty-based version of this test, 0 in 6 without), so a
-  // test whose whole job is to say the harness is sound was making the harness unsound.
-  // It does not need one: `ptySpawn('bash', …)` resolves the name through the PATH it is
-  // handed, and execFileSync handed the SAME PATH resolves it identically — the claim is
-  // about which binary the name reaches, and that is settled without a terminal.
-  it('P0: the pty harness runs the SAME bash the scripts\' shebang resolves to', () => {
-    // MARK=, not the bare output: a developer's rc file prints a banner into stdout ahead
-    // of the answer (measured — "Loading .bashrc at …"), and a check that reads the whole
-    // capture fails on that noise rather than on the thing it is asking about.
-    const env = { ...process.env, PATH: process.env.PATH ?? '' }
-    const ver = (file: string, args: string[]) =>
-      execFileSync(file, args, { encoding: 'utf8', env }).match(/MARK=(\S+)/)?.[1]
-    const harness = ver('bash', ['-c', 'echo MARK=$BASH_VERSION'])
-    const shebang = ver('/usr/bin/env', ['bash', '-c', 'echo MARK=$BASH_VERSION'])
-    expect(harness, 'harness bash reported no version').toMatch(/^\d+\./)
-    expect(harness).toBe(shebang)
-  })
-
+  // A "P0" asserting that this harness's bash matches the scripts' `#!/usr/bin/env bash`
+  // was added and then REMOVED — recorded here because the removal is the finding, and
+  // because the idea will occur to the next reader too. Both spellings failed, in opposite
+  // ways. Driven through ptySpawn it measured the right thing and perturbed the file
+  // (P8/P9 failing intermittently). Driven through execFileSync it perturbed nothing and
+  // measured NOTHING: `bash` and `/usr/bin/env bash` are ONE lookup — env is an execvp
+  // wrapper walking the same PATH — so the assertion was `x === x` and passed even with a
+  // fake `bash` planted first on PATH (measured). A test that cannot fail is worse than no
+  // test, so the version fact lives in TRDD-601KG45D as a dated measurement instead.
   it('P4: after a REFUSED exchange (the return-1 path) the tty has echo back on', async () => {
     const out = await runGate('true', 'stty -a < /dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"')
     expect(out).toMatch(/RC=1/)

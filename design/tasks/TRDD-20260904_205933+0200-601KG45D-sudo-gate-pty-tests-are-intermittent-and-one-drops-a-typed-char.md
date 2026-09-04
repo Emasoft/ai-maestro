@@ -3,15 +3,19 @@ trdd-id: 601KG45D
 title: The sudo-gate pty tests fail intermittently and one failure showed a truncated password
 scope: project
 project-id: ai-maestro
-column: todo
+column: backburner
+review-after: 2026-10-06
+blocker-probe: sh -c 'n=$(grep -c "IFS= read -rs _pw < /dev/tty" scripts/shell-helpers/common.sh 2>/dev/null || printf 0); printf "PROBE-RAN gate-shape=%s" "$n"'
+blocker-holds-if: not-match:gate-shape=0
+blocker-probe-canary: match:PROBE-RAN
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:11:45+0200
+updated: 2026-09-05T01:14:38+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
 task-type: bugfix
 priority: 2
-severity: medium
+severity: low
 effort: small
 release-via: none
 min-approval-requirement: none
@@ -46,16 +50,24 @@ The card ran eight review rounds without ever stating one. Synthesis on the corr
    panes (`scripts/remote-install.sh:1643` spawns them; `server.mjs:9` imports `node-pty`), and
    a process in a tmux pane HAS a controlling terminal, so `: < /dev/tty` succeeds and the probe
    PASSES. An agent running `aimaestro-agent.sh` in its own pane reaches `read -rs` exactly as a
-   human does. What it still cannot easily do is deliver **SIGINT** to itself mid-prompt — and
-   that is less exotic than "no plausible analogue", since the dashboard streams these terminals
-   and can write `\x03` into a pane.
-4. **⇒ User-facing risk is confined to one narrow conjunction:** a `^C` landing mid-prompt AND a
-   machine-timed write inside a millisecond window. For a human the two halves are
-   near-mutually-exclusive (someone pressing `^C` is not simultaneously pasting).
+   human does. What it still cannot easily do is deliver **SIGINT** to itself mid-prompt — but
+   even that is not exotic, and this is now **VERIFIED rather than asserted**: the dashboard's
+   WebSocket writes client input straight into the pty (`server.mjs:1566` `ws.on('message')` →
+   `:1595` `sessionState.ptyProcess.write(message)`), and the gate only clears `echo`, never
+   `ISIG` — so a `^C` typed into a dashboard terminal becomes a real SIGINT in that pane.
+4. **⇒ User-facing risk is confined to one conjunction — and it is LESS narrow than this card
+   claimed.** A `^C` mid-prompt AND a machine-timed write inside a millisecond window. An earlier
+   version added "(someone pressing `^C` is not simultaneously pasting)", which is wrong: the two
+   are **sequential-compatible and the sequence is ORDINARY RECOVERY** — press `^C` to abort a
+   mistyped entry, then PASTE at the re-prompt. **Worse, the retry-on-refusal fix proposed below
+   CREATES that second prompt**, so it would make this flow likelier, not rarer. That was the
+   most convenient claim left on the card.
 5. **IT FAILS CLOSED. This is NOT a credential-disclosure or auth-bypass bug** — a short password
    is simply wrong, the server refuses it, nothing is minted. **This is the fact that makes LOW
    obviously right rather than a judgment call**, and its absence let a skim read "credential
-   truncation" as something graver.
+   truncation" as something graver. **Scope of the check:** exact equality (`pw === GOOD`),
+   verified in the HARNESS's server; the production comparator at `POST /api/auth/sudo-password`
+   was not inspected. Prefix collision is impossible under exact equality either way.
 6. **Ownership is probably NOT ai-maestro's.** The gate does the ordinary thing (`stty -echo`,
    `trap INT`, `read -rs`), so every bash script reading a password under an INT trap shares the
    exposure.
@@ -70,9 +82,18 @@ The card ran eight review rounds without ever stating one. Synthesis on the corr
 - **(c)** Optional, independent of both: **retry-on-refusal** in the gate. Good UX regardless of
   who owns the bug.
 
-**Whether to close this card is now a judgment a reader can actually make.** My own read: the
-severity is LOW on (4), so (a) and (b) are worth one session, and (c) is worth doing whatever
-they find.
+**Whether to close this card is now a judgment a reader can actually make.** My own read:
+severity **LOW — justified by CONSEQUENCE (fact 5), not by reachability**, which is the more
+robust footing since the reachability argument has flipped three times and could flip again. The
+consequence argument cannot: worst case is a spurious auth refusal.
+
+**⏹ MOVED `todo` → `backburner` (`review-after: 2026-10-06`), and severity `medium` → `low`.**
+`todo` was dishonest: this card was worked all session, not queued, and none of (a)-(c) is
+urgent at LOW. `backburner` is the column for DELIBERATELY DEFERRED and is the one the drain rule
+exempts by name. **The drain rule applies to me here:** nine review rounds on a LOW-severity card
+while 54 cards sat untouched in `todo` is exactly the pattern it exists to catch, and the reason
+I gave twice for not draining — the measurement owning the machine — expired when the batch
+finished.
 
 ## ⏵ P13 ANSWERED 2026-09-05T00:56 — ZERO in 320 detecting typings. THE INTERACTION IS REQUIRED.
 
@@ -144,8 +165,7 @@ takes it.
 
 **The binding constraint is the SIGNAL, not the terminal** — see bottom-line fact 3. Note the
 recursion: I accepted the prior round's `/dev/tty` inference without checking it against the
-architecture named in the first line of this project's own CLAUDE.md. I did catch it in parallel
-by grepping for `tmux new-session` — but only AFTER committing it.
+architecture named in the first line of this project's own CLAUDE.md.
 
 **WHAT ACTUALLY SURVIVES — the conjunction, stated so a reader can judge it:** a HUMAN, at a real
 terminal, who presses `^C` mid-prompt, and who then **PASTES** rather than types (paste is the one

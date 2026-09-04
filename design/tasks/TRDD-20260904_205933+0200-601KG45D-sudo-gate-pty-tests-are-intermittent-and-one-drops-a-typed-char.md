@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:54:21+0200
+updated: 2026-09-05T00:57:24+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -31,6 +31,39 @@ labels: [flaky-test, pty, sudo-gate]
 # The sudo-gate pty tests are intermittent, and these are the tests that pin a security fix
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+## ⏵ P13 ANSWERED 2026-09-05T00:56 — ZERO in 320 detecting typings. THE INTERACTION IS REQUIRED.
+
+**40 runs. 3 truncations, ALL in the fixed arm (`run 10 [P8 P9]`, `run 15 [P9]`). P13: zero.**
+The no-signal blind-write cell did not truncate once.
+
+**WHAT THIS LICENSES.** Blind writing ALONE does not reproduce the fixed-arm rate, so *"the
+harness types into an unready tty and that is the whole story"* is rejected — **`common.sh` is
+NOT exonerated, and the product-bug arm is the live one.**
+
+**WHAT IT DOES NOT LICENSE, and the second row is the one that hurts:**
+
+| framing | number | verdict |
+|---|---|---|
+| unpaired, pooled fixed rate 2.29% (11/480 over 120 runs) | P(0 in 320) ≈ **0.065%** | strong — **IF the trials are independent** |
+| unpaired, this batch's own rate 1.875% (3/160) | P(0 in 320) ≈ **0.25%** | strong, same proviso |
+| **paired within-run, clustering-robust** | only **2 discordant runs** ⇒ `(1/2)^2` = **0.25** | **WEAK — not significant** |
+
+**The clustering-robust test cuts BOTH ways, and I would have missed that if I had only quoted
+it where it flattered me.** It is powerful for polling-vs-fixed (8 discordant runs, p = 0.0039)
+and nearly powerless for P13-vs-fixed, because this batch produced only 3 events and therefore
+only 2 discordant runs. So the strong P13 numbers rest entirely on the independence assumption
+the card has NOT been able to defend — the same assumption the sign test exists to avoid needing.
+
+**Honest summary: the interaction is IMPLICATED, not established.** The continuum caveat still
+stands too — a zero rules out "blind writing reproduces the fixed-arm rate" and does NOT rule
+out "blind writing contributes a smaller amount" (at 0.5% a zero has P ≈ 20%).
+
+**NEXT, AND IT IS A MECHANISM QUESTION, NOT A MEASUREMENT ONE:** does the byte FAIL TO REACH the
+line discipline, or reach it and get DROPPED at commit? Hypothesis 2 is the sole survivor by
+ELIMINATION, never by direct measurement, and that localization is the whole remaining question.
+A probe with echo left ON would show what the discipline actually received — 40 echoed chars with
+`read` getting 39 means it arrived and was dropped at commit; 39 echoed means it never arrived.
 
 ## ⏵ LENGTH EXPERIMENT — ANSWERED 2026-09-05T00:21. 39 bytes, TAIL-1, 4/4 at 40 chars.
 
@@ -169,7 +202,12 @@ constructible.**
   P(0) assumes 8 back-to-back gate runs in one process, one test, ~12 s, one machine are
   independent draws; under perfect within-test clustering the same marginal gives P(0) ≈ 36% —
   three orders of magnitude from 0.03%. Measured over the two clean 40-run batches: **8 events in
-  8 DISTINCT runs, zero doubletons**, which supports independence. **Against it: the live batch's
+  8 DISTINCT runs, zero doubletons** — which is **CONSISTENT with independence and carries almost
+  no evidential weight**, because under independence that is the MODAL outcome: 8 events among
+  80 runs land in 8 distinct runs with probability ∏(1−i/80) ≈ **0.70**. An earlier version of
+  this line offered it as "supports independence", which is the claim on this card that most
+  flattered my own position — Fisher NEEDS independence, and I was citing a ~70%-likely
+  coincidence as evidence for it. **Against it: the live batch's
   run-010 is the first doubleton** — P8 AND P9 truncating in the same run, both TAIL-1, both
   `stdin: 39`. **But read it at the right scope:** that is TWO ADJACENT TESTS inside one run, i.e.
   RUN-level clustering, whereas P13's assumption is about 8 iterations WITHIN one test. Related
@@ -241,6 +279,17 @@ if a 1-byte loss would MAKE ITS TEST FAIL. Most cannot:
 | P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value. **RE-READ AT FULL WIDTH (`614-657`) after the P2 discovery — exactly 3 assertions, no fourth hiding below.** The risk was live and specific: P10's classification had been carried forward from the truncated-window pass, and if it detected, the fixed arm would be 6/run and the p would move again. It does not |
 | P6, P7 | — | n/a | **They type NOTHING.** `runGateCtrlC` writes only `\x03` and never the password, so they are in neither denominator. Checked because the boundary sweep surfaced P6's 3 assertions and an unclassified test with assertions is exactly the shape of the P2 error |
 
+> **⏹ THE STATISTIC IS FROZEN AS OF 2026-09-05T00:56. It is post-hoc, non-decisive, and
+> SUPERSEDED BY P13. Do not refine it further.** Five review rounds went to arithmetic while the
+> mechanism sat untouched, and the decisive argument is not "diminishing returns" — it is that
+> **a correlation p CANNOT answer this card's question, which I established myself and then spent
+> five rounds ignoring.** Three variables are perfectly collinear across every event, so a p of
+> any size says "these two trial sets differ" and can never say WHICH of write timing, the `^C`,
+> or the signal-resume did it — and the middle one is the only one that would exonerate
+> `common.sh`. The correlation was only ever a prior that P13 was worth running. P13 is running,
+> and **its reading needs no correlation statistic at all.** Everything below is kept as the
+> record of how the number was arrived at, not as a live question.
+
 **THE TEST, CHOSEN BEFORE THE ARITHMETIC AND FIXED FROM HERE ON: Fisher exact, one-sided,
 CONDITIONED ON THE 8 EVENTS OBSERVED.** Poisson `P(0)` answers a different question — "how
 surprising is zero given a KNOWN pooled rate" — and by not conditioning on the 8 it runs ~3×
@@ -254,7 +303,16 @@ churn note below for why.
 |---|---|
 | **Fisher exact, conditioned on 8** | **0.011** ← the number |
 | binomial, `(320/560)^8` | 0.011 (cross-check) |
+| **paired within-run sign test** | **0.0039** ← the CLUSTERING-ROBUST check |
 | Poisson `P(0)`, λ = 3.43 | 0.032 (the wrong test, kept to show the gap) |
+
+**The sign test is the one that survives the independence problem, and it is free.** Treat each
+run as its own stratum: 8 runs where the fixed arm truncated and the polling arm did not, ZERO
+the other way ⇒ one-sided `(1/2)^8 = 0.0039`. Run-level clustering cannot inflate it (run-010's
+two events count ONCE), and it assumes only exchangeability of DIRECTION within a run — exactly
+the assumption that IS defensible here. It is a robustness check BESIDE Fisher, not a
+replacement: agreement between a clustering-sensitive test and a clustering-robust one is worth
+more than either alone.
 
 **TWO CAVEATS THAT TRAVEL WITH IT WHEREVER IT IS QUOTED:** the correlation was found by LOOKING
 AT THE DATA, never pre-registered, so it is a post-hoc p; and every value here is VOID if the

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:53:30+0200
+updated: 2026-09-04T23:55:09+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -54,11 +54,22 @@ insists the two were wrongly pooled by earlier revisions. What the batch shows i
 the TRUNCATIONS do not favour P8 (2/2), which nobody had asserted either way. **The P8
 concentration is UNTOUCHED by this batch**, and cannot be touched by it, because:
 
-**ZERO TIMEOUTS FIRED IN 40 RUNS** — a genuinely new fact the first write-up omitted entirely,
-and more interesting than the symmetry. Against 3 in the earlier history. **Not quotable as a
-rate change** (no control arm — see the load caveat), but the presumed-timeout population is
-now 3 events none of which has ever been reproduced under instrumentation, and no run log from
-those three survives.
+**THE TIMEOUT MODE DID NOT REPRODUCE IN 40 INSTRUMENTED RUNS.** State it as an ABSENCE OF
+REPRODUCTION, never as "0 tonight vs 3 historically" — **that is the rate claim this card
+forbids itself, and I wrote it once already.** The first version led with the count and hedged
+in a parenthetical, which a reader takes exactly backwards.
+
+Every word of the no-control-arm disclaimer applies here, and applies HARDER: a timeout is a
+TIMING failure by construction (the 25 s SIGKILL), so it is the failure mode most plausibly
+sensitive to the shim's added forks and to machine load — the one class where the missing
+control arm matters most is the one I quoted a bare count for. Whether the non-reproduction is
+the shim, the load, or chance is UNKNOWN.
+
+**What the batch can and cannot say about the P8 concentration.** It cannot compare P8 against
+P9 within the timeout population, because that population is empty tonight. It does record
+that the timeout phenomenon did not reproduce at all under instrumentation — a failed
+replication of the whole mode, which is a weak update rather than nothing. An earlier version
+said the concentration "cannot be touched by this batch"; that under-claimed.
 
 **Copy-independence: I talked myself out of the card's own correct judgement and am reverting
 to it.** It was recorded as *"nearly a tautology and… weak"*, which is right — the two copies
@@ -536,6 +547,23 @@ The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted 
    TAIL-1 ⇒ terminator-related; scaling ⇒ buffer-related. **Note it is now LESS discriminating
    than when first proposed:** H1 is excluded, so this characterises the sole survivor rather
    than separating two hypotheses.
+
+**THE CARD IS CLOSED FOR REVIEW, 2026-09-04T23:55 — pending NEW MEASUREMENT only.** Seven
+rounds ran tonight. The experimental content settled at 23:37 when the batch returned 4/4 at
+N=21; rounds 4-7 adjusted the WORDING of claims about a result that has not changed since.
+Each round's fixes generated the next round's findings — three separate paragraphs on this
+card now correct the *correction* of the load caveat — which is the failure the stopping rule
+itself predicted: *"the loop cannot self-terminate; findings are always available."* An
+adversarial reviewer pointed at any text will find something; that is what it is for.
+
+> **STOP REVIEWING when a round produces no finding that changes a MEASUREMENT, a NEXT STEP,
+> or a COLUMN** — i.e. when every finding is about how a settled result is worded.
+
+Round 6 met that for 3 of 6 findings; the 3 acted on were a rate claim a reader would
+mis-read, a STATE header contradicting its own body, and one unrun check. **The next real
+information comes from RUNNING step 2 or 3, not from re-reading step 1.** If the review gate
+fires on these card edits, the correct response is one line saying the card is closed for
+review pending new measurement — not another round.
 
 **BACKSTOP, in case a later round argues past it: the batch RUNS TO COMPLETION before any
 further instrument edit.** Two batches were already killed mid-flight for instrument fixes; a

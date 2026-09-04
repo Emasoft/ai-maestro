@@ -11,7 +11,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-09-04T23:51:27+0200
+updated: 2026-09-04T23:55:09+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -35,10 +35,17 @@ labels: [credentials, alarm-noise, blocks-deadline]
 external-refs: [Emasoft/ai-maestro#95, TRDD-X4RK1NUW, TRDD-3GU9V70H, TRDD-EQJPPZ2L]
 ---
 
-## ⏵ STATE — 2026-09-04T23:40: THE SOAK NEVER STARTED. The server has been STOPPED since the fix landed.
+## ⏵ STATE — 2026-09-04T23:54: THE SOAK HAS NOT BEEN SCORED. No beat window has been located.
 
-**`testing` → `human_review`.** `testing` asserts a soak is running. Measured tonight, it is
-not, and it never has been.
+> **The header said "THE SOAK NEVER STARTED" for fourteen minutes and is corrected here.** The
+> body already withdrew that claim — the tick DID execute at least once, at 20:43 — but the
+> header is the first thing a resuming reader sees, so it was still shipping the withdrawn
+> version. A STATE header that contradicts its own body is worse than a wrong body, because
+> nobody reads past it.
+
+**`testing` → `human_review`.** `testing` asserts a soak is running. Measured tonight, none is:
+the server is stopped and no beat window has been located. (An earlier version added "and it
+never has been" — withdrawn with the "never once executed" claim below.)
 
 | measurement | value |
 |---|---|
@@ -105,7 +112,7 @@ Corrected claim: *no beats appear in the two pm2 logs, which are frozen; whether
 elsewhere is unchecked.* The card's CONCLUSION survives — you cannot score a window you have
 not located — but the stated reason was wrong.
 
-**Still unexplained after FIVE checks, and recorded as unexplained rather than guessed at a
+**Still unexplained after SEVEN checks, and recorded as unexplained rather than guessed at a
 third time:** how `server-tick.ts` ran at 20:43 with no ai-maestro process alive.
 
 | check | result |
@@ -115,6 +122,18 @@ third time:** how `server-tick.ts` ran at 20:43 with no ai-maestro process alive
 | janitor scripts referencing the tick path or invoking `ai-maestro/…` | **none** (only incidental substring hits in `.pyc` files) |
 | `ps` snapshot (to a file, then searched) | no ai-maestro server process |
 | `lsof -iTCP:23000 -sTCP:LISTEN` | nothing listening |
+| `.janitor/logs/dispatch.log` at 20:4x (LIVE log, covers the moment) | **no lines** — the janitor's dispatch path ran nothing then |
+| `~/.aimaestro/` files written in that same second | **exactly one: the status file itself.** No lock, no session file, no siblings |
+
+**That last row is a FINGERPRINT, not just another negative.** A full `server-tick` run would
+be expected to touch more state than one file and to emit a log line; this invoker wrote ONE
+file and logged nothing. That narrows it toward a short-lived process with stdout discarded,
+or a code path that reaches `writeTickStatus` without the surrounding logging — and it rules
+out "a normal server tick that happened to go unlogged".
+
+**Listing `dispatch.log` as unchecked while calling the set "five checks, all negative"
+overstated the thoroughness** — I had established in the same session that this log is live
+(last line 23:21) and covers 20:43. It is now checked; six negatives.
 
 **Not yet checked, and the likeliest remaining homes for beats:** other state files under
 `~/.aimaestro/` written by the same invoker; a `yarn headless` run's own redirected output;
@@ -133,9 +152,13 @@ not guard the **stopped-process** case, because criterion (b) then has a denomin
 and is not merely failed but **unscoreable**. A floor of the form "≥95 % of that window's
 beats" needs the window to contain beats.
 
-**A grep would have ticked box (a).** `grep -c reauth-needed` over the window returns 0, which
-is the answer the criterion asks for. That is the whole trap: the measurement that satisfies
-the box is indistinguishable from the measurement that proves nothing happened.
+**A grep would have ticked box (a), and the trap is WORSE than the first version said.** I
+originally wrote that `grep -c reauth-needed` returns 0 and that "the measurement that
+satisfies the box is indistinguishable from the measurement that proves nothing happened" —
+which assumed the 0 was REAL. After withdrawing "zero beats in the window", the honest form is
+sharper: **a grep over the only logs I could find returns 0, and I cannot tell whether that 0
+means "no beats" or "no log".** The instrument's COVERAGE is unknown, which is a worse
+position than a known-empty window, because an unknown-coverage 0 is unfalsifiable.
 
 **Two near-misses recorded, because both were one step from a false claim of record:**
 1. I first searched the **janitor plugin** for the emitters of `reauth-needed` /

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:49:39+0200
+updated: 2026-09-04T23:53:30+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -514,10 +514,21 @@ because the question is fixed in advance; not the same as the loop terminating b
 **THE NEXT MEASUREMENTS, cheapest first — and the FIRST one needs no new code at all.**
 The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted again.
 
-1. **RE-READ THE FOUR LOGS BEFORE BUILDING ANYTHING — the answer may already be in them.**
-   The classifier reports `…x7q` as a PREFIX of `…x7q2`, so the final `2` is gone and nothing
-   else shifted. That already favours terminator-timing over a buffer truncation, from data in
-   hand. Zero cost.
+1. **DONE 2026-09-04T23:53 — and it CORRECTS the claim that sent me to do it.** I wrote that
+   re-reading the logs "already favours terminator-timing over a buffer truncation". **It does
+   not, and I should not have said so before looking.**
+
+   All four received strings are **BYTE-IDENTICAL**: `wrong-pw-9MZQ4T7E-x7q`, i.e. exactly the
+   expected string's 21-byte prefix, 4/4.
+
+   **What that DOES establish** (and it is more than the classifier's per-run verdict): the
+   loss is deterministic in WHAT it drops, not merely in position. No substitution, no interior
+   loss, no shift — always the same single final character.
+
+   **What it does NOT establish:** terminator-timing over a buffer effect. A 21-byte cap and a
+   terminator arriving one character early **both** produce a 21-byte prefix, so the prefix
+   property cannot separate them. That is precisely what steps 2 and 3 are for, and it is why
+   they are still worth running.
 2. **CHANGE THE LAST CHARACTER of `SECRET`** (end it with `#`). If the loss is always "the
    final character, whatever it is", terminator; if it correlates with the character's value,
    something stranger. One constant, no new machinery — cheaper and sharper than (3).

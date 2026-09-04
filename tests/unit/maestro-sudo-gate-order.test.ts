@@ -50,12 +50,20 @@ describe('TRDD-Q758CX98 — echo is off before the password prompt, in every cop
       const h = fnBody(file, '_maestro_sudo_on_int')
       const hOn = h.indexOf('stty echo < /dev/tty')
       const hRun = h.indexOf('eval "$_b"')
-      const hOff = h.indexOf('stty -echo < /dev/tty')
       expect(hOn, 'handler never restores echo').toBeGreaterThan(-1)
       expect(hRun, "handler never runs the caller's prior INT trap").toBeGreaterThan(-1)
-      expect(hOff, 'handler never re-disables echo for the resumed read').toBeGreaterThan(-1)
-      expect(hOn).toBeLessThan(hRun)  // the caller's trap is handed a usable terminal
-      expect(hOff).toBeGreaterThan(hRun) // re-disabled ONLY after it returned, never before
+      expect(hOn).toBeLessThan(hRun) // the caller's trap is handed a usable terminal
+      // The re-disable is on a RETURN trap, so its SOURCE position no longer says when it
+      // runs — pin the unskippability instead. A trailing line was skipped by a caller body
+      // ending in `return`, which returns from the handler itself (measured: password on
+      // screen). `exit` skips the RETURN trap, which is correct — see the pty file's P9/P10.
+      expect(h, 're-disable must be on a RETURN trap, not a trailing line').toMatch(
+        /trap 'stty -echo < \/dev\/tty[^']*' RETURN/,
+      )
+      // The re-raise is gated on the SPEC, never the BODY: `trap '' INT` has an empty body
+      // and is still a trap, and there `kill` is a no-op (measured: password on screen).
+      expect(h, 're-raise must test the spec, not the body').toMatch(/\[ -z "\$_spec" \]/)
+      expect(h).not.toMatch(/\[ -z "\$_b" \]/)
     })
   }
 })

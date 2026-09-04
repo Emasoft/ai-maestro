@@ -236,6 +236,48 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(seen[0]?.body).toContain(SECRET) // and it WAS the password the gate sent
   })
 
+  // P9/P10 — the two caller shapes the FIRST cut of _maestro_sudo_on_int leaked on, found by
+  // an adversarial review and reproduced at a pty before the fix (both LEAK=YES on b93f1ada,
+  // both clean after). They are the P8 assertion aimed at the two paths that skipped the
+  // re-disable: an EMPTY BODY that is still a trap, and a body that RETURNS from the handler.
+  for (const copy of COPIES) it(`P9 [${copy}]: \`trap '' INT\` is a trap, not an absent one — the resumed read still does not echo`, async () => {
+    // An empty body is indistinguishable from no trap if you test the BODY. It is not the
+    // same thing: SIGINT is IGNORED, so the gate's `kill -INT $$` is a no-op, the read
+    // resumes, and a handler that re-raised here left echo ON — the password on screen.
+    const out = await new Promise<string>((resolve) => {
+      const p = ptySpawn('bash', ['-c', `trap '' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+      })
+      let o = ''
+      let sent = false
+      p.onData((d) => { o += d; if (!sent && o.includes('MAESTRO password')) { sent = true; setTimeout(() => p.write('\x03'), 300); setTimeout(() => p.write(SECRET + '\r'), 1200) } })
+      const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+      p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
+    })
+    expect(out).not.toContain(SECRET)        // the whole point: typed after the ^C, still not echoed
+    expect(out).toMatch(/RC=1/)              // the gate ran to its refusal, the ^C was ignored as asked
+    expect(seen[0]?.body).toContain(SECRET)  // and it WAS the password the gate sent
+  })
+
+  for (const copy of COPIES) it(`P10 [${copy}]: a prior trap ending in \`return\` does not skip the re-disable`, async () => {
+    // The handler runs the caller's body inline, so a trailing `return` returns from the
+    // HANDLER. Anything placed after the body is therefore skipped — which is why the
+    // re-disable is a RETURN trap and not a trailing line.
+    const out = await new Promise<string>((resolve) => {
+      const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT; return' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+      })
+      let o = ''
+      let sent = false
+      p.onData((d) => { o += d; if (!sent && o.includes('MAESTRO password')) { sent = true; setTimeout(() => p.write('\x03'), 300); setTimeout(() => p.write(SECRET + '\r'), 1200) } })
+      const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+      p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
+    })
+    expect(out).toMatch(/PRIOR-INT/)
+    expect(out).not.toContain(SECRET)
+    expect(out).toMatch(/RC=1/)
+  })
+
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], GOOD)
     const calls = seen.map((s) => `${s.method} ${s.url}`)

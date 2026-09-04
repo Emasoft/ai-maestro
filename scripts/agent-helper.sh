@@ -214,14 +214,21 @@ _maestro_sudo_on_int() {
     trap - RETURN
     # The body out of `trap -p INT`'s own output, unquoted by bash itself:
     # `set -- trap -- 'BODY' SIGINT`, in a subshell so positionals stay isolated.
-    local _b
-    _b="$(eval "set -- ${_MAESTRO_PREV_INT}"; printf '%s' "${3-}")"
-    eval "${_MAESTRO_PREV_INT:-trap - INT}"    # the caller's trap is live again, never disarmed
+    local _spec="${_MAESTRO_PREV_INT:-}" _b
+    _b="$(eval "set -- ${_spec}"; printf '%s' "${3-}")"
+    eval "${_spec:-trap - INT}"                # the caller's trap is live again, never disarmed
     unset _MAESTRO_PREV_INT
-    # No caller trap: re-raise so the default disposition kills the script.
-    if [ -z "$_b" ]; then kill -INT $$; return; fi
+    # ONLY a genuinely ABSENT trap re-raises, and that is a test on the SPEC, never on the
+    # BODY: `trap '' INT` (SIGINT ignored) has an empty body but is very much a trap, and
+    # there the kill is a no-op — the read would resume with echo still ON and put the
+    # password on screen. Measured at a pty; the body test leaked, the spec test does not.
+    if [ -z "$_spec" ]; then kill -INT $$; return; fi
+    # Re-disable on the way OUT, on WHATEVER path leaves this function. Not a trailing
+    # line: a caller body ending in `return` (`trap 'cleanup; return' INT`) returns from
+    # HERE, and skipped it — also measured leaking. `exit` skips this trap, which is
+    # exactly right, because a dying script must leave the terminal usable.
+    trap 'stty -echo < /dev/tty 2>/dev/null; trap - RETURN' RETURN
     eval "$_b"
-    stty -echo < /dev/tty 2>/dev/null          # reached ONLY if that trap RETURNED — the read resumes
 }
 
 maestro_sudo_ensure() {

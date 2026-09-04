@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:59:12+0200
+updated: 2026-09-05T01:06:45+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -50,19 +50,43 @@ byte dies when bash restarts a `read` after a trapped signal, the defect plausib
 SURFACES. Any change there would then be a WORKAROUND, not a fix. Ownership is unresolved;
 "product bug" pre-judged it, and in the direction I had been building toward all session.
 
-**AND AN INTERACTION MAY MEAN THERE IS NO USER-FACING BUG AT ALL.** The card kept treating
-"harness artifact" and "product bug" as exclusive — an interaction makes both partly true. P13
-removes the `^C` and keeps the blind write; its zero says blind-write-without-signal is safe. It
-says NOTHING about whether the signal alone, with a human-realistic write, truncates. If the loss
-needs BOTH a signal AND a write landing in a machine-precise window, **no human ever reproduces
-it**, and the honest verdict is "harness artifact with a signal precondition" — nobody at risk.
+**If anything the reframe is still UNDER-corrected.** Because the gate does nothing unusual,
+**every bash script that reads a password under an INT trap has the same exposure** — which makes
+this a bash / line-discipline issue that ai-maestro merely HOSTS. **The fastest way to settle
+ownership is an upstream reproduction OUTSIDE this repo:** a ~10-line bash script under a pty,
+`trap INT` + `read -rs`, `^C` then a timed write. If it truncates there, the question leaves this
+card entirely.
+
+**But "not our bug" must NOT become "no action".** A defensive fix in the gate is correct
+regardless of who owns the defect: the gate knows the credential's expected shape at the point of
+use, and **a truncated credential silently failing an auth exchange is a worse failure mode than
+a re-prompt** — especially given the exposure note above, where the caller is an agent.
+
+**AN INTERACTION DOES NOT MEAN "NOBODY AT RISK" — AND THE PARAGRAPH THAT SAID SO WAS THE MOST
+COMFORTABLE CLAIM ON THIS CARD AND THE LEAST SUPPORTED.** It read: *"if the loss needs BOTH a
+signal AND a write landing in a machine-precise window, no human ever reproduces it… nobody at
+risk."* **That reasoning depends on the exposure being human-typing-only, and here it is not.**
+
+- A **paste** delivers bytes at machine speed.
+- Far more decisively: **this gate is driven by AUTOMATION in production. ai-maestro's entire
+  premise is agents invoking these scripts.** A machine-timed write into this gate is not a
+  harness-only condition — it is the NORMAL case.
+
+So "machine-precise window" does not mean "unreachable"; it means "reachable by exactly the
+caller this project ships". The interaction narrows the trigger; it does not retire the risk. I
+had written the opposite one commit earlier, in the same direction every other slide on this card
+has gone.
+
+What P13's zero DOES say, stated at its real strength: **no evidence of truncation at a rate
+comparable to the fixed arm** when the signal is absent. Not "safe" — at the pessimistic end of
+the rate CI, P(0 in 320) ≈ 3.2%.
 
 **WHAT IT DOES NOT LICENSE, and the second row is the one that hurts:**
 
 | framing | number | verdict |
 |---|---|---|
-| unpaired, pooled fixed rate 2.29% (11/480 over 120 runs) | P(0 in 320) ≈ **0.065%** | strong — **IF the trials are independent, AND if the batches are poolable at all (they may not be — see below)** |
-| unpaired, this batch's own rate 1.875% (3/160) | P(0 in 320) ≈ **0.25%** | strong, same proviso |
+| unpaired, **this batch's own rate 1.875% (3/160)** — the only same-suite comparison | P(0 in 320) ≈ **0.25%** | strong — **IF the trials are independent** |
+| ~~unpaired, pooled 2.29% (11/480 over 120 runs)~~ | ~~0.065%~~ | **WITHDRAWN, not merely flagged** — see below |
 | **paired within-run, clustering-robust** | only **2 discordant runs** ⇒ `(1/2)^2` = **0.25** | **WEAK — not significant** |
 
 **The clustering-robust test cuts BOTH ways, and I would have missed that if I had only quoted
@@ -78,14 +102,39 @@ per run is not obviously the same experiment. The `11/480` pooled rate silently 
 The per-batch rates are close (1.875% in batch 3 vs 2.5% over batches 1-2), which is reassuring
 and is not a test.
 
+**FLAGGING IT WAS NOT ENOUGH, SO THE POOLED NUMBER IS WITHDRAWN.** Ordinarily a caveat beside a
+figure would do. Not on THIS card, whose demonstrated failure mode is exactly numbers outliving
+their caveats: the 7-vs-0 survived inside a block I had just edited, and a superseded p was
+carried into three separate paragraphs. Leaving `11/480` in place with a warning next to it is
+the same shape as both. **Report the two per-batch rates separately, derive nothing from a pooled
+figure, and compute one only at a point of use with the assumption stated inline.**
+
 **Honest summary: the interaction is IMPLICATED, not established.** The continuum caveat still
 stands too — a zero rules out "blind writing reproduces the fixed-arm rate" and does NOT rule
 out "blind writing contributes a smaller amount" (at 0.5% a zero has P ≈ 20%).
 
-**NEXT ACTION — SWEEP THE WRITE DELAY AND MEASURE THE WIDTH OF THE VULNERABLE WINDOW.** Vary the
-one number in P8's shape — write at 400 / 600 / 800 / 1000 / 1200 / 1600 / 2400 ms after the
-`^C`, several iterations each — and find where truncations start and stop. One harness change,
-one batch, and it answers BOTH open questions at once:
+**NEXT ACTION — SWEEP THE WRITE DELAY. TARGET A HOT SPOT, NOT AN EDGE — the edge version is not
+viable and "measure the WIDTH" implied it.** Vary the one number in P8's shape (write at 400 /
+600 / 800 / 1000 / 1200 / 1600 / 2400 ms after the `^C`). **Computed independently before the
+review's own figure arrived, and they agree exactly** — at ~2%/typing, `P(0) = 0.98ⁿ`:
+
+| n per delay point | P(0) if the rate is still 2% | verdict |
+|---|---|---|
+| 8 ("several") | 0.85 | **useless** — a zero means nothing |
+| 25 | 0.60 | enough for a 5-10× HOT SPOT |
+| 150 | 0.048 | what a confident EDGE needs |
+
+**Edges: ~150/point × 7 points ÷ 8 typings/run ≈ 900 runs ≈ 6.5 h. Not viable.**
+**Hot spot: ~25/point ≈ 19 runs/point ≈ 130 runs ≈ 1 h. Run this, coarse, first.**
+
+**And the cheapest possible outcome is a FLAT result:** if the rate does not vary across
+400-2400 ms, the transitional-window story is falsified outright with no edge needed.
+
+**Anchor the delay to `PRIOR-INT`, not to the prompt.** That is what the retraction below is
+actually good for: it removes the jitter between "harness wrote `\x03`" and "bash handled it",
+which would otherwise smear every point of this sweep.
+
+One harness change, one batch, and it answers BOTH open questions at once:
 
 - **MECHANISM** — a narrow window pins the loss to a specific transition in the resume sequence
   (the handler's `stty` calls, the `read` restart); a wide one falsifies the transitional-window
@@ -95,8 +144,11 @@ one batch, and it answers BOTH open questions at once:
   this closes as a harness artifact with a signal precondition. ~100 ms ⇒ a paste could hit it
   and it is real.
 
-Nobody proposed measuring the window through five review rounds, and it dominates every
-remaining binary cell.
+**Attribution: the sweep is the SIXTH REVIEW's finding, not mine.** An earlier version of this
+line said only "nobody proposed measuring the window through five review rounds", which is true
+and quietly framed the idea as arriving rather than as being handed to me. Every other finding on
+this card is attributed; this one gets the same treatment, or the provenance record becomes
+selectively generous to its author. It dominates every remaining binary cell.
 
 **THEN the localization probe:** does the byte FAIL TO REACH the line discipline, or reach it and
 get DROPPED at commit? Hypothesis 2 is the sole survivor by ELIMINATION, never by direct
@@ -214,11 +266,23 @@ constructible.**
   generalized from the probe I had to the cell being impossible. **The readiness signal already
   exists and P8 already asserts it: the prelude is `trap 'echo PRIOR-INT' INT`, so `PRIOR-INT`
   appears in the pty stream ONLY AFTER the handler has run** — precisely the post-signal,
-  `read`-resuming state the cell needs to detect. Wait for that token plus a settle margin
-  instead of a fixed 1200 ms: three lines, holds the `^C`, varies only the readiness. (P9 cannot
-  use it — `trap '' INT` prints nothing — but one cell on P8's shape suffices.) Superseded in
-  priority by the window sweep, which subsumes it, but the card must not keep asserting an
-  impossibility that is merely an unwritten test.
+  `read`-resuming state the cell needs to detect.
+
+  **⚠ AND THAT RETRACTION ITSELF OVER-CORRECTED — corrected again 2026-09-05T01:05.** `PRIOR-INT`
+  is echoed by the handler **while the handler runs**: SIGINT arrives → `read` is interrupted →
+  handler runs → `echo PRIOR-INT` → handler returns → **only then** does bash decide whether to
+  restart the `read`. So the token marks the handler having **STARTED**, not `read` having
+  RESUMED — it lands at the *beginning* of the very transitional window this card hypothesizes,
+  so writing on it would hit the WORST moment, not a safe one. My own phrase "plus a settle
+  margin" conceded this without noticing: a settle margin is a fixed delay again, so the cell
+  becomes "anchor + fixed N ms" — varying the ANCHOR, not the readiness, which is not what the
+  cell was for. `NOT CONSTRUCTIBLE` was too strong; "constructible in three lines" is too strong
+  in the other direction, **and it was the tidier story, which is why it was the one to
+  distrust.**
+
+  **What the discovery IS good for: it is a better ZERO POINT for the sweep.** Anchoring to
+  `PRIOR-INT` removes the jitter between "harness wrote `\x03`" and "bash actually handled it" —
+  exactly the noise that would otherwise smear every delay point.
 - **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
   **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power, and all 8 DETECT (it
   asserts every length). **Power is computed against the ALTERNATIVE, so the rate is the fixed

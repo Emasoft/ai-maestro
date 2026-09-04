@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:14:40+0200
+updated: 2026-09-04T22:18:50+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -287,6 +287,27 @@ NOT SETTLED:
 5. **These 24 runs are LOW-LOAD only.** Batch A's confound was background load, and this
    machine was idle. A clean-ish result here says nothing about the loaded condition under
    which 3 of the original 4 failures occurred.
+
+**The flake has (at least) TWO failure modes, and §Evidence pooled them.** Of the 4 historical
+failures, exactly ONE was a truncation (the P9 in batch A — §"The clue" says it "was **not** a
+timeout"); the other three were timeouts. So `4/35` is a rate for *"the file went red"*, not
+for the truncation, and today's `1/24` is a rate for the **truncation alone**. Do not compare
+them as if they measured the same event. Two consequences:
+
+- **Box 1's tick is about P0-dependence and is still sound, but read it narrowly.** For the
+  truncation specifically the evidence is 1 event with P0 present and 1 without — thin, and
+  it is the direction that matters (a P0-caused defect cannot fire with P0 deleted), not the
+  magnitude.
+- **P8 is the usual failer, not P9.** P8 ×3 and P9 ×1 historically, P8 again today. Earlier
+  prose on this card framed the phenomenon around "the P9 failure" because that was the one
+  with the readable signature; the failing test is more often P8.
+
+**P8, P9 and P10 type IDENTICALLY — verified in the source, not assumed.** All three send
+`\x03` at 300 ms and `SECRET + '\r'` in ONE `p.write` at 1200 ms (`:346`, `:371`, `:390`);
+only the prior-trap prelude differs. So which of them fails carries no information about the
+input-delivery mechanism, and pooling the P9 and P8 truncations on THAT question is
+legitimate. Both are also post-`e4393a49` — the §Evidence batches were all run on the fixed
+file, since these tests exist to pin that fix — so no gate-version difference separates them.
 
 **Where it leaves the two hypotheses.** Not proof, but the evidence stops being symmetric.
 The harness writes `SECRET + '\r'` in ONE `p.write`, and the pty is canonical, so the line

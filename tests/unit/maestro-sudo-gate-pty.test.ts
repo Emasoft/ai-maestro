@@ -160,6 +160,30 @@ export function diagnoseTyped(expected: string, received: string | undefined): s
   return `INTERIOR loss: ${lost} char(s), earliest consistent index ${i} (ambiguous within a run of repeats)`
 }
 
+/**
+ * What a TIMEOUT looks like, attached to the assertion that actually fails when one happens.
+ *
+ * The ^C tests assert `out` BEFORE they assert `seen[0].body`, and on a timeout the pty is
+ * SIGKILLed so `RC=` never prints — that `out` assertion fails first and `diagnoseBody` is
+ * never reached. TRDD-601KG45D briefly claimed the opposite ("the next timeout diagnoses
+ * itself for free"), which was an assertion-MASKING error made while reasoning about
+ * assertion masking.
+ *
+ * `requests` is the discriminator worth having, and it points the OPPOSITE way to what
+ * TRDD-601KG45D first said. A merely LATE resume does not lose input — canonical mode buffers
+ * it and delivers it when `read` resumes — so a timing slip predicts a POPULATED `seen[]` and
+ * a late-but-completing run. **`requests=0` means the terminator never reached `read` at
+ * all**, which is the signature of input being DISCARDED, not of a slow resume. Neither is
+ * proof of a mechanism; it is the one bit the harness can cheaply carry out of a timeout.
+ *
+ * `echoed` rather than the raw tail on purpose: on the failure we care about, the typed
+ * password may be in `out`, and a message is printed to a log. The boolean answers the same
+ * question without putting a secret there — synthetic here, and the habit is what matters.
+ */
+function timeoutContext(out: string, seenCount: number, secret: string): string {
+  return `requests=${seenCount} · out ${out.length}b · secret echoed: ${out.includes(secret)}`
+}
+
 /** The password the server actually received, or undefined when there was no parseable body. */
 function pwOf(body: string | undefined): string | undefined {
   if (body === undefined) return undefined
@@ -354,7 +378,9 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
     expect(out).toMatch(/PRIOR-INT/)
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
-    expect(out).toMatch(/RC=1/)
+    // The message carries the timeout discriminator: this is the assertion a timeout fails
+    // on (no RC= after a SIGKILL), so it is the only place the request count can escape.
+    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
   })
@@ -378,7 +404,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
     expect(out).not.toContain(SECRET)        // the whole point: typed after the ^C, still not echoed
-    expect(out).toMatch(/RC=1/)              // the gate ran to its refusal, the ^C was ignored as asked
+    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/) // the gate ran to its refusal, ^C ignored as asked
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
@@ -398,7 +424,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
     expect(out).toMatch(/PRIOR-INT/)
     expect(out).not.toContain(SECRET)
-    expect(out).toMatch(/RC=1/)
+    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/)
   })
 
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {

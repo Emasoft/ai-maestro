@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:35:00+0200
+updated: 2026-09-04T22:39:03+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -49,7 +49,7 @@ account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f9
 
 | # | claim | status |
 |---|---|---|
-| 1 | a `stty` TCSAFLUSH eats queued input | **REFUTED on timing.** The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing |
+| 1 | a `stty` TCSAFLUSH eats queued input | **CONTRADICTED by the code path as read** (idle-machine timing; UNMEASURED under load). The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing. **Not "REFUTED"** — every step is a source READ, not an instrumented handler, and the one condition batch A ran under (load) is the one not checked. Using the strongest verb for the one refutation nobody instrumented is the wrong asymmetry on a card with four dead mechanisms |
 | 2 | the line terminated one byte early | **OPEN**, untested. The only survivor for the TRUNCATION |
 | 3 | the loss is in the shell→curl leg | **EXCLUDED.** The gate builds its body with `jq -Rnc` from the variable, so a well-formed body with a short value cannot come from a cut after `jq`; the only remnant is a short write on a 22-byte pipe from a builtin, far under `PIPE_BUF` |
 | 4 | a wall-clock timing slip (§Proposed fix step 2) | **OPEN for the TIMEOUTS, with two objections.** It came from the card rather than from me and that does NOT pre-validate it — §Proposed fix is a *proposal*, never a finding |
@@ -57,17 +57,44 @@ account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f9
 **The two objections to #4, because it is the one currently doing work.** (i) A canonical-mode
 tty BUFFERS characters typed while nobody is reading and delivers them on resume, so a merely
 late resume predicts a PASS — or an echo failure if the password lands while echo is back
-ON — **not a timeout**. (ii) **P10 has never failed**, and it shares P8's exact offsets while
-doing MORE work in the resume window (`trap 'echo PRIOR-INT; return'`). If a work-in-the-window
-slip were the mechanism, P10 should fail at least as often as P8. It does not.
+ON — **not a timeout**. (ii) **P10 has never failed** in ~59 runs, and it shares P8's exact
+offsets while doing MORE work in the resume window (`trap 'echo PRIOR-INT; return'`); if a
+work-in-the-window slip were the mechanism, P10 should fail at least as often as P8.
+**Weak evidence, and an earlier version of this line called it a CONTRADICTION, which
+over-claims twice over:** 0 failures in ~59 runs is unremarkable at a ~4% rate (P(0) ≈ 9%),
+and the argument PRESUPPOSES the per-test uniformity it purports to test — if the mechanism is
+caller-shape-specific, per-test rates differ by construction, which is exactly what the P8
+concentration claims. A circular control is not a control.
 
-**THE CHEAPEST NEXT MEASUREMENT IS ALREADY BUILT, and I missed it while proposing a `jq`
-shim.** The harness collects `seen[]`, and a timing slip predicts **`seen[] === []`** — no
-POST ever made — whereas "read got the line and the server refused" predicts exactly one. That
-is a one-bit discriminator, and `diagnoseBody`'s **"no request reached the server at all"**
-branch (added this session, `1a2a1b2c`) already prints it. **So the next timeout diagnoses
-itself, for free.** The `jq` shim below is the follow-up for the TRUNCATION, not the first
-step.
+**A trap worth restoring from the compressed narrative, because a future session can
+re-derive and re-believe it:** *"the harness writes the secret and its terminator in ONE
+`p.write`, so the line discipline holds the line until the terminator"* is a NON-SEQUITUR. How
+many `write(2)` calls the WRITER makes says nothing about the RECEIVER — the kernel feeds the
+canonical buffer character by character, and a `tcsetattr` from another process can land
+between any two. It was the first (wrong) argument used to refute hypothesis 1.
+
+**A ONE-BIT DISCRIMINATOR NOW ESCAPES EVERY TIMEOUT — but read the label carefully, because
+the first version of this paragraph had it BACKWARDS and promised a measurement that could
+not fire.** Both halves were wrong:
+
+- **Wrong direction.** I wrote that a timing slip predicts `seen[] === []`. It predicts the
+  OPPOSITE: canonical mode BUFFERS input typed while nobody is reading and delivers it on
+  resume, so a late resume yields a POPULATED `seen[]` and a late-but-completing run.
+  **`requests=0` means the terminator never reached `read` at all** — the signature of input
+  being DISCARDED, not of a slow resume. Same fact I had used one commit earlier to build the
+  objection to hypothesis 4, applied backwards here.
+- **Wrong about it being free.** `diagnoseBody`'s message rides the `seen[0]?.body` assertion,
+  which in P8/P9/P10 comes AFTER `expect(out).toMatch(/RC=1/)` — and a 25 s SIGKILL means
+  `echo RC=$?` never runs, so THAT assertion fails first and the diagnosis is never reached.
+  **An assertion-masking error, made while reasoning about assertion masking**, in the same
+  session that split P11 to fix exactly this and wrote the lesson into
+  `lessons-verification.md`.
+
+**Fixed in code rather than retracted into nothing:** `timeoutContext(out, seen.length,
+SECRET)` is now the message on the `RC=1` assertion in all three ^C tests — the assertion a
+timeout actually fails on. It reports `requests=N`, the length of `out`, and whether the
+secret was echoed as a BOOLEAN (never the tail: on the failure we care about the password may
+be in `out`, and a message goes to a log — synthetic here, but the habit is the point).
 
 **WHAT MUST BE KEPT NEXT TIME A TIMEOUT FIRES: the full run log.** No log from batches A or C
 survives, so nobody can now check what those three timeouts looked like — `out`, RC, or

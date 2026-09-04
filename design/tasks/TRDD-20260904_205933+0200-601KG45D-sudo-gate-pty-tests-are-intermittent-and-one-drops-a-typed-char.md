@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:34:39+0200
+updated: 2026-09-05T00:40:52+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -135,9 +135,34 @@ constructible.**
   removing the signal. **That cell needs a real "is `read` blocked and consuming" probe, which
   nothing here has**, and inventing one is its own task.
 - **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
-  **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power: at ~0.91% per typing,
-  1 typing/run over 40 runs expects ~0.36 events and a zero would mean nothing, while 8 gives
-  ~320 typings and a real result either way. Costs ~12 s per run.
+  **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power. **The rate to use here
+  is the FIXED-ARM 1.67% (8/480), NOT the pooled 0.91%** — power is computed against the
+  ALTERNATIVE, and P13's alternative is "blind writing alone suffices", i.e. P13 behaves like the
+  fixed arm. The pooled rate is the null for the CORRELATION test, a different question.
+  P(0 events in 320 typings) is **0.46% at 1.67%** — decisive — against **5.4% at 0.91%**, which
+  is merely marginal. An earlier version of this line used the pooled rate and asserted "a real
+  result either way" on the strength of it; the conclusion was right and the number under it did
+  not support it. Worse, `c6f8252e`'s own commit message had the correct 1.67% and this card
+  overwrote it — a correction that moved the number the wrong way.
+  At 1 typing/run over 40 runs the expectation is ~0.7 events, so a zero would mean nothing;
+  8 iterations is what buys the result. Costs ~12 s per run.
+
+**TWO CORRECTIONS OWED TO P13's COMMENT, deferred to after the running batch** — they are
+comment-only and changing the file mid-batch would split the artifact the batch measures:
+
+- **"byte-for-byte P8 except the ONE knob" is FALSE as written.** P8's prelude ends
+  `…; echo RC=$?; stty -a </dev/tty | tr -s " " "\n" | grep -E "^-?echo$"` (`:556`); P13's ends
+  `…; echo RC=$?` (`:665`). **The cell is still sound** — the extra command runs AFTER
+  `maestro_sudo_ensure` has returned, so it cannot touch the byte under measurement — but the
+  claim is exactly the verified-sounding-and-unchecked kind this card keeps catching. P13 also
+  pins `COPIES[0]` where P8 loops both copies, so **P13 can say nothing about
+  `agent-helper.sh`** and neither the comment nor this card recorded that scope limit.
+- **P13 conflates a TRUNCATION with a TIMEOUT**, which this card un-conflated as a corrected
+  error. A gate run SIGKILLed at 25 s records nothing, so `recordedLens()` returns 7 and the
+  `toEqual` fails identically. **They ARE separable in the log and here is the rule for reading
+  the batch now:** the note prints `jq -Rnc stdin: 40,40,40,40,40,40,40` (seven full-length
+  entries = one gate run died) versus a list CONTAINING `39` (a real truncation). The batch
+  runner surfaces both as a bare `P13` FAIL line, so read the note, never the test name.
 
 The surviving cell is the one that can implicate the harness AFFIRMATIVELY rather than by
 absence, which is the better half to keep — this card already has a surplus of nulls.
@@ -163,17 +188,30 @@ the success path proves "echo is off", not "`read` is blocked and consuming". Lo
 each write took before trusting 7-vs-0.
 
 **The exposure asymmetry runs the OTHER way and the signal survives it:** per run the polling
-group gets ~5 typings to the fixed group's 6 (P1/P2/P3 = 3, P4/P5 = 2, P8/P9/P10 × COPIES = 6).
+group gets **6** typings to the fixed group's 6 — a DEAD HEAT, not the deficit this paragraph
+claimed twice. Counted from the call sites, not from memory: every polling typing goes through
+`runAtTerminal` (`:215`) or `runGate` (`:479`), and their callers are `:435` (**P12e**), `:453`
+(P1), `:461` (P2), `:506` (P4), `:513` (P5), `:683` (P3). **P12e was the omission** — it drives
+the real gate with `SECRET` on every run, which this card knows elsewhere (it asserts the VALUE),
+and it was never counted. Fixed group: P8/P9/P10 × 2 COPIES = 6.
 
 **RECOMPUTED 2026-09-05 over BOTH shim batches — the earlier version of this paragraph was
 arithmetic from before batch 2 and I edited the block above it without touching it.** Countable
-denominator = the 80 runs with full logs (batch 1 at 22 chars, batch 2 at 40): ~400 polling
-typings with **zero** events vs ~480 with **8**. Pooled rate 8/880 ≈ 0.91%, so the polling arm
-expects ~3.6; observing 0 is **p ≈ 0.026**. The 3 pre-shim truncations are ALSO in the fixed
-arm — making the raw count **11-vs-0** — but they have no countable denominator (different
-suite composition, per-run typing counts never recorded), so they are excluded from the
-statistic rather than folded in with a guessed exposure. The correlation is real; only its CAUSE
-is unlocated.
+denominator = the 80 runs with full logs (batch 1 at 22 chars, batch 2 at 40): **480** polling
+typings with **zero** events vs 480 with **8**. Pooled rate 8/960 ≈ 0.83%, so the polling arm
+expects ~4.0; observing 0 is **p ≈ 0.018**. (Was stated as ~400 / 0.91% / p ≈ 0.026 on the
+5-per-run count — the omission made the card CONSERVATIVE, so fixing it strengthens the
+correlation rather than weakening it.) The 3 pre-shim truncations are ALSO in the fixed arm —
+making the raw count **11-vs-0** — but they have no countable denominator (different suite
+composition, per-run typing counts never recorded), so they are excluded from the statistic
+rather than folded in with a guessed exposure. The correlation is real; only its CAUSE is
+unlocated.
+
+**P13 IS A THIRD ARM, and the next batch's numbers must not pool it into the fixed one.** It adds
+8 typings/run at (no signal, blind write) — a cell that exists precisely to be CONTRASTED with
+the fixed arm, so folding its ~320 typings into that arm's denominator would dissolve the
+comparison the test was built to make. Three arms from the next batch on: polling 6/run, fixed
+6/run, blind-no-signal 8/run.
 
 **AND THE "OFF-BY-ONE vs TERMINATOR-EARLY" DICHOTOMY IS FALSE — I renamed the hypothesis.** Both
 describe the same observable and the same mechanism class, with no differing prediction, so no

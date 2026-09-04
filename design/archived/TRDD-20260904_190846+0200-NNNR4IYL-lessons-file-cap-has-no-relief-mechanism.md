@@ -1,9 +1,10 @@
 ---
 trdd-id: NNNR4IYL
 title: The lessons file is 315 bytes from its cap and the documented relief mechanism does not cover the file-level cap
-column: todo
+column: complete
 created: 2026-09-04T19:08:46+0200
-updated: 2026-09-04T19:27:19+0200
+updated: 2026-09-04T19:29:06+0200
+implementation-commits: [af301b98]
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -206,3 +207,8 @@ are in the always-loaded half. Getting the selection wrong is worse than the cap
 - 2026-09-04T19:08:46+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier 0: tooling hygiene inside this repo, reversible, no governance or public surface.
   No approval request was sent.
+- 2026-09-04T19:29:06+0200 — COMPLETED by claude-opus-session. All seven boxes driven; the
+  control's neuter was run, not asserted. Filed after a review told me to withdraw it, kept
+  after doing the chore proved the block real, then de-escalated from "spec change" to
+  "ordinary work" once a later review pointed at the missing neuter and the deadlock. Being
+  wrong in both directions on one card is the record worth keeping.

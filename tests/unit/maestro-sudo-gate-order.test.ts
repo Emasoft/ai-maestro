@@ -60,6 +60,11 @@ describe('TRDD-Q758CX98 — echo is off before the password prompt, in every cop
       expect(h, 're-disable must be on a RETURN trap, not a trailing line').toMatch(
         /trap 'stty -echo < \/dev\/tty[^']*' RETURN/,
       )
+      // EXACTLY one, because the RETURN-trap regex alone accepts an EXTRA one placed before
+      // the caller's trap — `stty echo; stty -echo; … trap … RETURN; eval "$_b"` satisfies
+      // both regexes and breaks P6. The old `hOff > hRun` position check rejected that shape
+      // for free; a count is what replaces it now that position no longer says when it runs.
+      expect(h.match(/stty -echo < \/dev\/tty/g) ?? [], 'exactly one re-disable, and it is the RETURN trap').toHaveLength(1)
       // The re-raise is gated on the SPEC, never the BODY: `trap '' INT` has an empty body
       // and is still a trap, and there `kill` is a no-op (measured: password on screen).
       expect(h, 're-raise must test the spec, not the body').toMatch(/\[ -z "\$_spec" \]/)

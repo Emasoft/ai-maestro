@@ -698,6 +698,11 @@ _maestro_sudo_on_int() {
     # BODY: `trap '' INT` (SIGINT ignored) has an empty body but is very much a trap, and
     # there the kill is a no-op — the read would resume with echo still ON and put the
     # password on screen. Measured at a pty; the body test leaked, the spec test does not.
+    # Both kinds survive the command substitution that captured the spec, but for TWO
+    # different reasons: an IGNORED disposition is inherited by a subshell (POSIX), while a
+    # CAUGHT one is reset there and comes back only because bash's `trap -p` special-cases
+    # it. Measured on this machine's /bin/bash 3.2.57 — the version the shebang resolves to
+    # on stock macOS — because a modern bash agreeing proves nothing about the old one.
     if [ -z "$_spec" ]; then kill -INT $$; return; fi
     # Re-disable on the way OUT, on WHATEVER path leaves this function. Not a trailing
     # line: a caller body ending in `return` (`trap 'cleanup; return' INT`) returns from

@@ -632,37 +632,50 @@ function requirePortfolioToken(
   }
 }
 
+/** Framework-neutral denial shape for {@link decideAidTitle} — the fields
+ * needed to build either a NextResponse (Next.js routes) or a plain JSON
+ * reply (the headless router), without importing next/server. */
+export type AidTitleDenial = {
+  status: number
+  error: string
+  message: string
+  route?: string
+  devHint?: string
+}
+
 /**
- * AGENT-path authorization (R32 / R28). Identity (#1) is already verified by
- * the time we get here (the guard returned 401 on `auth.error`). This does the
- * TITLE-privilege check (#2) via the shared authorize(), plus the pre-wired
- * portfolio hook (#3). Returns null (allow → the route's own pipeline runs the
- * fine per-target check) or a 403 NextResponse.
+ * AGENT-path authorization decision (R32 / R28), framework-neutral. Identity
+ * (#1) is already verified by the time we get here (the guard returned 401 on
+ * `auth.error`). This does the TITLE-privilege check (#2) via the shared
+ * authorize(), plus the pre-wired portfolio hook (#3). Returns null (allow →
+ * the route's own pipeline runs the fine per-target check) or a denial
+ * descriptor for the caller to render.
  *
- * `request` is needed to read the live pathname for path-id / session
- * resolution; it is optional so the function can be unit-tested with a synthetic
- * pathname-free auth, in which case target-scoped routes fall back to the coarse
- * (targetAgentId=undefined) decision authorize() already makes for them.
+ * `pathname` is needed to resolve path-id / session for target-scoped rules;
+ * it is optional so the function can be unit-tested with a synthetic
+ * pathname-free auth, in which case target-scoped routes fall back to the
+ * coarse (targetAgentId=undefined) decision authorize() already makes for
+ * them. This is the TRDD-HGE9T6VT extraction: `requireAidTitle` below is now
+ * a thin NextResponse adapter over this function, so a non-Next.js caller
+ * (the headless router) can reach the same decision without a NextRequest.
  */
-export function requireAidTitle(
+export function decideAidTitle(
   auth: AgentAuthResult,
   method: string,
   pathTemplate: string,
-  request?: NextRequest
-): NextResponse | null {
+  pathname?: string
+): AidTitleDenial | null {
   const routeKey = `${method} ${pathTemplate}`
 
   // (a) System-owner-only strict routes → fully deny ANY agent, mirroring the
   // route's own enforceSystemOwner gate.
   if (SYSTEM_OWNER_ONLY_STRICT.has(routeKey)) {
-    return NextResponse.json(
-      {
-        error: 'aid_title_forbidden',
-        message: 'This operation is restricted to the system owner.',
-        route: routeKey,
-      },
-      { status: 403 }
-    )
+    return {
+      status: 403,
+      error: 'aid_title_forbidden',
+      message: 'This operation is restricted to the system owner.',
+      route: routeKey,
+    }
   }
 
   // (a2) TRDD-6A2I6ZO0 — strict routes whose agent policy is undecided. Same
@@ -671,17 +684,15 @@ export function requireAidTitle(
   // agent (the janitor) hitting "not available to agents" on the very routes
   // built for it is how the epic's whole write surface stayed inert unnoticed.
   if (AGENT_POLICY_PENDING.has(routeKey)) {
-    return NextResponse.json(
-      {
-        error: 'agent_policy_undefined',
-        message: 'Agent access to this operation has not been defined yet.',
-        devHint:
-          'The route is strict but absent from STRICT_AGENT_RULES. Decide its agent policy ' +
-          '(AuthAction + target semantics) and move it out of AGENT_POLICY_PENDING in lib/sudo-guard.ts.',
-        route: routeKey,
-      },
-      { status: 403 }
-    )
+    return {
+      status: 403,
+      error: 'agent_policy_undefined',
+      message: 'Agent access to this operation has not been defined yet.',
+      devHint:
+        'The route is strict but absent from STRICT_AGENT_RULES. Decide its agent policy ' +
+        '(AuthAction + target semantics) and move it out of AGENT_POLICY_PENDING in lib/sudo-guard.ts.',
+      route: routeKey,
+    }
   }
 
   // (b) Title-gated strict routes → map to an AuthAction and authorize().
@@ -691,14 +702,12 @@ export function requireAidTitle(
     // unmapped. Fail CLOSED — an unmapped strict route must not silently
     // authorize an agent. (Covers DELETE /api/v1/agents/me being dropped from
     // the registry, plus any future strict route added without a rule here.)
-    return NextResponse.json(
-      {
-        error: 'aid_title_forbidden',
-        message: 'This operation is not available to agents.',
-        route: routeKey,
-      },
-      { status: 403 }
-    )
+    return {
+      status: 403,
+      error: 'aid_title_forbidden',
+      message: 'This operation is not available to agents.',
+      route: routeKey,
+    }
   }
 
   // (b2) TRDD-K2WJH7RF — routes the guard REFUSES to decide.
@@ -718,7 +727,6 @@ export function requireAidTitle(
 
   // Resolve targetAgentId for the (still coarse) authorize() decision.
   let targetAgentId: string | undefined
-  const pathname = request?.nextUrl?.pathname
   if (pathname) {
     if (rule.session) {
       // D1: `[id]` is a tmux SESSION name. Resolve session → agentId via a
@@ -740,28 +748,41 @@ export function requireAidTitle(
   // fine per-target check afterward.
   const decision = authorize(auth, rule.action, targetAgentId)
   if (!decision.allowed) {
-    return NextResponse.json(
-      {
-        error: 'aid_title_forbidden',
-        message: decision.reason ?? 'Your title does not permit this operation.',
-        route: routeKey,
-      },
-      { status: 403 }
-    )
+    return {
+      status: 403,
+      error: 'aid_title_forbidden',
+      message: decision.reason ?? 'Your title does not permit this operation.',
+      route: routeKey,
+    }
   }
 
   // R28 #3 — portfolio / mandate token (pre-wired no-op).
   const portfolio = requirePortfolioToken(auth, method, pathTemplate)
   if (!portfolio.allowed) {
-    return NextResponse.json(
-      {
-        error: 'portfolio_token_required',
-        message: portfolio.reason ?? 'This operation requires an approval token.',
-        route: routeKey,
-      },
-      { status: 403 }
-    )
+    return {
+      status: 403,
+      error: 'portfolio_token_required',
+      message: portfolio.reason ?? 'This operation requires an approval token.',
+      route: routeKey,
+    }
   }
 
   return null
+}
+
+/**
+ * NextResponse adapter over {@link decideAidTitle} — preserves the exact
+ * prior signature and behaviour of this function. See decideAidTitle for the
+ * actual decision logic.
+ */
+export function requireAidTitle(
+  auth: AgentAuthResult,
+  method: string,
+  pathTemplate: string,
+  request?: NextRequest
+): NextResponse | null {
+  const denial = decideAidTitle(auth, method, pathTemplate, request?.nextUrl?.pathname)
+  if (!denial) return null
+  const { status, ...body } = denial
+  return NextResponse.json(body, { status })
 }

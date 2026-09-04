@@ -3,9 +3,10 @@ trdd-id: VLBVO0ZP
 title: A reply-only communication edge is unlocked by any truthy string
 scope: project
 project-id: ai-maestro
-column: todo
+column: superseded
+superseded-by: [80557822]
 created: 2026-07-26T09:45:32+0200
-updated: 2026-09-04T15:27:54+0200
+updated: 2026-09-04T15:40:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -187,6 +188,26 @@ rule silently stops meaning what it says.
 
 ## Approval log
 
+- 2026-09-04T15:40:05+0200 — **SUPERSEDED by TRDD-80557822.** The USER delegated this card's
+  A/B ruling to me explicitly ("you are in charge, decide yourself... base your decisions on
+  verified facts and tests"), which clears the `manager` floor from above. The ruling is
+  NEITHER A nor B as posed, because the question had a false premise:
+  **Option A is already an open, ungated section of another card.**
+  `lib/communication-graph.ts` names TRDD-80557822 in its own comment as where full enforcement
+  is tracked; that card's §8 specifies exactly Option A — `isReplyToInbound(...)` called from
+  both consumers, `replied=true` marked atomically, the ADVISORY comment removed — with its
+  acceptance boxes still `- [ ]`. It also already carries the ordering constraint Option B was
+  trying to invent ("MUST ship before any Phase 2 maestro-auth work lands"), and Option B's
+  stated destination, "the Phase-2 auth TRDD", does not exist in the corpus (searched
+  design/{tasks,proposals,archived}; two hits, this card and 80557822).
+  Decisive difference: 80557822 is `min-approval-requirement: none`. So this duplicate's
+  `manager` floor was the ONLY thing making the work look like it needed a ruling. Superseding
+  removes a governance gate that existed solely because the same defect was filed twice at
+  different floors — the work itself was never blocked.
+  Nothing is lost: the four-call-site census, this card's one non-duplicate contribution, is
+  relocated into 80557822 §8 with row 3 (`lib/message-send.ts:421`) flagged as a tripwire —
+  re-verified by hand today, it sets `isHuman` from wire data but passes no `inReplyTo`, so
+  adding one there is the single edit that would make the weak gate live before Phase 2.
 - 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
   manager — the card's declared floor, which manager satisfies), §D4
   APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

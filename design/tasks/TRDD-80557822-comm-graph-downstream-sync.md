@@ -191,6 +191,31 @@ the moment Phase 2 maestro auth wires H as an AMP recipient.
 This MUST ship before any Phase 2 maestro-auth work lands — at that
 point the advisory gate becomes exploitable.
 
+### Absorbed from TRDD-VLBVO0ZP (superseded into this card 2026-09-04)
+
+VLBVO0ZP filed the same defect independently and reached the same Option A. It is now
+`superseded-by: [80557822]`, because `lib/communication-graph.ts` names THIS card as the
+enforcement tracker, §8 above specifies the work in more operational detail, and this card
+carries `min-approval-requirement: none` while VLBVO0ZP's `manager` floor was gating a ruling
+nobody needed to make. Its one non-duplicate contribution is relocated here rather than lost —
+**the four-call-site census that establishes the path is dead today.** §8 above asserts this for
+two sites; the census covers all four:
+
+| gate call site | `recipientIsHuman` from | passes `inReplyTo`? | reachable? |
+|---|---|---|---|
+| `services/send-message-service.ts:388` (agent sender) | REGISTRY (`agent.governanceTitle`, else `'unknown'`) | yes | no — the title can never be `human`/`user` |
+| `services/send-message-service.ts:343` (R38.2 user route) | registry title \|\| `recipientIsUser` | yes | no — the branch is `else if (senderTitle === 'user')`, and a reply-only edge runs FROM a team title |
+| `lib/message-send.ts:421` (`forwardFromUI`) | **WIRE** — `recipientAlias === 'user' \|\| 'human'` | **NO** | no — the graph denies a reply-only edge on a missing `inReplyToMessageId` |
+| `services/amp-service.ts:1287` (AMP route) | REGISTRY (`localAgent.governanceTitle`) | yes | no — same title constraint |
+
+Row 3 is the one worth re-checking on any future edit, because it is the only site whose
+`isHuman` comes from caller-controlled wire data rather than the registry. **Verified by hand
+2026-09-04 at `lib/message-send.ts:421-429`:** the `assertAgentRouteAllowed` call sets `isHuman`
+from `recipientAlias` and omits `inReplyToMessageId` entirely, with the comment *"A forward is a
+new message, never a reply, so reply-only edges never open."* Adding a reply id to that call is
+therefore the single edit that would make the weak gate live BEFORE Phase 2 — treat it as a
+tripwire, not merely as a row in a table.
+
 ## Acceptance
 - [ ] `skills/agent-messaging/SKILL.md` and `skills/team-governance/SKILL.md` in `Emasoft/ai-maestro-plugin` mirror the tightened + v2-expanded graph, published via `publish.py`
 - [ ] Each of the 8 role-plugin repos' main-agent "Communication Permissions" section is aligned with the current graph (per the per-repo table in §2.B), published independently

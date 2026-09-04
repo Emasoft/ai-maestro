@@ -91,11 +91,11 @@ exist ONLY there.
 - **`cross-client-conversion`** — how do I move an agent from claude to codex
 - **`ecosystem-constants-and-repos`** — where are the marketplace repo names defined
 - **`element-management-service`** — where do plugin and agent-property mutations go through
-- **`marketplace-manifest-format`** — claude plugin install fails 'Plugin not found in marketplace' — marketplace manifest plugin source must be {…
+- **`marketplace-manifest-format`** — claude plugin install fails 'Plugin not found in marketplace'
 - **`marketplace-plugin-registration`** — how to register / publish a new plugin into the ai-maestro-plugins marketplace
 - **`plugin-abstraction-and-script-layer`** — why can't a plugin call the ai-maestro API directly
 - **`plugin-architecture-source-vs-install-target`** — where does a plugin actually live
-- **`plugin-install-no-git-tag-satisfying`** — a plugin install fails with 'has no git tag satisfying >=X <Y' even though the tags exist — role-plugins…
+- **`plugin-install-no-git-tag-satisfying`** — a plugin install fails with 'has no git tag satisfying >=X <Y' even though the tags exist
 - **`role-plugins`** — what is a role-plugin / fourfold identity rule
 
 ### Security and Auth
@@ -116,7 +116,7 @@ exist ONLY there.
 
 ### Reliability Patterns
 
-- **`agent-claims-the-api-was-never-delivered`** — a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build…
+- **`agent-claims-the-api-was-never-delivered`** — a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build X)
 - **`aio-pipeline-rollback-transactions`** — a pipeline failed halfway and left two stores disagreeing
 - **`family-a-continuity-absorption-plan`** — the implementation decomposition (NPT map) for absorbing the janitor's continuity daemon into the ai-maestro…
 - **`janitor-chore-absorbability`** — can the ai-maestro server take over this janitor chore

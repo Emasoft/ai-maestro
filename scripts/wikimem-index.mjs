@@ -13,7 +13,7 @@
 //                    (repeatable). Fails loudly if the fences are absent.
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 // Canonical topic order — matches the assignment used to tag the corpus.
 const TOPIC_ORDER = [
@@ -60,7 +60,19 @@ function parseArgs(argv) {
     } else if (argv[i] === '--check') {
       check = true
     } else if (argv[i] === '--write') {
-      writes.push(argv[++i])
+      const target = argv[++i]
+      // CLAUDE.md's wikimem index is now owned by the ai-maestro-janitor plugin's own
+      // hook (TRDD-LS9N71DX) — two generators splicing the same fences into that file
+      // fought over which one's output was current. Refusing here, not just skipping,
+      // stops the oscillation from silently reintroducing the duplicate block.
+      if (basename(target) === 'CLAUDE.md') {
+        console.error(
+          `${target}: refusing to write — the CLAUDE.md wikimem index is owned by the ` +
+          `ai-maestro-janitor plugin now (TRDD-LS9N71DX). Write the wiki's own overview page instead.`,
+        )
+        process.exit(1)
+      }
+      writes.push(target)
     }
   }
   return { dir, check, writes }

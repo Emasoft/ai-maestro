@@ -29,7 +29,9 @@ import {
   TERMINAL_DONE,
   AUTHORITY_RANK,
   V1_STATUS_TO_COLUMN,
+  expectedZone,
 } from './trdd-vocabulary'
+import type { TrddZone } from './pillar/kinds'
 
 export type EditGuardResult = { ok: true } | { ok: false; error: string }
 
@@ -110,6 +112,7 @@ export function validateTrddFieldEdits(
   fields: Record<string, string>,
   current: Record<string, unknown>,
   resolveId: (id: string) => boolean,
+  zone: TrddZone,
 ): EditGuardResult {
   // ── terminal-column freeze (IND base §12) — checked FIRST, on the CURRENT column,
   // never the resultant one: a frozen card's whole point is that nothing may move it. ──
@@ -140,6 +143,22 @@ export function validateTrddFieldEdits(
     return {
       ok: false,
       error: `"column" value "${fields['column']}" is not in the ratified vocabulary [${VALID_COLUMNS.join(', ')}]`,
+    }
+  }
+
+  // ── the resultant column must agree with the ZONE this card lives in (TRDD-5MN01NO8) ──
+  // `editTrdd` never moves the file, so a column whose `expectedZone` disagrees with
+  // `zone` would produce the same inert card TRDD-MWKCBLQN closed on the mint path —
+  // e.g. `column: proposal` written onto a card sitting in `design/tasks/`. Reuse
+  // `expectedZone` (the single arbiter `createTrdd`/`advanceColumn`/the doctor already
+  // share) rather than a second column→zone table.
+  if ('column' in fields) {
+    const wantZone = expectedZone(resultColumn, merged)
+    if (wantZone && wantZone !== zone) {
+      return {
+        ok: false,
+        error: `"column" value "${resultColumn}" belongs in design/${wantZone}/, but this TRDD is in design/${zone}/ — edit does not move folders; use the promote/refuse/archive verb for that transition`,
+      }
     }
   }
 

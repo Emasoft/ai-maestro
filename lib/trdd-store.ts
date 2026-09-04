@@ -410,6 +410,7 @@ export function editTrdd(
     { ...fields, updated: iso },
     trdd.frontmatter,
     (refId) => Boolean(findTrdd(designDir, refId)),
+    trdd.zone,
   )
   if (!guard.ok) return { ok: false, error: guard.error, status: 400 }
 

@@ -3,9 +3,9 @@ trdd-id: 5MN01NO8
 title: editTrdd can still write a column its zone contradicts — the half MWKCBLQN did not close
 scope: project
 project-id: ai-maestro
-column: todo
+column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T16:01:20+0200
+updated: 2026-09-04T16:51:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -190,6 +190,52 @@ the whole file, noting I had read 40 lines and never checked its length. It is 1
 sentence "the third write surface refuses column writes outright" named ONE writer and read as a
 statement about the file — the same over-generalisation from an examined instance that this session
 hit repeatedly. The fork could not run the grep; the grep is what found this.
+
+## Implementation
+
+Fix landed in the LEAF GUARD (`lib/trdd-edit-guard.ts::validateTrddFieldEdits`), not in `editTrdd`
+as caller. **This contradicts the "Why this is not a three-line fix" section above, which is
+therefore FALSE and superseded here rather than edited in place:** that section argued the leaf
+must stay pure and the check should live in `editTrdd` where `trdd.zone` is already known. The
+implementing session was given this design decision as already made in the other direction —
+thread a `zone: TrddZone` parameter into the guard itself — and that is what shipped. The guard was
+already not pure in the sense claimed (it already imports `trdd-vocabulary.ts` and several other
+grammar leaves), so adding one more parameter costs nothing the file did not already pay, and it
+keeps every column/zone rule in the one file that owns column rules.
+
+**Fix sites:**
+- `lib/trdd-edit-guard.ts` — import `expectedZone` + `TrddZone`; add `zone: TrddZone` as the guard's
+  4th parameter; after the existing vocabulary check, refuse when `'column' in fields` and
+  `expectedZone(resultColumn, merged)` is non-null and differs from `zone`. Error names the column,
+  the zone it belongs in, and the zone the card is actually in.
+- `lib/trdd-store.ts:412` — `editTrdd`'s call site now passes `trdd.zone` as the 4th argument.
+- `tests/unit/trdd-edit-guard.test.ts` — every one of its 20 direct calls to
+  `validateTrddFieldEdits` updated to pass an explicit zone (`'tasks'` for the `dev`/`todo`/blocked
+  fixtures, `'archived'` for the `complete`/`superseded` terminal fixtures) — required for `tsc` to
+  pass once the parameter became mandatory.
+- `tests/unit/trdd-edit-zone-column.test.ts` (new) — 3 tests: refuses `column: proposal` onto a
+  `tasks/` card; accepts an ordinary working-column edit (positive control); accepts
+  `column: complete` + `release-via: publish` on a `tasks/` card (the `expectedZone` returns-null
+  case, proving the merged frontmatter — not `{}` — was threaded through).
+
+**Neuter (verbatim intent, run twice):** commented the new refusal block to `if (false && 'column'
+in fields)`. Re-ran `tests/unit/trdd-edit-zone-column.test.ts` + `tests/unit/trdd-edit-guard.test.ts`
+(29 tests total): exactly 1 reddened — `refuses column: proposal written onto a card whose zone is
+tasks — the bug`, `expected true to be false` at line 33, naming itself — and the other 28 (the 2
+positive controls in the new file + all 26 pre-existing guard tests) stayed green. Restored the
+`if ('column' in fields)` guard; re-ran: 41/41 green across the four named suites.
+
+**Pre-existing suite non-vacuity, stated per the card's own instruction:** `trdd-edit-guard.test.ts`
+never drove a zone-contradicting column before this change (no test in it ever passed a 4th
+argument at all, since the parameter did not exist) — so its 26 tests pass IDENTICALLY with or
+without the new guard, and are NOT regression evidence for this fix. The only tests that exercise
+the new behaviour are the 3 in `trdd-edit-zone-column.test.ts`, and the neuter above is what proves
+they are non-vacuous.
+
+**Verification run:** `tests/unit/{trdd-edit-zone-column,trdd-edit-guard,trdd-create,trdd-create-zone-column}.test.ts`
+→ 41/41 pass. `tsc --noEmit` → 0 lines. `yarn trdd:doctor` → exit 1, `605 scanned · 2 error · 239 warn`
+(241 pre-existing findings, none new); `grep -ic "5MN01NO8\|MWKCBLQN"` over the full doctor output →
+0 — neither this card nor its parent is named by any finding.
 
 ## Approval log
 

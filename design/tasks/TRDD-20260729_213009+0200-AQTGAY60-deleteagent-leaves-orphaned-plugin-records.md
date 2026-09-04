@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T01:37:54+0200
+updated: 2026-09-05T01:40:10+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -163,39 +163,35 @@ until the user rules on it.
 `design/archived/`, so the record-scoped remover this card was waiting on exists and is exported.
 `column:` moved `todo → dev` — the code landed, the card had simply never been advanced.
 
-**⏹ COLUMN CORRECTED AGAIN 2026-09-05 — and my first account of WHY was false, checked with
-`git log -G'^column:'` only after review challenged it.** I wrote that the `→ dev` above "was
-recorded in this BODY and never written to the field". **It WAS written:** `41d4e5b7`
-(2026-07-30) is literally `column: todo → dev`. What actually happened is that `947d36cb`
-(2026-08-02) — *"triage the last 9 dev cards — dev 18 → 1, and the board reconciles"* — moved it
-**back** `dev → todo` as part of a WIP-reduction sweep.
+**⏹ COLUMN CORRECTED 2026-09-05 — `todo` → `human_review`. The whole story, in four clauses:**
+the field was `dev` (`41d4e5b7`, 2026-07-30); a 2026-08-02 triage moved it to `todo`
+(`947d36cb`); that was a **misfile** — this card belonged with `44RGLOO8`, which the same sweep
+sent to `human_review` for a STATE that forbids agent action; and **the sweep left no in-card
+note by design**, which is why nothing here ever explained the move.
 
-**READ AT LAST (`git show 947d36cb`), and it answers the question three of my versions talked
-around.** The sweep DID assess each card individually — its body says *"Every one of the nine was
-mis-filed, not abandoned and not done-but-unclosed: deferred by its own text, gated on a human,
-blocked externally, or simply pending with nobody on it"*, and it moved `44RGLOO8 → human_review`
-precisely because that card's STATE forbids agent action, sending the other eight to `todo`.
+**What `947d36cb` shows, at its real strength:** it CLASSIFIED rather than bulk-moved (a four-way
+taxonomy — deferred by its own text / gated on a human / blocked externally / pending with nobody
+on it — is not what a uniform operation produces) and it demonstrably OPENED at least one card,
+quoting 44RGLOO8's own STATE. That eight went to one destination is consistent with assessing all
+nine, and also with defaulting the rest; "assessed each card individually" claimed more than the
+evidence carries.
 
-**So it exercised judgment, had the right vocabulary, and put THIS card in the wrong bucket.**
-AQTGAY60 belonged with `44RGLOO8` — gated on a human — not with "pending with nobody on it".
-That is a specific, ordinary misclassification, not a process failure.
+**The finding is not the misfile — it is that the sweep annotated its own defect and shipped
+anyway.** Its body records *"The nine cards moved today carry no in-card note — a recorded debt,
+not an oversight"*, AND that an earlier pass was recoverable "ONLY because the per-card reasons
+were written", AND that reasons-in-the-log-not-the-cards was **the wrong call**. So it diagnosed
+the failure mode, wrote down that it was committing it, and committed it. **A column move without
+an in-card reason is the artifact that rots** — that is the transferable lesson, and calling this
+"an ordinary misclassification" credited candor where the process needs fixing.
 
-**And the sweep predicted exactly the confusion it caused me.** Its own body records: *"The nine
-cards moved today carry no in-card note — a recorded debt, not an oversight."* That missing
-in-card reason is why this card offered no explanation for its `dev → todo` move, and why I filled
-the gap with a story instead of a command.
-
-**A first correction of this paragraph said the sweep "was not wrong at the time… correct WIP
-discipline". That is retracted too, as a second unverified claim in the charitable direction.**
-It asserted three things I had not checked — that nothing was working the card, that the sweep
-exercised judgment, that the defect is nobody's omission — all from the same two lines that the
-original blame came from. **Version 1 blamed a past editor for an omission; version 2 credited
-them with deliberate correct judgment; neither warrant exceeds "the field changed in a commit
-whose subject mentions triage."** Replacing an unfavourable invention with a flattering one is
-not a correction.
-
-What IS observable: `todo` cannot express "6/7 done, remainder operator-gated", so for five weeks
-the board reported this card as unstarted backlog.
+**Where the gap became MY error, kept separate because they are different failures:** the sweep
+left a documentation gap. Filling it with three successive causal inventions — blamed the editor,
+then credited the editor, then declared it unread — instead of running one `git show` was mine,
+and merging the two lets me share my error with a commit that only left a gap. The three
+superseded versions are in this card's commit trail (`e9057a97`, `a69c3b31`, `d460405e`,
+`e37f72b7`); they are NOT restated here, by the same reasoning that withdrew a superseded number
+on TRDD-601KG45D rather than flagging it — superseded REASONING outlives its caveats exactly as
+superseded numbers do.
 
 Now `human_review`, which is the honest
 column, because the remaining box is OPERATOR-GATED by the card's own text — a real create +

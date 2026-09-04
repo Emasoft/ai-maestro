@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:42:13+0200
+updated: 2026-09-04T22:46:08+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -118,8 +118,26 @@ timeout at all. A flush that discarded the queued characters and then let the `\
 produces exactly the second. Check `out` for the fail-closed error before reading `requests=0`
 as a stranded read.
 
-**`timeoutContext` is pinned by P11h** — it shipped with no test and no neuter, in the file
-whose founding finding is that an untested error path is not an instrument. Third instance.
+**`timeoutContext` is pinned by P11h/i/j, split per branch and each NEUTERED.** Three run:
+freeze `requests=${seenCount}` → P11h; re-add the raw `out` tail → **P11j**, the secret-leak
+regression; drop the size clause → P11h+P11i. Restores verified byte-identical.
+
+**THE RC-FIRST REORDER WAS A REGRESSION AND IS REVERTED.** I moved `RC=1` to the front so the
+timeout context would print — and thereby DEMOTED `expect(out).not.toContain(SECRET)` behind a
+liveness check in P8 and P10. **That is the wrong trade in this file**: the echo guarantee is
+what P6/P8/P9/P10 exist for, and a genuine leak co-occurring with a wrong RC would have gone
+unevaluated until someone fixed the RC. The original order is restored and the message now
+rides whichever assertion is ALREADY first (`PRIOR-INT` in P8/P10; `not.toContain(SECRET)` in
+P9, which has no `PRIOR-INT` to assert because its trap body is empty by construction). Same
+diagnosis, no cost to assertion priority.
+
+**"Both copies exhibit it" is nearly a tautology and is recorded as weak.** The two files are
+verified-identical, so the only thing the copy split can rule out is per-copy state — load
+order, path, mtime. Worth one clause, not a finding.
+
+**One firing validates ONE branch.** The 22:41 failure exercised `diagnoseBody`'s TAIL path
+end-to-end. Its "unparseable body" and "no request" branches remain validated by P11g alone,
+i.e. by construction, not on real data.
 
 **WHAT MUST BE KEPT NEXT TIME A TIMEOUT FIRES: the full run log.** No log from batches A or C
 survives, so nobody can now check what those three timeouts looked like — `out`, RC, or
@@ -141,13 +159,21 @@ P9 run the same handler, differing only in the body it `eval`s.
 
 **THE INSTRUMENT.** `diagnoseTyped`, `pwOf`, `diagnoseBody` in the pty test (`fc3b6f76`,
 `1a2a1b2c`), used as the failure message on every assertion pinning the password's arrival.
-Pinned by P11a-g, one `it()` per branch; **8 neuters, all 7 tests redden**. What they pin, in
+Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden**. What they pin, in
 three categories — the two-way split published earlier over-claimed, then the correction
 under-claimed:
 
 - **branch EXISTENCE** (delete the branch): C, D, F, H
 - **branch DISCRIMINATION** (both predicates compute and select distinctly): A
-- **computation**: B (the index) · **message text only**: E, G
+- **computation**: B (the index), I (request count), K (size) · **message text only**: E, G
+- **security**: J — re-adding the raw `out` tail reddens P11j, the only assertion here whose
+  failure has a consequence beyond a worse message
+
+**STOP INSTRUMENTING. The next thing to touch is the `jq` shim, not this file.** Six revisions
+of the instrument against ONE 24-run experiment; the diagnostic ceiling is reached (position is
+TAIL three-for-three, and no further message refinement separates hypothesis 2 from the
+shell-side remnant). Everything since `1a2a1b2c` has been instrument-polish driven by review
+findings on instrument-polish.
 
 21 pty tests pass, tsc 0 lines. **The DETECTOR half is validated for `fc3b6f76`'s wiring
 only** — run 23 fired it on a real loss end-to-end, and `1a2a1b2c` then replaced that wiring

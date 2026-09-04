@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:33:00+0200
+updated: 2026-09-04T21:35:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -158,10 +158,19 @@ Also not `MAX_CANON` (1024 on Darwin) — the secret is 22 characters.
 
 ## Step 1, 2026-09-04: ONE loss seen in a probe (n=1), position unrecorded
 
-**What is measured.** In a probe driving the P9 shape, one run returned a payload one
-character short (`len=35/36`); ten further runs at the same delay returned it intact. So the
-outcome is **reachable outside the full gate**, at a low and unquantified rate (1 in ~12 at
-that configuration). That is the whole claim.
+**Two one-character shortfalls exist, with very different evidential strength. Both belong
+here; an earlier draft deleted the stronger one while correcting an overstatement.**
+
+| observation | where | position | strength |
+|---|---|---|---|
+| `…x7q` for `…x7q2` (the original P9 failure) | the **SHIPPED gate**, full pipeline + live HTTP | **MEASURED: a tail loss** | 1 event, but position established |
+| `len=35/36` | `fix2.sh`, a **reimplementation**, no pipeline | **unrecorded** (lengths compared, not strings) | 1 event, position unknown |
+
+**Whether they share a mechanism is open** — that is the question, not a settled link. What
+the second adds is that a single-character shortfall is **reachable outside the full gate**,
+across 1 loss in 12 runs spanning TWO probe variants (a 2-run pair with a `printf` in the
+RETURN-trap window, and a 10-run batch without it). That is not one measured cell, and no
+rate should be quoted from it.
 
 **What this card said an hour ago, and why it was wrong — three times over.**
 
@@ -186,11 +195,13 @@ RETURN-trap window. The data contradicts it: the variant with `sleep 0.4` + a `r
 same window lost nothing in 2 runs, and the losing run's own sibling at a different delay was
 intact. The variable that differed was the delay, on n=1. Guess withdrawn.
 
-**Next, in order:** (a) rebuild the probe under `scripts_dev/` — it must DIFF the strings,
-not compare lengths, so the next loss is characterised (the current one already does; it was
-written after the loss); (b) run it to a few hundred iterations to get a rate and a position;
-(c) port to the SHIPPED gate, which this probe is not — it is `fix2.sh`, a reimplementation
-without the `read -rs` → `jq` → `curl` pipeline; (d) only then discriminate the hypotheses.
+**Next, in order:** (a) rebuild the probe under `scripts_dev/` and **validate its loss
+branch**: the last version does contain diffing logic, but it has produced 10 INTACT and
+**zero losses, so that branch has never executed** — an untested error path is not a working
+instrument, which is this card's own recurring theme. Induce a loss deliberately and confirm
+the diff output is right BEFORE trusting any position it reports. (b) Then run to a few
+hundred iterations for a rate and a position. (c) Port to the SHIPPED gate — this probe is
+not it. (d) Only then discriminate the hypotheses.
 
 ## Proposed fix
 

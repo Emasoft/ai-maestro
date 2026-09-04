@@ -3,9 +3,9 @@ trdd-id: 601KG45D
 title: The sudo-gate pty tests fail intermittently and one failure showed a truncated password
 scope: project
 project-id: ai-maestro
-column: dev
+column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:07:15+0200
+updated: 2026-09-04T22:14:40+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76]
+implementation-commits: [fc3b6f76, 1a2a1b2c]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -50,16 +50,17 @@ labels: [flaky-test, pty, sudo-gate]
   so one run series answers step 0 (rate), (b) (rate + position) and feeds (d)
   (hypothesis discrimination). They stopped being separate exercises.
 
-**NEXT ACTION.** 24 consecutive runs of the pty file are in flight (`/tmp/flake601/`),
-single-arm because P0 is deleted and there is no second arm left to interleave against.
-Score failures/24 and, on any failure, read the diagnosis line — that is the position three
-revisions of this card turned on. **A clean 24 does not close box 1's question**: §Verification's
-table shows a 4.5% true rate comes up clean about a quarter of the time at n=30, so report
-the count, not a verdict.
+**THE RUN LANDED, AND IT REPRODUCED — see §Step 2 below. 1 failure in 24, and the
+instrument named the position on its first real firing: TAIL loss, 1 char.**
 
-**Do not re-derive the interleaving requirement for this run.** Box 4's randomisation clause
-is about comparing two ARMS. P0 is gone, so there is one arm; a single-arm rate needs no
-assignment mechanism, and none is claimed here.
+**NEXT ACTION.** Discriminate the two hypotheses in §"The clue worth chasing first" — the
+evidence is no longer symmetric between them, and §Step 2 says why. Then decide whether the
+gate has a real user-facing input-loss bug (which would change this card's shape and
+severity, as §Proposed fix step 1 always said).
+
+**Do not re-derive the interleaving requirement for the run that already happened.** Box 4's
+randomisation clause governs comparing two ARMS. P0 is deleted, so there is one arm; a
+single-arm rate needs no assignment mechanism, and none was claimed.
 
 ## Problem
 
@@ -253,6 +254,54 @@ an instrument. What changed is only where the instrument lives. Building it in t
 harness discharged (a) and (c) in one step and left no throwaway to port, so a reader
 following this list must not go and rebuild the `scripts_dev/` probe it describes.
 
+## Step 2, 2026-09-04: the flake REPRODUCED, and the position is TAIL
+
+24 consecutive runs of the shipped pty file, single arm (P0 deleted), ~10 s each, idle
+machine. Logs `/tmp/flake601/`.
+
+| | |
+|---|---|
+| **rate** | **1 failure / 24 runs (4.2%)** |
+| **which test** | `P8 [scripts/shell-helpers/common.sh]`, run 23 |
+| **what the instrument said** | `TAIL loss: 1 char(s) dropped at the end (received is a prefix of expected): expected '{"password":"wrong-pw-9MZQ4T7E-x7q"}' to contain 'wrong-pw-9MZQ4T7E-x7q2'` |
+
+**Three things this settles, and two it does not.**
+
+SETTLED:
+1. **The intermittency does not depend on P0.** Every prior failure had some P0 present, so
+   the card could not tell the two apart. P0 has been deleted for hours and the flake still
+   fires. 4.2% also sits right on the 4.5% that §Verification's "batch A excluded" row
+   assumed, which is the estimate that row was built from.
+2. **The position is TAIL, and it is now MEASURED rather than eyeballed.** Two independent
+   single-character losses exist and both are tail losses: the original P9 failure and this
+   P8. The instrument is what makes the second one evidence instead of an anecdote.
+3. **The instrument works end-to-end, not just as a classifier.** Its first firing was on a
+   REAL tty loss through the real pipeline, and it printed the right answer. The review that
+   read this work called that half unvalidated — correctly, at the time it was written; run
+   23 arrived afterwards and supplies it. This is the one place a synthetic mutation could
+   never have substituted.
+
+NOT SETTLED:
+4. **The rate is one event.** 1/24 is a point estimate with an enormous interval; do not
+   quote 4.2% as if it were pinned.
+5. **These 24 runs are LOW-LOAD only.** Batch A's confound was background load, and this
+   machine was idle. A clean-ish result here says nothing about the loaded condition under
+   which 3 of the original 4 failures occurred.
+
+**Where it leaves the two hypotheses.** Not proof, but the evidence stops being symmetric.
+The harness writes `SECRET + '\r'` in ONE `p.write`, and the pty is canonical, so the line
+discipline holds the line until the terminator. A `stty` TCSAFLUSH would discard what is
+QUEUED — i.e. a leading run, everything buffered so far — which is not what either
+observation looks like. Losing exactly the final byte before `\r`, twice, fits hypothesis 2
+(the line terminated one byte early) far better than hypothesis 1. **Hypothesis 1 is not
+refuted** — a flush landing when only the last byte is still queued would also take the
+tail — but it now requires a much more specific coincidence, twice.
+
+**If hypothesis 2 holds, this is a USER-FACING bug, not a test problem** — a human typing
+while the gate re-disables echo loses their last character and gets an unexplained refusal.
+§Proposed fix step 1 said that from the start; it is now the likely branch, not the unlikely
+one.
+
 ## Proposed fix
 
 Investigate in this order, and do not skip to the third:
@@ -296,8 +345,11 @@ LOW for the harness work. Step 1 could raise the severity sharply if input loss 
 
 ## Acceptance
 
-- [ ] Step 0: re-measured the flake rate with P0 fully absent, n >= 24, settling whether the
+- [x] Step 0: re-measured the flake rate with P0 fully absent, n >= 24, settling whether the
       intermittency pre-dates P0 at all — every failure so far had some P0 present.
+      **1/24 with P0 absent (§Step 2), so it does not depend on P0.** Ticked for the question
+      the box asks, which was P0-dependence — NOT for a pinned rate, which one event does not
+      give, and not for the loaded condition, which these idle-machine runs never touched.
 - [ ] Established whether the truncated password was tty input loss or a harness artifact,
       with the measurement recorded here, testing BOTH hypotheses in the clue section.
 - [ ] The timing dependence removed wherever an observable marker exists.

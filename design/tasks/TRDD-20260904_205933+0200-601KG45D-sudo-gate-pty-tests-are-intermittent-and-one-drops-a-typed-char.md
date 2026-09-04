@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:43:06+0200
+updated: 2026-09-04T23:49:39+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -45,15 +45,41 @@ run-027  P8 [shell-helpers/common.sh] TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) 
 run-033  P9 [shell-helpers/common.sh] TAIL loss: 1 · jq -Rnc stdin: 21 byte(s) for 22 expected
 ```
 
-**THE DISTRIBUTION IS SYMMETRIC, and it kills a standing worry.** One firing in each of the
-four (test × copy) cells: P8 and P9 twice each, `common.sh` and `agent-helper.sh` twice each.
-**The "P8 concentration" recorded further down — all 3 presumed timeouts on P8 — is REFUTED
-for the TRUNCATIONS**: they do not favour P8, and the card was already treating that
-concentration as weak (3 events, 2 in one batch). Copy-independence is likewise no longer the
-near-tautology it was recorded as: with 2 firings per copy it is now measured on real events
-rather than inferred from the files being identical.
+**THE DISTRIBUTION IS SYMMETRIC** — one firing in each of the four (test × copy) cells.
 
-**n is 4 here, 7 across the card's history, and every single one is TAIL-1.**
+**I FIRST WROTE THAT THIS "REFUTES the P8 concentration". It refutes something nobody
+claimed.** The concentration was always a statement about the **3 presumed TIMEOUTS** (the
+card says so verbatim), and timeouts are a DIFFERENT failure mode — this card's own headline
+insists the two were wrongly pooled by earlier revisions. What the batch shows is only that
+the TRUNCATIONS do not favour P8 (2/2), which nobody had asserted either way. **The P8
+concentration is UNTOUCHED by this batch**, and cannot be touched by it, because:
+
+**ZERO TIMEOUTS FIRED IN 40 RUNS** — a genuinely new fact the first write-up omitted entirely,
+and more interesting than the symmetry. Against 3 in the earlier history. **Not quotable as a
+rate change** (no control arm — see the load caveat), but the presumed-timeout population is
+now 3 events none of which has ever been reproduced under instrumentation, and no run log from
+those three survives.
+
+**Copy-independence: I talked myself out of the card's own correct judgement and am reverting
+to it.** It was recorded as *"nearly a tautology and… weak"*, which is right — the two copies
+are VERIFIED BYTE-IDENTICAL, so the split can only ever rule out per-copy STATE (load order,
+path, mtime). 2 firings per copy is weak corroboration of that, not a promotion to
+"measurement".
+
+**IS A PERFECT 1-PER-CELL SPLIT SUSPICIOUS? No — computed, not assumed.** Four events into
+four cells under a uniform model gives P(exactly one per cell) = 4!/4⁴ = **0.09375, about 1 in
+10.7**. Mildly unlikely, entirely unremarkable, and NOT grounds to suspect a harness artefact.
+Worth computing rather than reading the symmetry as either reassuring or sinister.
+
+**"Zero SHIM-ERROR, therefore the instrument was clean" is the WEAK form of the claim, and
+finding K is why.** `fail 90` cannot write its own marker (`mktemp` fails for the same reasons
+that break the append), so the marker's ABSENCE proves less than it appears to. The strong form
+is available and was measured: **0 of 40 runs reported `NOT RECORDED`** — every run recorded a
+real value, and a `fail 90` would necessarily have produced `NOT RECORDED` on that run. That
+closes K's hole for this batch by positive evidence instead of by absence of a marker.
+
+**n is 4 here, 7 across the card's history** — batch-A P9, `P8 [common.sh]` run 23,
+`P8 [agent-helper.sh]` 22:41, plus tonight's four — **and every single one is TAIL-1.**
 
 **FIRST, THE CONFOUND, because the conclusion is worthless without it.** The shim measures
 `wc -c < "$t"` and feeds `"$REAL" "$@" < "$t"` — the SAME file — so *"the gate handed jq 21"*
@@ -89,6 +115,16 @@ landing after the `\r` is queued discards everything, giving an empty `_pw` and 
 fail-closed branch. **Neither is a one-character tail.** Load changes *k*, so it changes the
 SIZE of a leading loss; it does not change which END the loss is at. H1's entire prediction
 family is leading/total losses at every load, so a TAIL observation is inconsistent with it.
+
+**SCOPE THIS CLAIM to the gate's own sequence — it is not a universal about `TCSAFLUSH`.**
+What is established is that *the gate's `stty` calls, in CANONICAL mode, against a single-line
+`read`,* cannot produce a one-character tail. Three edge cases were checked and none rescues
+H1 here: a split `\r` delivery gives LEADING-21, not TAIL-1; `ICANON` off with `VMIN`/`VTIME`
+could short-read, but the gate never leaves canonical mode (`stty -echo` alters ECHO only, and
+bash's `read -rs` does not set `-icanon`); and a partially-consumed line cannot be flushed,
+since bash issues one `read(2)` per line in canonical mode. An UNQUALIFIED "a flush can never
+produce a tail loss" is the kind of sentence a future reader carries to a different code path
+where it is false.
 
 **Round three's FINDING N is therefore WRONG in its conclusion, and I adopted it verbatim
 one commit ago** — it conflated *load-dependence of the loss SIZE* with *load-dependence of
@@ -475,10 +511,20 @@ failure reddening four security-named tests is genuinely misleading, and stays).
 classifications, and commissioned the review that proposed it. Better than a per-finding call
 because the question is fixed in advance; not the same as the loop terminating by itself.
 
-**THE NEXT MEASUREMENT, once the batch closes: VARY THE PASSWORD LENGTH** (22 → 40 → 60). If
-the loss stays exactly TAIL-1 regardless, the mechanism is terminator-related; if it scales,
-it is buffer-related. One constant, no new machinery. It IS an instrument edit, so the
-backstop below holds it until the batch ends.
+**THE NEXT MEASUREMENTS, cheapest first — and the FIRST one needs no new code at all.**
+The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted again.
+
+1. **RE-READ THE FOUR LOGS BEFORE BUILDING ANYTHING — the answer may already be in them.**
+   The classifier reports `…x7q` as a PREFIX of `…x7q2`, so the final `2` is gone and nothing
+   else shifted. That already favours terminator-timing over a buffer truncation, from data in
+   hand. Zero cost.
+2. **CHANGE THE LAST CHARACTER of `SECRET`** (end it with `#`). If the loss is always "the
+   final character, whatever it is", terminator; if it correlates with the character's value,
+   something stranger. One constant, no new machinery — cheaper and sharper than (3).
+3. **VARY THE PASSWORD LENGTH** (22 → 40 → 60), only if 1 and 2 do not settle it. Constant
+   TAIL-1 ⇒ terminator-related; scaling ⇒ buffer-related. **Note it is now LESS discriminating
+   than when first proposed:** H1 is excluded, so this characterises the sole survivor rather
+   than separating two hypotheses.
 
 **BACKSTOP, in case a later round argues past it: the batch RUNS TO COMPLETION before any
 further instrument edit.** Two batches were already killed mid-flight for instrument fixes; a

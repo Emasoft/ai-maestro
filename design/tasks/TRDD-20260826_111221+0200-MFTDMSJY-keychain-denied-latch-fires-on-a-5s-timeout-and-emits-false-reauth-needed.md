@@ -4,14 +4,14 @@ title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-
 column: human_review
 review-after: 2026-09-11
 blocker-probe: sh -c 'c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:23000/api/sessions); case "$c" in [0-9][0-9][0-9]) printf "PROBE-RAN %s" "$c";; *) printf "PROBE-FAILED";; esac'
-blocker-holds-if: match:PROBE-RAN 000
+blocker-holds-if: not-match:PROBE-RAN 200
 blocker-probe-canary: match:PROBE-RAN
 pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-09-04T23:45:17+0200
+updated: 2026-09-04T23:51:27+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -77,17 +77,52 @@ it is one `grep`, which I should have run before asserting:
   = 20:43:33 local). So it was genuinely WRITTEN today by `writeTickStatus`, not touched and
   not restored from a backup — **the tick executed at least once, today, with `nextAction: ok`.**
 
-**What survives, and it is still the card's conclusion: the SOAK has not run.** One tick is not
-a soak, and the beat record is empty regardless — see the table above and the corroboration
-below. The wrong part was "never once executed"; the right part is that there is no sustained
-tick and no window to score.
+**What survives, and it is still the card's conclusion: the SOAK has not been scored.** One
+tick is not a soak, and no window has been located to score. The wrong part was "never once
+executed"; the right part is that there is no sustained, LOGGED beat stream — see the scoping
+paragraph below, which withdraws the stronger "the beat record is empty".
 
-**Still unexplained, and recorded as unexplained rather than guessed at a second time:** how
-`server-tick.ts` ran at 20:43 with no ai-maestro process alive. Measured at 23:44: nothing is
-listening on port 23000, and a `ps` snapshot (taken to a file, then searched — never `ps | grep`)
-shows no ai-maestro server process. Candidates not yet checked: a short-lived `yarn headless`
-run, a test that exercises the path, or a one-shot invocation. **I guessed this attribution once
-already and was wrong; it stays open.**
+**SCOPING "the beat record is empty" — it means `logs/`, which is everywhere the SERVER
+writes, and that is not the same as everywhere a beat could be.** Measured: `logs/` holds
+exactly three files; only the two pm2 logs carry `[oauth-rotator]` lines (73 268 and 916), and
+both stop Aug 29 15:10. So no beat has been logged since then by anything writing to `logs/`.
+
+**And that sharpens the 20:43 anomaly rather than dissolving it.** A normal `server-tick` run
+writes BOTH a log line and the status file. The 20:43 invocation wrote the status file and
+**no log line anywhere** — so whatever ran it either had stdout discarded or reached
+`writeTickStatus` by a path that does not log. Either way: **one tick with no visible process
+and no log line is not evidence of a soak**, and if that path can run once it can run many
+times leaving equally little trace, which is precisely why the beat count cannot be treated as
+a complete census. What IS established is that no SUSTAINED, LOGGED beat stream exists.
+
+**"ZERO BEATS IN THE WINDOW" WAS NOT ESTABLISHED, and the card asserted it — corrected.** The
+reasoning contained a contradiction: I conceded the tick RAN at 20:43 outside pm2, while
+sourcing "zero beats" entirely from the two pm2 logs. If a tick can run outside pm2, its stdout
+goes wherever THAT invoker's stdout goes — by definition not those files. So "no beats in the
+pm2 logs after Aug 29" is what you would observe **whether the rotator ticked once or ten
+thousand times**. The observation cannot discriminate, and the card presented it as if it did.
+Corrected claim: *no beats appear in the two pm2 logs, which are frozen; whether beats exist
+elsewhere is unchecked.* The card's CONCLUSION survives — you cannot score a window you have
+not located — but the stated reason was wrong.
+
+**Still unexplained after FIVE checks, and recorded as unexplained rather than guessed at a
+third time:** how `server-tick.ts` ran at 20:43 with no ai-maestro process alive.
+
+| check | result |
+|---|---|
+| `launchctl list` | one relevant job: `com.ai-maestro-janitor.daemon` (pid 60621) — the JANITOR's, not ai-maestro's |
+| `crontab -l` | no maestro/oauth/tick entry |
+| janitor scripts referencing the tick path or invoking `ai-maestro/…` | **none** (only incidental substring hits in `.pyc` files) |
+| `ps` snapshot (to a file, then searched) | no ai-maestro server process |
+| `lsof -iTCP:23000 -sTCP:LISTEN` | nothing listening |
+
+**Not yet checked, and the likeliest remaining homes for beats:** other state files under
+`~/.aimaestro/` written by the same invoker; a `yarn headless` run's own redirected output;
+`.janitor/logs/` in this project (its `dispatch.log` IS live); and any `.aim-bak-*` siblings of
+`oauth-rotator-tick-status.json`, each of which would be a timestamped sample of a past tick
+and would give a RATE for free. Also unchecked: a short-lived `yarn headless` run, a test that
+exercises the path, or a one-shot invocation. **I guessed this attribution once already and was
+wrong; it stays open.**
 
 **This is exactly the failure the ≥95 % floor was written to catch, arriving by a route the
 floor cannot see.** Criterion (a) — *zero latch-attributable false `reauth-needed` beats over
@@ -140,7 +175,19 @@ malformed, and `human_review` already carries the HF2DY4VT precedent for waits-o
 Recorded so the next reader does not re-litigate it.
 
 **`review-after:` is set so a `priority: 0` card cannot park silently.** A P0 in `human_review`
-with nothing pulling it is the "filed, therefore handled" failure the drain rule names. Once it runs ≥24 h, score BOTH criteria
+with nothing pulling it is the "filed, therefore handled" failure the drain rule names.
+
+**The probe releases ONLY on a real 200 — `match:PROBE-RAN 000` was too loose.** That form
+unparked the card the moment ANYTHING answered on 23000: another dev server, a proxy, a stale
+process, or ai-maestro up but `/api/sessions` returning 500 — every one yields a 3-digit
+non-000. `not-match:PROBE-RAN 200` holds the block unless a genuine 200 arrives.
+
+**And the probe is CANARIED IN ONE DIRECTION ONLY.** `PROBE-RAN 000` (blocked) and
+`PROBE-RAN 200` against a reachable third-party endpoint were both observed, so the probe
+runs and can emit either shape — but that the LINTER then unparks the card on a 200 is
+**unproven**, and cannot be proven until the server actually runs. It is the same
+canaried-one-way trap fixed elsewhere tonight, left open here because the release direction
+is not reproducible on demand. Verify it when the server comes up. Once it runs ≥24 h, score BOTH criteria
 against `logs/pm2-out.log`, splitting `reauth-needed` by reason — `UNREADABLE from this
 process` is the latch-attributable class, `dead refresh` is the real one (the split is already
 documented in the correction below).

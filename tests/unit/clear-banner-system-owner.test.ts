@@ -20,8 +20,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * and it is indistinguishable from a fix at the point where the suite reports green.
  *
  * Removing the mock and re-running settled it: **only `clear-banner` 500s.** `cleanup` passes
- * unmocked, so the mock bought it nothing and cost it a failure mode. Hence this file — one route,
- * one scoped stub, and the other five keep their real executor.
+ * unmocked — because `cleanup/route.ts:48-53` swallows its own tmux failure in a bare `catch`
+ * ("Session didn't exist — that's fine") and returns `{cleaned:true}` regardless. So `cleanup`'s
+ * positive control is INSENSITIVE to the executor either way, and an earlier version of this
+ * comment claiming the mock "cost it a failure mode" was contradicted by the very run cited for
+ * it. The mock was still wrong to have — an unaudited blast radius is a hazard whether or not it
+ * fires — but that is the weaker, true claim. Hence this file: one route, one scoped stub, and
+ * the other five keep their real executor.
+ *
+ * WHAT THIS FILE'S POSITIVE CONTROL IS AND IS NOT. It asserts the owner reaches the route body and
+ * the body does not throw when its ONLY side effect is stubbed to succeed. That is the thinnest
+ * control in this family, and it is the reason the file exists — worth knowing before treating it
+ * as strong evidence about anything but the gate.
+ *
+ * LANDMINE FOR THE NEXT ROUTE ADDED HERE: the stub returns `undefined` where real `execFile`
+ * returns a `ChildProcess`, so any caller doing `const cp = execFile(…); cp.on(…)` throws.
+ * Nothing in `clear-banner` does. Anything else added to this file must be checked.
  *
  * THE 500 WAS ALSO INFERRED BEFORE IT WAS SEEN. The first diagnosis read the route source, saw
  * `execFile`, and reasoned that tmux fails under vitest — then changed the fixture until it went

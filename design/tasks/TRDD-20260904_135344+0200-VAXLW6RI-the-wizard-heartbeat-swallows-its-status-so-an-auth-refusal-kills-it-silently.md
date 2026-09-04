@@ -47,10 +47,26 @@ overstates it, and an adversarial review caught it.** Read in full rather than a
 that report describes race #4 against the code as it was in April: `setInterval` at **30s** with
 `fetch(...).catch(() => {})`, a 120s watchdog, and "exactly 4 missed heartbeats are fatal".
 
-**That report was ACTED ON.** `components/HaephestosEmbeddedView.tsx:107-119` records the fix —
-*"WT-004#1 (SCEN-004 P0-002, 2026-04-16): hardened heartbeat protocol. Three improvements over the
-previous setInterval/30s/catch(()=>{})"*: interval halved to 15s, exponential backoff added, and
-the interval suspended while the tab is hidden. The watchdog also moved to 30 min.
+**That report was ACTED ON** — and here is which parts of that I VERIFIED versus took from prose,
+because an earlier draft of this card stated all of it flatly and one item was WRONG.
+
+`components/HaephestosEmbeddedView.tsx:107-119` *claims* the fix: *"WT-004#1 (SCEN-004 P0-002,
+2026-04-16): hardened heartbeat protocol. Three improvements over the previous
+setInterval/30s/catch(()=>{})"*. A comment claiming a fix is not the fix, so each leg was read:
+
+| claimed | verified? |
+|---|---|
+| interval halved 30s → 15s | **YES** — `setInterval(sendHeartbeat, 15_000)` at :144 |
+| exponential backoff added | **YES** — `Math.pow(2, attempt - 1)` at :136-138 |
+| suspend the interval on a hidden tab | **YES** — `visibilityState === 'hidden'` at :152, listener at :166 |
+| *"The server watchdog fires at 30min"* (:111) | **NO — THAT COMMENT IS WRONG** |
+
+**`services/creation-helper-service.ts:135` reads `const WATCHDOG_TIMEOUT_MS = 120 * 60 * 1000 //
+120 minutes`.** The component's comment says 30 minutes; the server's constant is 120. An earlier
+draft of this card repeated the 30 as fact, having taken it from that comment without opening the
+file that owns the number — the third time in one session that prose was trusted for a runtime
+value, and the first time it was actually false. **The stale comment is a small finding in its own
+right**: it is the number a reader sizes the heartbeat budget against, and it is off by 4×.
 
 So the April report is **not** a second sighting of this bug; it is the sighting that produced the
 current, better code. What survives the hardening is the narrow residue below — and stating it as
@@ -61,8 +77,9 @@ that gets a card prioritised on false grounds.
 
 The backoff is undifferentiated. It caps at `attempt = 4`, so a **permanent** failure (401/403)
 retries at 8s forever and never surfaces. The catch cannot distinguish it from a transient 503,
-which is precisely what the backoff was added FOR. With the watchdog now at 30 min the reap is
-slow rather than 2-minute-fast, but the end state is the same and the user still sees no error.
+which is precisely what the backoff was added FOR. With the watchdog at 120 minutes (measured, not the 30 the
+component's comment claims) the reap is slow rather than 2-minute-fast, but the end state is the
+same and the user still sees no error.
 
 **And note the title was wrong too**: the catch does not kill anything — it retries indefinitely.
 The WATCHDOG reap is what ends the session. Corrected above.
@@ -82,6 +99,14 @@ is the INTENDED semantics of `enforceSystemOwner` — the same source says the e
 routes "correctly reject" a normal user, and creating agents is plausibly a maestro capability.
 **The defect is not the refusal; it is that the refusal is invisible.** An auth decision must not
 be reverted to paper over a UI that hides its own errors.
+
+## Derived fix — the stale comment that caused this card's own error
+
+`components/HaephestosEmbeddedView.tsx:111` says *"The server watchdog fires at 30min, so 15s = 120
+heartbeats per watchdog window."* The constant is **120 minutes**
+(`services/creation-helper-service.ts:135`), so the real figure is 480 heartbeats per window. Fix
+the comment in the same change — it is the number a reader sizes this budget against, and it
+already misled one card (this one) into asserting 30 as fact.
 
 ## Proposed fix
 

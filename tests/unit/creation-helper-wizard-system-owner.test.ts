@@ -98,12 +98,28 @@ vi.mock('@/services/creation-helper-service', async (orig) => {
 // owner path 500s in this environment, and the only way to give it a positive control here was a
 // module-scope `child_process` mock. MEASURED 2026-09-04: that mock's blast radius is TWO routes,
 // not one — `cleanup/route.ts:49` also calls `execFileAsync('tmux', ['kill-session', …])`. So the
-// mock silenced the most common failure mode of a route in this very loop, directly underneath the
-// assertion that had just been strengthened to catch exactly that kind of blindness. Removed.
-// `clear-banner` now lives in tests/unit/clear-banner-system-owner.test.ts, where the mock is
-// scoped to the one route that needs it. Verified by removing the mock and re-running: only
-// clear-banner 500s; `cleanup` passes unmocked, so the mock bought it nothing and cost it a
-// failure mode.
+// mock reached a second route in this very loop, directly underneath the assertion that had just
+// been strengthened to catch exactly that kind of blindness. Removed. `clear-banner` now lives in
+// tests/unit/clear-banner-system-owner.test.ts, where the mock is scoped to the one route needing it.
+//
+// TWO CORRECTIONS TO THE CLAIM THIS COMMENT ORIGINALLY MADE, both from a later review:
+//
+// 1. It said the mock "cost `cleanup` a failure mode". IT DID NOT, and my own run said so — with
+//    the mock removed, `cleanup` still returned < 400 in an environment with no tmux session.
+//    `cleanup/route.ts:48-53` wraps its `execFileAsync('tmux', ['kill-session', …])` in a bare
+//    `catch { /* Session didn't exist — that's fine */ }` and returns `{cleaned:true}` regardless.
+//    So `cleanup`'s positive control is INSENSITIVE to the executor in both directions; there was
+//    no failure mode there to lose. The mock was still wrong to have — an unaudited blast radius
+//    is a hazard whether or not it fires — but that is a different and weaker claim than the one
+//    written here first, and the evidence for the stronger one was in the run that refuted it.
+//
+// 2. "The blast radius is exactly two routes" is a claim about the SEVEN FILES I grepped, not
+//    about the mock. `vi.mock('child_process')` applies to the whole module graph of the test
+//    file, so any TRANSITIVE import that shells out is also in radius — `lib/agent-runtime.ts`
+//    is this repo's tmux layer and was never checked against these routes' import trees. The
+//    honest claim is: no DIRECT `child_process` use in the six route files or the one service
+//    checked. Scoping the stub to a one-route file is correct regardless of that gap, which is
+//    luck rather than diligence.
 
 const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitle: 'member', teamId: null }
 const MANAGER = { agentId: 'cccccccc-3333-4333-8333-cccccccccccc', governanceTitle: 'manager', teamId: null }

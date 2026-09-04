@@ -91,4 +91,33 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
     )
     expect(r.ok).toBe(false)
   })
+
+  it('refuses a zone-contradicting column reached through the v1 status fallback', () => {
+    // `effectiveColumn` derives the column from `status:` when `column:` is absent
+    // (V1_STATUS_TO_COLUMN). A write that touches only `status:` must be checked
+    // against the zone exactly like a `column:` write — keying the guard on the
+    // FIELD NAME `column` let a status-only write skip this check entirely.
+    const r = validateTrddFieldEdits(
+      { status: 'cancelled', updated: ISO },
+      baseFm({ column: undefined, status: 'in-progress' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.error).toContain('archived')
+    }
+  })
+
+  it('accepts an ordinary status-only edit that lands in an OPEN column (positive control)', () => {
+    // 'in-progress' -> 'dev' via V1_STATUS_TO_COLUMN, an ordinary WORKING column
+    // that belongs in tasks/ — must still be accepted through the fallback.
+    const r = validateTrddFieldEdits(
+      { status: 'in-progress', updated: ISO },
+      baseFm({ column: undefined, status: 'not-started' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(true)
+  })
 })

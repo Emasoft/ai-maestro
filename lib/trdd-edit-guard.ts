@@ -159,8 +159,13 @@ export function validateTrddFieldEdits(
   // would 400, and the error would point at promote/refuse/archive, which is not the
   // verb that fixes an already-mismatched card (the doctor's remedy is `git mv`).
   // A no-op re-write of the same value cannot make the state worse.
-  const columnUnchanged = String(current['column'] ?? '') === String(fields['column'] ?? '')
-  if ('column' in fields && !columnUnchanged) {
+  //
+  // The predicate is the EFFECTIVE column (`currentColumn`/`resultColumn`, both already
+  // computed above via `effectiveColumn`), never the presence of a `column` FIELD — a
+  // write of `status:` alone changes the effective column exactly as a `column:` write
+  // does (v1 fallback), and keying on the field name let it skip this check entirely.
+  const columnChanged = resultColumn !== currentColumn
+  if (columnChanged) {
     const wantZone = expectedZone(resultColumn, merged)
     if (wantZone && wantZone !== zone) {
       return {

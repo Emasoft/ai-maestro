@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:52:21+0200
+updated: 2026-09-05T00:54:21+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -238,7 +238,8 @@ if a 1-byte loss would MAKE ITS TEST FAIL. Most cannot:
 | P5 `:513` | polling | no | asserts the prior INT trap survived |
 | P8 ×2 copies | fixed | **YES** | the `:585` coverage line |
 | P9 ×2 copies | fixed | **YES** | the `:611` coverage line |
-| P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value |
+| P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value. **RE-READ AT FULL WIDTH (`614-657`) after the P2 discovery — exactly 3 assertions, no fourth hiding below.** The risk was live and specific: P10's classification had been carried forward from the truncated-window pass, and if it detected, the fixed arm would be 6/run and the p would move again. It does not |
+| P6, P7 | — | n/a | **They type NOTHING.** `runGateCtrlC` writes only `\x03` and never the password, so they are in neither denominator. Checked because the boundary sweep surfaced P6's 3 assertions and an unclassified test with assertions is exactly the shape of the P2 error |
 
 **THE TEST, CHOSEN BEFORE THE ARITHMETIC AND FIXED FROM HERE ON: Fisher exact, one-sided,
 CONDITIONED ON THE 8 EVENTS OBSERVED.** Poisson `P(0)` answers a different question — "how

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:50:41+0200
+updated: 2026-09-04T22:51:31+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -138,10 +138,24 @@ right.** Recorded in full because both wrong versions were shipped and described
 3. **Attached to BOTH landing spots, order untouched** — current. Handler-failed timeouts fail
    on the first assertion, handler-completed ones on `RC=1`, and neither costs a demotion.
 
-**Still OPEN, recorded and NOT fixed** (see the stop note below): an `afterEach` reading the
-failed task's state would carry the context out of *whichever* assertion failed, with one hook
-instead of six attachments — strictly smaller than what is shipped. It is the right design and
-it is instrument work, so it waits behind the shim.
+**OPEN INSTRUMENT DEFECTS — recorded, NOT fixed, per the stop note below. Do not "just fix"
+these; they are the loop's output, and fixing them is what the note forbids.**
+
+1. **An `afterEach` is the right design and is not what is shipped.** Reading the failed task's
+   state would carry the context out of *whichever* assertion failed — one hook instead of six
+   attachments, strictly smaller than the current code.
+2. **The context now prints on NON-timeout failures too.** `timeoutContext` rides
+   `toMatch(/PRIOR-INT/)`, so a genuine handoff regression — the real bug P5/P8 pin — fails
+   carrying `requests=1 · out 847b`, which is irrelevant to it and is the first thing the
+   reader sees. The same trade as the reorder in a quieter form: instrument convenience paid
+   for out of the assertion that carries the meaning.
+3. **P11g is not testing what its name says, and the split is incomplete there.** It is
+   *"diagnoseBody tells 'no request' apart from 'unparseable body'"*, and it also asserts
+   `/^TAIL loss/` on a short-value body — a second TAIL-classification test duplicating P11b.
+   That is why neuter A reddens THREE tests (P11b, P11c, P11g): a mutation reaching three
+   tests means those three share a branch. P11g should assert DISPATCH (no-request vs
+   unparseable vs delegates-to-`diagnoseTyped`), not re-assert the TAIL string. The
+   three-test attribution was measured correctly and then read as reassurance.
 
 **"Both copies exhibit it" is nearly a tautology and is recorded as weak.** The two files are
 verified-identical, so the only thing the copy split can rule out is per-copy state — load
@@ -195,13 +209,22 @@ revisions of the instrument against ONE 24-run experiment; the diagnostic ceilin
 (position is TAIL three-for-three, and no further message refinement separates hypothesis 2
 from the shell-side remnant).
 
-**WITH A CLOSING CONDITION, because the first version of this note shipped inside a commit
-that did more instrument work and so taught its reader it was aspirational:** from here,
-**instrument findings are RECORDED on this card, not fixed**, until the shim exists. That is
-what makes the note terminable — the review loop keeps surfacing instrument defects (it has
-found a real one every pass), so "stop" cannot mean "stop when the findings stop". The one
-carve-out is a claim of RECORD that is false: a wrong statement on the card gets corrected,
-because leaving it is worse than the churn.
+**THE CLOSING CONDITION, on its second attempt, because the first was unfalsifiable.** From
+here, **instrument findings are RECORDED on this card, not fixed**, until the shim exists.
+A false claim on the card is corrected **by editing the card to say what is actually true —
+including "this is broken and is not being fixed"** — never by changing code.
+
+The first version carved out "a false claim of RECORD gets corrected", and the commit carrying
+it then changed six call sites. That exception swallows the rule: **every instrument defect
+this loop has surfaced was also, at the moment of discovery, a false claim somewhere** — the
+card said the instrument worked, the neuters covered, the context printed. An exception for
+false claims exempts the entire output of the review gate, which is what makes a stop note
+aspirational. The honest move that pass was to write "the diagnosis is lost in most timeout
+cases" and leave it lost.
+
+"Stop" cannot mean "stop when the findings stop": the gate fires on every commit, findings are
+always available, and each fix is itself reviewable. **The loop cannot self-terminate; the exit
+is to stop committing code here.**
 
 21 pty tests pass, tsc 0 lines. **The DETECTOR half is validated for `fc3b6f76`'s wiring
 only** — run 23 fired it on a real loss end-to-end, and `1a2a1b2c` then replaced that wiring

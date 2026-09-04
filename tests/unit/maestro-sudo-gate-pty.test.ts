@@ -169,6 +169,24 @@ function pwOf(body: string | undefined): string | undefined {
   } catch { return undefined }
 }
 
+/**
+ * The diagnosis for a REQUEST BODY, which is what the assertions actually hold.
+ *
+ * This wrapper exists because collapsing every non-password case into `pwOf` returning
+ * `undefined` made the instrument's message WRONG for its own most likely failure: a
+ * truncated body does not parse, so "no request reached the server" would be printed about
+ * a request that plainly did. Truncation is the class this instrument hunts, so being
+ * wrong exactly there is worse than being silent. The three cases are now distinct, and an
+ * unparseable body is shown RAW — with a short test secret that is the most useful thing
+ * available, and there is no live credential in this file to leak.
+ */
+function diagnoseBody(expected: string, body: string | undefined): string {
+  if (body === undefined) return 'no request reached the server at all'
+  const pw = pwOf(body)
+  if (pw === undefined) return `body present but no string \`password\` field parsed out of it — raw body: ${JSON.stringify(body)}`
+  return diagnoseTyped(expected, pw)
+}
+
 describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   // P11 is the INSTRUMENT's own check, and it is not a pty test — it is here because
   // `diagnoseTyped` runs ONLY when one of the body assertions below fails, so without this
@@ -176,23 +194,44 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   // measurement on exactly that: a diffing branch that had produced 10 INTACT results and
   // zero losses, i.e. had never run at all. Driving every branch here means the loss path is
   // exercised on every run of this file, not first exercised on the day it is trusted.
-  it('P11: the loss diagnostic names the right position for a KNOWN loss (the instrument, not the gate)', () => {
-    const s = 'abcdef'
-    expect(diagnoseTyped(s, s)).toBe('INTACT')
-    expect(diagnoseTyped(s, 'abcde')).toMatch(/^TAIL loss: 1 char/)
-    expect(diagnoseTyped(s, 'bcdef')).toMatch(/^LEADING loss: 1 char/)
-    expect(diagnoseTyped(s, 'abdef')).toMatch(/^INTERIOR loss: 1 char.*index 2/)
-    expect(diagnoseTyped(s, 'abef')).toMatch(/^INTERIOR loss: 2 char.*index 2/)
-    expect(diagnoseTyped(s, 'abcxef')).toMatch(/^NOT-A-LOSS/)
-    expect(diagnoseTyped(s, undefined)).toMatch(/^no password recovered/)
-    // A loss inside a run cannot be placed at an end, and must not claim to be.
-    expect(diagnoseTyped('aaa', 'aa')).toMatch(/^AMBIGUOUS/)
+  // SPLIT into one `it()` per branch, deliberately. As a single test with 12 assertions it
+  // was NOT what it claimed: vitest aborts a test at its first failed assertion, so both
+  // neuters died on assertion 2 or 4 and the seven after them were never reached by any
+  // mutation — including AMBIGUOUS, the branch carrying the honesty claim, which could have
+  // been deleted outright with the test still passing. Separate `it()`s cannot mask each
+  // other, so every branch below is independently falsifiable.
+  const S = 'abcdef'
+  it('P11a: an intact string is INTACT', () => {
+    expect(diagnoseTyped(S, S)).toBe('INTACT')
+  })
+  it('P11b: a lost final character is TAIL', () => {
+    expect(diagnoseTyped(S, 'abcde')).toMatch(/^TAIL loss: 1 char/)
     // The shape it exists for: the exact P9 failure that opened TRDD-601KG45D.
     expect(diagnoseTyped(SECRET, SECRET.slice(0, -1))).toMatch(/^TAIL loss: 1 char/)
-    // And the extractor it is fed through, on the real body shape.
-    expect(pwOf(JSON.stringify({ password: SECRET }))).toBe(SECRET)
-    expect(pwOf('not json')).toBeUndefined()
-    expect(pwOf(undefined)).toBeUndefined()
+  })
+  it('P11c: a lost first character is LEADING', () => {
+    expect(diagnoseTyped(S, 'bcdef')).toMatch(/^LEADING loss: 1 char/)
+  })
+  it('P11d: an interior loss names the earliest consistent index', () => {
+    expect(diagnoseTyped(S, 'abdef')).toMatch(/^INTERIOR loss: 1 char.*index 2/)
+    expect(diagnoseTyped(S, 'abef')).toMatch(/^INTERIOR loss: 2 char.*index 2/)
+  })
+  it('P11e: a loss inside a RUN is AMBIGUOUS and does not claim an end', () => {
+    // The whole honesty claim of this instrument. Unpinned until this was its own test.
+    expect(diagnoseTyped('aaa', 'aa')).toMatch(/^AMBIGUOUS/)
+  })
+  it('P11f: a substitution is NOT-A-LOSS, and a missing string is said to be missing', () => {
+    expect(diagnoseTyped(S, 'abcxef')).toMatch(/^NOT-A-LOSS/)
+    expect(diagnoseTyped(S, undefined)).toMatch(/^no password recovered/)
+  })
+  it('P11g: diagnoseBody tells "no request" apart from "unparseable body" — the truncation case', () => {
+    expect(diagnoseBody(SECRET, undefined)).toMatch(/^no request reached the server/)
+    // The failure class this instrument hunts: a body that arrived and would not parse must
+    // NOT be reported as a request that never arrived.
+    expect(diagnoseBody(SECRET, '{"password":"trunc')).toMatch(/^body present but no string/)
+    expect(diagnoseBody(SECRET, '{"password":"trunc')).toContain('trunc')
+    expect(diagnoseBody(SECRET, JSON.stringify({ password: SECRET }))).toBe('INTACT')
+    expect(diagnoseBody(SECRET, JSON.stringify({ password: SECRET.slice(0, -1) }))).toMatch(/^TAIL loss/)
   })
 
   it('P1: a wrong password is refused by the exchange, mints no token, and the strict verb sends nothing', async () => {
@@ -217,7 +256,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(leaks).toEqual([])
     expect(r.out).not.toContain(SECRET)
     // The secret DID travel: it reached the server in the request body (stdin → curl -d @-).
-    expect(seen[0].body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET)
+    expect(seen[0].body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)
   })
 
   // P4/P5 drive the gate FUNCTION directly in a pty so the tty state AFTER it returns can be
@@ -312,7 +351,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
     expect(out).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
-    expect(seen[0]?.body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET) // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
   })
 
   // P9/P10 — the two caller shapes the FIRST cut of _maestro_sudo_on_int leaked on, found by
@@ -335,7 +374,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
     expect(out).not.toContain(SECRET)        // the whole point: typed after the ^C, still not echoed
     expect(out).toMatch(/RC=1/)              // the gate ran to its refusal, the ^C was ignored as asked
-    expect(seen[0]?.body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET)  // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
   for (const copy of COPIES) it(`P10 [${copy}]: a prior trap ending in \`return\` does not skip the re-disable`, async () => {

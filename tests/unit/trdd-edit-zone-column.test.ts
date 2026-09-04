@@ -69,14 +69,20 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
   })
 
   it('still refuses a changed column on a card whose CURRENT column is also mismatched', () => {
-    // WHAT THIS DOES AND DOES NOT PIN. It was written as a "the exemption is narrow"
-    // test and it is NOT one: MEASURED by neutering `!columnUnchanged` (making the
-    // exemption unconditional), only the unchanged-re-write test above reds — this one
-    // stays green, because `columnUnchanged` is false here so the guard takes the same
-    // branch it always took. It re-tests the ORIGINAL rule on a distinct fixture (a card
-    // whose current column is itself already mismatched), which is worth having.
-    // The exemption's narrowness is pinned by the FIRST test in this file: widen the
-    // exemption to every column write and that one reds.
+    // WHAT THIS PINS — both directions MEASURED, because neither neuter alone answers it
+    // and my first two attempts at this comment each got it wrong in one direction.
+    //
+    //   REMOVE `!columnUnchanged` (exemption gone, guard back to its original form)
+    //     -> 1 red: only "does NOT lock an already-mismatched card". This test stays
+    //        GREEN, because `columnUnchanged` is false here either way.
+    //   WIDEN to `columnUnchanged = true` (exemption swallows every column write)
+    //     -> 2 red: the FIRST test in this file AND this one.
+    //
+    // So this test is NOT decorative — an earlier version of this comment demoted it on
+    // the strength of the first neuter alone. It pins the exemption's NARROWNESS (a
+    // too-wide exemption reds it); what it does not pin is the exemption's EXISTENCE,
+    // which only the unchanged-re-write test above covers. Two mutations, two different
+    // properties; one run would have told me half the story and did.
     const r = validateTrddFieldEdits(
       { column: 'refused', updated: ISO },
       baseFm({ column: 'proposal' }),

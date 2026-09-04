@@ -45,6 +45,12 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
 
   afterEach(() => {
     cleanup()
+    // DO NOT "make this consistent" with the delete below — the two properties have
+    // OPPOSITE shapes and each needs the opposite treatment (both measured in jsdom):
+    //   window.innerWidth        own DATA property (1024, writable), NO prototype entry
+    //   document.visibilityState NO own property, prototype ACCESSOR
+    // So defineProperty is the correct restore here, and `delete` would be a BUG —
+    // with no getter to fall back to, window.innerWidth would become `undefined`.
     Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, writable: true, configurable: true })
     // `delete`, NOT a defineProperty "restore". `visibilityState` has no own property
     // on the document — it is an ACCESSOR on the prototype (measured: own descriptor

@@ -108,6 +108,34 @@ heartbeats per watchdog window."* The constant is **120 minutes**
 the comment in the same change — it is the number a reader sizes this budget against, and it
 already misled one card (this one) into asserting 30 as fact.
 
+## Aside — the suite flake that turned up while working this card, and how it was settled
+
+A full-suite run failed with `tests/unit/oauth-alert-delivery.test.ts` as a FAILED SUITE while all
+6646 tests passed (unhandled `ReferenceError: window is not defined` from react-dom). The first
+reflex — *"I didn't touch that file"* — is a NON-SEQUITUR for a cross-file leak: the victim's
+contents are irrelevant, what matters is which files share a worker, and adding a test file changes
+exactly that. A review caught the fallacy.
+
+**The first counterfactual was VACUOUS and said so only when checked.** `git stash push <path>` on
+a file that is COMMITTED and clean stashes nothing, so six "without the file" runs all ran WITH it.
+Worse, the paired `git stash pop` then applied an unrelated 2026-08-27 stash to the working tree
+(142 lines across `CLAUDE.md` and another TRDD, plus a new `DELEGATION.md`). Re-stashed under an
+explicit name; nothing lost. **A stash/pop pair around a committed file is a no-op followed by a
+live grenade.**
+
+Re-run with `vitest --exclude`, instrument-checked (508 → **507** files, so the exclusion demonstrably
+landed):
+
+| tree | runs | suite failures |
+|---|---|---|
+| WITH the new file | 10 | 1 |
+| WITHOUT it (`--exclude`) | 6 | **1** |
+
+A suite failure occurs on BOTH sides, so the non-determinism is **pre-existing** and the new file is
+not implicated. Note the honest residue: the specific `window is not defined` string appeared in
+exactly 1 of 16 runs, so its base rate is ~6% with an interval far too wide to characterise — "3 of
+4 green" was never the reassurance it read as.
+
 ## Proposed fix
 
 Distinguish permanent from transient in the `catch`: on 401/403 stop retrying and surface a

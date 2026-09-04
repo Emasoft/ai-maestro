@@ -9,7 +9,7 @@ blocker-probe: sh -c 'f=scripts/shell-helpers/common.sh; t=$(grep -c "trap ._mae
 blocker-holds-if: not-match:(trap=0|read=0)
 blocker-probe-canary: match:PROBE-RAN
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:22:16+0200
+updated: 2026-09-05T01:25:38+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -104,7 +104,20 @@ before anything was measured, when the observable was "a security-gate test drop
 character" — which reads as credential handling. Fact 5 (fails closed) is what settles it: the
 worst case is a spurious auth refusal.
 
-**On the probe below — read it for what it is.** At LOW severity with a `review-after` date, **the
+**On the probe below — read it for what it is, and this is now MEASURED, not attitude.** **Nothing
+in this repo EXECUTES a blocker probe.** `grep -rn 'blocker-probe'` over `lib/` and `scripts/`
+returns hits in `lib/trdd-doctor.ts` and NOWHERE else, and the doctor only checks that the field
+EXISTS and that `blocker-holds-if` matches a SHAPE regex
+(`BLOCKER_HOLDS_IF_RE = /^(exit-0|exit-nonzero|match:\S.*|not-match:\S.*)$/`, `:292`). So the
+review's open question — *is the operand compiled as a regex, or as a literal substring?* — has no
+answer in this repo: **the semantics belong to a consumer I have not identified.** My
+`not-match:(trap=0|read=0)` passes the shape check either way (confirmed: `trddgrep validate`
+reports 0 findings on this card), and whether the alternation MEANS anything is unknowable from
+here.
+
+**Consequence worth stating beyond this card: every blocker probe on every card in this repo is
+currently a DECLARATION, not a check** — unless an external consumer (plausibly the janitor's
+`trdd-drift`) runs them, which was not verified. At LOW severity with a `review-after` date, **the
 DATE is the real blocker**; the probe exists because the linter requires one, and it is brittle by
 nature. It tracks the CONJUNCTION the card identified (a trapped `INT` plus a `read` on the
 controlling terminal) and **BOTH halves are tested** (`not-match:(trap=0|read=0)`).

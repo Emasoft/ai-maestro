@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:45:56+0200
+updated: 2026-09-05T00:52:21+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -141,7 +141,11 @@ constructible.**
   **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power, and all 8 DETECT (it
   asserts every length). **Power is computed against the ALTERNATIVE, so the rate is the fixed
   arm's DETECTING rate — 2.5% (8/320), not the pooled 0.91% an earlier version used, and not the
-  1.67% that superseded it.** P(0 events in 320 typings) ≈ **0.03%**. The same denominator
+  1.67% that superseded it.** P(0 events in 320 typings) ≈ **0.03%** — **but that is a POINT
+  ESTIMATE off 8 events and must not be quoted bare.** The Poisson 95% CI on 8 events is
+  [3.45, 15.76], so the rate CI is **[1.08%, 4.93%]** and P(0 in 320) ranges from **~3.2%** at
+  the pessimistic end to ~10⁻⁷ at the optimistic one. The design still holds at 3.2%; "0.03%"
+  alone is two orders of magnitude more confident than 8 events support. The same denominator
   correction that WEAKENED the correlation above STRENGTHENS this experiment; the two moves are
   independent and the pleasant one must not be allowed to carry the unpleasant one.
 
@@ -167,8 +171,12 @@ constructible.**
   three orders of magnitude from 0.03%. Measured over the two clean 40-run batches: **8 events in
   8 DISTINCT runs, zero doubletons**, which supports independence. **Against it: the live batch's
   run-010 is the first doubleton** — P8 AND P9 truncating in the same run, both TAIL-1, both
-  `stdin: 39`. One doubleton is not a refutation, but it is the first direct evidence of temporal
-  correlation on this card and it must be weighed before any P13 number is quoted as decisive.
+  `stdin: 39`. **But read it at the right scope:** that is TWO ADJACENT TESTS inside one run, i.e.
+  RUN-level clustering, whereas P13's assumption is about 8 iterations WITHIN one test. Related
+  and not identical — adjacency makes it genuinely suggestive, since a machine-state transient
+  would hit neighbours — but a run-level doubleton is not direct evidence about within-test
+  independence, and one doubleton in a small sample is weak on its own. It must be weighed before
+  any P13 number is called decisive; it does not settle anything.
 
 **TWO CORRECTIONS OWED TO P13's COMMENT, deferred to after the running batch. THE DEFERRAL IS
 RIGHT AND MY FIRST REASON FOR IT WAS NOT.** I wrote that a mid-batch edit "would split the
@@ -223,30 +231,55 @@ if a 1-byte loss would MAKE ITS TEST FAIL. Most cannot:
 | test | arm | detects a 1-byte loss? | why |
 |---|---|---|---|
 | P12e `:435` | polling | **YES** | asserts the recorded length directly |
-| P3 `:683` | polling | **YES** | truncated `GOOD` ⇒ server refuses ⇒ no token ⇒ `expect(strict).toBeDefined()` fails. **A DIFFERENT ROUTE from the shim assertion** — anyone later "unifying" this table by grepping `recordedLens()` will drop P3 wrongly |
+| P3 `:683` | polling | **YES** | truncated `GOOD` ⇒ server refuses ⇒ no token ⇒ `expect(strict).toBeDefined()` fails. **The middle link is now READ, not inferred:** the fake server does `if (pw === GOOD)` — strict equality, so a short value cannot match. An earlier version of this row claimed the whole chain was "verified by reading the assertions" when the server's comparison had never been opened, and P3 is the highest-leverage row here. **A DIFFERENT ROUTE from the shim assertion** — anyone later "unifying" this table by grepping `recordedLens()` will drop P3 wrongly |
+| P2 `:474` | polling | **YES** | `expect(seen[0].body, diagnose(…)).toContain(SECRET)` — it asserts the request body carries the WHOLE secret, and it even calls `diagnose()`. **Classified BLIND for one commit, and the error was the INSTRUMENT:** I read each test with a 10-line `sed` window, and P2's detecting assertion is its LAST, 14 lines in. The window showed the first two and cut the one that mattered |
 | P1 `:453` | polling | no | a truncated WRONG password is still a wrong password; refusal is asserted and happens either way |
-| P2 `:461` | polling | no | "not in argv, not echoed" is true of a short string too |
 | P4 `:506` | polling | no | asserts echo restored after refusal |
 | P5 `:513` | polling | no | asserts the prior INT trap survived |
 | P8 ×2 copies | fixed | **YES** | the `:585` coverage line |
 | P9 ×2 copies | fixed | **YES** | the `:611` coverage line |
 | P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value |
 
-**DETECTING trials over the 80 logged runs: polling 2/run = 160 with ZERO events; fixed 4/run =
-320 with 8.** Fixed detecting rate **2.5%**; pooled over detecting trials 8/480 ≈ 1.67%; the
-polling arm expects ~2.67, and observing 0 is **P(0) ≈ 6.9%**. Suggestive — NOT significant at
-the conventional line, and the card must stop calling it "real".
+**THE TEST, CHOSEN BEFORE THE ARITHMETIC AND FIXED FROM HERE ON: Fisher exact, one-sided,
+CONDITIONED ON THE 8 EVENTS OBSERVED.** Poisson `P(0)` answers a different question — "how
+surprising is zero given a KNOWN pooled rate" — and by not conditioning on the 8 it runs ~3×
+conservative here. Naming the test first is the discipline this card has been missing; see the
+churn note below for why.
 
-**The 6-vs-6 "DEAD HEAT" I committed one commit ago is wrong, and wrong in the direction that
-flattered the conclusion.** On detection it is **2 vs 4** — the polling arm is the DISADVANTAGED
-one, which cuts against the inference the paragraph draws from its zero. And the sentence
-"the omission made the card CONSERVATIVE, so fixing it strengthens the correlation" is true on
-exposure counting and FALSE on detection counting: adding P12e added the one polling test that
-CAN see the byte, while leaving four blind ones inflating the denominator.
+**DETECTING trials over the 80 logged runs: polling 3/run = 240 with ZERO events; fixed 4/run =
+320 with 8.** Fixed detecting rate **2.5%**.
 
-**8 IS A FLOOR ON THE EVENT COUNT, NOT A COUNT.** P10 contributes 160 blind typings to the FIXED
-arm over those 80 runs, so the fixed arm has its own blind spot and some truncations there were
-never observable. Every rate on this card is a lower bound.
+| test | p (one-sided) |
+|---|---|
+| **Fisher exact, conditioned on 8** | **0.011** ← the number |
+| binomial, `(320/560)^8` | 0.011 (cross-check) |
+| Poisson `P(0)`, λ = 3.43 | 0.032 (the wrong test, kept to show the gap) |
+
+**TWO CAVEATS THAT TRAVEL WITH IT WHEREVER IT IS QUOTED:** the correlation was found by LOOKING
+AT THE DATA, never pre-registered, so it is a post-hoc p; and every value here is VOID if the
+trials are not independent — see the independence note on P13.
+
+**THE p HAS NOW BEEN FOUR DIFFERENT NUMBERS IN ONE SESSION — 0.018 → 0.070 → (0.038) → 0.011 —
+and the churn is a finding about my method, not about the data.** Each value was recomputed
+under correction pressure rather than derived once from a test chosen in advance: 0.018 counted
+EXPOSURE not detection; 0.070 used the right denominators with the wrong TEST; 0.038 fixed the
+test but kept a table with P2 misclassified; 0.011 is the first computed with the test named
+first and the table read at full width. Nothing but the arithmetic is load-bearing here — the
+mechanism question is untouched by any of it.
+
+**The 6-vs-6 "DEAD HEAT" I committed earlier is wrong, and the 2-vs-4 that replaced it was also
+wrong.** On detection it is **3 vs 4**, because P2 detects. The polling arm is still the
+disadvantaged one, but only slightly — and the sentence "the omission made the card CONSERVATIVE,
+so fixing it strengthens the correlation" remains FALSE on detection counting.
+
+**8 IS A FLOOR ON THE EVENT COUNT — BUT THE RATE IS NOT A FLOOR, and an earlier version of this
+line said it was.** P10 contributes 160 blind typings to the FIXED arm, so some truncations there
+were never observable and the observed COUNT understates how many occurred. The RATE is
+unaffected: it is 8 events ÷ 320 **detecting** trials, and P10's typings are excluded from
+numerator AND denominator alike, so 2.5% is an unbiased estimate of the per-typing probability
+(assuming blind and detecting trials share the underlying rate — reasonable, since P8/P9/P10 are
+all `^C`-then-blind-write at identical offsets). "Every rate on this card is a lower bound"
+contradicted the lesson written from this very finding, which correctly says COUNT.
 
 The 3 pre-shim truncations are ALSO in the fixed arm — raw count **11-vs-0** — but they have no
 countable denominator (different suite composition, per-run typing counts never recorded), so
@@ -256,7 +289,7 @@ they stay out of the statistic rather than folded in with a guessed exposure.
 8 typings/run at (no signal, blind write), ALL OF THEM DETECTING (it asserts all 8 lengths) — a
 cell that exists precisely to be CONTRASTED with the fixed arm, so folding it into that arm's
 denominator would dissolve the comparison. Three arms from the next batch on, in DETECTING terms:
-**polling 2/run · fixed 4/run · blind-no-signal 8/run.**
+**polling 3/run · fixed 4/run · blind-no-signal 8/run.**
 
 **AND THE "OFF-BY-ONE vs TERMINATOR-EARLY" DICHOTOMY IS FALSE — I renamed the hypothesis.** Both
 describe the same observable and the same mechanism class, with no differing prediction, so no

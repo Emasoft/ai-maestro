@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T01:35:20+0200
+updated: 2026-09-05T01:37:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -170,9 +170,20 @@ recorded in this BODY and never written to the field". **It WAS written:** `41d4
 (2026-08-02) — *"triage the last 9 dev cards — dev 18 → 1, and the board reconciles"* — moved it
 **back** `dev → todo` as part of a WIP-reduction sweep.
 
-**What git shows, and nothing beyond it:** the field was `dev`, and a 2026-08-02 bulk triage
-moved it back to `todo`. **Whether that sweep assessed this card individually is UNREAD** — I saw
-its subject line and its two-line diff for this one file, nothing else.
+**READ AT LAST (`git show 947d36cb`), and it answers the question three of my versions talked
+around.** The sweep DID assess each card individually — its body says *"Every one of the nine was
+mis-filed, not abandoned and not done-but-unclosed: deferred by its own text, gated on a human,
+blocked externally, or simply pending with nobody on it"*, and it moved `44RGLOO8 → human_review`
+precisely because that card's STATE forbids agent action, sending the other eight to `todo`.
+
+**So it exercised judgment, had the right vocabulary, and put THIS card in the wrong bucket.**
+AQTGAY60 belonged with `44RGLOO8` — gated on a human — not with "pending with nobody on it".
+That is a specific, ordinary misclassification, not a process failure.
+
+**And the sweep predicted exactly the confusion it caused me.** Its own body records: *"The nine
+cards moved today carry no in-card note — a recorded debt, not an oversight."* That missing
+in-card reason is why this card offered no explanation for its `dev → todo` move, and why I filled
+the gap with a story instead of a command.
 
 **A first correction of this paragraph said the sweep "was not wrong at the time… correct WIP
 discipline". That is retracted too, as a second unverified claim in the charitable direction.**
@@ -196,8 +207,9 @@ from the main context. It is not `blocked` (no `blocked-by:` TRDD gates it) and 
 **And the column history supplies an argument for `human_review` that I had not made:** the
 mechanism that produced the wrong column was a **`dev`-reduction sweep**, so any column inside
 that sweep's target set is one this card can silently fall back into. `human_review` is not in
-it — the sweep moves cards OUT of `dev` — so it is more stable against a repeat than `dev` would
-be.
+it. **Stated at its real strength: this SPECIFIC historical failure mode cannot recur in this
+column — that is not a general stability property of `human_review`, and a future triage pass
+could sweep any column.**
 
 **Not touched, deliberately:** the open box itself. Nothing about finding a stale column
 authorizes running the destructive verification the box defers.

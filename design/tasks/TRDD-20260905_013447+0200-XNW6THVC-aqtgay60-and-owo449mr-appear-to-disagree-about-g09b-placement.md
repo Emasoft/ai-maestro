@@ -5,11 +5,11 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T01:34:47+0200
-updated: 2026-09-05T01:34:47+0200
+updated: 2026-09-05T01:37:54+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
-task-type: audit
+task-type: docs
 priority: 3
 severity: low
 effort: small
@@ -34,7 +34,9 @@ labels: [corpus-consistency, deleteagent, aio-pipeline]
 I have not read OWO449MR — only AQTGAY60's DESCRIPTION of it.** Naming a stale side from a
 second-hand description is the error this card exists to stop someone repeating.
 
-**The two claims, as written:**
+**The two claims, as written. ⚠ BOTH COLUMNS BELOW QUOTE AQTGAY60; NEITHER WAS READ FROM SOURCE**
+— including the OWO449MR row, which is AQTGAY60's description of it. The detail is specific enough
+to read as verified and is not; that is the whole reason this card exists rather than a verdict.
 
 | card | what it says about the plugin-record cleanup |
 |---|---|
@@ -50,9 +52,20 @@ call in `DeleteAgent` (`services/element-management-service.ts`) relative to the
 then read OWO449MR itself. Fix whichever card is stale. If OWO449MR's relocation landed, re-open
 AQTGAY60's box 2.
 
-**Why this is its own card rather than a note.** It was recorded as prose inside AQTGAY60, which
-is now parked in `human_review` — the one place least likely to be read by whoever can fix a
-corpus inconsistency. A reader of AQTGAY60 is not looking for OWO449MR's correctness.
+**Why this is its own card rather than a note — and the justification is ADDRESSABILITY, not
+visibility.** A new `todo` card among 52 is not meaningfully more visible than a note on a parked
+card; that framing would be close to false. What extraction actually buys: an **id that can be
+cited, blocked-on and grepped** (`grep -l XNW6THVC`), and a row in the board count the heartbeat
+prints every fire. Prose has none of those.
+
+The deeper reason is standing: **the note impugns the correctness of the card it was living in.**
+AQTGAY60's box 2 is ticked on an argument this contradiction may invalidate, so a footnote saying
+"this card's checked box may be unearned" has no standing there — and a reader going top-to-bottom
+has already accepted box 2 before reaching it.
+
+**Residual, named rather than glossed: filing this RESOLVES NOTHING.** Queueing is a handoff, not
+a resolution (the kanban rule this project runs under says so explicitly), and this card discharges
+its finding only when something pulls it.
 
 **Provenance.** Surfaced by adversarial review during the 601KG45D/AQTGAY60 session
 (2026-09-05); inherited into that session's context rather than measured, which is exactly why

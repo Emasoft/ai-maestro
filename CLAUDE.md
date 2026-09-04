@@ -227,3 +227,85 @@ Editing between the fences is pointless; the next run overwrites it.
 - **`token-optimization`** — Why a UI scenario run could cost 130M+ tokens and how to keep token usage low: the 8 mandatory token-saving…
 
 <!-- WIKIMEM-INDEX-END -->
+
+<+-+-JANITOR-WIKIMEM-INDEX-START-(do-not-modify)-+-+> v1 digest=7cc8bf9e8566 generated=2026-09-04T15:13:16+0200
+## Wikimem index (PROJECT scope) — recall by symptom, read on demand
+
+Deep knowledge lives in these pages, not in this file. Search: `memgrep recall "<symptom>" .claude/project/memory`.
+
+- [ai-maestro-overview](.claude/project/memory/ai-maestro-overview.md) — the project's front door — what AI Maestro is, how its parts fit together, and which page owns each subject
+
+**amp-messaging** — how do agents send messages to each other
+- [amp-messaging](.claude/project/memory/amp-messaging.md) — how do agents send messages to each other
+  - [amp-communication-graph](.claude/project/memory/amp-communication-graph.md) — which governance titles can message which
+  - [runtime-install-tree](.claude/project/memory/runtime-install-tree.md) — where does ai-maestro store data on a host
+
+**password-and-credential-system** — which password or token do I need
+- [password-and-credential-system](.claude/project/memory/password-and-credential-system.md) — which password or token do I need
+  - [env-vars-and-the-governance-password](.claude/project/memory/env-vars-and-the-governance-password.md) — which env vars does ai-maestro actually read
+
+**Other topics**
+- [agent-claims-the-api-was-never-delivered](.claude/project/memory/agent-claims-the-api-was-never-delivered.md) — a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build X)
+- [agent-control-monitor-api](.claude/project/memory/agent-control-monitor-api.md) — how does the janitor
+- [agent-deletion-all-in-one-pipeline](.claude/project/memory/agent-deletion-all-in-one-pipeline.md) — I deleted an agent but its folder keeps coming back
+- [agent-first-architecture](.claude/project/memory/agent-first-architecture.md) — why is data.governanceTitle always undefined
+- [agent-isolation-is-not-enforced](.claude/project/memory/agent-isolation-is-not-enforced.md) — can one agent read another agent's token or impersonate it
+- [agent-launch-preconditions](.claude/project/memory/agent-launch-preconditions.md) — an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in'
+- [agent-title-role-persona](.claude/project/memory/agent-title-role-persona.md) — TITLE vs ROLE vs PERSONA in ai-maestro
+- [agent-workdir-invariants-and-policy](.claude/project/memory/agent-workdir-invariants-and-policy.md) — why did my agent's shipped rule file come back
+- [aio-pipeline-rollback-transactions](.claude/project/memory/aio-pipeline-rollback-transactions.md) — a pipeline failed halfway and left two stores disagreeing
+- [an-unenforced-rule-produces-a-success-not-an-error](.claude/project/memory/an-unenforced-rule-produces-a-success-not-an-error.md) — the scenario passed
+- [code-analysis-tooling](.claude/project/memory/code-analysis-tooling.md) — what is tldr
+- [cross-client-conversion](.claude/project/memory/cross-client-conversion.md) — how do I move an agent from claude to codex
+- [custom-server-and-websocket-pty](.claude/project/memory/custom-server-and-websocket-pty.md) — why does server.mjs exist
+- [dashboard-ui-patterns](.claude/project/memory/dashboard-ui-patterns.md) — how are agent category colors assigned in the sidebar
+- [ecosystem-constants-and-repos](.claude/project/memory/ecosystem-constants-and-repos.md) — where are the marketplace repo names defined
+- [element-management-service](.claude/project/memory/element-management-service.md) — where do plugin and agent-property mutations go through
+- [env-var-security-delete-not-gate](.claude/project/memory/env-var-security-delete-not-gate.md) — adding a new process.env read
+- [family-a-continuity-absorption-plan](.claude/project/memory/family-a-continuity-absorption-plan.md) — the implementation decomposition (NPT map) for absorbing the janitor's continuity daemon into the ai-maestro…
+- [folder-adoption-import](.claude/project/memory/folder-adoption-import.md) — wizard 'Browse existing project folder' 400s
+- [governance-enforcement-ratchet](.claude/project/memory/governance-enforcement-ratchet.md) — I added/edited a governance rule and the build went red — what is the enforcement map
+- [governance-password-invalidation](.claude/project/memory/governance-password-invalidation.md) — how does the user rotate
+- [governance-rules-layering](.claude/project/memory/governance-rules-layering.md) — where do the aimaestro governance rules live
+- [janitor-chore-absorbability](.claude/project/memory/janitor-chore-absorbability.md) — can the ai-maestro server take over this janitor chore
+- [lenient-json-reader-destroys-the-file](.claude/project/memory/lenient-json-reader-destroys-the-file.md) — my settings.json
+- [manager-gated-team-governance](.claude/project/memory/manager-gated-team-governance.md) — why are all my teams blocked
+- [marketplace-manifest-format](.claude/project/memory/marketplace-manifest-format.md) — claude plugin install fails 'Plugin not found in marketplace'
+- [marketplace-plugin-registration](.claude/project/memory/marketplace-plugin-registration.md) — how to register
+- [memory-scope-leak-proposed](.claude/project/memory/memory-scope-leak-proposed.md)
+- [model-context-window-classification](.claude/project/memory/model-context-window-classification.md) — the context percentage is wrong
+- [model-scoped-window-fallback](.claude/project/memory/model-scoped-window-fallback.md) — the Fable window is exhausted but the account still has 5h/7d headroom
+- [network-security-tailscale-bind](.claude/project/memory/network-security-tailscale-bind.md) — why does a LAN IP get dropped
+- [never-log-a-security-argv](.claude/project/memory/never-log-a-security-argv.md) — I want to log which keychain item is slow or failing
+- [nextjs-full-route-cache-freezes-api-responses](.claude/project/memory/nextjs-full-route-cache-freezes-api-responses.md) — an API endpoint returns stale or frozen data
+- [nul-byte-makes-a-file-invisible-to-grep](.claude/project/memory/nul-byte-makes-a-file-invisible-to-grep.md) — grep returns no match for a file I KNOW contains the string
+- [persistent-state-shaped-by-the-caller-oscillates](.claude/project/memory/persistent-state-shaped-by-the-caller-oscillates.md) — two tools keep overwriting each other's config and both report success
+- [pillar-tooling-scale-and-index](.claude/project/memory/pillar-tooling-scale-and-index.md) — trddgrep
+- [plugin-abstraction-and-script-layer](.claude/project/memory/plugin-abstraction-and-script-layer.md) — why can't a plugin call the ai-maestro API directly
+- [plugin-architecture-source-vs-install-target](.claude/project/memory/plugin-architecture-source-vs-install-target.md) — where does a plugin actually live
+- [plugin-install-no-git-tag-satisfying](.claude/project/memory/plugin-install-no-git-tag-satisfying.md) — a plugin install fails with 'has no git tag satisfying >=X <Y' even though the tags exist
+- [pm2-boot-persistence](.claude/project/memory/pm2-boot-persistence.md) — server did not come back after a reboot
+- [project-long-form-docs](.claude/project/memory/project-long-form-docs.md) — where is the long-form documentation
+- [prompt-provenance-and-the-injection-path](.claude/project/memory/prompt-provenance-and-the-injection-path.md) — fleet recovery keeps deferring
+- [public-repo-personal-data](.claude/project/memory/public-repo-personal-data.md) — this repo is PUBLIC and a personal email
+- [release-and-marketing](.claude/project/memory/release-and-marketing.md) — do I need to draft an X twitter post when opening a PR
+- [repo-file-structure](.claude/project/memory/repo-file-structure.md) — where should I put a new component or hook in this repo
+- [restart-conversation-continuity](.claude/project/memory/restart-conversation-continuity.md) — restarted agent came back blank
+- [role-plugins](.claude/project/memory/role-plugins.md) — what is a role-plugin
+- [scen031-manager-role-violation-not-substrate](.claude/project/memory/scen031-manager-role-violation-not-substrate.md) — SCEN-031 fleet-ship FAILs — MANAGER builds the project solo instead of creating+delegating to fleet personas;…
+- [server-oauth-token-continuity-design](.claude/project/memory/server-oauth-token-continuity-design.md) — how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate
+- [session-control-5-state-model](.claude/project/memory/session-control-5-state-model.md) — agent badge shows the wrong color
+- [session-control-subagent-gate](.claude/project/memory/session-control-subagent-gate.md) — restart API times out 504
+- [settings-file-watcher-ledger](.claude/project/memory/settings-file-watcher-ledger.md) — who changed my settings.json
+- [single-active-agent-rendering](.claude/project/memory/single-active-agent-rendering.md) — why does switching agents lose my terminal scrollback
+- [team-creation](.claude/project/memory/team-creation.md) — how is a team created
+- [team-meeting-and-kanban](.claude/project/memory/team-meeting-and-kanban.md) — how does the team meeting state machine work
+- [terminal-rendering-and-pty](.claude/project/memory/terminal-rendering-and-pty.md) — terminal duplicating every character
+- [testing-and-scenarios](.claude/project/memory/testing-and-scenarios.md) — how do I run a UI scenario test
+- [three-pillars-conformance-spec](.claude/project/memory/three-pillars-conformance-spec.md) — where is the 3-pillars (TRDD/PRRD/kanban) design actually decided
+- [three-role-initial-test-not-a-title-restrict](.claude/project/memory/three-role-initial-test-not-a-title-restrict.md) — does 'we need a version running with only 3 role plugins (MANAGER/MAINTAINER/AUTONOMOUS)' mean restrict/hide…
+- [token-optimization](.claude/project/memory/token-optimization.md) — Why a UI scenario run could cost 130M+ tokens and how to keep token usage low: the 8 mandatory token-saving t…
+- [trdd-conventions](.claude/project/memory/trdd-conventions.md) — How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3…
+- [trdd-d4-watchdog](.claude/project/memory/trdd-d4-watchdog.md) — why does the server log [trdd-watchdog] sweep ran
+- [two-server-modes-the-headless-router-reimplements-routes](.claude/project/memory/two-server-modes-the-headless-router-reimplements-routes.md) — I added the guard in lib/ and the tests are green — but is it actually enforced? the same request behaves dif…
+<+-+-JANITOR-WIKIMEM-INDEX-END-(do-not-modify)-+-+>

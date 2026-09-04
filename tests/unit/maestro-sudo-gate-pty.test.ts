@@ -55,6 +55,76 @@ let seen: Seen[]
 let psSnapshot: string
 let apiBase: string
 let fakeHome: string
+let shimPath: string
+let jqLenFile: string
+
+/**
+ * TRDD-601KG45D step 2 — measure what the gate hands `jq -Rnc`, from the TEST.
+ *
+ * The gate builds its request body with `printf '%s' "$_pw" | jq -Rnc '{password: input}'`
+ * (common.sh:761, agent-helper.sh:279), so that pipe is the last place the typed password
+ * exists as shell data. Three observed truncations all lost exactly the TAIL byte, and the
+ * card's argument that the loss is at or before `read` rests on the COMPOSITION of that
+ * pipeline — an argument, not a measurement. This turns it into one: a short length here
+ * puts the loss at or before `read`; a full length puts it after jq.
+ *
+ * It records a LENGTH, never the content — the point is to instrument a password path
+ * without ever writing a password anywhere it can be read back.
+ *
+ * Argv-filtered on `-Rnc` deliberately: common.sh calls jq ~20 times, one of them on the
+ * RESPONSE (`:770`), and a shim that measured every call would pass a filter+file invocation
+ * an empty stdin it does not want — or hang waiting for one. Non-matching calls are `exec`ed
+ * straight through, before stdin is touched at all.
+ *
+ * The real jq is resolved and BAKED IN here, because the shim dir is first on the child's
+ * PATH — a `command -v jq` inside the wrapper would find the wrapper.
+ */
+function installJqShim(dir: string, recordFile: string): string | undefined {
+  let realJq = ''
+  try { realJq = execFileSync('bash', ['-c', 'command -v jq'], { encoding: 'utf8' }).trim() } catch { /* absent */ }
+  if (!realJq) return undefined
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(
+    path.join(dir, 'jq'),
+    `#!/bin/bash\n` +
+      `# TRDD-601KG45D test shim — see installJqShim() in maestro-sudo-gate-pty.test.ts.\n` +
+      `for a in "$@"; do\n` +
+      `  [ "$a" = "-Rnc" ] || continue\n` +
+      `  t="$(mktemp '${dir}/jq-stdin.XXXXXX')"\n` +
+      `  cat > "$t"\n` +
+      `  wc -c < "$t" | tr -d ' ' >> '${recordFile}'\n` +
+      `  '${realJq}' "$@" < "$t"\n` +
+      `  rc=$?\n` +
+      `  rm -f "$t"\n` +
+      `  exit $rc\n` +
+      `done\n` +
+      `exec '${realJq}' "$@"\n`,
+    { mode: 0o755 },
+  )
+  return dir
+}
+
+/**
+ * The lengths the shim recorded this test, as a message fragment.
+ *
+ * KEEP THIS TOTAL. It rides `expect(actual, message)`, which vitest evaluates EAGERLY on
+ * every run — a throw here turns a PASSING test into an error.
+ *
+ * `expected` is a JS char count and the shim reports bytes; both secrets here are ASCII, so
+ * they agree. A non-ASCII password would need the comparison done in bytes on both sides.
+ */
+function jqStdinNote(expected: number): string {
+  let raw = ''
+  try { raw = fs.readFileSync(jqLenFile, 'utf8') } catch { return 'jq -Rnc stdin: NOT RECORDED (shim inactive — jq absent, or the gate never reached it)' }
+  const lens = raw.split('\n').filter((l) => l.trim() !== '')
+  if (lens.length === 0) return 'jq -Rnc stdin: NOT RECORDED (shim active, no -Rnc call reached it)'
+  return `jq -Rnc stdin: ${lens.join(',')} byte(s) for ${expected} expected`
+}
+
+/** diagnoseBody plus what the gate actually handed jq — the two halves of "where was it cut". */
+function diagnose(expected: string, body: string | undefined): string {
+  return `${diagnoseBody(expected, body)} · ${jqStdinNote(expected.length)}`
+}
 
 beforeEach(async () => {
   seen = []
@@ -83,6 +153,10 @@ beforeEach(async () => {
   const addr = server.address()
   if (typeof addr === 'object' && addr) apiBase = `http://127.0.0.1:${addr.port}`
   fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-sudo-pty-'))
+  // Lives inside fakeHome so afterEach's rmSync already owns its lifetime.
+  jqLenFile = path.join(fakeHome, 'jq-rnc-lengths.txt')
+  const shimDir = installJqShim(path.join(fakeHome, 'jq-shim'), jqLenFile)
+  shimPath = shimDir ? `${shimDir}:${process.env.PATH ?? ''}` : (process.env.PATH ?? '')
 })
 
 afterEach(async () => {
@@ -115,7 +189,7 @@ function runAtTerminal(args: string[], password: string): Promise<{ code: number
   return new Promise((resolve) => {
     const p = ptySpawn('bash', [TEAMS, ...args], {
       cwd: REPO,
-      env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, AIMAESTRO_API_BASE: apiBase, TERM: 'dumb' },
+      env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, AIMAESTRO_API_BASE: apiBase, TERM: 'dumb' },
     })
     let out = ''
     let typed = false
@@ -282,6 +356,50 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(diagnoseBody(SECRET, JSON.stringify({ password: SECRET.slice(0, -1) }))).toMatch(/^TAIL loss/)
   })
 
+  // P12 — the jq PATH shim itself. It sits in the middle of a password pipeline in every
+  // pty test below, so it is pinned before it is trusted: an instrument that silently drops
+  // its measurement reads exactly like an instrument that measured no loss, and an instrument
+  // that corrupts what it forwards would fail these tests for a reason that is not the bug.
+  // One `it()` per branch — a neuter stops at the first failed assertion, so bundling these
+  // would leave the later ones unpinned (the P11 split, applied ahead of the mistake).
+  const shim = () => path.join(fakeHome, 'jq-shim', 'jq')
+  const runShim = (args: string[], input?: string) =>
+    execFileSync(shim(), args, { input, encoding: 'utf8' })
+
+  it('P12a: with -Rnc the shim records the BYTE LENGTH of its stdin', () => {
+    runShim(['-Rnc', '{password: input}'], SECRET)
+    expect(fs.readFileSync(jqLenFile, 'utf8').trim()).toBe(String(Buffer.byteLength(SECRET)))
+  })
+
+  it('P12b: with -Rnc the shim forwards stdin to the real jq unchanged', () => {
+    // If this ever fails, the shim is corrupting the very request body it exists to measure.
+    expect(JSON.parse(runShim(['-Rnc', '{password: input}'], SECRET)).password).toBe(SECRET)
+  })
+
+  it('P12c: without -Rnc the shim execs through, taking no stdin (a file-arg call must not hang)', () => {
+    const f = path.join(fakeHome, 'p12c.json')
+    fs.writeFileSync(f, '{"a":1}')
+    expect(runShim(['-r', '.a', f]).trim()).toBe('1')
+  })
+
+  it('P12d: without -Rnc the shim records nothing — only the gate\'s own call is measured', () => {
+    const f = path.join(fakeHome, 'p12d.json')
+    fs.writeFileSync(f, '{"a":1}')
+    runShim(['-r', '.a', f])
+    expect(fs.existsSync(jqLenFile)).toBe(false)
+  })
+
+  // THE POSITIVE CONTROL, and the only one of P12 that is not vacuous on its own. P12a-d
+  // drive the shim DIRECTLY; every one of them passes with the shim absent from the child's
+  // PATH entirely, in which case `jqStdinNote` prints "NOT RECORDED" forever and reads
+  // exactly like a run in which nothing was lost. This asserts the shim is really in the
+  // path the GATE takes — a real pty, a real `read`, the real `jq -Rnc` at common.sh:761.
+  it('P12e: a real gate run goes THROUGH the shim — exactly one -Rnc call is recorded', async () => {
+    await runAtTerminal(['delete', TEAM_ID], SECRET)
+    const lens = fs.readFileSync(jqLenFile, 'utf8').split('\n').filter((l) => l.trim() !== '')
+    expect(lens, jqStdinNote(SECRET.length)).toHaveLength(1)
+  })
+
   it('P1: a wrong password is refused by the exchange, mints no token, and the strict verb sends nothing', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], SECRET)
     expect(r.code).not.toBe(0)
@@ -304,7 +422,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(leaks).toEqual([])
     expect(r.out).not.toContain(SECRET)
     // The secret DID travel: it reached the server in the request body (stdin → curl -d @-).
-    expect(seen[0].body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)
+    expect(seen[0].body, diagnose(SECRET, seen[0]?.body)).toContain(SECRET)
   })
 
   // P4/P5 drive the gate FUNCTION directly in a pty so the tty state AFTER it returns can be
@@ -312,7 +430,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   function runGate(prelude: string, epilogue: string): Promise<string> {
     return new Promise((resolve) => {
       const p = ptySpawn('bash', ['-c', `${prelude}; source scripts/shell-helpers/common.sh; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; ${epilogue}`], {
-        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
       })
       let out = ''
       let typed = false
@@ -359,7 +477,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   function runGateCtrlC(prelude: string, copy = COPIES[0]): Promise<{ code: number; signal: number | undefined; out: string }> {
     return new Promise((resolve) => {
       const p = ptySpawn('bash', ['-c', `${prelude}; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
-        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
       })
       let out = ''
       let sent = false
@@ -387,7 +505,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // output (echo re-disabled after the re-raise) and the final flag must be `echo`.
     const out = await new Promise<string>((resolve) => {
       const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?; stty -a </dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"`], {
-        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
       })
       let o = ''
       let sent = false
@@ -409,7 +527,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
     expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
-    expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnose(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
   })
 
   // P9/P10 — the two caller shapes the FIRST cut of _maestro_sudo_on_int leaked on, found by
@@ -422,7 +540,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // resumes, and a handler that re-raised here left echo ON — the password on screen.
     const out = await new Promise<string>((resolve) => {
       const p = ptySpawn('bash', ['-c', `trap '' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
-        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
       })
       let o = ''
       let sent = false
@@ -434,7 +552,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // caller's trap body is empty by construction), so the echo guarantee IS first here.
     expect(out, timeoutContext(out, seen.length)).not.toContain(SECRET) // typed after the ^C, still not echoed
     expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/) // the gate ran to its refusal, ^C ignored as asked
-    expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnose(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
   for (const copy of COPIES) it(`P10 [${copy}]: a prior trap ending in \`return\` does not skip the re-disable`, async () => {
@@ -443,7 +561,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     // re-disable is a RETURN trap and not a trailing line.
     const out = await new Promise<string>((resolve) => {
       const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT; return' INT; source ${copy}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
-        cwd: REPO, env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', HOME: fakeHome, TERM: 'dumb' },
+        cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
       })
       let o = ''
       let sent = false

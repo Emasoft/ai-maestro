@@ -630,6 +630,55 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
   })
 
+  /**
+   * TRDD-601KG45D step 4 — the OFF-DIAGONAL CELL. All 7 truncations to date are in tests that
+   * hold BOTH knobs at (prior `^C`, blind 1200 ms write); the zero-truncation tests hold both at
+   * (no `^C`, polled write). No cell existed where the two differ, so "the blind-write path
+   * predicts the truncations" was a correlation over a design that could not separate write
+   * timing from the signal-resume — and the second of those is a PRODUCT bug in `common.sh`,
+   * not a harness artifact.
+   *
+   * This is the cell that can implicate the harness AFFIRMATIVELY: a blind timed write with NO
+   * signal anywhere near it. One truncation here proves blind writing alone suffices.
+   *
+   * THE COMPLEMENT CELL (`^C` + polled write) IS NOT CONSTRUCTIBLE, and finding that out is why
+   * it is absent rather than merely unwritten. `typeWhenNoEcho` is not a readiness check: it
+   * polls for `-echo`, which `common.sh` sets at :749 BEFORE `read` at :753, so the flag is
+   * already true when the poll starts and the loop breaks on its first iteration. Scheduled
+   * before the `^C` it would type ahead of the signal (a different cell entirely); scheduled at
+   * 1200 ms to match this one's delay it breaks immediately and reduces to P8 exactly. Either
+   * way it varies the delay, not the readiness, so it cannot hold timing fixed while removing
+   * the signal. That cell needs a real "is `read` blocked and consuming" probe, which nothing
+   * here has.
+   *
+   * ITERATES, because a null needs power. At the observed ~1.7% per typing, one typing per run
+   * over a 40-run batch expects ~0.7 events and a zero would mean nothing; 8 gives ~320 typings
+   * per batch, where a zero is a genuine result.
+   */
+  it('P13: no ^C anywhere — a blind timed write into an uninterrupted read, 8x', async () => {
+    const N = 8
+    for (let i = 0; i < N; i++) {
+      await new Promise<void>((resolve) => {
+        // Identical to P8 except for the ONE knob: no `\x03` is ever written. The prior INT
+        // trap is kept so the gate's own setup is byte-for-byte P8's — the only difference
+        // between the two cells must be the signal, not the shell around it.
+        const p = ptySpawn('bash', ['-c', `trap 'echo PRIOR-INT' INT; source ${COPIES[0]}; AIMAESTRO_API_BASE=${apiBase} maestro_sudo_ensure; echo RC=$?`], {
+          cwd: REPO, env: { NODE_ENV: 'test', PATH: shimPath, HOME: fakeHome, TERM: 'dumb' },
+        })
+        let o = ''
+        let sent = false
+        p.onData((d) => { o += d; if (!sent && o.includes('MAESTRO password')) { sent = true; setTimeout(() => p.write(SECRET + '\r'), 1200) } })
+        const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
+        p.onExit(() => { clearTimeout(killer); resolve() })
+      })
+    }
+    // The shim's record is per-test (it lives in this test's own fakeHome), so this is exactly
+    // the N lengths these N gate runs handed `jq -Rnc`. A short one is a truncation in a cell
+    // where no signal was ever delivered.
+    const full = String(Buffer.byteLength(SECRET))
+    expect(recordedLens(), jqStdinNote(SECRET.length)).toEqual(Array(N).fill(full))
+  }, 60_000)
+
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], GOOD)
     const calls = seen.map((s) => `${s.method} ${s.url}`)

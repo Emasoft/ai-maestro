@@ -69,20 +69,21 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
   })
 
   it('still refuses a changed column on a card whose CURRENT column is also mismatched', () => {
-    // WHAT THIS PINS — both directions MEASURED, because neither neuter alone answers it
-    // and my first two attempts at this comment each got it wrong in one direction.
+    // WHAT THIS PINS — both directions MEASURED against the CURRENT guard predicate
+    // `const columnChanged = resultColumn !== currentColumn`, because neither neuter
+    // alone answers it.
     //
-    //   REMOVE `!columnUnchanged` (exemption gone, guard back to its original form)
+    //   `columnChanged = true` (exemption gone — guard fires on every write)
     //     -> 1 red: only "does NOT lock an already-mismatched card". This test stays
-    //        GREEN, because `columnUnchanged` is false here either way.
-    //   WIDEN to `columnUnchanged = true` (exemption swallows every column write)
-    //     -> 2 red: the FIRST test in this file AND this one.
+    //        GREEN, because `resultColumn !== currentColumn` is true here either way.
+    //   `columnChanged = false` (exemption swallows every write — guard never fires)
+    //     -> 3 red: the FIRST test in this file, this one, AND "refuses a
+    //        zone-contradicting column reached through the v1 status fallback".
     //
-    // So this test is NOT decorative — an earlier version of this comment demoted it on
-    // the strength of the first neuter alone. It pins the exemption's NARROWNESS (a
-    // too-wide exemption reds it); what it does not pin is the exemption's EXISTENCE,
-    // which only the unchanged-re-write test above covers. Two mutations, two different
-    // properties; one run would have told me half the story and did.
+    // So this test is NOT decorative. It pins the exemption's NARROWNESS (a too-wide
+    // exemption reds it); what it does not pin is the exemption's EXISTENCE, which only
+    // the unchanged-re-write test above covers. Two mutations, two different properties;
+    // one run would have told me half the story.
     const r = validateTrddFieldEdits(
       { column: 'refused', updated: ISO },
       baseFm({ column: 'proposal' }),

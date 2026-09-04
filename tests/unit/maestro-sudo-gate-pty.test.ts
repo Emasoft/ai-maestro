@@ -176,12 +176,14 @@ export function diagnoseTyped(expected: string, received: string | undefined): s
  * all**, which is the signature of input being DISCARDED, not of a slow resume. Neither is
  * proof of a mechanism; it is the one bit the harness can cheaply carry out of a timeout.
  *
- * `echoed` rather than the raw tail on purpose: on the failure we care about, the typed
- * password may be in `out`, and a message is printed to a log. The boolean answers the same
- * question without putting a secret there — synthetic here, and the habit is what matters.
+ * NOT the raw `out` tail: on the failure we care about the typed password may be in it, and a
+ * message goes to a log. A `secret echoed:` BOOLEAN was tried and removed — it could only ever
+ * print `false`, because `expect(out).not.toContain(SECRET)` runs BEFORE this assertion in
+ * every one of these tests, so an echoed secret fails there and this message is never reached.
+ * A field whose only reachable value is one constant carries no information.
  */
-function timeoutContext(out: string, seenCount: number, secret: string): string {
-  return `requests=${seenCount} · out ${out.length}b · secret echoed: ${out.includes(secret)}`
+function timeoutContext(out: string, seenCount: number): string {
+  return `requests=${seenCount} · out ${out.length}b`
 }
 
 /** The password the server actually received, or undefined when there was no parseable body. */
@@ -253,6 +255,18 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(diagnoseTyped(S, 'abcxef')).toMatch(/^NOT-A-LOSS/)
     expect(diagnoseTyped(S, undefined)).toMatch(/^no password recovered/)
   })
+  it('P11h: the timeout context carries the request count — the one bit a timeout can export', () => {
+    // Added because `timeoutContext` shipped with NO test and NO neuter, in the file whose
+    // whole point is that an untested error path is not an instrument. Third instance of this
+    // card's founding defect, so it gets the same treatment as the other three helpers.
+    expect(timeoutContext('abc', 0)).toMatch(/^requests=0 /)
+    expect(timeoutContext('abc', 1)).toMatch(/^requests=1 /)
+    expect(timeoutContext('abcd', 0)).toContain('out 4b')
+    // It must NOT carry the secret: the tail was deliberately left out, and a regression that
+    // put it back would leak a live password into a log on a real gate's failure.
+    expect(timeoutContext(`x${SECRET}y`, 0)).not.toContain(SECRET)
+  })
+
   it('P11g: diagnoseBody tells "no request" apart from "unparseable body" — the truncation case', () => {
     expect(diagnoseBody(SECRET, undefined)).toMatch(/^no request reached the server/)
     // The failure class this instrument hunts: a body that arrived and would not parse must
@@ -376,11 +390,14 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
+    // RC FIRST, deliberately: "the run completed" must be asserted before anything about what
+    // it contains, or a TIMEOUT fails on some content assertion above and the timeout context
+    // never prints. Putting it third (its original place, kept through one revision of this
+    // comment) meant `PRIOR-INT` was checked first — and if the handler is what failed to
+    // complete, PRIOR-INT is absent, so the masking simply moved one assertion earlier.
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/)
     expect(out).toMatch(/PRIOR-INT/)
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
-    // The message carries the timeout discriminator: this is the assertion a timeout fails
-    // on (no RC= after a SIGKILL), so it is the only place the request count can escape.
-    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET) // and it WAS the password the gate sent
   })
@@ -403,8 +420,8 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/) // RC first — see P8 on why
     expect(out).not.toContain(SECRET)        // the whole point: typed after the ^C, still not echoed
-    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/) // the gate ran to its refusal, ^C ignored as asked
     expect(seen[0]?.body, diagnoseBody(SECRET, seen[0]?.body)).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
@@ -422,9 +439,9 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
       const killer = setTimeout(() => p.kill('SIGKILL'), 25_000)
       p.onExit(() => { clearTimeout(killer); resolve(o.replace(/\r/g, '')) })
     })
+    expect(out, timeoutContext(out, seen.length)).toMatch(/RC=1/) // RC first — see P8 on why
     expect(out).toMatch(/PRIOR-INT/)
     expect(out).not.toContain(SECRET)
-    expect(out, timeoutContext(out, seen.length, SECRET)).toMatch(/RC=1/)
   })
 
   it('P3: positive control — a correct password mints a token and the strict request carries it', async () => {

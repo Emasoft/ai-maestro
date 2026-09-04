@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:39:03+0200
+updated: 2026-09-04T22:42:13+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -34,9 +34,16 @@ labels: [flaky-test, pty, sudo-gate]
 
 **WHAT IS MEASURED — this is the headline, and every mechanism story on this card has died.**
 
-- **Two distinct failure modes.** Truncations: 2 observed (the batch-A P9, and `P8
-  [common.sh]` in run 23 today). Timeouts: 3 observed. Earlier revisions pooled them.
-- **The truncation position is TAIL, 1 char**, measured by a validated classifier, twice.
+- **Two distinct failure modes.** Truncations: **3 observed** — the batch-A P9, `P8
+  [common.sh]` in run 23, and `P8 [agent-helper.sh]` on an incidental run at 22:41. Timeouts:
+  3 observed. Earlier revisions pooled the two modes.
+- **The truncation position is TAIL, 1 char, three for three**, measured by a validated
+  classifier on the last two. **Both COPIES exhibit it** (`common.sh` and `agent-helper.sh`),
+  so it is not copy-specific — the two files are verified-identical, so this is a consistency
+  check that passed rather than a surprise.
+- **The CURRENT wiring is now validated end-to-end.** `diagnoseBody` (not just `fc3b6f76`'s
+  `diagnoseTyped`+`pwOf`) produced the 22:41 diagnosis on a real loss, closing the gap this
+  block flagged an hour ago.
 - **Rate:** 1 truncation in 24 consecutive runs, single-arm, P0 absent, idle machine. Read
   §Step 2 before quoting it — it is per-RUN, the denominator moved this session, and box 1's
   tick was taken and withdrawn.
@@ -90,11 +97,29 @@ not fire.** Both halves were wrong:
   session that split P11 to fix exactly this and wrote the lesson into
   `lessons-verification.md`.
 
-**Fixed in code rather than retracted into nothing:** `timeoutContext(out, seen.length,
-SECRET)` is now the message on the `RC=1` assertion in all three ^C tests — the assertion a
-timeout actually fails on. It reports `requests=N`, the length of `out`, and whether the
-secret was echoed as a BOOLEAN (never the tail: on the failure we care about the password may
-be in `out`, and a message goes to a log — synthetic here, but the habit is the point).
+**Fixed in code, then fixed AGAIN when the first fix turned out to mask the same way.**
+`timeoutContext(out, seen.length)` is the message on the `RC=1` assertion, and that assertion
+is now **FIRST** in P8/P9/P10. Placing it third (its original position) left
+`expect(out).toMatch(/PRIOR-INT/)` ahead of it in P8 and P10 — and if a timeout's cause is the
+handler failing to complete, `PRIOR-INT` is absent, so that assertion fails first and the
+context never prints. **The masking had moved one assertion earlier, not gone.** Asserting
+"the run completed" before anything about what it contains is the general form of the fix.
+
+A `secret echoed:` boolean was tried and REMOVED: `expect(out).not.toContain(SECRET)` ran
+before it at every call site, so an echoed secret failed there and the boolean could only ever
+print `false` — a field with one reachable value, sold in a commit message as a deliberate
+security-conscious design. The tail is still deliberately omitted (a real gate's failure would
+put a live password in a log).
+
+**`requests=0` spans TWO causes, and the message alone cannot separate them:** `read` never
+returned (the timeout case), or `read` returned EMPTY — the gate's `[ -z "$_pw" ]` fail-closed
+branch returns before `jq`/`curl`, printing `Error: empty password` and `RC=1`, which is not a
+timeout at all. A flush that discarded the queued characters and then let the `\r` through
+produces exactly the second. Check `out` for the fail-closed error before reading `requests=0`
+as a stranded read.
+
+**`timeoutContext` is pinned by P11h** — it shipped with no test and no neuter, in the file
+whose founding finding is that an untested error path is not an instrument. Third instance.
 
 **WHAT MUST BE KEPT NEXT TIME A TIMEOUT FIRES: the full run log.** No log from batches A or C
 survives, so nobody can now check what those three timeouts looked like — `out`, RC, or

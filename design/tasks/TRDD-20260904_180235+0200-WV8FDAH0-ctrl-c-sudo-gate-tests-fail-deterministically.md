@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T20:34:38+0200
+updated: 2026-09-04T21:00:15+0200
 current-owner: user
 created-by: ai-maestro-hub-session
 assignee: claude-opus-session
@@ -74,7 +74,14 @@ keyed on the trap having an INLINE body, a shape the fix necessarily breaks. The
 unchanged and is now pinned *more* tightly: the order INSIDE the handler, which is the
 property that actually regressed and which the old regex could not express.
 
-**NEXT ACTION.** None. Card closed.
+**CAVEAT ON THE PIN — TRDD-601KG45D.** P6/P8/P9/P10 are the only behavioural pin on this
+fix, and that file fails intermittently at roughly **1 run in 8** (measured over 27 runs in
+three batches). So a real regression here would currently read as "the flaky one again".
+One failure showed the gate POSTing the password *minus its last character*, which may be
+tty input loss around the handler's `stty` — if so that is a user-facing bug, not a test
+problem. Filed separately; do not treat the pin as reliable until it closes.
+
+**NEXT ACTION.** None on this card. Its pin's reliability is 601KG45D.
 
 ## Problem
 

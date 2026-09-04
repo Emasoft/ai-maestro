@@ -94,19 +94,16 @@ vi.mock('@/services/creation-helper-service', async (orig) => {
   return { ...actual, ...svc }
 })
 
-// `clear-banner` reaches NO service — it shells out to tmux directly. An earlier draft of this
-// file mocked a `clearBanner` service export that the route never calls, so the mock matched
-// nothing, the real execFile ran, tmux failed in the test env, and the owner path 500'd. The
-// weak `not.toBe(403)` control passed straight over it; strengthening the control to `< 400` is
-// what surfaced it.
-vi.mock('child_process', async (orig) => {
-  const actual = await orig<typeof import('child_process')>()
-  return {
-    ...actual,
-    execFile: (_f: string, _a: string[], cb: (e: unknown, o: unknown, s: unknown) => void) =>
-      cb(null, { stdout: '', stderr: '' }, undefined),
-  }
-})
+// `clear-banner` is NOT in ROUTES below. It reaches no service — it shells out to tmux — so its
+// owner path 500s in this environment, and the only way to give it a positive control here was a
+// module-scope `child_process` mock. MEASURED 2026-09-04: that mock's blast radius is TWO routes,
+// not one — `cleanup/route.ts:49` also calls `execFileAsync('tmux', ['kill-session', …])`. So the
+// mock silenced the most common failure mode of a route in this very loop, directly underneath the
+// assertion that had just been strengthened to catch exactly that kind of blindness. Removed.
+// `clear-banner` now lives in tests/unit/clear-banner-system-owner.test.ts, where the mock is
+// scoped to the one route that needs it. Verified by removing the mock and re-running: only
+// clear-banner 500s; `cleanup` passes unmocked, so the mock bought it nothing and cost it a
+// failure mode.
 
 const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitle: 'member', teamId: null }
 const MANAGER = { agentId: 'cccccccc-3333-4333-8333-cccccccccccc', governanceTitle: 'manager', teamId: null }
@@ -115,7 +112,6 @@ const OWNER = { agentId: undefined, governanceTitle: undefined, teamId: null }
 /** route dir -> [http method to import, a request the route would otherwise act on] */
 const ROUTES: { dir: string; method: 'POST' | 'GET'; url: string; body?: unknown }[] = [
   { dir: 'cleanup', method: 'POST', url: 'http://localhost/api/agents/creation-helper/cleanup', body: {} },
-  { dir: 'clear-banner', method: 'POST', url: 'http://localhost/api/agents/creation-helper/clear-banner', body: {} },
   { dir: 'heartbeat', method: 'POST', url: 'http://localhost/api/agents/creation-helper/heartbeat', body: {} },
   { dir: 'ensure-persona', method: 'POST', url: 'http://localhost/api/agents/creation-helper/ensure-persona', body: {} },
   // file-picker exports POST, not GET — measured, after a GET assumption produced

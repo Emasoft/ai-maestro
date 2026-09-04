@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:05:12+0200
+updated: 2026-09-04T21:10:30+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -31,11 +31,11 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## Problem
 
-`tests/unit/maestro-sudo-gate-pty.test.ts` has failed intermittently — 4 failures in 27 runs,
-and not always the same test. **Read that rate as conditional, not as the file's baseline**:
-every one of those 27 runs carried a version of the since-deleted P0, and 14 P0-free runs
-have been clean. The intermittency is real and was observed; what it depends on is open, and
-that is step 0. This matters more than an ordinary flake because P6, P8,
+`tests/unit/maestro-sudo-gate-pty.test.ts` has failed intermittently — 4 failures in 35 runs,
+and not always the same test. **Read that rate as conditional, not as the file's baseline.**
+Split by whether the since-deleted P0 was present, it is **4 / 21 with** and **0 / 14
+without**. The intermittency is real and was observed; what it depends on is open, and that
+is step 0. This matters more than an ordinary flake because P6, P8,
 P9 and P10 in that file are the *only* behavioural pin on TRDD-WV8FDAH0's fix — the one that
 stops a ^C at the password prompt leaving the terminal echo-off or putting the typed password
 on screen. **An unreliable pin on a security fix is close to no pin**: a real regression would
@@ -43,15 +43,25 @@ read as "the flaky one again".
 
 ## Evidence — measured 2026-09-04, four batches
 
-| batch | condition | failures / runs | which |
-|---|---|---|---|
-| A | with a pty-based P0 present | 3 / 13 | P8 ×2, P9 ×1 |
-| B | that P0 skipped | 0 / 6 | — |
-| C | with the final, non-pty P0 | 1 / 8 | P8 ×1 |
-| D | P0 fully removed | 0 / 8 | — |
+| batch | P0? | condition | failures / runs | which |
+|---|---|---|---|---|
+| A | present | pty-based P0 | 3 / 13 | P8 ×2, P9 ×1 |
+| B | **absent** | that P0 `it.skip`ped | 0 / 6 | — |
+| C | present | the final, non-pty P0 | 1 / 8 | P8 ×1 |
+| D | **absent** | P0 fully removed | 0 / 8 | — |
 
-The order matters, because each batch overturned the reading of the one before, and two of
-those readings were nearly committed as fact:
+**with P0: 4 / 21 · without P0: 0 / 14.**
+
+Batch B counts as P0-ABSENT, and an earlier version of this card had it the other way round.
+`it.skip` does not merely stop the assertion — **a skipped test's `beforeEach` does not run
+either**, so B's runs carried no extra HTTP `listen(0)`, no `mkdtemp`, and no pty. Measured
+with a throwaway probe rather than assumed: a describe with one skipped and one real test
+saw the hook fire **once**, not twice. The wrong reading made the P0 hypothesis look weaker
+than the data supports, by moving 6 clean runs onto the wrong side of the split.
+
+The order matters, because three of the four batches overturned the reading of the one
+before, and two of those readings were nearly committed as fact (A was the first data and
+overturned nothing):
 
 - After **B**, I believed the extra pty allocation caused it.
 - **C** appeared to refute that — the flake survived with no extra pty — so I called B's
@@ -59,29 +69,42 @@ those readings were nearly committed as fact:
 - **D** undercuts that in turn: C's P0 still ran `beforeEach`, so C was never a clean
   P0-free condition, and with P0 fully gone the file is 0/8.
 
-So neither "P0 causes it" nor "it pre-dates P0" is established. What every reading shared
-was treating a clean batch of 6-8 as evidence of absence, which at a 1-in-8 rate it is not.
+- Re-classifying **B** as P0-absent then moved 6 clean runs across the split, which is what
+  produced the numbers in the table above.
 
-**What is NOT established: that the flake pre-dates P0.** An earlier draft of this card said
-"pre-existing" in its own headline. Every observed failure had *some* version of P0 present,
-and the only P0-free evidence is batch B's `0/6` — which at a 1-in-8 rate comes up clean by
-luck about **45%** of the time. The honest statement is: *never observed without some P0
-present, and 0/6 cannot distinguish that from chance.* Batch C's P0 also ran `beforeEach`
-(an HTTP `listen(0)` plus a `mkdtemp`) before the first pty test, so even "no extra pty"
-did not restore batch B's baseline. **Step 0 is therefore to re-measure with P0 fully
-absent, at n ≥ 24, and settle it.**
+What every one of those readings shared was treating a clean batch of 6-8 as evidence of
+absence. It is not: even at the corrected 19%, six clean runs happen 28% of the time.
 
-Nothing here establishes a rate to more than an order of magnitude. All four batches are
-small, and batch A additionally ran while a background agent was live, so load is confounded
-with the P0 variable in exactly the batch that looked most significant.
+**Two confounders that survive all of this.** Batch A ran while a background agent was live,
+so machine load is confounded with the P0 variable in exactly the batch that carries most of
+the failures. And C's P0, though it allocated no pty, still ran `beforeEach` — an HTTP
+`listen(0)` plus a `mkdtemp` — so "no extra pty" was never the same condition as "no P0".
+**Step 0 therefore re-measures with P0 absent, on a quiet machine, at n >= 24.**
 
-P0 itself has since been REMOVED (it was vacuous — see the note in the test file). Batch D
-is the first data with it fully absent: **0 / 8**. Combined with batch B that is **0 / 14
-P0-free** against **4 / 27 with some P0** — suggestive, still not decisive (0/14 comes up
-clean by luck ~15% of the time at 1-in-8), which is why step 0 asks for n >= 24 rather
-than declaring it settled here. Note what this would mean if it holds: the flake is not
-pre-existing at all, and *adding almost anything* to this file destabilises it — which is a
-statement about the harness's margins, not about P0.
+**Where that leaves it: leaning toward P0-active mattering, at about p = 0.05, not settled.**
+With P0 active the rate is 4/21 ≈ **19%**, and at that rate a clean 14-run P0-free stretch
+comes up by luck only **5.2%** of the time. An earlier version of this card said "neither
+hypothesis is established", which was the right instinct applied to the wrong denominator —
+once B moves to the correct side of the split, the data leans one way and saying otherwise
+is over-caution, which is its own kind of wrong. Step 0's n >= 24 stands regardless.
+
+Note what it would mean if it holds: the flake is not pre-existing, and *adding almost
+anything* to this file destabilises it — a statement about the harness's margins rather
+than about P0.
+
+## A separate gap this turned up: nothing executes the shebang
+
+The deleted P0 asked "does the harness's bash match the scripts' `#!/usr/bin/env bash`?"
+That question was **confused from the start**, and noticing why is worth more than the test
+was. The pty tests run `bash -c '… source <copy>; maestro_sudo_ensure …'` — they **source**
+the scripts into an already-running bash (5 such sites) and **never execute the shebang at
+all**. So no test in this file ever depended on the answer.
+
+But production *does* invoke these scripts through that shebang, and **no test exercises
+that path** — `scripts/agent-helper.sh` carries the line and nothing runs it as a program.
+That is a real, previously unstated gap. It is NOT this card's job: it belongs in its own
+file, where an extra pty costs nothing, and it should execute the script directly rather
+than sourcing it. Recorded here because this is where it surfaced.
 
 ## The clue worth chasing first
 
@@ -126,11 +149,11 @@ Investigate in this order, and do not skip to the third:
 
 ## Verification
 
-- The file passes **30 consecutive runs**. The number is not arbitrary: at the observed
-  ~1-in-8 rate, 30 clean runs happen by luck about **1.8%** of the time (`(7/8)^30`), so it
-  is the point where "clean" stops being cheap. A single green run proves nothing here, and
-  10 would still come up clean ~26% of the time — do not trim this without redoing that
-  arithmetic against whatever rate step 0 measures.
+- The file passes **30 consecutive runs**. The number is not arbitrary — it is where "clean"
+  stops being cheap across the plausible range of the underlying rate: 30 clean runs happen
+  by luck **0.2%** of the time at the P0-active rate (4/21) and **2.6%** at the pooled rate
+  (4/35). Ten runs would come up clean 12-30% of the time, i.e. prove almost nothing. Do not
+  trim this without redoing the arithmetic against whatever rate step 0 measures.
 - If step 1 finds real input loss, that becomes its own fix with its own pty test, and this
   card cites it.
 

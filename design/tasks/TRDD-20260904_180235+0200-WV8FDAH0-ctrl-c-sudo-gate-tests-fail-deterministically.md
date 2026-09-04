@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T21:07:00+0200
+updated: 2026-09-04T21:10:30+0200
 current-owner: user
 created-by: ai-maestro-hub-session
 assignee: claude-opus-session
@@ -75,10 +75,11 @@ unchanged and is now pinned *more* tightly: the order INSIDE the handler, which 
 property that actually regressed and which the old regex could not express.
 
 **CAVEAT ON THE PIN — TRDD-601KG45D.** P6/P8/P9/P10 are the only behavioural pin on this
-fix, and that file has failed intermittently — 4 failures in 27 runs. Treat that rate as
-CONDITIONAL: all 27 carried a since-deleted test, and 14 runs without it were clean, so
-whether the file is flaky as it now stands is open (step 0 on that card). A real regression
-here could still read as "the flaky one again".
+fix, and that file has failed intermittently — 4 failures in 35 runs. Treat that rate as
+CONDITIONAL: split by whether a since-deleted test was present it is **4/21 with** and
+**0/14 without**, which leans toward that test having caused it (p ≈ 0.05) but does not
+settle it. Whether the file is flaky as it now stands is open — step 0 on that card. A real
+regression here could still read as "the flaky one again".
 One failure showed the gate POSTing the password *minus its last character*, which may be
 tty input loss around the handler's `stty` — if so that is a user-facing bug, not a test
 problem. Filed separately; do not treat the pin as reliable until it closes.

@@ -170,14 +170,17 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   }
 
   // A "P0" asserting that this harness's bash matches the scripts' `#!/usr/bin/env bash`
-  // was added and then REMOVED — recorded here because the removal is the finding, and
-  // because the idea will occur to the next reader too. Both spellings failed, in opposite
-  // ways. Driven through ptySpawn it measured the right thing and perturbed the file
-  // (P8/P9 failing intermittently). Driven through execFileSync it perturbed nothing and
-  // measured NOTHING: `bash` and `/usr/bin/env bash` are ONE lookup — env is an execvp
-  // wrapper walking the same PATH — so the assertion was `x === x` and passed even with a
-  // fake `bash` planted first on PATH (measured). A test that cannot fail is worse than no
-  // test, so the version fact lives in TRDD-601KG45D as a dated measurement instead.
+  // was added and then REMOVED — recorded because the removal is the finding, and because
+  // the idea will occur to the next reader too. Its QUESTION was confused: these tests
+  // `source` the scripts into an already-running bash and never execute the shebang, so
+  // nothing here ever depended on the answer. (Production DOES invoke them through it, and
+  // no test covers that — a real gap, but one for a separate file; see TRDD-601KG45D.)
+  // Both spellings failed anyway, in opposite ways. Through ptySpawn it perturbed the file
+  // (P8/P9 then failed intermittently). Through execFileSync it perturbed nothing and
+  // measured nothing: libuv sets the child's environ from the `env` option before execvp,
+  // and `/usr/bin/env` is itself an execvp wrapper, so both operands walk the identical
+  // PATH and the assertion was `x === x`. A fake `bash` planted first on PATH satisfied it
+  // (measured) — corroboration, though the mechanism above is the actual proof.
   it('P4: after a REFUSED exchange (the return-1 path) the tty has echo back on', async () => {
     const out = await runGate('true', 'stty -a < /dev/tty | tr -s " " "\\n" | grep -E "^-?echo$"')
     expect(out).toMatch(/RC=1/)

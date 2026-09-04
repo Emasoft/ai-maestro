@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:51:31+0200
+updated: 2026-09-04T22:53:48+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -149,13 +149,14 @@ these; they are the loop's output, and fixing them is what the note forbids.**
    carrying `requests=1 · out 847b`, which is irrelevant to it and is the first thing the
    reader sees. The same trade as the reorder in a quieter form: instrument convenience paid
    for out of the assertion that carries the meaning.
-3. **P11g is not testing what its name says, and the split is incomplete there.** It is
-   *"diagnoseBody tells 'no request' apart from 'unparseable body'"*, and it also asserts
-   `/^TAIL loss/` on a short-value body — a second TAIL-classification test duplicating P11b.
-   That is why neuter A reddens THREE tests (P11b, P11c, P11g): a mutation reaching three
-   tests means those three share a branch. P11g should assert DISPATCH (no-request vs
-   unparseable vs delegates-to-`diagnoseTyped`), not re-assert the TAIL string. The
-   three-test attribution was measured correctly and then read as reassurance.
+3. **P11g BUNDLES dispatch and delegation, so the split is incomplete there.** It asserts the
+   no-request/unparseable DISPATCH *and* `/^TAIL loss/` on a short-value body, which is why
+   neuter A (a `diagnoseTyped` mutation) reaches it — a mutation reddening three tests means
+   those three share a branch. Split the delegation assertion out, or accept that P11g is two
+   tests. **An earlier version of this entry said P11g "is not testing what its name says",
+   taken from a review rather than checked: the name ends "— the truncation case", which does
+   cover the TAIL assertion.** The defect is bundling, not mislabelling. The three-test
+   attribution was measured correctly and then read as reassurance rather than as this.
 
 **"Both copies exhibit it" is nearly a tautology and is recorded as weak.** The two files are
 verified-identical, so the only thing the copy split can rule out is per-copy state — load
@@ -189,11 +190,14 @@ Pinned by **P11a-j, one `it()` per branch; 11 neuters, all 10 tests redden.** Pr
 because "all 11 hold against the current file" was asserted once and is only two-thirds
 measured: **A and B were RE-RUN** after the split (A reds P11b+P11c+P11g, B reds P11d) — their
 earlier attributions had been carried across a refactor that moved the test boundaries they
-depend on. **C-H were run against the P11a-g arrangement and are NOT re-run**; they still hold
-DEDUCTIVELY, because neither the function each mutates nor the test each reddens has changed
-since (P11h-j are additions, and the P8/P9/P10 message attachments touch no classifier code).
-That is an argument, not a measurement, and it is labelled as one — re-running six neuters to
-confirm what follows from "nothing they touch changed" is the over-work the stop note forbids.
+depend on. **C-H were run against the P11a-g arrangement and are NOT re-run**; they hold because neither
+the function each mutates nor the test each reddens has changed since. **That premise was
+labelled "an argument, not a measurement" and has now been CHECKED** — `git log -S` shows
+P11a-g's bodies last changed in `1a2a1b2c`, the commit that created them and against which
+these neuters ran; the two later commits whose diffs mention `P11g` touch it only as a context
+line (`5aab3a19` inserts P11h above it) or only in the commit message (`bb0e23c2`). The
+classifier functions are likewise untouched since. So the deduction's premise is verified, and
+re-running the six would confirm what the history already shows.
 
 What they pin, in three categories — the two-way split published earlier over-claimed, then
 the correction under-claimed:
@@ -208,6 +212,15 @@ the correction under-claimed:
 revisions of the instrument against ONE 24-run experiment; the diagnostic ceiling is reached
 (position is TAIL three-for-three, and no further message refinement separates hypothesis 2
 from the shell-side remnant).
+
+**`implementation-commits` IS COMPLETE — six entries, and code commits have stopped.** An
+earlier note called the field "one behind by construction, a commit's SHA cannot be written
+into itself"; the first half is true and the second made it sound permanent. The lag is one
+commit *while code commits continue* and it CLOSES when they stop, which a following card-only
+commit does — and has. **`431e13b6` also touched the test file and is deliberately excluded:**
+it added a comment only, and this field is the backtracking chain from a later bug to the
+change that could have introduced it. (A review reported six-for-six and missed `431e13b6`
+entirely; the exclusion is a decision, not an oversight, which is why it is written down.)
 
 **THE CLOSING CONDITION, on its second attempt, because the first was unfalsifiable.** From
 here, **instrument findings are RECORDED on this card, not fixed**, until the shim exists.

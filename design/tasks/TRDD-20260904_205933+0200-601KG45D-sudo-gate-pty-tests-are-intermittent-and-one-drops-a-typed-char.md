@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T00:40:52+0200
+updated: 2026-09-05T00:45:56+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -103,7 +103,10 @@ noted only so the next reader does not re-derive the broken version.
 
 ## ⏵ THE CAUSAL READING OF THE TYPING CORRELATION IS UNSUPPORTED — and one arm is a PRODUCT BUG
 
-**The correlation is statistically real; my attribution of it was not.** I wrote that it is
+**The correlation is SUGGESTIVE, not statistically real — `p ≈ 0.07` once the denominator counts
+DETECTION rather than exposure (see the detection table below); "statistically real" was written
+against `p ≈ 0.03` on an exposure count that included four polling typings which cannot see a
+truncation at all. And my attribution of it was never supported either.** I wrote that it is
 "evidence for H5 (harness artifact)". It is evidence for a **DISJUNCTION**, and at least one
 member is gate-side. **THREE variables are perfectly collinear across all 11 events** — there is
 no cell in the design where any two differ:
@@ -135,20 +138,45 @@ constructible.**
   removing the signal. **That cell needs a real "is `read` blocked and consuming" probe, which
   nothing here has**, and inventing one is its own task.
 - **no `^C` + fixed 1200 ms** — truncations appear ⇒ blind writing alone suffices ⇒ harness.
-  **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power. **The rate to use here
-  is the FIXED-ARM 1.67% (8/480), NOT the pooled 0.91%** — power is computed against the
-  ALTERNATIVE, and P13's alternative is "blind writing alone suffices", i.e. P13 behaves like the
-  fixed arm. The pooled rate is the null for the CORRELATION test, a different question.
-  P(0 events in 320 typings) is **0.46% at 1.67%** — decisive — against **5.4% at 0.91%**, which
-  is merely marginal. An earlier version of this line used the pooled rate and asserted "a real
-  result either way" on the strength of it; the conclusion was right and the number under it did
-  not support it. Worse, `c6f8252e`'s own commit message had the correct 1.67% and this card
-  overwrote it — a correction that moved the number the wrong way.
-  At 1 typing/run over 40 runs the expectation is ~0.7 events, so a zero would mean nothing;
-  8 iterations is what buys the result. Costs ~12 s per run.
+  **BUILT as P13** (`c6f8252e`), 8 iterations per run so a null has power, and all 8 DETECT (it
+  asserts every length). **Power is computed against the ALTERNATIVE, so the rate is the fixed
+  arm's DETECTING rate — 2.5% (8/320), not the pooled 0.91% an earlier version used, and not the
+  1.67% that superseded it.** P(0 events in 320 typings) ≈ **0.03%**. The same denominator
+  correction that WEAKENED the correlation above STRENGTHENS this experiment; the two moves are
+  independent and the pleasant one must not be allowed to carry the unpleasant one.
 
-**TWO CORRECTIONS OWED TO P13's COMMENT, deferred to after the running batch** — they are
-comment-only and changing the file mid-batch would split the artifact the batch measures:
+  **BUT THE ALTERNATIVE IS A CONTINUUM, NOT A BINARY, and a zero here does not license the
+  conclusion it looks like it licenses:**
+
+  | if blind writing… | P13's rate | P(0 in 320) |
+  |---|---|---|
+  | fully suffices | 2.5% | **0.03%** — decisive |
+  | contributes PARTIALLY (say 0.5%) | 0.5% | **~20%** — a zero says nothing |
+  | is not involved (interaction required) | ≈ 0 | a zero confirms |
+
+  So a zero rules out *"blind writing reproduces the fixed-arm rate"* and **does NOT** rule out
+  *"blind writing contributes a smaller amount"*. And `P(0 | H_A) = 0.03%` is **not** "99.97%
+  sure of the interaction" — that slide from likelihood to posterior is the one sentence this
+  block exists to forbid.
+
+  Costs ~12 s per run.
+
+  **INDEPENDENCE IS THE ASSUMPTION DOING THE MOST WORK, and the evidence is now MIXED.** Poisson
+  P(0) assumes 8 back-to-back gate runs in one process, one test, ~12 s, one machine are
+  independent draws; under perfect within-test clustering the same marginal gives P(0) ≈ 36% —
+  three orders of magnitude from 0.03%. Measured over the two clean 40-run batches: **8 events in
+  8 DISTINCT runs, zero doubletons**, which supports independence. **Against it: the live batch's
+  run-010 is the first doubleton** — P8 AND P9 truncating in the same run, both TAIL-1, both
+  `stdin: 39`. One doubleton is not a refutation, but it is the first direct evidence of temporal
+  correlation on this card and it must be weighed before any P13 number is quoted as decisive.
+
+**TWO CORRECTIONS OWED TO P13's COMMENT, deferred to after the running batch. THE DEFERRAL IS
+RIGHT AND MY FIRST REASON FOR IT WAS NOT.** I wrote that a mid-batch edit "would split the
+artifact the batch measures" — false for COMMENT-ONLY changes, which have no runtime effect and
+change nothing any run measures. That is the plausible-mechanical-claim-nobody-checked pattern
+this card exists to catch, applied to my own reasoning. The defensible reason is OPERATIONAL:
+editing a file vitest may re-read or re-transform mid-run risks a transform race for the run in
+flight, and it makes "the batch ran tree-state X" untrue. Same decision, honest reason.
 
 - **"byte-for-byte P8 except the ONE knob" is FALSE as written.** P8's prelude ends
   `…; echo RC=$?; stty -a </dev/tty | tr -s " " "\n" | grep -E "^-?echo$"` (`:556`); P13's ends
@@ -187,31 +215,48 @@ It also only polls for `-echo`, which the gate sets at `:749` BEFORE `read` at `
 the success path proves "echo is off", not "`read` is blocked and consuming". Log which path
 each write took before trusting 7-vs-0.
 
-**The exposure asymmetry runs the OTHER way and the signal survives it:** per run the polling
-group gets **6** typings to the fixed group's 6 — a DEAD HEAT, not the deficit this paragraph
-claimed twice. Counted from the call sites, not from memory: every polling typing goes through
-`runAtTerminal` (`:215`) or `runGate` (`:479`), and their callers are `:435` (**P12e**), `:453`
-(P1), `:461` (P2), `:506` (P4), `:513` (P5), `:683` (P3). **P12e was the omission** — it drives
-the real gate with `SECRET` on every run, which this card knows elsewhere (it asserts the VALUE),
-and it was never counted. Fixed group: P8/P9/P10 × 2 COPIES = 6.
+**EVERY DENOMINATOR ON THIS CARD COUNTED EXPOSURE WHERE THE p-VALUE NEEDS DETECTION — and that
+inverts the result. `p ≈ 0.07`, not `0.018`.** Corrected 2026-09-05 after review; verified by
+reading each test's assertions, not by counting call sites. A typing is only in the denominator
+if a 1-byte loss would MAKE ITS TEST FAIL. Most cannot:
 
-**RECOMPUTED 2026-09-05 over BOTH shim batches — the earlier version of this paragraph was
-arithmetic from before batch 2 and I edited the block above it without touching it.** Countable
-denominator = the 80 runs with full logs (batch 1 at 22 chars, batch 2 at 40): **480** polling
-typings with **zero** events vs 480 with **8**. Pooled rate 8/960 ≈ 0.83%, so the polling arm
-expects ~4.0; observing 0 is **p ≈ 0.018**. (Was stated as ~400 / 0.91% / p ≈ 0.026 on the
-5-per-run count — the omission made the card CONSERVATIVE, so fixing it strengthens the
-correlation rather than weakening it.) The 3 pre-shim truncations are ALSO in the fixed arm —
-making the raw count **11-vs-0** — but they have no countable denominator (different suite
-composition, per-run typing counts never recorded), so they are excluded from the statistic
-rather than folded in with a guessed exposure. The correlation is real; only its CAUSE is
-unlocated.
+| test | arm | detects a 1-byte loss? | why |
+|---|---|---|---|
+| P12e `:435` | polling | **YES** | asserts the recorded length directly |
+| P3 `:683` | polling | **YES** | truncated `GOOD` ⇒ server refuses ⇒ no token ⇒ `expect(strict).toBeDefined()` fails. **A DIFFERENT ROUTE from the shim assertion** — anyone later "unifying" this table by grepping `recordedLens()` will drop P3 wrongly |
+| P1 `:453` | polling | no | a truncated WRONG password is still a wrong password; refusal is asserted and happens either way |
+| P2 `:461` | polling | no | "not in argv, not echoed" is true of a short string too |
+| P4 `:506` | polling | no | asserts echo restored after refusal |
+| P5 `:513` | polling | no | asserts the prior INT trap survived |
+| P8 ×2 copies | fixed | **YES** | the `:585` coverage line |
+| P9 ×2 copies | fixed | **YES** | the `:611` coverage line |
+| P10 ×2 copies | fixed | no | `PRIOR-INT` / `not.toContain(SECRET)` / `RC=1` all pass on a truncated value |
+
+**DETECTING trials over the 80 logged runs: polling 2/run = 160 with ZERO events; fixed 4/run =
+320 with 8.** Fixed detecting rate **2.5%**; pooled over detecting trials 8/480 ≈ 1.67%; the
+polling arm expects ~2.67, and observing 0 is **P(0) ≈ 6.9%**. Suggestive — NOT significant at
+the conventional line, and the card must stop calling it "real".
+
+**The 6-vs-6 "DEAD HEAT" I committed one commit ago is wrong, and wrong in the direction that
+flattered the conclusion.** On detection it is **2 vs 4** — the polling arm is the DISADVANTAGED
+one, which cuts against the inference the paragraph draws from its zero. And the sentence
+"the omission made the card CONSERVATIVE, so fixing it strengthens the correlation" is true on
+exposure counting and FALSE on detection counting: adding P12e added the one polling test that
+CAN see the byte, while leaving four blind ones inflating the denominator.
+
+**8 IS A FLOOR ON THE EVENT COUNT, NOT A COUNT.** P10 contributes 160 blind typings to the FIXED
+arm over those 80 runs, so the fixed arm has its own blind spot and some truncations there were
+never observable. Every rate on this card is a lower bound.
+
+The 3 pre-shim truncations are ALSO in the fixed arm — raw count **11-vs-0** — but they have no
+countable denominator (different suite composition, per-run typing counts never recorded), so
+they stay out of the statistic rather than folded in with a guessed exposure.
 
 **P13 IS A THIRD ARM, and the next batch's numbers must not pool it into the fixed one.** It adds
-8 typings/run at (no signal, blind write) — a cell that exists precisely to be CONTRASTED with
-the fixed arm, so folding its ~320 typings into that arm's denominator would dissolve the
-comparison the test was built to make. Three arms from the next batch on: polling 6/run, fixed
-6/run, blind-no-signal 8/run.
+8 typings/run at (no signal, blind write), ALL OF THEM DETECTING (it asserts all 8 lengths) — a
+cell that exists precisely to be CONTRASTED with the fixed arm, so folding it into that arm's
+denominator would dissolve the comparison. Three arms from the next batch on, in DETECTING terms:
+**polling 2/run · fixed 4/run · blind-no-signal 8/run.**
 
 **AND THE "OFF-BY-ONE vs TERMINATOR-EARLY" DICHOTOMY IS FALSE — I renamed the hypothesis.** Both
 describe the same observable and the same mechanism class, with no differing prediction, so no

@@ -3,7 +3,7 @@ trdd-id: CAVCTULL
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200
-updated: 2026-08-28T23:31:46+0200
+updated: 2026-09-04T14:33:06+0200
 current-owner: main
 created-by: main
 task-type: security
@@ -129,8 +129,8 @@ loudly instead of reporting clean.
       **2026-08-28 pass: 15 → 11.** Per-route grep of the 15 then in the ledger (`authorize|requireSudoToken|enforceSystemOwner|canIssue|buildAuthContext|authenticateAgent` × mutating methods):
       - DECIDED COVERED (4): `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults`, `startup` — all call `enforceSystemOwner(` (`lib/route-auth.ts:161`, 403 unless `isSystemOwner`), a real authorization the needle could not see. Added `\benforceSystemOwner\(` to AUTHORIZES + STRONG; removed the 4 from `COLLECTION_UNREVIEWED`. Neuter: dropping the needle reds exactly `every mutating collection route either authorizes or is a declared debt` + `the collection ledger contains no route that has since been fixed` (2 red / 10 green); 12/12 restored. `[id]` unaffected (0 uses).
       - DECIDED STAYS, reason written in the ledger (1): `health` — `enforceAuth(` only (authenticated ≠ authorized); mutates nothing (SSRF-guarded probe). Low risk, but not the invariant.
-      - DEFERRED TO ITS OWNER (10): every `creation-helper/*` route — one policy decision, TRDD-DQVPODKW's open follow-up (Haephestos credential first, then `enforceSystemOwner` on the wizard-only helpers). Deciding them here would fork that card's decision.
-      Box stays open until the 10 land through DQVPODKW; nothing else on this card is undecided.
+      - DEFERRED TO ITS OWNER (10 → 4): every `creation-helper/*` route — one policy decision, TRDD-DQVPODKW's open follow-up (Haephestos credential first, then `enforceSystemOwner` on the wizard-only helpers). **2026-09-04: DQVPODKW landed `enforceSystemOwner` on 6 of the 10** (`cleanup`, `clear-banner`, `ensure-persona`, `file-picker`, `heartbeat`, `raw-materials`) — real holes, not needle artefacts (unauthorized agents could wipe/reset/respawn/browse the owner's Haephestos tree). Removed from `COLLECTION_UNREVIEWED`; ledger 11 → 5. The remaining 4 stay, scoped by a caller census of `agents/haephestos-creation-helper.md`: `element-descriptions` and `publish-plugin` are the two routes the persona actually curls (still undecided, agent-callable); `kill` and `session` are the other two still open. `health` also stays (unchanged, see above).
+      Box stays open until the remaining 4 (`element-descriptions`, `publish-plugin`, `kill`, `session`) are decided; nothing else on this card is undecided.
 - [x] the 12 forward-only routes verified against their pipelines' Gate 0 — **all 12 done**, see
       the section below. 1 was a live hole (TRDD-JWE3CFLV, fixed), 11 are covered, and the sweep
       turned up one latent finding one layer down (TRDD-FRRJ80YQ)

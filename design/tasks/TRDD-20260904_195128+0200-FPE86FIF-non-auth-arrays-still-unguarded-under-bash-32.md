@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T19:51:28+0200
-updated: 2026-09-04T19:54:39+0200
+updated: 2026-09-04T19:56:12+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -46,7 +46,7 @@ variable and aborts the script with exit 127. Measured on this machine's
 This is not machine-specific: `CLAUDE.md` documents **macOS 12+** as the platform
 and stock macOS ships 3.2.57, so it reproduces for every stock-macOS user.
 
-## The remaining set, measured 2026-09-04 (38 sites, 28 distinct arrays — `_auth` fixed, see below)
+## The remaining set, measured 2026-09-04 (38 sites, 27 distinct arrays — `_auth` fixed, see below)
 
 ```
 5 ACTIVE_INDICES   4 ATTACH_FILES   3 ARGS   2 stale_dirs   2 REACHABLE_INDICES
@@ -54,8 +54,12 @@ and stock macOS ships 3.2.57, so it reproduces for every stock-macOS user.
 1 each: tool_flags TOOL_ARGS SEND_ARGS scripts REGISTRATIONS PROVIDERS
         plugin_skill_dirs options jq_args INJECTION_PATTERNS GW_ITEMS GH_ARGS
         CURL_HEADERS cmd_args clone_args claude_args cands BUILD_ARGS args
-        AMP_BLOCKED_MIME_TYPES _auth
+        AMP_BLOCKED_MIME_TYPES
 ```
+
+(The original measurement also listed `1 _auth`; it is fixed and removed from
+this table, which is why the totals read 38/27 rather than the 39/28 first
+measured.)
 
 **Triage first — and note this is inference from NAMES, not from reading the call
 sites.** `stale_dirs`, `msg_files`, `candidates`, `cands`, `REGISTRATIONS` and

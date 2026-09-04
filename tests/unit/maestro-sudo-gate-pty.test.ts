@@ -128,7 +128,73 @@ function runAtTerminal(args: string[], password: string): Promise<{ code: number
   })
 }
 
+/**
+ * Where did a typed string lose characters? (TRDD-601KG45D, step (a).)
+ *
+ * The P9 failure that opened that card showed the server receiving the password one byte
+ * SHORT (`…x7q` for `…x7q2`). The assertion that caught it — `toContain(SECRET)` — reports
+ * only that the string is ABSENT, never where it was cut, and the POSITION is exactly what
+ * discriminates that card's two hypotheses: a `stty` TCSAFLUSH discarding queued input would
+ * tend to drop a leading or interior run, while a line terminating one byte early loses the
+ * TAIL and nothing else. Three revisions of that card turned on a position nobody had recorded.
+ *
+ * Position is reported honestly: a character dropped inside a RUN of identical characters is
+ * genuinely ambiguous, so this names the EARLIEST index consistent with the loss, and a
+ * received string that is both a prefix AND a suffix is reported as AMBIGUOUS rather than
+ * assigned to an end.
+ */
+export function diagnoseTyped(expected: string, received: string | undefined): string {
+  if (received === undefined) return 'no password recovered (no request reached the server, or its body would not parse)'
+  if (received === expected) return 'INTACT'
+  if (received.length >= expected.length) {
+    return `NOT-A-LOSS: got ${received.length} chars for ${expected.length} expected — it differs, but nothing was dropped`
+  }
+  const lost = expected.length - received.length
+  const pre = expected.startsWith(received)
+  const suf = expected.endsWith(received)
+  if (pre && suf) return `AMBIGUOUS ${lost}-char loss: received is BOTH a prefix and a suffix of expected`
+  if (pre) return `TAIL loss: ${lost} char(s) dropped at the end (received is a prefix of expected)`
+  if (suf) return `LEADING loss: ${lost} char(s) dropped at the start (received is a suffix of expected)`
+  let i = 0
+  while (i < received.length && received[i] === expected[i]) i++
+  return `INTERIOR loss: ${lost} char(s), earliest consistent index ${i} (ambiguous within a run of repeats)`
+}
+
+/** The password the server actually received, or undefined when there was no parseable body. */
+function pwOf(body: string | undefined): string | undefined {
+  if (body === undefined) return undefined
+  try {
+    const pw = JSON.parse(body).password
+    return typeof pw === 'string' ? pw : undefined
+  } catch { return undefined }
+}
+
 describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
+  // P11 is the INSTRUMENT's own check, and it is not a pty test — it is here because
+  // `diagnoseTyped` runs ONLY when one of the body assertions below fails, so without this
+  // every one of its branches would ship unexecuted. TRDD-601KG45D refused to build its next
+  // measurement on exactly that: a diffing branch that had produced 10 INTACT results and
+  // zero losses, i.e. had never run at all. Driving every branch here means the loss path is
+  // exercised on every run of this file, not first exercised on the day it is trusted.
+  it('P11: the loss diagnostic names the right position for a KNOWN loss (the instrument, not the gate)', () => {
+    const s = 'abcdef'
+    expect(diagnoseTyped(s, s)).toBe('INTACT')
+    expect(diagnoseTyped(s, 'abcde')).toMatch(/^TAIL loss: 1 char/)
+    expect(diagnoseTyped(s, 'bcdef')).toMatch(/^LEADING loss: 1 char/)
+    expect(diagnoseTyped(s, 'abdef')).toMatch(/^INTERIOR loss: 1 char.*index 2/)
+    expect(diagnoseTyped(s, 'abef')).toMatch(/^INTERIOR loss: 2 char.*index 2/)
+    expect(diagnoseTyped(s, 'abcxef')).toMatch(/^NOT-A-LOSS/)
+    expect(diagnoseTyped(s, undefined)).toMatch(/^no password recovered/)
+    // A loss inside a run cannot be placed at an end, and must not claim to be.
+    expect(diagnoseTyped('aaa', 'aa')).toMatch(/^AMBIGUOUS/)
+    // The shape it exists for: the exact P9 failure that opened TRDD-601KG45D.
+    expect(diagnoseTyped(SECRET, SECRET.slice(0, -1))).toMatch(/^TAIL loss: 1 char/)
+    // And the extractor it is fed through, on the real body shape.
+    expect(pwOf(JSON.stringify({ password: SECRET }))).toBe(SECRET)
+    expect(pwOf('not json')).toBeUndefined()
+    expect(pwOf(undefined)).toBeUndefined()
+  })
+
   it('P1: a wrong password is refused by the exchange, mints no token, and the strict verb sends nothing', async () => {
     const r = await runAtTerminal(['delete', TEAM_ID], SECRET)
     expect(r.code).not.toBe(0)
@@ -151,7 +217,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(leaks).toEqual([])
     expect(r.out).not.toContain(SECRET)
     // The secret DID travel: it reached the server in the request body (stdin → curl -d @-).
-    expect(seen[0].body).toContain(SECRET)
+    expect(seen[0].body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET)
   })
 
   // P4/P5 drive the gate FUNCTION directly in a pty so the tty state AFTER it returns can be
@@ -246,7 +312,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     expect(out).not.toContain(SECRET)   // typed after ^C, still not echoed
     expect(out).toMatch(/RC=1/)
     expect(out).toMatch(/\necho\n?$/)
-    expect(seen[0]?.body).toContain(SECRET) // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET) // and it WAS the password the gate sent
   })
 
   // P9/P10 — the two caller shapes the FIRST cut of _maestro_sudo_on_int leaked on, found by
@@ -269,7 +335,7 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     })
     expect(out).not.toContain(SECRET)        // the whole point: typed after the ^C, still not echoed
     expect(out).toMatch(/RC=1/)              // the gate ran to its refusal, the ^C was ignored as asked
-    expect(seen[0]?.body).toContain(SECRET)  // and it WAS the password the gate sent
+    expect(seen[0]?.body, diagnoseTyped(SECRET, pwOf(seen[0]?.body))).toContain(SECRET)  // and it WAS the password the gate sent
   })
 
   for (const copy of COPIES) it(`P10 [${copy}]: a prior trap ending in \`return\` does not skip the re-disable`, async () => {

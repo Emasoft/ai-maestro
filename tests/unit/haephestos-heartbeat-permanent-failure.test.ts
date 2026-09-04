@@ -183,11 +183,15 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     expect(screen.queryByText(/rejected/i)).toBeNull()
   })
 
-  // NOTE the title was WRONG until now — it said innerWidth "is an own data property",
-  // which is what a bare-node probe reports and what the assertions below DISPROVE in
-  // this environment. A test name is prose: it cannot fail, so it outlived the fix that
-  // falsified it by one commit. Same failure as the comment that fix deleted.
-  it('teardown contract: innerWidth is an own ACCESSOR, visibilityState a prototype accessor — opposite shapes, one restore', () => {
+  // The title said innerWidth "is an own data property" until 73f82f82 — the bare-node
+  // result, which the assertions below disprove here. Why it survived a commit that
+  // rewrote everything around it: NOTHING PINNED IT. The old title named a shape no
+  // assertion checked, so it could not fail. The current title is the opposite case —
+  // every clause is duplicated by an assertion below, so a jsdom that flipped either
+  // shape reds this test and the name cannot silently outlive it. State that precisely
+  // rather than "a test name cannot fail", which is true in general and NOT the reason
+  // this one is now safe.
+  it('teardown contract (vitest jsdom): innerWidth is an own ACCESSOR, visibilityState a prototype accessor — opposite shapes, one restore', () => {
     // This test exists because the afterEach restores the two properties by OPPOSITE
     // means, and nothing else pins that. Deleting either restore reds no other test
     // here — the mobile test SETS innerWidth rather than reading a restored value, and
@@ -199,8 +203,6 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     // visibilityState 'prerender' where vitest's reports 'visible'. A descriptor fact
     // asserted here cannot drift from the environment the teardown actually runs in.
 
-    // innerWidth: own DATA property, no getter, and no prototype entry to fall back
-    // to — so `delete` would strand it undefined and defineProperty is the restore.
     // innerWidth: an own ACCESSOR with NO prototype entry. Both hand-written
     // strategies are wrong for it — defineProperty({value}) replaces the accessor
     // with a data property, and `delete` strands it undefined (nothing to fall back

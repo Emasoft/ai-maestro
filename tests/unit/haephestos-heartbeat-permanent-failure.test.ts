@@ -28,6 +28,35 @@ const agent = {
   session: { status: 'online' },
 } as unknown as Agent
 
+// Captured at MODULE LOAD — before any test mutates either property. Measuring later
+// would read back our own afterEach defineProperty instead of jsdom's real shape.
+const PRISTINE_INNERWIDTH = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+const PRISTINE_VISIBILITY_OWN = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+function protoDescriptor(obj: object, key: string): PropertyDescriptor | undefined {
+  for (let p = Object.getPrototypeOf(obj); p; p = Object.getPrototypeOf(p)) {
+    const d = Object.getOwnPropertyDescriptor(p, key)
+    if (d) return d
+  }
+  return undefined
+}
+const PRISTINE_VISIBILITY_PROTO = protoDescriptor(document, 'visibilityState')
+
+/**
+ * Put a property back EXACTLY as it was, whatever shape it had. This is
+ * shape-agnostic on purpose: the two properties this file overrides have opposite
+ * shapes in vitest's jsdom (innerWidth is an own ACCESSOR with no prototype entry;
+ * visibilityState has no own property and a prototype accessor), so any teardown
+ * that hard-codes one strategy is wrong for the other — and both hand-written
+ * strategies I tried were wrong for at least one of them:
+ *   defineProperty({value}) replaces an own accessor with a data property (shadow)
+ *   delete                  strands a property whose prototype has no fallback
+ * Re-defining the captured descriptor needs no knowledge of which case applies.
+ */
+function restoreProp(obj: object, key: string, pristine: PropertyDescriptor | undefined) {
+  if (pristine) Object.defineProperty(obj, key, pristine)
+  else delete (obj as Record<string, unknown>)[key]
+}
+
 describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI)', () => {
   let fetchMock: ReturnType<typeof vi.fn>
 
@@ -41,25 +70,14 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
   // innerWidth=400 leaked forward and silently ran the NEXT test against the
   // mobile branch — found by neutering the mobile banner, which reddened two
   // tests instead of one. Restoring it keeps each test's branch its own choice.
-  const realInnerWidth = window.innerWidth
-
   afterEach(() => {
     cleanup()
-    // DO NOT "make this consistent" with the delete below — the two properties have
-    // OPPOSITE shapes and each needs the opposite treatment (both measured in jsdom):
-    //   window.innerWidth        own DATA property (1024, writable), NO prototype entry
-    //   document.visibilityState NO own property, prototype ACCESSOR
-    // So defineProperty is the correct restore here, and `delete` would be a BUG —
-    // with no getter to fall back to, window.innerWidth would become `undefined`.
-    Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, writable: true, configurable: true })
-    // `delete`, NOT a defineProperty "restore". `visibilityState` has no own property
-    // on the document — it is an ACCESSOR on the prototype (measured: own descriptor
-    // `undefined`, prototype descriptor has a getter). Writing the captured VALUE back
-    // as an own data property leaves the getter permanently shadowed for the rest of
-    // the file, which looks like a restore and is the very leak it claims to undo.
-    // `delete` removes the own property and re-exposes the live getter.
-    // @ts-expect-error — deleting an own property that shadows a prototype accessor
-    delete document.visibilityState
+    // Both go through the SAME shape-agnostic restore — see restoreProp above. Do not
+    // replace either with a hand-written strategy: the two have opposite shapes here,
+    // and the "teardown contract" test at the bottom of this file asserts them IN THIS
+    // ENVIRONMENT so the claim cannot drift the way a comment quoting descriptors does.
+    restoreProp(window, 'innerWidth', PRISTINE_INNERWIDTH)
+    restoreProp(document, 'visibilityState', PRISTINE_VISIBILITY_OWN)
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -163,5 +181,38 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     })
 
     expect(screen.queryByText(/rejected/i)).toBeNull()
+  })
+
+  it('teardown contract: innerWidth is an own data property, visibilityState a prototype accessor', () => {
+    // This test exists because the afterEach restores the two properties by OPPOSITE
+    // means, and nothing else pins that. Deleting either restore reds no other test
+    // here — the mobile test SETS innerWidth rather than reading a restored value, and
+    // it is the last test that touches width — so without this the teardown is
+    // unguarded and the asymmetry looks like a bug to anyone tidying up.
+    //
+    // It also measures in the RIGHT PLACE. The shapes were first probed in a bare
+    // `new JSDOM('')` under node, which is NOT this environment: that one reports
+    // visibilityState 'prerender' where vitest's reports 'visible'. A descriptor fact
+    // asserted here cannot drift from the environment the teardown actually runs in.
+
+    // innerWidth: own DATA property, no getter, and no prototype entry to fall back
+    // to — so `delete` would strand it undefined and defineProperty is the restore.
+    // innerWidth: an own ACCESSOR with NO prototype entry. Both hand-written
+    // strategies are wrong for it — defineProperty({value}) replaces the accessor
+    // with a data property, and `delete` strands it undefined (nothing to fall back
+    // to). MEASURED HERE, and it contradicts the same probe run in bare node, where
+    // innerWidth is an own DATA property: that is why this assertion exists at all.
+    expect(PRISTINE_INNERWIDTH?.get).toBeTypeOf('function')
+    expect(protoDescriptor(window, 'innerWidth')).toBeUndefined()
+
+    // visibilityState: the mirror image — NO own property, a prototype ACCESSOR.
+    expect(PRISTINE_VISIBILITY_OWN).toBeUndefined()
+    expect(PRISTINE_VISIBILITY_PROTO?.get).toBeTypeOf('function')
+
+    // The invariant that actually matters, and the one restoreProp delivers for both
+    // shapes: after teardown, each property's own descriptor is back to pristine.
+    // (This test runs last, so the preceding tests' overrides have been torn down.)
+    expect(Object.getOwnPropertyDescriptor(window, 'innerWidth')).toEqual(PRISTINE_INNERWIDTH)
+    expect(Object.getOwnPropertyDescriptor(document, 'visibilityState')).toBeUndefined()
   })
 })

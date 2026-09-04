@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:22:30+0200
+updated: 2026-09-04T21:25:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -75,18 +75,23 @@ general lesson in `.claude/rules/lessons-verification.md`, not re-argued here.
 
 > **4 failures in 35 runs. All 4 in P0-active batches; 3 of those in ONE batch that also ran
 > under background load.** P0 and machine load varied together, so this design cannot
-> separate them. Pooled rate 11.4%, Wilson 95% CI **4.5%-26%** — the rate itself is unknown
-> to within a factor of six.
+> separate them. The rate is **not** summarised here as an interval: a binomial CI needs
+> independent draws from ONE population, and these are four file versions under varying
+> load. A Wilson CI was briefly quoted and withdrawn — same borrowed authority as the
+> p-values, in the more persuasive costume of caution.
 
-No p-value is quotable *from this design* (that is narrower than "no quantification": the CI
-above is descriptive and assumes no randomisation). A permutation test inverts a
+No p-value is quotable *from this design*, and neither is a binomial interval. A permutation
+test needs randomisation; a CI needs independence and homogeneity; this data supplies
+neither. A permutation test inverts a
 randomisation null, and these batches ran in time order against four different versions of
 the file. Two earlier versions of this card quoted p anyway — 0.052, then 0.114, then 0.36
 for an A-excluded split that was itself unfair, since dropping the batch holding 3 of 4
 events *because* it is confounded biases hard toward the null.
 
-**Two confounders that survive.** Batch A ran under background-agent load, and C's P0 still
-ran `beforeEach` (an HTTP `listen(0)` plus a `mkdtemp`), so "no extra pty" was never "no P0".
+**Two confounders that survive.** Batch A ran under background-agent load. And C was never a
+clean control: its P0 still EXISTED and merely lacked a pty, so it still ran `beforeEach` —
+an HTTP `listen(0)` plus a `mkdtemp` before the first pty test. "No extra pty" was therefore
+never the same condition as "no P0".
 
 **A limit on the skip finding**, since the split rests on it: measured for a *static*
 `it.skip`, which is what B used. A runtime `ctx.skip()` runs `beforeEach` first;
@@ -151,6 +156,19 @@ UNVERIFIED — do not treat either as a finding, and do not test only the first:
 Ruled out: a truncated HTTP body. The JSON parsed cleanly and only the *value* was short.
 Also not `MAX_CANON` (1024 on Darwin) — the secret is 22 characters.
 
+## Step 1 measured 2026-09-04: no character loss reproduced
+
+Drove the P9 shape (`trap '' INT`, handler returns, RETURN trap runs `stty -echo`) at a pty
+and wrote a 36-char payload at a delay SWEEP around the ^C — 0, 1, 2, 3, 5, 8, 12, 20, 40,
+80 ms — so several writes land while `stty` is mid-transition. **10 / 10 arrived intact.**
+
+So hypothesis 1 (a `TCSAFLUSH` discarding queued input) does NOT reproduce under direct
+attack, which is evidence against the alarming reading — the one that would make this a
+user-facing bug. It is not a refutation: the original loss was a single observation inside
+the full gate with a live HTTP exchange, and this probe omits that. Next: reproduce inside
+the real gate, and try hypothesis 2 (a `\r` ending the line a byte early) by writing the
+payload and its CR as SEPARATE writes straddling the transition.
+
 ## Proposed fix
 
 Investigate in this order, and do not skip to the third:
@@ -199,9 +217,11 @@ LOW for the harness work. Step 1 could raise the severity sharply if input loss 
 - [ ] Established whether the truncated password was tty input loss or a harness artifact,
       with the measurement recorded here, testing BOTH hypotheses in the clue section.
 - [ ] The timing dependence removed wherever an observable marker exists.
-- [ ] Green across an INTERLEAVED design, n >= 12 per arm. (Not '30 consecutive runs': that
-      number was derived from a fixed-rate independence assumption this card disowns, so it
-      would be a convention dressed as a derivation.)
+- [ ] Green across an INTERLEAVED design. **The arm size is a CONVENTION, not a derivation** —
+      nothing here derives one, and 12/arm would be WEAKER than the '30 consecutive' it
+      replaced. Prefer a relative criterion: run until the arms' counts differ by more than
+      chance, or report that they do not. Any fixed n quoted before the interleaved run has
+      produced a rate estimate is decoration.
 - [ ] TRDD-WV8FDAH0's STATE block updated to drop its caveat about the pin being intermittent.
 
 ## Approval log

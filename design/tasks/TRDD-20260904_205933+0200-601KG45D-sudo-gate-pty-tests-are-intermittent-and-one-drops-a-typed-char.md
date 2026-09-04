@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:25:00+0200
+updated: 2026-09-04T21:28:30+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -156,18 +156,29 @@ UNVERIFIED — do not treat either as a finding, and do not test only the first:
 Ruled out: a truncated HTTP body. The JSON parsed cleanly and only the *value* was short.
 Also not `MAX_CANON` (1024 on Darwin) — the secret is 22 characters.
 
-## Step 1 measured 2026-09-04: no character loss reproduced
+## Step 1 ATTEMPTED 2026-09-04 — the probe failed its own control, so it measured NOTHING
 
-Drove the P9 shape (`trap '' INT`, handler returns, RETURN trap runs `stty -echo`) at a pty
-and wrote a 36-char payload at a delay SWEEP around the ^C — 0, 1, 2, 3, 5, 8, 12, 20, 40,
-80 ms — so several writes land while `stty` is mid-transition. **10 / 10 arrived intact.**
+**Retracted before it was believed.** A probe drove the P9 shape at a pty and wrote a 36-char
+payload at a delay sweep around the ^C (0-80 ms): 10/10 intact. Widening the `stty` window to
+**400 ms** and writing 50/150/250 ms into it: still 10/10 intact. That looked like evidence
+against hypothesis 1.
 
-So hypothesis 1 (a `TCSAFLUSH` discarding queued input) does NOT reproduce under direct
-attack, which is evidence against the alarming reading — the one that would make this a
-user-facing bug. It is not a refutation: the original loss was a single observation inside
-the full gate with a live HTTP exchange, and this probe omits that. Next: reproduce inside
-the real gate, and try hypothesis 2 (a `\r` ending the line a byte early) by writing the
-payload and its CR as SEPARATE writes straddling the transition.
+**Then the instrument check.** I made the handler DELIBERATELY consume pending input
+(`read -rs -t 0.01 -n 100 _junk < /dev/tty`) inside that 400 ms window — a probe that cannot
+see input vanish there can see nothing. It still reported the payload intact. **So the probe
+has no demonstrated power, and all three results above are nulls from a blind instrument.**
+Hypothesis 1 is exactly as open as before.
+
+Two further reasons the result would not have transferred even had the control passed: the
+probe ran `fix2.sh`, a scratchpad REIMPLEMENTATION of the handler rather than the shipped
+`common.sh`/`agent-helper.sh`, and it omitted the `read -rs` → `jq` → `curl` pipeline and the
+live HTTP exchange present when the loss was observed. Same class of error as the deleted P0:
+measuring a copy and reporting it as the thing.
+
+**So step 1 remains OPEN**, and now has a precondition: **build an instrument that can be
+SHOWN to detect a deliberately induced loss**, against the SHIPPED gate, before any null from
+it is worth recording. The probe scripts were scratchpad-only and are not preserved — there
+is nothing to reuse, which is correct for an instrument that failed its control.
 
 ## Proposed fix
 
@@ -221,7 +232,9 @@ LOW for the harness work. Step 1 could raise the severity sharply if input loss 
       nothing here derives one, and 12/arm would be WEAKER than the '30 consecutive' it
       replaced. Prefer a relative criterion: run until the arms' counts differ by more than
       chance, or report that they do not. Any fixed n quoted before the interleaved run has
-      produced a rate estimate is decoration.
+      produced a rate estimate is decoration. NOTE: the interleaved design RESTORES
+      randomisation, so a two-sample test IS legitimate on ITS results — the ban on p-values
+      applies to batches A-D, which were not randomised, not to the re-run.
 - [ ] TRDD-WV8FDAH0's STATE block updated to drop its caveat about the pin being intermittent.
 
 ## Approval log

@@ -3,7 +3,7 @@ trdd-id: VAXLW6RI
 title: The wizard heartbeat cannot tell a permanent refusal from a transient blip so it retries forever
 column: ai_review
 created: 2026-09-04T13:53:44+0200
-updated: 2026-09-04T17:25:41+0200
+updated: 2026-09-04T17:51:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -13,6 +13,7 @@ severity: medium
 effort: low
 min-approval-requirement: none
 labels: [ui, haephestos, error-handling, found-by-review-fork]
+implementation-commits: [3c0be66e, d65a278b, b0c43111]
 ---
 
 # The wizard heartbeat cannot tell a permanent refusal from a transient blip so it retries forever

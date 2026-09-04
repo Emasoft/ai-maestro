@@ -3,12 +3,13 @@ trdd-id: MWKCBLQN
 title: create with column proposal mints a card no write verb can act on
 column: ai_review
 created: 2026-08-22T17:37:09+0200
-updated: 2026-09-04T17:25:14+0200
+updated: 2026-09-04T17:51:15+0200
 current-owner: user
 created-by: user
 task-type: bugfix
 min-approval-requirement: manager
 eht: [5MN01NO8]
+implementation-commits: [7b24c74d]
 mandate: true
 mandated-by: user
 approved: true

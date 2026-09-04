@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T17:49:18+0200
+updated: 2026-09-04T17:51:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -26,7 +26,7 @@ relevant-rules: [R25]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [7dd8246d, 1e2e713b, ccf0de95, 95b23663]
 ---
 
 # editTrdd can still write a column its zone contradicts — the half MWKCBLQN did not close

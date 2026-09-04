@@ -418,7 +418,15 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
     let raw = ''
     try { raw = fs.readFileSync(jqLenFile, 'utf8') } catch { /* the shim never fired — that IS the finding, so assert it */ }
     const lens = raw.split('\n').filter((l) => l.trim() !== '')
-    expect(lens, jqStdinNote(SECRET.length)).toHaveLength(1)
+    // Asserts the VALUE, not just the count, and that is what makes the card's "baseline
+    // control" real rather than aspirational: `fakeHome` is torn down in afterEach, so no
+    // later step can ever read this number back — if it is not asserted HERE it is not
+    // asserted anywhere. Every green run therefore carries the control, for free.
+    //
+    // It follows that this test ALSO fires on a real truncation, and that is intended: the
+    // note tells the two apart — `NOT RECORDED` means the shim never ran, `21 byte(s) for 22
+    // expected` means the gate handed jq a short line, which is the experiment's whole answer.
+    expect(lens, jqStdinNote(SECRET.length)).toEqual([String(Buffer.byteLength(SECRET))])
   })
 
   it('P1: a wrong password is refused by the exchange, mints no token, and the strict verb sends nothing', async () => {

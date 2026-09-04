@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:24:34+0200
+updated: 2026-09-04T23:26:10+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -354,10 +354,13 @@ validated and then thrown away.
      most change what this card is about.
    - **NOT RECORDED** → the shim did not fire on that run. That is a finding about the
      HARNESS, not about the gate; do not read it as either answer.
-   - **The baseline control, which is free and must be taken FIRST:** on a PASSING run the
-     shim still records, and the value must be 22. If a green run ever records anything else,
-     the instrument is wrong and no failing run's number means anything. Take one green
-     reading before trusting any red one.
+   - **The baseline control is TAKEN AUTOMATICALLY, on every run — P12e asserts the VALUE.**
+     An earlier version of this line said to "take one green reading before trusting a red
+     one", which was not executable: `fakeHome` is torn down in `afterEach`, so no later step
+     can read the number back, and a control that cannot be run is not a control. P12e now
+     asserts `['22']` rather than a length of 1, so a green suite IS the control. It follows
+     that P12e also fires on a real truncation — intended, and the note separates the two
+     (`NOT RECORDED` = the shim never ran; `21 byte(s) for 22 expected` = the answer).
 
    **Exit codes 90/91/92 from the shim are HARNESS failures, never the bug.** `mktemp` and
    `cat` both fail toward a SHORT length — a full disk mid-`cat` leaves a truncated file, and

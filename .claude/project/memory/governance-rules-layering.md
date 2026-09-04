@@ -1,8 +1,8 @@
 ---
 name: governance-rules-layering
-description: "where do the aimaestro governance rules live / IND base vs DEP overlay / why is my aimaestro-*.md rule file read-only / who owns the aimaestro-*.md name in an agent workdir / why did my edit to a shipped rule file get reverted / is the rule protection a sandbox"
+description: "where do the aimaestro governance rules live / IND base vs DEP overlay / why is my aimaestro-*.md rule file read-only / who owns the aimaestro-*.md name in an agent workdir / why did my edit to a shipped rule file get reverted / is the rule protection a sandbox / do the aimaestro overlay rules actually apply to my session / when do the DEP overlays bind / are these governance rules in force outside the ai-maestro harness / does having the rule file mean the rule applies"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-04
 metadata:
   node_type: memory
   type: reference
@@ -69,6 +69,28 @@ harness (use the CLI, never the API; obey the comm graph), which is the opposite
 developer OF the server does, so it is deliberately not symlinked here. To change a DEP
 rule, edit `rules/aimaestro/` (agents pick the update up on next wake, or within one
 watchdog interval); never hand-edit a seeded copy in a workdir — it will be restored.
+
+
+^ATOM-EC4G-N3AB [desc: "The DEP aimaestro-* overlays bind ONLY inside the server harness; outside it they are inert and the IND base 3-pillars specs are the whole rule set", keywords: do_the_aimaestro_overlay_rules_apply_to_my_session when_do_the_DEP_overlays_actually_bind are_these_governance_rules_in_force_outside_the_harness my_workdir_has_aimaestro-trdd-approval_do_I_follow_it does_having_the_rule_file_mean_the_rule_applies which_layer_applies_in_iTerm_or_a_plain_terminal is_min-approval-requirement_enforced_here do_I_need_manager_approval_running_locally the_overlay_files_are_installed_but_I_am_not_an_agent when_is_a_shipped_rule_file_inert, type: feedback, ocd: 2026-09-04, lmd: 2026-09-04]
+
+**Having the overlay FILE is not the same as the overlay BINDING.** The `aimaestro-*.md` DEP
+rules are installed into a registered agent's workdir, so an external checkout of this repo can
+easily be carrying them (or reading them out of `rules/aimaestro/`) while none of them applies.
+
+**They bind only where the ai-maestro server is running the agent.** Inside the harness the DEP
+overlays sit on top of the IND base. Outside it — iTerm, Terminal, an IDE, any session the
+server did not launch — the base 3-pillars specs (`trdd-design-tasks`, `prrd-design-rules`,
+`universal-kanban`) are the WHOLE rule set, and the overlay fields a card may carry
+(`min-approval-requirement:`, `mandate:`, `approval-judge:`) are inert metadata rather than
+instructions.
+
+The reason is not that the roles happen to be absent — it is that the server is the sole
+notarizer of identity, and it can only vouch for agents it itself runs, so outside the harness
+every governance claim is an unverifiable self-assertion and simulating the chain is a security
+hole rather than a shortcut. The full argument, the threat model, and the test for whether a
+given gate survives live at USER scope in
+[[external-claude-session-is-not-an-ai-maestro-agent]] — canonical there because it governs
+every external session, not only ones holding this repo.
 
 ## Applies to
 

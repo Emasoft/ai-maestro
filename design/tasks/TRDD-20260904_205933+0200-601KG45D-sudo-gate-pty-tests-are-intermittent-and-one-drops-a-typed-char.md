@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:28:05+0200
+updated: 2026-09-04T22:30:44+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -32,11 +32,22 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
-**THE FLAKE HAS TWO FAILURE MODES AND EACH NOW HAS A LEADING EXPLANATION.** Timeouts (3 of 4
-historical) ← a `stty` TCSAFLUSH, which blocks `read` forever rather than shortening it.
-Truncations (1 historical + 1 today) ← a line ending one byte early. **That pairing is the
-current state of the card**; everything below is how it was arrived at, including three
-retractions of my own reasoning.
+**WHAT IS MEASURED — this is the headline, and every mechanism story on this card has died.**
+
+- **Two distinct failure modes.** Truncations: 2 observed (the batch-A P9, and `P8
+  [common.sh]` in run 23 today). Timeouts: 3 observed. Earlier revisions pooled them.
+- **The truncation position is TAIL, 1 char**, measured by a validated classifier, twice.
+- **Rate:** 1 truncation in 24 consecutive runs, single-arm, P0 absent, idle machine. Read
+  §Step 2 before quoting it — it is per-RUN, the denominator moved this session, and box 1's
+  tick was taken and withdrawn.
+- **The loss is at or before `read`** — the gate builds its body with `jq -Rnc` from the
+  variable, so a well-formed body with a short value cannot come from a downstream cut.
+
+**NO MECHANISM IS ESTABLISHED. Three have been proposed and all three failed:** hypothesis 1
+(TCSAFLUSH) is refuted on TIMING — see §Step 2; hypothesis 3 (shell→curl) is excluded by the
+`jq` composition; hypothesis 2 (a line ending one byte early) survives only in the sense that
+nothing has tested it. **Do not adopt the next plausible story without measuring it — this
+card has produced one per pass and retracted each in turn.**
 
 - **DONE — step (a)'s CLASSIFIER half, by a different route than the body prescribes.**
   `diagnoseTyped`, `pwOf` and `diagnoseBody` live in
@@ -44,8 +55,7 @@ retractions of my own reasoning.
   message on every assertion that pins the password reaching the server. Pinned by P11a-g,
   one `it()` per branch; **seven neuters run, every one of the seven tests reddens under at
   least one, and FIVE of the seven pin a BRANCH rather than message text** (A→P11b · B→P11d ·
-  C→P11e · D→P11g · F→P11f · **H→P11c**; E and G perturb only interpolated text). 21 passed,
-  tsc 0 lines.
+  C→P11e · D→P11g · F→P11f · **H→P11c**; E and G perturb only interpolated text). 21 pty tests pass, tsc 0 lines.
 - **The DETECTOR half is validated for `fc3b6f76`'s wiring only.** Run 23 fired it on a real
   loss end-to-end; `1a2a1b2c` then replaced that wiring with `diagnoseBody`, which has never
   fired on real data. Do not read "the instrument works" as covering the code in the tree.
@@ -411,26 +421,38 @@ broken argument discards the conclusion with it:
   queued, and a flush there discards all 22 and produces **no request at all**, not a tail
   loss. Worked through properly, a flush predicts a **LEADING or total** loss at every point.
 
-**So hypothesis 1 (TCSAFLUSH) is not refuted and not merely disfavoured — it is RELOCATED,
-and this is the sharpest thing on the card.** Follow the flush through: `read -rs` is blocked
-in the kernel waiting for a line terminator; a flush discards the queue, including the
-terminator; so `read` does not return short — **it keeps blocking**, and nothing types again
-(the 1200 ms write already happened). It blocks until the harness's 25 s `SIGKILL`. **A flush
-therefore predicts a TIMEOUT.**
+**HYPOTHESIS 1 IS REFUTED ON TIMING, and this replaced a "relocation" I published minutes
+earlier — the second mechanism story this card produced and killed in one pass.**
 
-And timeouts are **3 of the 4 historical failures**. So hypothesis 1 stops being a candidate
-for the truncation and becomes a live candidate for the *other* failure mode — the majority
-one, which had no explanation at all until now.
+Read the gate's actual `stty` calls. There are exactly three, all in
+`maestro_sudo_ensure`/`_maestro_sudo_on_int`: `stty -echo` **before** the prompt (t≈0); the
+INT handler's `stty echo` plus its RETURN trap's `stty -echo`, both at the **^C** (t≈300 ms);
+and `stty echo` **after** `read` returns. The harness types the password at **t≈1200 ms**.
 
-**How this was missed is worth more than the finding.** `a4da6e47`, one commit earlier in
-this same session, established that the flake has two distinct failure modes and warned
-against pooling them. `ab90429f` then reasoned about hypothesis 1 as though only the
-truncation existed, and concluded "disfavoured" about a hypothesis that had simply moved to
-the other mode. **I split the modes and immediately went back to reasoning about one.**
-Splitting a population is worthless if the next paragraph re-merges it.
+So no `stty` runs within ~900 ms of the password write. At t≈300 ms the input queue is
+**empty** — nothing has been typed, and the `^C` arrives as a SIGNAL under `ISIG`, not as
+queued data. **A flush there flushes nothing.** It cannot shorten the password (the original
+hypothesis 1) and it cannot strand `read` either (the "relocation"), because by the time the
+password is typed the handler has been finished for most of a second.
 
-What remains open for the TRUNCATION is hypothesis 2 versus the narrow remnant of
-hypothesis 3, and the observation to date cannot separate those two at all.
+**What I had published between those two positions.** That a flush blocks `read` until the
+25 s `SIGKILL`, hence explains the 3 timeouts. Each step of that is defensible in isolation;
+the argument never checked whether a flush happens anywhere near the password, and it does
+not. **It was the same failure as the statusline attribution earlier in the session** — a
+chain of plausible steps published without measuring the one quantity that decides whether
+any of it occurs. Recorded rather than deleted because the pattern is the finding: this card
+has produced one confident mechanism per pass, and retracted every one.
+
+**One survivor of the timing argument, and it is a hypothesis, not a rescue.** The 900 ms gap
+is measured on an **idle** machine, where the handler is a few shell commands and one
+subshell. Batch A — which holds 3 of the 4 historical failures — ran under **background
+load**. Whether load can stretch that handler by ~900 ms is untested, and saying "it might"
+is exactly the move this section exists to warn against. It is written down as a thing to
+measure, not as a reason hypothesis 1 lives.
+
+**So for the TRUNCATION nothing is left but hypothesis 2, unexamined — and for the TIMEOUTS,
+nothing at all.** That is a worse position than the card claimed an hour ago and a more
+honest one.
 
 **If the loss is at the tty (hypothesis 2), this is a USER-FACING bug, not a test problem** —
 a human typing while the gate re-disables echo loses their last character and gets an

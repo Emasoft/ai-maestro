@@ -3,7 +3,7 @@ trdd-id: NNNR4IYL
 title: The lessons file is 315 bytes from its cap and the documented relief mechanism does not cover the file-level cap
 column: todo
 created: 2026-09-04T19:08:46+0200
-updated: 2026-09-04T19:18:15+0200
+updated: 2026-09-04T19:27:19+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -25,9 +25,48 @@ labels: [tooling, governance, lessons]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
-**The chore was attempted and is BLOCKED by a pinned invariant. The blocker is the whole
-finding, and it is a stronger version of this card's premise than the one the card was filed
-with.**
+**RESOLVED. The chore is done, the control is replaced and neutered, and the file has 2179
+bytes of headroom.** What follows is kept because the route here was wrong twice in opposite
+directions, and the corrections are the transferable part.
+
+**The framing below said "spec change". That was one notch too high.** Case 3 *mechanically*
+blocked relocation — that much was right, and withdrawing this card outright would have been
+wrong. But two things say it was never intended as a constraint on a second trigger:
+
+- **The test's own header prescribes a neuter for CEILING and for ENTRY_MAX, and none for case
+  3.** An assertion its author did not think worth neutering is scaffolding for the other two,
+  not an independent invariant.
+- **Under the strict reading the system is deadlocked by construction:** a core file at its
+  ceiling with no over-length entry has no legal relief. Nobody specifies an unsatisfiable
+  system. That is an oversight surfacing, not a design being defended.
+
+So updating case 3 alongside the new trigger was ORDINARY WORK, and it took one constant and
+four lines. **And the correction I drew last round — "prose describes, a test decides" — is
+half right and I over-applied it: a test is authority on what the system DOES, never on what it
+SHOULD do.** It can encode an accident exactly as prose can. I corrected elevating prose to
+spec by elevating a test to spec.
+
+**What shipped:**
+
+- Five incident-specific entries relocated (selection: **lowest recurrence frequency** — an
+  entry whose text is mostly one incident's own identifiers has earned the reference; a trap
+  that bites weekly stays, however old). Two of my own misfiled entries re-homed inside CORE:
+  both had landed in `## Shell`, including — with no irony spared — the one about content
+  belonging to its proper subject.
+- CORE **97989 → 96125** bytes; headroom 315 → **2179** (~4 further entries, short of the 2500
+  target and recorded as such rather than rounded up).
+- Each relocated short entry carries `<!-- moved-for-file-cap -->`. The lesson text is
+  byte-identical; the marker is appended metadata.
+- Case 3 now admits an entry that is over-length **or** marked, and it `filter`s and names
+  offenders instead of asserting a bare boolean — `every(...)` reports only `false` and leaves
+  the reader grepping a 196 KB file for the culprit.
+
+**The move was verified byte-identical by me, not taken from the worker's report** — every line
+added to the reference has a byte-identical twin among the lines removed from CORE (`comm -13`
+empty). That check first returned a false 2-vs-5 because `grep '^-[^-]'` **excludes every
+removed markdown bullet**: a deleted `- **ENTRY**` appears as `--` in a diff. The worker's
+report was accurate; my instrument was not, and its own check 5 ("line count drops by exactly
+5") had failed at 349→348 with an explanation I initially accepted without checking.
 
 `tests/governance/lessons-file-budget.test.ts` third case:
 
@@ -52,22 +91,24 @@ the header; neither of us read the spec. The lesson is the general one: **prose 
 a test decides** — when a rule's scope is in question, the thing that mechanically enforces it
 is the authority.
 
-**What was attempted, and where it is.** Five incident-specific entries were moved to the
-reference and two misfiled entries re-homed inside CORE (97989 → 96125 bytes, comfortably under
-the cap), with the header updated to name both triggers. It works and it reddens the suite.
-Preserved, not discarded, as **`git stash@{0}`** — *"TRDD-NNNR4IYL: file-cap relocation attempt
-— blocked by the reference's only-long-entries positive control"*. Recover with
-`git stash pop stash@{0}`, or inspect with `git stash show -p stash@{0}`.
+**Why the control was not simply deleted.** Its job is to prove *the split is real* — that the
+reference is a routed destination and not a junk drawer. Weakening it to `es.length > 100`
+would pin nothing, and that is suppressing a rule to pass a gate. The replacement keeps the
+property under both triggers: over-length **or** explicitly marked.
 
-**Why the control cannot simply be deleted.** Its stated job is to prove *the split is real* —
-that the reference is a routed destination and not a junk drawer. Weakening it to
-`es.length > 100` would pin nothing and would be suppressing a rule to pass a gate. A
-replacement control has to express what makes the split real under TWO triggers, and that is
-the design decision this card now owns.
+**The neuter, run rather than asserted.** A short unmarked entry was seeded into the reference:
+the suite went **red and named the offending entry by its text** (the `filter`+`map` rewrite
+earning its keep on its first use). Removing the probe returned it to 3/3. So the control
+discriminates; it does not merely pass. `tsc --noEmit` clean, 0 lines.
 
-**NEXT ACTION.** Decide the replacement control, then pop the stash. Candidate: every reference
-entry is EITHER over 500 chars OR carries an explicit relocation marker, so a short entry can
-only be there deliberately and the reference still cannot become a dumping ground.
+**I stashed rather than finished, and that was the same failure one level up.** The previous
+round had just caught me deferring a chore into a 54-card `todo` column with prose attached; my
+response was to defer a smaller one into the same column with more prose attached — a
+replacement control I had already NAMED in the deferral. Worse, the preservation mechanism I
+chose was the one with an incident in this very repo today (`stash@{1}` reads *"content an
+accidental 'git stash pop' applied to a working tree it did not belong to"*). Naming a
+candidate answer and filing it as future work is not rigor; the tree was green only because
+the work was undone.
 
 ## Problem
 
@@ -136,21 +177,29 @@ are in the always-loaded half. Getting the selection wrong is worse than the cap
 
 ## Acceptance
 
-- [ ] Decide the REPLACEMENT positive control for the reference file, so the split stays
-      provably real under two triggers instead of one. This is the gating decision — the
-      relocation itself is already done and stashed, and reddens the suite without it.
-- [ ] Update `tests/governance/lessons-file-budget.test.ts` third case to the new control, and
-      run the neuter: a version that lets ANY short entry into the reference unmarked must
-      redden. A control that passes on a junk drawer is not a control.
-- [ ] Decide and record the selection policy (oldest-first / by-section / lowest-recurrence),
-      with the reason, in the file's own header so the next author does not re-derive it.
-- [ ] Update the header's relief rule to name BOTH triggers (per-entry >500 chars, and the
-      file at its byte cap) and correct "96 KB" to the enforced 98304 bytes.
-- [ ] Relocate enough entries to restore working headroom (target: room for at least five
-      further entries, ~2500 bytes).
-- [ ] Confirm every relocated entry is byte-identical in `-full.md` under its original heading.
-- [ ] `tests/governance/lessons-file-budget.test.ts` passes, plus a new case pinning the
-      file-cap trigger; run the deletion neuter and confirm it reddens.
+- [x] Decide the REPLACEMENT positive control: an entry may live in the reference if it is
+      over `ENTRY_MAX` **or** carries `<!-- moved-for-file-cap -->`. Keeps the junk-drawer
+      property under both triggers instead of dropping the length check.
+- [x] Update `tests/governance/lessons-file-budget.test.ts` third case, and run the neuter.
+      **Run, not asserted:** a short unmarked entry seeded into the reference turned the suite
+      **red and named the offender by text**; removing it returned 3/3. The case now `filter`s
+      and reports offenders rather than asserting a bare boolean — `every(...)` yields only
+      `false` and leaves the reader grepping 196 KB for the culprit.
+- [x] Decide and record the selection policy: **lowest recurrence frequency** — an entry whose
+      text is mostly one incident's own identifiers (a named gate, a named pipeline, a
+      completed survey's result) has earned the reference; a trap that bites weekly stays in
+      CORE, however old. Recorded in the file's own header.
+- [x] Update the header's relief rule to name BOTH triggers and correct "96 KB" to the enforced
+      98304 bytes (96 KiB, not 96000).
+- [x] Relocate enough entries to restore working headroom. **97989 → 96125 bytes; headroom 315
+      → 2179**, i.e. ~4 further entries, not the 5 targeted. Recorded as measured rather than
+      rounded up to the target.
+- [x] Confirm every relocated entry is byte-identical in `-full.md` under its original heading.
+      **Verified first-hand, not from the worker's report:** every line added to the reference
+      has a byte-identical twin among the lines removed from CORE (`comm -13` empty). The check
+      first returned a false 2-vs-5 because `grep '^-[^-]'` **excludes every removed markdown
+      bullet** — a deleted `- **ENTRY**` appears as `--` in a diff.
+- [x] Suite passes with the new case; the deletion neuter reddens. `tsc --noEmit`: 0 lines.
 
 ## Approval log
 

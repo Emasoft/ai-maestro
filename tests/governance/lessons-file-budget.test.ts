@@ -3,6 +3,16 @@
 // per-entry length cap that routes long lessons to the on-demand reference instead of deleting
 // them. Neuter: raise CEILING to 1e9 or ENTRY_MAX to 1e9 → the corresponding test must stop
 // discriminating; lower either below the measured value → red.
+//
+// TRDD-NNNR4IYL — an entry now reaches the reference by EITHER trigger: it outgrew ENTRY_MAX,
+// or the core file hit CEILING and the entry was relocated to make room. Case 3 asserted the
+// first trigger's world (`every(e => e.length > ENTRY_MAX)`) because it was the only one, which
+// made the system DEADLOCKED by construction: a core file at its ceiling with no over-length
+// entry had no legal relief. A relocated short entry must therefore carry RELOCATION_MARKER, so
+// the reference still cannot become a dumping ground — that is what case 3 protects, and it is
+// why the fix is a marker rather than dropping the length check. Neuter for case 3: delete the
+// marker from any relocated entry, or drop the `!e.includes(RELOCATION_MARKER)` clause so any
+// unmarked short entry is admitted → must go red.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
@@ -10,6 +20,7 @@ const CORE = '.claude/rules/lessons-verification.md'
 const REF = '.claude/rules-reference/lessons-verification-full.md'
 const CEILING = 96 * 1024
 const ENTRY_MAX = 500
+const RELOCATION_MARKER = '<!-- moved-for-file-cap -->'
 
 function entries(text: string): string[] {
   const out: string[] = []
@@ -36,9 +47,12 @@ describe('lessons-verification.md budget (TRDD-IIXYIU7G)', () => {
     expect(long.map((e) => e.slice(0, 80))).toEqual([])
   })
 
-  it('the full reference exists and holds only long entries (positive control that the split is real)', () => {
+  it('the full reference holds only entries that EARNED a place there — over-length, or explicitly relocated for the file cap (positive control that the split is real)', () => {
     const es = entries(ref)
     expect(es.length).toBeGreaterThan(100)
-    expect(es.every((e) => e.length > ENTRY_MAX)).toBe(true)
+    // Naming the offenders rather than asserting a bare boolean: `every(...)` reports only
+    // `false` and leaves the reader grepping a 196 KB file for which entry broke it.
+    const unearned = es.filter((e) => e.length <= ENTRY_MAX && !e.includes(RELOCATION_MARKER))
+    expect(unearned.map((e) => e.slice(0, 80))).toEqual([])
   })
 })

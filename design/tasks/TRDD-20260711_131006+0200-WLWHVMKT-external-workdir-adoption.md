@@ -3,7 +3,7 @@ trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-08-22T14:43:38+0200
+updated: 2026-09-04T17:35:09+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -49,8 +49,10 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/2
 Re-columned, NOT closed, even though the core fix landed and was proven E2E on a live server: its own
 STATE names remaining work — open follow-up TRDDs for the **three new blockers the E2E discovered**
 (pre-existing, not caused by this change). Closing it would strand three known defects with no owner.
-⚠ This card has **no acceptance checklist at all**, so the completion gate has nothing to gate on —
-the vacuity measured across 69/97 open cards on [[5YRLA53W]]. Judged from the STATE block instead.
+⚠ At the time this note was written (2026-08-02) this card had **no acceptance checklist at all**,
+so the completion gate had nothing to gate on — the vacuity measured across 69/97 open cards on
+[[5YRLA53W]]. Judged from the STATE block instead. A 6-box checklist was added later (see
+`## Acceptance` below); the completion gate now has something to gate on.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11
 
@@ -242,12 +244,38 @@ exact coverage whose absence caused this bug:
   residual risk recorded above. No approval request was sent — the mandate is the
   approval.
 
+## Blocker (2) — measured 2026-09-04, and the nearest candidate card is NOT its follow-up
+
+Box 250 stays unchecked, but the next reader should not re-derive this from scratch.
+
+**The obvious candidate does not fit.** `TRDD-13MZ7EFO` ("Reconcile registry sessions with live tmux
+state") matches blocker 2 by title and is `column: complete` with implementation-commits `[d34d7546]`
+— but it completed **2026-07-07T15:48**, and this card's E2E observed the failure on **2026-07-11**,
+four days LATER. It therefore cannot be the follow-up this box is waiting on. Ticking box 250 on the
+title match would have closed a live defect.
+
+**`TRDD-CHN16JXZ` does not own it either.** It is `column: human_review` and covers fleet-recovery
+liveness and boot-restore relaunch shape, not "the registry never updates for a newly created agent".
+
+**The symptom as stated does not reproduce today.** Measured read-only on this host 2026-09-04
+against `~/.aimaestro/agents/registry.json` and `~/.aimaestro/sessions.json`: 13 agents, of which
+**13/13 carry a NON-EMPTY `sessions[]`** (9 `offline`, 2 `active`, 2 `deleted`); `sessions.json`
+holds 16 entries; 3 live tmux sessions. Blocker 2 asserts the registry shows `sessions: []` while a
+session is live — that specific shape is absent here. This is positive evidence AGAINST the symptom
+as written, not merely an absence of evidence.
+
+**Why no new TRDD was filed.** Confirming whether the defect persists would require CREATING an
+agent and watching the registry, which is real project work nobody authorized in that session. A
+card asserting a live critical bug would have been filed against partial evidence to the contrary.
+The honest state is: box 250 open, the measurement recorded here, and a decision owed on whether to
+re-test by creating an agent.
+
 ## Acceptance
 
 - [ ] `lib/agent-workdir-policy.ts` exists as the single authority (`isAuthorizedAgentWorkdir` / `assertAuthorizedAgentWorkdir`), used by all 4+ call sites (createSession, boot-restore, browse-dir, ChangeFolder, importAgent).
 - [ ] E2E: a MAINTAINER agent adopting a repo genuinely outside `~/agents/` gets a starting tmux session (not just a registry write) — re-confirm on a fresh run.
-- [ ] Follow-up TRDD filed and landed for blocker (1): CreateAgent leaving an agent with zero role-plugins (R9.13 hard-reject or auto-assign).
-- [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug).
+- [x] Follow-up TRDD filed and landed for blocker (1): CreateAgent leaving an agent with zero role-plugins (R9.13 hard-reject or auto-assign). — TRDD-IXUV1XHD "CreateAgent returned 201 for agents that can never be woken", filed 2026-07-11 (~3h after this card), `column: complete`, implementation-commits [ce635c14]. Verified 2026-09-04.
+- [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug). — see the blocker-2 measurement below.
 - [ ] Boot-restore across a real server restart is proven end-to-end for an adopted agent, once blocker (2) is fixed.
 - [ ] `SCENARIOS_TESTS_RULES.md` Rule 0 / the scenario fixture rules permit an out-of-`~/agents/` fixture, so external adoption is scenario-testable going forward.
 

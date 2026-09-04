@@ -5,11 +5,11 @@ scope: project
 project-id: ai-maestro
 column: backburner
 review-after: 2026-10-06
-blocker-probe: sh -c 'f=scripts/shell-helpers/common.sh; t=$(grep -c "trap .* INT" "$f" 2>/dev/null); r=$(grep -cE "read -rs.*/dev/tty" "$f" 2>/dev/null); printf "PROBE-RAN trap=%s read=%s" "${t:-0}" "${r:-0}"'
-blocker-holds-if: not-match:trap=0
+blocker-probe: sh -c 'f=scripts/shell-helpers/common.sh; t=$(grep -c "trap ._maestro_sudo_on_int. INT" "$f" 2>/dev/null); r=$(grep -cE "^[[:space:]]*(IFS=[[:space:]]*)?read -rs.*< */dev/tty" "$f" 2>/dev/null); printf "PROBE-RAN trap=%s read=%s" "${t:-0}" "${r:-0}"'
+blocker-holds-if: not-match:(trap=0|read=0)
 blocker-probe-canary: match:PROBE-RAN
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:18:06+0200
+updated: 2026-09-05T01:22:16+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -107,12 +107,21 @@ worst case is a spurious auth refusal.
 **On the probe below — read it for what it is.** At LOW severity with a `review-after` date, **the
 DATE is the real blocker**; the probe exists because the linter requires one, and it is brittle by
 nature. It tracks the CONJUNCTION the card identified (a trapped `INT` plus a `read` on the
-controlling terminal) rather than one line's exact spelling — an earlier version matched the
-literal string `IFS= read -rs _pw < /dev/tty`, which was **inverted on both axes**: it unparked on
-a rename or a dropped space (bug unchanged) and stayed parked through every change that would
-actually resolve the card. Its "negative control" ran against `/dev/null`, proving only that
-`grep -c` works. The current one is verified against PLAUSIBLE edits: renaming `_pw` → `_pass`
-keeps it parked (`trap=8`), removing the `trap` unparks it (`trap=0`).
+controlling terminal) and **BOTH halves are tested** (`not-match:(trap=0|read=0)`).
+
+**It took THREE tries, and the first two failed the same way — a control that did not
+discriminate the axis it claimed to:**
+
+| version | why it was wrong |
+|---|---|
+| literal `IFS= read -rs _pw < /dev/tty` | **inverted on both axes** — unparked on a rename or a dropped space (bug unchanged), stayed parked through every real resolution. Its "control" ran against `/dev/null`: proves `grep -c` works, exercises no edit anyone would make |
+| file-wide `grep -c "trap .* INT"` | counts **8** lines, only ~3 of them the gate's, so removing the gate's OWN signal handling gives ~5, not 0 — **it stayed parked through its own resolution condition.** Its "control" stripped ALL eight traps: `/dev/null` in a better costume. And `read=` was printed but never tested, so a `read` moved off `/dev/tty` — a genuine fix — held too. The `_pw`→`_pass` control never touches a `trap` line, so `trap=8` was guaranteed regardless: it looked like a pass and was evidence of the gap |
+
+**Now scoped to the gate's own install line and verified against the TWO REAL RESOLUTIONS:**
+live `trap=1 read=1` (holds) · remove `trap '_maestro_sudo_on_int' INT` → `trap=0` (unparks) ·
+move the `read` off `/dev/tty` → `read=0` (unparks). The `read` match is anchored to a STATEMENT
+because the unanchored form counted **2** — one of them the header COMMENT at `:671` describing
+the pattern, which is the matched-the-documentation trap from this repo's own lessons file.
 
 ## ⏵ P13 ANSWERED 2026-09-05T00:56 — ZERO in 320 detecting typings. THE INTERACTION IS REQUIRED.
 

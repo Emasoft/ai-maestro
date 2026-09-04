@@ -3,9 +3,9 @@ trdd-id: 5MN01NO8
 title: editTrdd can still write a column its zone contradicts — the half MWKCBLQN did not close
 scope: project
 project-id: ai-maestro
-column: ai_review
+column: dev
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T17:25:27+0200
+updated: 2026-09-04T17:31:32+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -254,9 +254,41 @@ The first question a reviewer asks, and it would be a real regression: if a card
 `release-via` that lives in the card and is absent from this edit's fields. That is what makes the
 `complete` + `release-via: publish` case pass for the right reason rather than by accident.
 
+## REVIEW REJECTED 2026-09-04T17:31 — the fix was itself half-applied, in the shape of the bug it fixes
+
+`ai_review` → `dev`. An adversarial review found the guard closes the `column:` route and leaves the
+`status:` route open — the same one-of-two-paths defect this card exists to close on MWKCBLQN.
+
+The guard keyed on `'column' in fields`. But `effectiveColumn` (`lib/trdd-edit-guard.ts:80`) derives
+the column from EITHER `column:` OR the v1 `status:` fallback via `V1_STATUS_TO_COLUMN`, so an edit
+writing only `status:` moved the EFFECTIVE column while skipping the zone check entirely.
+
+Proven by execution with a control, not by reading: with `current = {status: 'in-progress'}` (no
+`column:`) and `zone = 'tasks'`, the edit `{status: 'cancelled'}` returned `ok: true`, while the
+IDENTICAL end state via `{column: 'cancelled'}` was correctly refused with "belongs in
+design/archived/". `{status: 'superseded'}` likewise reached a TERMINAL_DONE state through the back
+door — the freeze check read `currentColumn` as `dev` and never fired.
+
+**Latent, not live, and the distinction was measured rather than assumed:** 0 cards across all four
+zones currently carry a `status:` with no `column:`, and `editTrdd` cannot mint that shape (blanking
+`column:` trips the ABSENT check first, and `createTrdd` always writes one). The hole opens when a
+v1-shaped card ENTERS the corpus by merge, hand-authoring, or import — which is precisely why
+`effectiveColumn` carries the fallback at all.
+
+The repair is a simplification, not an addition: the guard's real predicate is "did the EFFECTIVE
+column change", which `currentColumn` and `resultColumn` already express, so keying on the field
+name was both wrong and longer.
+
+**A second finding, about my own reporting rather than the code:** the review brief I wrote claimed
+the companion commit passed `'tasks'` at every call site. It does not — the file is zone-aware
+(`'archived'` at `:152`, `:228`, `:239`), and all 21 argument values are correct for their fixtures.
+I had generalized from the first 2KB of a truncated 7.4KB diff. The reviewer checked the claim
+instead of inheriting it, which is the only reason it was caught.
+
 ## Acceptance
 - [x] `validateTrddFieldEdits` takes the card's `zone` and refuses an edit whose resulting `column` belongs in a different zone
-- [x] The `columnUnchanged` exemption lets a no-op column re-write through, so a card already in a zone/column mismatch does not become harder to repair than before the guard existed
+- [x] The no-op exemption lets an unchanged column re-write through, so a card already in a zone/column mismatch does not become harder to repair than before the guard existed
+- [ ] The guard keys on the EFFECTIVE column (covering the v1 `status:` fallback), not on the presence of a `column` field — with a test pinning the `status:`-only route and a recorded neuter
 - [x] `tests/unit/trdd-edit-zone-column.test.ts` covers the refusal, a positive control, the `complete` + `release-via` case, the unchanged re-write, and a changed column on an already-mismatched card
 - [x] Complementary neuter pair recorded on the card: removing the exemption reds one named test, widening it to always-true reds two
 - [x] Every pre-existing call site passes the new required 4th argument (commit ccf0de95); `tsc --noEmit` exits 0 and the four affected test files report 43 passed

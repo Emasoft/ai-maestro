@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T16:01:20+0200
-updated: 2026-09-04T17:36:03+0200
+updated: 2026-09-04T17:43:16+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -288,11 +288,40 @@ instead of inheriting it, which is the only reason it was caught.
 ## Acceptance
 - [x] `validateTrddFieldEdits` takes the card's `zone` and refuses an edit whose resulting `column` belongs in a different zone
 - [x] The no-op exemption lets an unchanged column re-write through, so a card already in a zone/column mismatch does not become harder to repair than before the guard existed
-- [x] The guard keys on the EFFECTIVE column (covering the v1 `status:` fallback), not on the presence of a `column` field — with a test pinning the `status:`-only route and a recorded neuter. Landed `95b23663`: `const columnChanged = resultColumn !== currentColumn`, which is SHORTER than the field-keyed form it replaces. Neuters RE-MEASURED against the new predicate in `0127bce9` rather than renamed — and the count moved: neuter B (`columnChanged = false`) now reds **3** tests, not the 2 recorded under the old form, because the new v1-status test also depends on the guard firing. Verified independently: `tsc --noEmit` 0 lines, 4 files / 45 tests pass, `V1_STATUS_TO_COLUMN` has 7 mappings with 0 targets outside `VALID_COLUMNS` (so the vocabulary check is unreachable via `status:` alone and was correctly left untouched)
+- [x] The guard keys on the EFFECTIVE column (covering the v1 `status:` fallback), not on the presence of a `column` field — with a test pinning the `status:`-only route and a recorded neuter. Landed `95b23663`: `const columnChanged = resultColumn !== currentColumn`— the PREDICATE is shorter than the field-keyed form it replaces (~70 chars vs ~130, same two lines), though the FILE grew by five lines of explanatory comment. Neuters RE-MEASURED against the new predicate in `0127bce9` rather than renamed — and the count moved: neuter B (`columnChanged = false`) now reds **3** tests, not the 2 recorded under the old form, because the new v1-status test also depends on the guard firing. Verified independently: `tsc --noEmit` 0 lines, 4 files / 45 tests pass, `V1_STATUS_TO_COLUMN` has 7 mappings with 0 targets outside `VALID_COLUMNS` (so the vocabulary check is unreachable via `status:` alone and was correctly left untouched)
 - [x] `tests/unit/trdd-edit-zone-column.test.ts` covers the refusal, a positive control, the `complete` + `release-via` case, the unchanged re-write, and a changed column on an already-mismatched card
 - [x] Complementary neuter pair recorded on the card: removing the exemption reds one named test, widening it to always-true reds two
 - [x] Every pre-existing call site passes the new required 4th argument (commit ccf0de95); `tsc --noEmit` exits 0 and the four affected test files report 43 passed
 - [ ] Reviewed and moved out of `ai_review` by an approver other than the implementer
+
+## Corrections to this card's own record — 2026-09-04T17:42, after an adversarial review
+
+Four claims on this card were asserted before they were checked. All four have now been
+measured; three were true, and recording them anyway is the point — a claim that happens to
+be right is still unverified when it is made, and only the check tells the two apart.
+
+1. **`209ee3fa`'s message said "Verified first-hand rather than on the workers' reports: tsc
+   0 lines, 4 files / 45 tests".** My own `tsc` run was at **17:19:04 — three commits before
+   the fix `95b23663` existed.** The post-change `tsc` was worker-reported. The sentence
+   claiming independence was the one carrying the unverified item, which is the worst place
+   for it. Re-run at HEAD 17:41:48: **exit 0, 0 lines.** True — and now actually checked.
+2. **The neuter counts (A = 1 red, B = 3 red) were worker-reported** when I wrote them into
+   this card and into a user-facing summary as fact. That is precisely what the re-measurement
+   existed to prevent: it replaced a stale number with an unchecked one. Re-run myself:
+   `columnChanged = true` → **1 red**, "does NOT lock an already-mismatched card";
+   `columnChanged = false` → **3 red**, adding "refuses column: proposal … the bug" and
+   "refuses a zone-contradicting column reached through the v1 status fallback". Both confirmed;
+   guard restored and the tree verified clean against HEAD afterwards.
+3. **The "strictly wider" counterexample rested on `V1_STATUS_TO_COLUMN['in-progress'] === 'dev'`,
+   which I never checked** — I had counted 7 entries and verified every target is in
+   `VALID_COLUMNS`, which is a different claim. Read directly: `in-progress → dev`. The
+   counterexample holds, but it was stated to the user twice before its one load-bearing input
+   was looked at.
+4. **This card reached `ai_review` from `dev`, skipping `testing`.** The ratified path is
+   `dev → testing → ai_review`, and `testing → ai_review` is the transition that asserts the
+   test requirements passed. They did pass, and the evidence is on this card — but the recorded
+   sequence does not show it. Noted rather than churned: re-columning backwards to manufacture a
+   tidier history would make the board less truthful, not more.
 
 ## Approval log
 

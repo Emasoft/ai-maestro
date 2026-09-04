@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:33:56+0200
+updated: 2026-09-04T22:35:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -43,120 +43,86 @@ labels: [flaky-test, pty, sudo-gate]
 - **The loss is at or before `read`** — the gate builds its body with `jq -Rnc` from the
   variable, so a well-formed body with a short value cannot come from a downstream cut.
 
-**FOR THE TIMEOUTS: a CANDIDATE was already on this card (§Proposed fix step 2), and I
-invented a kernel mechanism instead of reading two sections down — but it is UNMEASURED too,
-and it has an objection I owe it.** The tests type at FIXED offsets — `^C` at 300 ms,
-password at 1200 ms — which *assumes the caller's trap ran and the read resumed inside
-900 ms*. It needs no new physics and it **predicts the load correlation the data shows**
-(batch A, under background load, holds 3 of the 4 historical failures).
+**HYPOTHESES AND THEIR STATUS.** None is tested. Four have been proposed this card; the full
+account of each retraction is in the commit trail (`ab90429f`, `d67db73b`, `38f995c1`,
+`ca1df277`) and is deliberately NOT re-narrated here — this block is the state, not the diary.
 
-**The objection, which I did not state when I adopted it an hour ago.** A canonical-mode tty
-BUFFERS characters typed while no one is reading, and delivers them when `read` resumes. So a
-merely-late resume predicts a **PASS**, or — if the password lands in the window where echo is
-back ON — an immediate `expect(out).not.toContain(SECRET)` failure. **Neither is a timeout.**
-For `read` to hang to the 25 s `SIGKILL`, the terminator has to never arrive at it at all,
-and a plain timing slip does not obviously produce that. So this is a candidate with a hole
-in it, not an explanation.
+| # | claim | status |
+|---|---|---|
+| 1 | a `stty` TCSAFLUSH eats queued input | **REFUTED on timing.** The gate's only `stty` calls are at t≈0, at the ^C (t≈300 ms) and after `read` returns; the password is typed at t≈1200 ms, and at 300 ms the queue is empty (the ^C arrives as a SIGNAL under `ISIG`, not as data). A flush there flushes nothing |
+| 2 | the line terminated one byte early | **OPEN**, untested. The only survivor for the TRUNCATION |
+| 3 | the loss is in the shell→curl leg | **EXCLUDED.** The gate builds its body with `jq -Rnc` from the variable, so a well-formed body with a short value cannot come from a cut after `jq`; the only remnant is a short write on a 22-byte pipe from a builtin, far under `PIPE_BUF` |
+| 4 | a wall-clock timing slip (§Proposed fix step 2) | **OPEN for the TIMEOUTS, with two objections.** It came from the card rather than from me and that does NOT pre-validate it — §Proposed fix is a *proposal*, never a finding |
 
-**And the evidence that would settle it is GONE.** No log from batches A or C survives
-(`/tmp/batch*.txt` are unrelated files; `/tmp/flake601/` holds only today's 24 runs, whose
-single failure was the truncation). So nobody can now check what those three timeouts
-actually LOOKED like — whether `out` held the secret, what RC was, whether the server saw a
-request. **That is the measurement to take: keep the failing run's full log next time a
-timeout fires**, because "it timed out" is a symptom and the harness captures enough to
-distinguish several causes behind it.
+**The two objections to #4, because it is the one currently doing work.** (i) A canonical-mode
+tty BUFFERS characters typed while nobody is reading and delivers them on resume, so a merely
+late resume predicts a PASS — or an echo failure if the password lands while echo is back
+ON — **not a timeout**. (ii) **P10 has never failed**, and it shares P8's exact offsets while
+doing MORE work in the resume window (`trap 'echo PRIOR-INT; return'`). If a work-in-the-window
+slip were the mechanism, P10 should fail at least as often as P8. It does not.
 
-**So this is the FOURTH mechanism story on this card, and the fact that it came from the card
-rather than from me does not pre-validate it.** It is better supported than the three that
-died — it needs no new physics and it predicts the load correlation — and it is still
-untested, with a stated objection.
+**THE CHEAPEST NEXT MEASUREMENT IS ALREADY BUILT, and I missed it while proposing a `jq`
+shim.** The harness collects `seen[]`, and a timing slip predicts **`seen[] === []`** — no
+POST ever made — whereas "read got the line and the server refused" predicts exactly one. That
+is a one-bit discriminator, and `diagnoseBody`'s **"no request reached the server at all"**
+branch (added this session, `1a2a1b2c`) already prints it. **So the next timeout diagnoses
+itself, for free.** The `jq` shim below is the follow-up for the TRUNCATION, not the first
+step.
 
-**The P8 concentration points the same way, weakly.** Taking §"The clue"'s statement that
-batch A's P9 was *not* a timeout, all three timeouts are P8 (A: P8×2, C: P8×1). P8's prelude
-is `trap 'echo PRIOR-INT' INT` and P9's is `trap '' INT`, so P8 does strictly MORE work in
-the resume window — what a timing slip predicts, and not what a flush does (a flush fires
-identically on both, since both handlers call the same two `stty`s). I had this table in
-front of me and drew the opposite conclusion from it.
+**WHAT MUST BE KEPT NEXT TIME A TIMEOUT FIRES: the full run log.** No log from batches A or C
+survives, so nobody can now check what those three timeouts looked like — `out`, RC, or
+whether the server saw a request. "It timed out" is a symptom, and the harness captures enough
+to separate several causes behind it.
 
-**Two limits on that, both real.** (i) It is **3 events across 2 batches**, on one of ~7
-tests that could time out — a concentration that size is suggestive and nothing more.
-(ii) The classification rests on ONE inherited sentence ("One P9 failure was not a timeout"),
-never independently verified, and this card has already had to retract two other claims that
-were inherited unexamined in exactly that way. If the P8/P9 split matters to a future
-decision, re-derive it from a log rather than from that sentence.
+**On the P8 concentration** (all 3 presumed timeouts are P8): treat it as weak. It is 3 events,
+2 of them in one batch, on one of ~7 tests that could time out; the work difference between
+P8's `eval 'echo PRIOR-INT'` and P9's `eval ''` is MICROSECONDS inside a 900 ms budget, which
+is not a mechanism; and P10 contradicts it (above). The partition itself rests on ONE inherited
+sentence — §"The clue"'s *"One P9 failure was not a timeout"* — never verified against a log,
+which is the same shape as two claims this card has already retracted. Say "the 3 PRESUMED
+timeouts", not "the timeouts".
 
-**One thing that IS verified, because it was queried:** the handler runs in P9 too. A reader
-may reasonably suspect that `trap '' INT` (SIGINT ignored) means `_maestro_sudo_on_int` never
-fires there, which would make P9 a different path rather than the same path with less work.
-It does fire: `maestro_sudo_ensure` installs `trap '_maestro_sudo_on_int' INT` **before** the
-`read`, replacing the caller's disposition for the duration; the caller's `''` is only saved
-in `_MAESTRO_PREV_INT` and restored *inside* the handler. So P8 and P9 run the same handler
-and differ only in the body it `eval`s — empty for P9, `echo PRIOR-INT` for P8.
+**Verified because it was queried:** the handler DOES run in P9. `maestro_sudo_ensure` installs
+`trap '_maestro_sudo_on_int' INT` BEFORE the `read`, replacing the caller's disposition; the
+caller's `''` is only saved in `_MAESTRO_PREV_INT` and restored inside the handler. So P8 and
+P9 run the same handler, differing only in the body it `eval`s.
 
-**FOR THE TRUNCATION no mechanism is established.** Hypothesis 1 (TCSAFLUSH) is refuted on
-TIMING — see §Step 2; hypothesis 3 (shell→curl) is excluded by the `jq` composition;
-hypothesis 2 (a line ending one byte early) survives only in the sense that nothing has
-tested it. **Do not adopt the next plausible story without measuring it — this card has
-produced one confident mechanism per pass and retracted every one.**
+**THE INSTRUMENT.** `diagnoseTyped`, `pwOf`, `diagnoseBody` in the pty test (`fc3b6f76`,
+`1a2a1b2c`), used as the failure message on every assertion pinning the password's arrival.
+Pinned by P11a-g, one `it()` per branch; **8 neuters, all 7 tests redden**. What they pin, in
+three categories — the two-way split published earlier over-claimed, then the correction
+under-claimed:
 
-- **DONE — step (a)'s CLASSIFIER half, by a different route than the body prescribes.**
-  `diagnoseTyped`, `pwOf` and `diagnoseBody` live in
-  `tests/unit/maestro-sudo-gate-pty.test.ts` (`fc3b6f76`, `1a2a1b2c`) and supply the failure
-  message on every assertion that pins the password reaching the server. Pinned by P11a-g,
-  one `it()` per branch; **eight neuters run and every one of the seven tests reddens under
-  at least one.** What they pin, corrected downward after a review — an earlier version of
-  this line said "five pin a BRANCH" and counted A among them, which is wrong: swapping which
-  STRING each branch returns leaves both branches running. **Branch selection: C, D, F, H
-  (4). Computation: B (the index). Message text only: A, E, G.** 21 pty tests pass, tsc 0
-  lines. (Inflating a coverage claim is exactly what the commit that wrote this line was
-  criticising a previous commit for.)
-- **The DETECTOR half is validated for `fc3b6f76`'s wiring only.** Run 23 fired it on a real
-  loss end-to-end; `1a2a1b2c` then replaced that wiring with `diagnoseBody`, which has never
-  fired on real data. Do not read "the instrument works" as covering the code in the tree.
-- **The route change, stated because the body still reads the old way.** The body ordered
-  (a) rebuild a throwaway probe under `scripts_dev/`, then (c) port it to the shipped gate.
-  The probe was SKIPPED: the shipped harness already has a real pty, a real server and the
-  real pipeline, so building an instrument there means never validating one that was going
-  to be thrown away. **(a) and (c) are therefore both discharged, and (b) and (d) now read
-  off the shipped file directly.** If a future reader wants the standalone probe back, the
-  reason it was skipped is this — not that it failed.
-- **What that buys the remaining steps.** A P-failure now self-reports WHERE the byte went,
-  so one run series answers step 0 (rate), (b) (rate + position) and feeds (d)
-  (hypothesis discrimination). They stopped being separate exercises.
+- **branch EXISTENCE** (delete the branch): C, D, F, H
+- **branch DISCRIMINATION** (both predicates compute and select distinctly): A
+- **computation**: B (the index) · **message text only**: E, G
 
-**THE RUN LANDED, AND IT REPRODUCED — see §Step 2 below. 1 truncation in 24 runs, and the
-instrument named the position on its first real firing: TAIL loss, 1 char, on
-`P8 [common.sh]`.** Read §Step 2's caveats before quoting any of that: the tick on acceptance
-box 1 was taken and then WITHDRAWN, "4.2%" is a per-run number whose denominator moved this
-session, and the flake has at least two distinct failure modes that earlier revisions pooled.
+21 pty tests pass, tsc 0 lines. **The DETECTOR half is validated for `fc3b6f76`'s wiring
+only** — run 23 fired it on a real loss end-to-end, and `1a2a1b2c` then replaced that wiring
+with `diagnoseBody`, which has never fired on real data.
 
-**NEXT ACTION — instrument the `jq` boundary FROM THE TEST, never from the gate.** The
-question is whether the line `read` returned was already short (§Step 2 hypothesis 3 shows
-the loss must be at or before `read`, so this is the whole remaining question).
+**Step (a) is discharged, and so is (c), together.** The body orders a throwaway probe under
+`scripts_dev/` then a port to the shipped gate; the probe was skipped because the shipped
+harness already has a real pty, a real server and the real pipeline, so nothing had to be
+validated and then thrown away.
 
-**Do NOT do it the way an earlier version of this line said**, which was *"print `${#pw}`
-inside the gate right after `read`"*. `scripts/shell-helpers/common.sh` is SHIPPED and runs
-against the owner's REAL governance password — that instruction was "add a debug print to a
-production credential path", and a length derived from a live secret is still derived from a
-live secret. It also would not have worked: `_pw` is `local`, and the gate `unset`s it one
-line after composing the body.
+**NEXT ACTION — in this order.**
 
-**Do it with a `jq` PATH shim instead — but build it, do not assume it exists.** Two
-corrections to an earlier version of this paragraph, which claimed the tests "already run
-with a controlled PATH":
+1. **Wait for the next TIMEOUT and read its own message.** Free, already built: `seen[] === []`
+   discriminates a timing slip, and `diagnoseBody` prints "no request reached the server at
+   all" when it holds. **Keep the full run log** either way.
+2. **For the TRUNCATION, instrument the `jq` boundary FROM THE TEST, never from the gate.**
+   Prepend a tmpdir to the test's `PATH` (the spawns pass `PATH: process.env.PATH ?? ''` — the
+   INHERITED path, so this is a small harness change, not something that already exists) and
+   put a `jq` wrapper there that records stdin length **only when its argv contains `-Rnc`**
+   (the gate's own call at `:81`; `:90` reads the RESPONSE and must not be counted, and
+   `common.sh` calls `jq` ~20 times overall), then `exec`s the real `jq`. Zero shipped code,
+   no reach to a real credential.
 
-- **They do not.** The pty spawns pass `PATH: process.env.PATH ?? ''` — the INHERITED path.
-  A shim needs a tmpdir PREPENDED to it, which is a harness change, small but real.
-- **The shim must filter on ARGV, not log every call.** `common.sh` calls `jq` roughly twenty
-  times for unrelated things. The gate's own call is uniquely identified by `-Rnc` (`:81`);
-  `:90` reads the RESPONSE and must not be counted. A shim that logs "stdin length" for every
-  invocation produces an uninterpretable stream.
-
-So: prepend a tmpdir to the test's `PATH`, put a `jq` wrapper there that records stdin length
-**only when its argv contains `-Rnc`** and then `exec`s the real `jq`. That measures the
-exact boundary, touches **zero shipped code**, and cannot reach a real credential because it
-exists only inside the test's own environment. Run until a truncation fires and compare the
-recorded length with what the server received.
+**NOT the way two earlier versions of this line said** — *"print `${#pw}` inside the gate"*
+would have added a debug print to `scripts/shell-helpers/common.sh`, which is SHIPPED and runs
+against the owner's REAL governance password; it would also not have worked (`_pw` is `local`
+and `unset` one line later). Reasons in `ab90429f`/`38f995c1`.
 
 **Waiting on nothing and nobody** — no `blocked-by:`, no owner decision. It sits in `todo`
 because the turn ended, not because it is parked; the sibling `TRDD-BAXXIG0J` is the one
@@ -587,6 +553,14 @@ LOW for the harness work. Step 1 could raise the severity sharply if input loss 
 - [ ] Established whether the truncated password was tty input loss or a harness artifact,
       with the measurement recorded here, testing BOTH hypotheses in the clue section.
 - [ ] The timing dependence removed wherever an observable marker exists.
+- [ ] **UNSATISFIABLE AS WRITTEN — restate before working it (2026-09-04).** Two reasons.
+      (i) Its arms were P0-present vs P0-absent and **P0 is deleted**, so there are no arms to
+      interleave; the STATE block's "do not re-derive the interleaving requirement" reads as
+      *don't worry about it* when what it means is *this box needs restating*. (ii) Since the
+      two failure MODES were split, "green" is ambiguous — a series that fixes the timing slip
+      and leaves the truncation would show a long green streak and satisfy this box while the
+      security-pin defect it exists for remains. Restate as a per-MODE criterion. Original
+      text kept below.
 - [ ] Green across an INTERLEAVED design. **The arm size is a CONVENTION, not a derivation** —
       nothing here derives one, and 12/arm would be WEAKER than the '30 consecutive' it
       replaced. Prefer a relative criterion: run until the arms' counts differ by more than

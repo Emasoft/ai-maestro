@@ -1,9 +1,9 @@
 ---
 trdd-id: VAXLW6RI
 title: The wizard heartbeat cannot tell a permanent refusal from a transient blip so it retries forever
-column: todo
+column: ai_review
 created: 2026-09-04T13:53:44+0200
-updated: 2026-09-04T13:53:44+0200
+updated: 2026-09-04T15:27:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -157,3 +157,34 @@ LOW. One `catch` block in one component; no server change.
 
 - 2026-09-04T13:53:44+0200 — Tier 0 self-mandate: a UI error-handling fix inside this session's own scope, no
   governance surface. Filed while acting on an adversarial review of TRDD-DQVPODKW.
+
+## Implementation
+
+**Fix site:** `components/HaephestosEmbeddedView.tsx`, the `sendHeartbeat` closure inside the
+heartbeat `useEffect` (~line 132-153). Added a `heartbeatError` state and a branch in `sendHeartbeat`
+that checks `res.status === 401 || res.status === 403` BEFORE the generic `!res.ok` throw: on a
+permanent refusal it calls `stopInterval()`, clears any pending `retryTimer`, and sets
+`heartbeatError` to a user-facing message — then returns without falling into the backoff `catch`.
+A successful heartbeat now also clears `heartbeatError`. Any other non-2xx (5xx, network failure)
+still falls through to the original exponential-backoff `catch`, unchanged. A visible banner reading
+`heartbeatError` was added at the top of the component's root JSX (before the two-frame content
+area), reusing the component's existing red/amber forge palette — no new UI system introduced.
+
+**Test:** `tests/unit/haephestos-heartbeat-permanent-failure.test.ts` — renders the real component
+(TerminalView/TomlPreviewPanel/HaephestosLeftPanel mocked to `null`, `next/navigation` mocked) with
+fake timers and a stubbed `fetch`. Test 1 drives a 403 and asserts the banner text appears and the
+heartbeat is called exactly once even after advancing 60s (past every backoff tier and the 15s
+interval). Test 2 (positive control) drives two 503s then a 200, asserts the heartbeat is called at
+1s and 3s (matching the 1s/2s backoff schedule) and that no error banner is shown once it recovers.
+
+**Neuter (mandatory, run per instructions):** collapsed the fix back to the original undifferentiated
+`try { ...; if (!res.ok) throw ...; attempt = 0 } catch { backoff }` (no 401/403 branch, no
+`heartbeatError` writes). Re-ran the suite: test 1 (permanent-failure banner) REDDENED —
+`getByText(/rejected \(403\)/i)` threw `TestingLibraryElementError: Unable to find an element`,
+confirming the banner only appears because of the new branch. Test 2 (503 positive control) stayed
+GREEN under the neuter, confirming it is not accidentally coupled to the fix. Restored the fix;
+both tests green again (verified by re-running `vitest run tests/unit/haephestos-heartbeat-permanent-failure.test.ts`).
+
+**Also verified:** `npx tsc --noEmit` clean (no output, no errors).
+
+**No claim in this card was found false.**

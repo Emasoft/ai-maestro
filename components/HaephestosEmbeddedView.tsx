@@ -74,6 +74,7 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [playingAnimation] = useState(true)  // Always loop while on page
   const [videoMuted, setVideoMuted] = useState(true)
+  const [heartbeatError, setHeartbeatError] = useState<string | null>(null)
   const animationVideoRef = useRef<HTMLVideoElement>(null)
   const signalDetectedRef = useRef(false)
 
@@ -132,8 +133,18 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
       if (cancelled) return
       try {
         const res = await fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' })
+        if (res.status === 401 || res.status === 403) {
+          // Permanent refusal (not a transient blip) — stop retrying and
+          // surface it, or the session dies silently 120min later when the
+          // server watchdog reaps it (TRDD-VAXLW6RI).
+          stopInterval()
+          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+          setHeartbeatError(`Session heartbeat rejected (${res.status}) — you may have been signed out.`)
+          return
+        }
         if (!res.ok) throw new Error(`heartbeat ${res.status}`)
         attempt = 0
+        setHeartbeatError(null)
       } catch {
         if (cancelled) return
         attempt = Math.min(attempt + 1, 4)
@@ -363,6 +374,11 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
   return (
     <TerminalProvider>
       <div className="flex flex-col h-full" style={{ backgroundColor: PAGE_BG }}>
+        {heartbeatError && (
+          <div className="mx-3 mt-2 px-4 py-2 rounded text-sm font-semibold" style={{ backgroundColor: '#3a1010', color: '#f5b0b0', border: `1px solid ${FRAME_RED_BASE}` }}>
+            {heartbeatError}
+          </div>
+        )}
         {/* Two-frame content area */}
         <div className="flex-1 flex gap-3 mx-3 mt-2 mb-2 min-h-0 overflow-hidden">
 

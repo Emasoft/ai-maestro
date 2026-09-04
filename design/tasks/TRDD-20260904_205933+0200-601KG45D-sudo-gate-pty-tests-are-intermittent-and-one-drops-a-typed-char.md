@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:53:48+0200
+updated: 2026-09-04T22:55:55+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -191,13 +191,22 @@ because "all 11 hold against the current file" was asserted once and is only two
 measured: **A and B were RE-RUN** after the split (A reds P11b+P11c+P11g, B reds P11d) — their
 earlier attributions had been carried across a refactor that moved the test boundaries they
 depend on. **C-H were run against the P11a-g arrangement and are NOT re-run**; they hold because neither
-the function each mutates nor the test each reddens has changed since. **That premise was
-labelled "an argument, not a measurement" and has now been CHECKED** — `git log -S` shows
-P11a-g's bodies last changed in `1a2a1b2c`, the commit that created them and against which
-these neuters ran; the two later commits whose diffs mention `P11g` touch it only as a context
-line (`5aab3a19` inserts P11h above it) or only in the commit message (`bb0e23c2`). The
-classifier functions are likewise untouched since. So the deduction's premise is verified, and
-re-running the six would confirm what the history already shows.
+the function each mutates nor the test each reddens has changed since. **That premise was labelled
+"an argument, not a measurement", then CHECKED — twice, because the first check was the wrong
+instrument.** `git log -S` was used first and is INSUFFICIENT here: it detects a change in the
+COUNT of a string, so an edit that rewrites a line while preserving occurrences is invisible to
+it — the same class of hole this card has been finding all session, in the very step claiming
+to close one. What actually
+establishes the claim is the OTHER check that was run alongside it: **enumerating every commit
+touching the file** since `1a2a1b2c` and inspecting each — that cannot miss an edit, because it
+lists every commit that touched the file at all. Confirmed independently by a **CONTENT diff**
+of the P11 block between `1a2a1b2c` (the commit that created P11a-g, and the tree these neuters
+ran against) and HEAD: **additions only** — P11h/i/j inserted — with **no line of P11a-g
+removed or modified**. The classifier functions are likewise untouched. Premise holds.
+
+**Use `-G`, never `-S`, to ask "did anything touch these lines".** `-S` is a pickaxe on
+occurrence COUNT; `-G` matches any hunk touching the pattern. Worth writing down because the
+card briefly cited `-S` as proof of unchangedness, which it cannot give.
 
 What they pin, in three categories — the two-way split published earlier over-claimed, then
 the correction under-claimed:
@@ -218,9 +227,13 @@ earlier note called the field "one behind by construction, a commit's SHA cannot
 into itself"; the first half is true and the second made it sound permanent. The lag is one
 commit *while code commits continue* and it CLOSES when they stop, which a following card-only
 commit does — and has. **`431e13b6` also touched the test file and is deliberately excluded:**
-it added a comment only, and this field is the backtracking chain from a later bug to the
-change that could have introduced it. (A review reported six-for-six and missed `431e13b6`
-entirely; the exclusion is a decision, not an oversight, which is why it is written down.)
+the IND rule says the field accumulates the SHAs that landed this TRDD's **code**, and a
+comment lands none. (A review reported six-for-six and missed `431e13b6` entirely; the
+exclusion is a decision, not an oversight, which is why it is written down. And "a comment
+cannot introduce a bug" would be too strong as a general reason — the comment `431e13b6` added
+is the eager-evaluation warning that stops a future edit making `timeoutContext` throw, so
+deleting it could contribute to one. The rule's own word "code" is the firmer ground, which is
+why the justification now rests there rather than on purpose.)
 
 **THE CLOSING CONDITION, on its second attempt, because the first was unfalsifiable.** From
 here, **instrument findings are RECORDED on this card, not fixed**, until the shim exists.

@@ -5,11 +5,11 @@ scope: project
 project-id: ai-maestro
 column: backburner
 review-after: 2026-10-06
-blocker-probe: sh -c 'n=$(grep -c "IFS= read -rs _pw < /dev/tty" scripts/shell-helpers/common.sh 2>/dev/null || printf 0); printf "PROBE-RAN gate-shape=%s" "$n"'
-blocker-holds-if: not-match:gate-shape=0
+blocker-probe: sh -c 'f=scripts/shell-helpers/common.sh; t=$(grep -c "trap .* INT" "$f" 2>/dev/null); r=$(grep -cE "read -rs.*/dev/tty" "$f" 2>/dev/null); printf "PROBE-RAN trap=%s read=%s" "${t:-0}" "${r:-0}"'
+blocker-holds-if: not-match:trap=0
 blocker-probe-canary: match:PROBE-RAN
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:14:38+0200
+updated: 2026-09-05T01:18:06+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -87,13 +87,32 @@ severity **LOW — justified by CONSEQUENCE (fact 5), not by reachability**, whi
 robust footing since the reachability argument has flipped three times and could flip again. The
 consequence argument cannot: worst case is a spurious auth refusal.
 
-**⏹ MOVED `todo` → `backburner` (`review-after: 2026-10-06`), and severity `medium` → `low`.**
-`todo` was dishonest: this card was worked all session, not queued, and none of (a)-(c) is
-urgent at LOW. `backburner` is the column for DELIBERATELY DEFERRED and is the one the drain rule
-exempts by name. **The drain rule applies to me here:** nine review rounds on a LOW-severity card
-while 54 cards sat untouched in `todo` is exactly the pattern it exists to catch, and the reason
-I gave twice for not draining — the measurement owning the machine — expired when the batch
-finished.
+**⏹ MOVED `todo` → `backburner` (`review-after: 2026-10-06`), severity `medium` → `low`. THE
+REASON, in full: severity is LOW, neither open action is urgent, so this is deferred BY CHOICE.**
+`todo` was also simply wrong — the card was being worked, not queued.
+
+*(An earlier version justified the park by invoking the drain rule against myself — "ten rounds
+on a LOW card while 54 sat untouched". That is accurate as self-criticism and it is NOT a reason
+to park: the drain rule says finishing a card means pulling the NEXT one; it does not say an
+unfinished card may be parked because its author spent too long on it. Those are different moves,
+and dressing the second as the first is the same rhetorical shape this card already caught twice
+— "same direction as every other slide", and "I did catch it in parallel". Being tired does not
+make the park wrong; it is just not the reason.)*
+
+**Why `medium` was wrong, since a reader who set it deserves an answer:** `medium` was assigned
+before anything was measured, when the observable was "a security-gate test dropped a password
+character" — which reads as credential handling. Fact 5 (fails closed) is what settles it: the
+worst case is a spurious auth refusal.
+
+**On the probe below — read it for what it is.** At LOW severity with a `review-after` date, **the
+DATE is the real blocker**; the probe exists because the linter requires one, and it is brittle by
+nature. It tracks the CONJUNCTION the card identified (a trapped `INT` plus a `read` on the
+controlling terminal) rather than one line's exact spelling — an earlier version matched the
+literal string `IFS= read -rs _pw < /dev/tty`, which was **inverted on both axes**: it unparked on
+a rename or a dropped space (bug unchanged) and stayed parked through every change that would
+actually resolve the card. Its "negative control" ran against `/dev/null`, proving only that
+`grep -c` works. The current one is verified against PLAUSIBLE edits: renaming `_pw` → `_pass`
+keeps it parked (`trap=8`), removing the `trap` unparks it (`trap=0`).
 
 ## ⏵ P13 ANSWERED 2026-09-05T00:56 — ZERO in 320 detecting typings. THE INTERACTION IS REQUIRED.
 
@@ -351,7 +370,8 @@ and I would have closed the card calling `common.sh` innocent. **TWO cells were 
 they separate TWO of the three variables, not three. Only ONE of the two turned out to be
 constructible.**
 - ~~**`^C` + polling** — truncations persist ⇒ the signal path is implicated, not write
-  timing.~~ **NOT CONSTRUCTIBLE**, discovered by trying to write it (2026-09-05). The card
+  timing.~~ **[SUPERSEDED — DO NOT CITE; see the two retractions below this bullet]** ~~NOT
+  CONSTRUCTIBLE, discovered by trying to write it~~ (2026-09-05). The card
   already knew the reason and had not connected it to the design: `typeWhenNoEcho` is not a
   readiness check, it polls for `-echo`, which the gate sets at `:749` BEFORE `read` at `:753`,
   so the flag is already true when the poll starts and the loop breaks on its first iteration.

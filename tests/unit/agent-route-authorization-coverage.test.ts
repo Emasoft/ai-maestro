@@ -236,15 +236,23 @@ const rel = (f: string) => path.relative(collectionRoot, f)
  * MANAGER positive control, neuter observed 1 red / 1 green).
  */
 const COLLECTION_UNREVIEWED: string[] = [
-  'creation-helper/cleanup/route.ts',
-  'creation-helper/clear-banner/route.ts',
+  // ── 11 → 5, TRDD-DQVPODKW (2026-09-04) ────────────────────────────────────────────────
+  // `cleanup`, `clear-banner`, `ensure-persona`, `file-picker`, `heartbeat` and `raw-materials`
+  // are gone because they now call `enforceSystemOwner(`. They were REAL holes, not a needle
+  // artefact: the Haephestos wizard is a human dashboard flow, and authenticating without
+  // authorizing let any agent of any title wipe the owner's `~/agents/haephestos/` tree, reset
+  // its banner, forge its heartbeat, respawn its persona and browse its filesystem.
+  //
+  // SCOPED BY A CALLER CENSUS, not swept: `element-descriptions` and `publish-plugin` are the
+  // only two routes the persona actually curls (agents/haephestos-creation-helper.md), so they
+  // STAY here, agent-callable and still undecided. `cleanup` looked like a third — the persona
+  // names it — but that is PROSE describing what the wizard does to its directory, not a call,
+  // and reading the mention as a call would have excluded the most destructive route of the six.
+  // Pinned by tests/unit/creation-helper-wizard-system-owner.test.ts, whose last case asserts
+  // those two siblings are NOT owner-gated, so a later sweep of the whole subtree reddens here.
   'creation-helper/element-descriptions/route.ts',
-  'creation-helper/ensure-persona/route.ts',
-  'creation-helper/file-picker/route.ts',
-  'creation-helper/heartbeat/route.ts',
   'creation-helper/kill/route.ts',
   'creation-helper/publish-plugin/route.ts',
-  'creation-helper/raw-materials/route.ts',
   'creation-helper/session/route.ts',
   // ── 15 → 11, TRDD-CAVCTULL (2026-08-28) ───────────────────────────────────────────────
   // `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults` and `startup` are gone

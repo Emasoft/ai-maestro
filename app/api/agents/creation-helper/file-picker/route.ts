@@ -3,7 +3,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join, resolve } from 'path'
 import { homedir } from 'os'
 import { randomBytes } from 'crypto'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,10 +26,15 @@ const ALLOWED_EXTENSIONS = new Set(['md', 'txt', 'toml'])
  * Returns: { path: string, filename: string }
  */
 export async function POST(req: NextRequest) {
-  const auth = authenticateFromRequest(req)
-  if (auth.error) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-  }
+  // TRDD-DQVPODKW: SYSTEM-OWNER only. This is a wizard-only surface — the Haephestos creation
+  // wizard is a human dashboard flow, and a per-route caller census (2026-09-04) found this route
+  // called from `components/` and NOT by the persona, whose shipped instructions
+  // (agents/haephestos-creation-helper.md) curl only element-descriptions and publish-plugin.
+  // Authenticating and stopping there let any agent of any title drive the owner's wizard — wipe
+  // its working directory, kill its session, reset its banner, browse its filesystem.
+  // A browser cookie session resolves to the system owner, so the UI is unaffected.
+  const ownerErr = enforceSystemOwner(req)
+  if (ownerErr) return ownerErr
 
   try {
     const formData = await req.formData()

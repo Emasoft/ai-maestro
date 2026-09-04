@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:37:13+0200
+updated: 2026-09-04T23:43:06+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -34,26 +34,58 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ THE EXPERIMENT FIRED — 2026-09-04T23:37, N = 21, TWICE
 
-**`jq -Rnc stdin: 21 byte(s) for 22 expected`**, on two independent runs of the same batch:
+**`jq -Rnc stdin: 21 byte(s) for 22 expected`**, TWICE WITHIN ONE BATCH, four runs apart:
 
 ```
 run-008  P9 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
 run-012  P8 [agent-helper.sh]  TAIL loss: 1 char · jq -Rnc stdin: 21 byte(s) for 22 expected
 ```
 
+**FIRST, THE CONFOUND, because the conclusion is worthless without it.** The shim measures
+`wc -c < "$t"` and feeds `"$REAL" "$@" < "$t"` — the SAME file — so *"the gate handed jq 21"*
+and *"the shim's own `cat` lost a byte"* produce byte-identical observations. Two things
+exclude the second, and both were already on this card, attached to other sections:
+
+1. **The phenomenon PREDATES the shim.** Three truncations with the same TAIL-1 signature were
+   observed on plain `jq` — batch-A P9, `P8 [common.sh]` run 23, `P8 [agent-helper.sh]` 22:41.
+   An instrument cannot cause an effect recorded before it existed.
+2. **PIPE_BUF atomicity** (hypothesis 3's own row): `printf '%s' "$_pw"` is a builtin writing 22
+   bytes to a pipe, far under `PIPE_BUF`, so the write is atomic and a `cat` reading to EOF
+   cannot silently short-read it.
+
+So N=21 means **`_pw` ITSELF held 21 characters** — upstream of `jq` and upstream of the shim.
+
 **WHAT THIS ESTABLISHES.** The gate handed `jq` a line that was ALREADY short. "The loss is
 at or before `read`" stops being an argument from the pipeline's composition and becomes a
 MEASUREMENT. **Hypothesis 3 (the shell→curl leg) is now excluded by measurement, not by
 reasoning** — the same conclusion the composition argument reached, but this card has
 retracted four mechanisms that were reasoned rather than measured, so the distinction is the
-point. Two independent firings, both 21, both TAIL, so it is not a one-off reading.
+point. Both 21, both TAIL, so it is not a one-off reading — but **"two INDEPENDENT runs" was
+claimed and is withdrawn**: same batch, same machine state, same script copy, four runs apart,
+so a transient common cause (scheduler, memory pressure, a background job) is not excluded.
+That is a REPEAT, not a replication. It costs nothing — ONE firing pins the boundary just as
+well, and independence would only matter for a rate claim, which is disclaimed below.
 
-**WHAT IT DOES NOT ESTABLISH.** Which of hypothesis 1 or 2 — both live at or before `read`.
-The position is TAIL, which fits H2 (the line terminated one byte early) and does not fit H1
-(a flush discards the whole queued line, giving a LEADING/total loss or a stranded `read`,
-never a one-char tail). That is the same position argument the card already had; what is new
-is only that the boundary is now pinned upstream of `jq`. **And per the review's FINDING N,
-the position argument is circular against H1 under load** — see the load caveat below.
+**A TAIL LOSS EXCLUDES H1 OUTRIGHT, and the "circularity" objection is WRONG — worked from
+the mechanism, not taken from a reviewer.** `TCSAFLUSH` discards the input received but not
+yet read, i.e. the WHOLE pending queue, never a suffix of it. In canonical mode with `read`
+blocked, a flush landing after character *k* discards 1..*k*; characters *k*+1..22 and the
+`\r` survive, so what `read` returns is a **SUFFIX** of the password — a LEADING loss. A flush
+landing after the `\r` is queued discards everything, giving an empty `_pw` and the
+fail-closed branch. **Neither is a one-character tail.** Load changes *k*, so it changes the
+SIZE of a leading loss; it does not change which END the loss is at. H1's entire prediction
+family is leading/total losses at every load, so a TAIL observation is inconsistent with it.
+
+**Round three's FINDING N is therefore WRONG in its conclusion, and I adopted it verbatim
+one commit ago** — it conflated *load-dependence of the loss SIZE* with *load-dependence of
+the loss END*. The load caveat below is struck to that extent. Recorded rather than quietly
+reverted, because "the reviewer said so" is how a correct claim got weakened in the first
+place, and a fourth reviewer saying the opposite is not better evidence than the mechanism.
+
+**So H2 survives on EVIDENCE, not by elimination**, and the position reading does discriminate.
+
+**WHAT IS STILL NOT ESTABLISHED:** why a canonical-mode line delivers its terminator one byte
+early. That is the whole remaining question.
 
 **HYPOTHESIS 2 IS THE ONLY SURVIVOR, and it is now the thing to instrument.** The next
 question is why a canonical-mode line delivers its terminator one byte early.
@@ -354,11 +386,18 @@ buffers fewer characters and the loss moves toward the START. **The claim theref
 H2, which is exactly what the position reading is supposed to test** — the same circularity
 this card already flags in the P10 objection, committed again one paragraph away from it.
 
-Corrected: *position is load-independent under H2 and load-DEPENDENT under H1, so a position
-reading taken under one load condition cannot by itself separate them.* Recorded with the
-evidence that cuts the other way, because it should not be buried: batch A's truncation is
-the one noted as having happened UNDER LOAD, and it was **TAIL** — n=1, and it points toward
-H2.
+**STRUCK 2026-09-04T23:44 — the correction above was itself wrong.** Load changes the SIZE of
+a leading loss, not the END it falls at; a flush cannot produce a one-character tail at any
+load. The mechanism is worked in the result block at the top of this STATE. What survives of
+FINDING N is nothing: position DOES discriminate H1 from H2, and the claim it attacked was
+right as originally written. Left in place rather than deleted so the next reader sees that
+this card weakened a correct claim on a reviewer's word and then restored it on the mechanism.
+
+**And "batch A's truncation happened UNDER LOAD" is INHERITED AND UNVERIFIED.** It appears on
+this card as an assertion with no measurement behind it, and I repeated it as evidence for H2.
+Same shape as *"One P9 failure was not a timeout"*, which this card already flags as never
+checked against a log. **TAIL for batch A IS established** — directly from the recorded strings
+(`…x7q` vs `…x7q2`), no classifier needed. The load half is not.
 
 **The `jqStdinNote` message rides `expect(actual, message)` and is TOTAL** — vitest
 evaluates it EAGERLY on every run, so a missing record file returns a sentence, never a
@@ -414,6 +453,18 @@ against a fixed question instead of against judgement. Applied to round three: f
 position/load circularity) and O (`['922']`'s length inferred, not read back) all change how
 a reader INTERPRETS the number, never the number — so all four are recorded above and **zero
 code changed**. That is the loop terminating under its own rule.
+
+**Two things the rule is NOT, stated so nobody assumes more of it than it gives.** It protects
+the EXPERIMENT'S integrity, not general clarity — so it deliberately permits finding M (a shim
+failure reddening four security-named tests is genuinely misleading, and stays). And this is
+**precommitment, not the absence of judgement**: I chose to adopt the rule, chose the
+classifications, and commissioned the review that proposed it. Better than a per-finding call
+because the question is fixed in advance; not the same as the loop terminating by itself.
+
+**THE NEXT MEASUREMENT, once the batch closes: VARY THE PASSWORD LENGTH** (22 → 40 → 60). If
+the loss stays exactly TAIL-1 regardless, the mechanism is terminator-related; if it scales,
+it is buffer-related. One constant, no new machinery. It IS an instrument edit, so the
+backstop below holds it until the batch ends.
 
 **BACKSTOP, in case a later round argues past it: the batch RUNS TO COMPLETION before any
 further instrument edit.** Two batches were already killed mid-flight for instrument fixes; a

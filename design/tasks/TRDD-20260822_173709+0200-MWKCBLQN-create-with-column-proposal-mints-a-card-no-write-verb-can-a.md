@@ -43,6 +43,33 @@ without a manual move, and `trddgrep validate` must report no ZONE-MISMATCH.
 
 - 2026-08-22T17:37:09+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
 
+## Caller census — done AFTER the guard shipped, which is the wrong order
+
+A review asked who else calls `createTrdd`, since the guard went into a LIBRARY function
+and the commit message said "the TRDD create route". Fair hit: I tightened a shared function
+without enumerating its callers first — the exact discipline TRDD-FRRJ80YQ applied and this
+card skipped. Measured now (`grep -rn "createTrdd" app lib services scripts tests`):
+
+| caller | passes a caller-chosen `column`? | effect of the guard |
+|---|---|---|
+| `app/api/trdd/create/route.ts:52` | yes (`column` from the request body) | refuses before any write — the intended fix |
+| `scripts/trddgrep.mjs:1041` | yes (`column: columnVal` from `--column`) | refuses before any write; the CLI catches and exits 2 with `refusing to create — <message>` |
+| `tests/unit/trdd-create.test.ts` (7 cases) | some | **7/7 still pass** — no regression |
+| `lib/trdd-store.ts:903` | no — a COMMENT referencing this guard, not a call | none |
+
+**No headless-router caller exists** — the grep covered `services/` and returned none, which
+matters because that mode reimplements routes by design and is where a half-applied guard
+would normally hide.
+
+The CLI is worth one extra line: it already carried a POST-WRITE gate that writes the file,
+runs `validateTrddCandidate`, and DELETES it on a violation. So that path was partly covered
+before; the guard now refuses earlier, before anything touches disk. The route had no such
+gate, which is where an inert card could actually survive.
+
+Verdict: two production callers, both should be guarded, both are, and the pre-existing suite
+is green. The finding was legitimate and resolves clean — but the census belonged before the
+commit, not after a reviewer asked.
+
 ## Implementation
 
 Fix site: `lib/trdd-create.ts`, `createTrdd()` — the mandate branch (`isMandate === true`)

@@ -41,17 +41,19 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
   // innerWidth=400 leaked forward and silently ran the NEXT test against the
   // mobile branch — found by neutering the mobile banner, which reddened two
   // tests instead of one. Restoring it keeps each test's branch its own choice.
-  // Same reasoning for document.visibilityState, which the tab-resume test also
-  // redefines. It happens to be harmless today (jsdom defaults to 'visible' and the
-  // test sets 'visible'), so nothing reds — which is exactly why it would have been
-  // left behind. A later test asserting the hidden-tab suspend would inherit it.
   const realInnerWidth = window.innerWidth
-  const realVisibility = document.visibilityState
 
   afterEach(() => {
     cleanup()
     Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, writable: true, configurable: true })
-    Object.defineProperty(document, 'visibilityState', { value: realVisibility, writable: true, configurable: true })
+    // `delete`, NOT a defineProperty "restore". `visibilityState` has no own property
+    // on the document — it is an ACCESSOR on the prototype (measured: own descriptor
+    // `undefined`, prototype descriptor has a getter). Writing the captured VALUE back
+    // as an own data property leaves the getter permanently shadowed for the rest of
+    // the file, which looks like a restore and is the very leak it claims to undo.
+    // `delete` removes the own property and re-exposes the live getter.
+    // @ts-expect-error — deleting an own property that shadows a prototype accessor
+    delete document.visibilityState
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })

@@ -1,9 +1,13 @@
 ---
 trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
-column: ai_review
+column: blocked
+blocked-by: [1LFRP6GJ]
+pre-block-column: ai_review
+blocker-probe: sh -c 'grep -m1 "^column:" design/tasks/TRDD-20260904_134338+0200-1LFRP6GJ-haephestos-persona-has-no-credential-so-its-own-api-calls-401.md || echo column-absent'
+blocker-holds-if: not-match:complete
 created: 2026-08-22T22:30:28+0200
-updated: 2026-09-04T13:44:42+0200
+updated: 2026-09-04T18:12:25+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -339,3 +343,10 @@ silently-unapplied neuter and a vacuous guard produce the identical output.
 
 No advisor verdict was obtained: the Fable weekly window measured `exhausted` (100%), which the
 advisor policy names as a sanctioned skip.
+
+## Blocked
+
+All 12 acceptance boxes are checked and the work is done, but the card's EHT TRDD-1LFRP6GJ
+("The Haephestos persona has no credential so its two documented API calls are refused") sits
+at `column: todo` with 4 unchecked boxes, and the 3-pillars completion gate forbids a parent
+reaching a terminal column while a derived task is open. It completes when 1LFRP6GJ does.

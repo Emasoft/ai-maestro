@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:35:00+0200
+updated: 2026-09-04T21:41:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -99,6 +99,18 @@ never the same condition as "no P0".
 
 **Step 0 must fix the DESIGN, not raise `n`:** interleave the arms within one session on a
 quiet machine. More runs of the same shape buy precision about nothing.
+
+## Relationship to WV8FDAH0, and a correction its own commit cannot carry
+
+WV8FDAH0 closed `complete` (`b47c423e`) while this card was open, and that was right: its
+code is landed and verified, and what THIS card governs is confidence in the TEST, not
+completion of the FIX. So this is not a `blocked-by:` of it.
+
+**`b47c423e`'s commit message gives a different, wrong reason** — that a `blocked-by:` would
+"make the board claim work is in flight". It would not; `blocked` is precisely the column for
+a card sitting still with a named blocker. The card is frozen and the commit is immutable, so
+the correction lives here, on the unfrozen card that owns the relationship and that a reader
+asking the closure question will reach.
 
 ## A separate gap this turned up: nothing executes the shebang
 

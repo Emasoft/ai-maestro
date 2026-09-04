@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:16:40+0200
+updated: 2026-09-04T23:24:34+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,7 +24,7 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2, e3787efb]
+implementation-commits: [fc3b6f76, 1a2a1b2c, b0ec7002, 5aab3a19, 65a56eeb, bb0e23c2, e3787efb, c74d8798]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
@@ -235,7 +235,14 @@ BYTE LENGTH (never the content) of what the gate hands `jq -Rnc` at `common.sh:7
 stdin is touched (common.sh calls `jq` ~20 times, one on the RESPONSE at `:770`, several
 with a filter and a file and no stdin at all). Zero shipped code changed.
 
-**Pinned by P12a-e, one `it()` per branch, four neuters run and ATTRIBUTED:** guard never
+**P12f WAS ADDED BY THE REVIEW, and it is the one that pins the number the experiment turns
+on.** A shim that ignored stdin and appended a hard-coded `22` passes P12a (the secret is 22
+bytes) AND P12e (which counts lines, not values) — so before P12f, *nothing* asserted the
+recorded length was a function of the gate's stdin at all. MEASURED, not argued: that exact
+mutation reddens P12f alone, 5 of 6 still green. Two different input lengths make a constant
+impossible.
+
+**Pinned by P12a-f, one `it()` per branch, four neuters run and ATTRIBUTED:** guard never
 matches (`-RnZ`) → P12a+P12e · guard matches everything (`-n "$a"`) → P12d+P12e · `wc -c`
 → `wc -l` → P12a · forward replaced by `echo '{}'` → P12b. The last two ran TOGETHER; they
 are independent by construction (one writes the record file, one writes stdout, and each
@@ -253,12 +260,25 @@ from the pipeline's composition, and it is now MEASURABLE: a short length at `jq
 confirms it, a full length REFUTES it. The measurement has NOT been taken — no truncation
 has fired since the shim landed.
 
-**THE CAVEAT THAT MUST BE READ BEFORE ANY POST-SHIM RATE IS QUOTED.** The shim adds an
-`mktemp` + `cat` + `wc` + a fork INSIDE the gate's own pipeline, so it perturbs the timing
-of the very window the surviving hypotheses live in. A post-shim rate is therefore NOT
-comparable to the pre-shim 1-in-24, in either direction, and a truncation that stops
-appearing is NOT evidence it was fixed. What the shim is trusted for is the POSITION of
-the boundary when a loss does occur — not the rate at which it occurs.
+**THE TIMING CAVEAT, CORRECTED — the first version named the wrong mechanism and was
+wrong in the direction that would have discarded a real finding.** It said the shim
+"perturbs the timing of the very window the surviving hypotheses live in", so a post-shim
+rate was not comparable in either direction. **The shim runs at `common.sh:761`, which is
+AFTER `read` returns at `:753`.** Both surviving hypotheses (1, a flush at the prompt; 2,
+the line terminating a byte early) resolve at or before `read`, i.e. strictly UPSTREAM of
+every line the shim adds. So the shim cannot perturb the truncation window at all, and the
+rate SHOULD be unchanged.
+
+That inverts what a rate change would mean. Under the old caveat, a rate that moved was
+noise to be discounted. Under the corrected one, **a rate that visibly moves is itself a
+finding** — evidence for a mechanism nobody has proposed, since no current hypothesis has
+anything downstream of `read` to be perturbed. The only residual is second-order: ~4 extra
+forks per gate call raise machine load across a long batch, which is a whole-machine
+effect, not a gap in the gate's own pipeline.
+
+Found by the adversarial review of `e3787efb`. The caveat was written to be conservative
+and was conservative about the wrong axis — which is not a safe failure, because "discount
+any rate change" would have thrown away the one signal this shim can produce for free.
 
 **The `jqStdinNote` message rides `expect(actual, message)` and is TOTAL** — vitest
 evaluates it EAGERLY on every run, so a missing record file returns a sentence, never a
@@ -327,8 +347,27 @@ validated and then thrown away.
      early) is the only survivor and becomes the thing to instrument next.
    - **N = 22** → the loss is AFTER `jq`, which REFUTES the composition argument this card
      has been resting on since `38f995c1`, and re-opens hypothesis 3.
+   - **N ≤ 20** → a MULTI-byte loss, which no observation on this card has ever shown (all
+     three were exactly one char). A different finding, not a stronger version of N=21.
+   - **N > 22** → something ENTERED the buffer that the gate did not type — a stray `\r`, an
+     echo artefact, input from another test. Also a different finding, and the one that would
+     most change what this card is about.
    - **NOT RECORDED** → the shim did not fire on that run. That is a finding about the
      HARNESS, not about the gate; do not read it as either answer.
+   - **The baseline control, which is free and must be taken FIRST:** on a PASSING run the
+     shim still records, and the value must be 22. If a green run ever records anything else,
+     the instrument is wrong and no failing run's number means anything. Take one green
+     reading before trusting any red one.
+
+   **Exit codes 90/91/92 from the shim are HARNESS failures, never the bug.** `mktemp` and
+   `cat` both fail toward a SHORT length — a full disk mid-`cat` leaves a truncated file, and
+   the shim would record a short length AND hand `jq` short input, manufacturing exactly the
+   observation this card is hunting. They are guarded; if one fires, discard the run.
+
+   **The runner prints EVERY note, never the first.** Passing tests emit none (measured: 0 in
+   a green run, 1 in a neutered one), so every note in a log belongs to a failed test — but
+   P3, P8×2 and P9×2 all carry a `diagnose()` message, so a two-failure run has two notes and
+   `head -1` would attribute a length to the wrong test.
 
    **Keep the full run log either way** — no log survives from batches A or C, which is why
    nobody can now say what those three presumed timeouts looked like.

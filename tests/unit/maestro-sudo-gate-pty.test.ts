@@ -90,9 +90,14 @@ function installJqShim(dir: string, recordFile: string): string | undefined {
       `# TRDD-601KG45D test shim — see installJqShim() in maestro-sudo-gate-pty.test.ts.\n` +
       `for a in "$@"; do\n` +
       `  [ "$a" = "-Rnc" ] || continue\n` +
-      `  t="$(mktemp '${dir}/jq-stdin.XXXXXX')"\n` +
-      `  cat > "$t"\n` +
-      `  wc -c < "$t" | tr -d ' ' >> '${recordFile}'\n` +
+      `  t="$(mktemp '${dir}/jq-stdin.XXXXXX')" || exit 90\n` +
+      // BOTH guards fail toward a SHORT length, which is indistinguishable from the bug this
+      // whole card is chasing. A `cat` that hits a full disk leaves a truncated file, and the
+      // shim would then record a short length AND hand jq short input — manufacturing the
+      // exact observation, on the exact test, that would be read as the defect reproducing.
+      // Exit loudly instead; a shim that dies is obvious, a shim that lies is not.
+      `  cat > "$t" || exit 91\n` +
+      `  wc -c < "$t" | tr -d ' ' >> '${recordFile}' || exit 92\n` +
       `  '${realJq}' "$@" < "$t"\n` +
       `  rc=$?\n` +
       `  rm -f "$t"\n` +
@@ -369,6 +374,16 @@ describe('TRDD-9MZQ4T7E — MAESTRO sudo gate driven at a real pty', () => {
   it('P12a: with -Rnc the shim records the BYTE LENGTH of its stdin', () => {
     runShim(['-Rnc', '{password: input}'], SECRET)
     expect(fs.readFileSync(jqLenFile, 'utf8').trim()).toBe(String(Buffer.byteLength(SECRET)))
+  })
+
+  // P12f exists because P12a alone does NOT pin what it claims. A shim that ignored stdin and
+  // appended a hard-coded `22` passes P12a (the secret happens to be 22 bytes) AND P12e (which
+  // counts lines, not values) — so the single number this entire experiment will be read from
+  // would rest on nothing. Two different lengths make a constant impossible. Found by the
+  // adversarial review of e3787efb, before any measurement was taken.
+  it('P12f: the recorded length is a FUNCTION of stdin, not a constant', () => {
+    runShim(['-Rnc', '{password: input}'], 'abcde')
+    expect(fs.readFileSync(jqLenFile, 'utf8').trim()).toBe('5')
   })
 
   it('P12b: with -Rnc the shim forwards stdin to the real jq unchanged', () => {

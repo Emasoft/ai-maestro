@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:06:45+0200
+updated: 2026-09-05T01:09:26+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -32,6 +32,37 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
+## ⏵ BOTTOM LINE — READ THIS FIRST, IT IS WHAT A READER CAN ACT ON (2026-09-05T01:09)
+
+The card ran eight review rounds without ever stating one. Synthesis on the corrected facts:
+
+1. **The truncation is REAL and reproducible** — 11 events, always TAIL-1, always the last byte
+   before the terminator, length-independent (22 and 40 chars both lose exactly one).
+2. **The trigger needs a signal PLUS a machine-timed write.** P13 removed the `^C` and got zero
+   in 320 detecting typings; blind writing alone does not reproduce the rate.
+3. **An agent CANNOT supply the signal, and cannot reach the gate at all** — `common.sh:729`
+   refuses callers with no controlling terminal and directs them to `AIMAESTRO_SUDO_TOKEN`.
+4. **⇒ User-facing risk is confined to one narrow conjunction:** a human at a terminal who
+   presses `^C` mid-prompt and then PASTES, landing inside a millisecond window. The two halves
+   are near-mutually-exclusive in human use.
+5. **Ownership is probably NOT ai-maestro's.** The gate does the ordinary thing (`stty -echo`,
+   `trap INT`, `read -rs`), so every bash script reading a password under an INT trap shares the
+   exposure.
+6. **The failure is LOUD, not silent** (`sudo exchange refused`, `RC=1`). The defect is that a
+   truncated password is indistinguishable from a mistyped one.
+
+**ACTIONABLE, in priority order:**
+- **(a)** The ~10-line **upstream reproduction outside this repo** — bash + pty + `trap INT` +
+  `read -rs`, `^C` then a timed write. Settles ownership faster than any in-repo cell.
+- **(b)** The **hot-spot sweep** (~130 runs, ~1 h) — a flat result falsifies the
+  transitional-window story outright, which is the cheapest possible outcome.
+- **(c)** Optional, independent of both: **retry-on-refusal** in the gate. Good UX regardless of
+  who owns the bug.
+
+**Whether to close this card is now a judgment a reader can actually make.** My own read: the
+severity is LOW on (4), so (a) and (b) are worth one session, and (c) is worth doing whatever
+they find.
+
 ## ⏵ P13 ANSWERED 2026-09-05T00:56 — ZERO in 320 detecting typings. THE INTERACTION IS REQUIRED.
 
 **40 runs. 3 truncations, ALL in the fixed arm (`run 10 [P8 P9]`, `run 15 [P9]`). P13: zero.**
@@ -57,25 +88,54 @@ ownership is an upstream reproduction OUTSIDE this repo:** a ~10-line bash scrip
 `trap INT` + `read -rs`, `^C` then a timed write. If it truncates there, the question leaves this
 card entirely.
 
-**But "not our bug" must NOT become "no action".** A defensive fix in the gate is correct
-regardless of who owns the defect: the gate knows the credential's expected shape at the point of
-use, and **a truncated credential silently failing an auth exchange is a worse failure mode than
-a re-prompt** — especially given the exposure note above, where the caller is an agent.
+**But "not our bug" must NOT become "no action" — though the action I proposed was theatre.** I
+wrote that "the gate knows the credential's expected shape at the point of use". **It does not.**
+A password is opaque: no length, no charset, no checksum the gate can assert without hardcoding a
+policy it does not own — and encoding a password policy in a shell script is worse than the bug.
 
-**AN INTERACTION DOES NOT MEAN "NOBODY AT RISK" — AND THE PARAGRAPH THAT SAID SO WAS THE MOST
-COMFORTABLE CLAIM ON THIS CARD AND THE LEAST SUPPORTED.** It read: *"if the loss needs BOTH a
-signal AND a write landing in a machine-precise window, no human ever reproduces it… nobody at
-risk."* **That reasoning depends on the exposure being human-typing-only, and here it is not.**
+**And "silently failing" was simply false.** The server rejects a wrong password, the gate
+surfaces it as `sudo exchange refused` with `RC=1`, and **P1 asserts exactly that** — so the
+failure is loud. **The real gap is DIAGNOSIS, not detection:** a truncated password is
+indistinguishable from a mistyped one, so a user who typed correctly is told they got it wrong.
 
-- A **paste** delivers bytes at machine speed.
-- Far more decisively: **this gate is driven by AUTOMATION in production. ai-maestro's entire
-  premise is agents invoking these scripts.** A machine-timed write into this gate is not a
-  harness-only condition — it is the NORMAL case.
+**The proportionate fix is therefore a RETRY AFFORDANCE — re-prompt once on refusal instead of
+`return 1`.** It needs no shape validation, it is good UX independent of this bug, and it is the
+lazy correct change; the shape check was the over-built one.
 
-So "machine-precise window" does not mean "unreachable"; it means "reachable by exactly the
-caller this project ships". The interaction narrows the trigger; it does not retire the risk. I
-had written the opposite one commit earlier, in the same direction every other slide on this card
-has gone.
+**⚠ THE EXPOSURE QUESTION WENT WRONG TWICE, IN OPPOSITE DIRECTIONS, AND THE ANSWER IS A THIRD
+THING NEITHER ROUND NAMED.** First I wrote *"no human ever reproduces it… nobody at risk"*. Then
+I over-corrected to *"agents drive this gate at machine speed by design — the NORMAL case"*.
+**Both were written without opening the gate's own entry conditions. One grep settles it:**
+
+```
+:729   if ! { : < /dev/tty; } 2>/dev/null || ! { : > /dev/tty; } 2>/dev/null; then
+:730       "Error: this operation is strict (sudo-gated) and needs the MAESTRO password from a terminal."
+:731       "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN."
+```
+
+**The gate EXPLICITLY REFUSES non-interactive callers, by design, with a documented alternative.**
+Prompt and read are BOTH on `/dev/tty` (`:752`, `:753`) — a controlling terminal, not a pipe — and
+the guard at `:729` is a real OPEN probe whose own comment records it was MEASURED against a
+session-less spawn. Agents authenticate over HTTP with a pre-minted `AIMAESTRO_SUDO_TOKEN` and
+**never reach this code**. That is also why every test in the suite pays for `ptySpawn` instead of
+`child_process.spawn`: the harness has to MANUFACTURE the terminal that no agent has.
+
+So "agents are exposed by design" is not merely unsupported — it is contradicted by an explicit,
+deliberate, documented guard inside the very function.
+
+**WHAT ACTUALLY SURVIVES — the conjunction, stated so a reader can judge it:** a HUMAN, at a real
+terminal, who presses `^C` mid-prompt, and who then **PASTES** rather than types (paste is the one
+plausible route to a machine-timed write into a real tty), and whose paste lands inside a window
+measured in milliseconds. Narrow — and note the two preconditions are near-mutually-exclusive in
+human use, since someone pressing `^C` is not simultaneously pasting.
+
+**THE META-LESSON, because it is the mechanism of the error and not just its content:** the
+over-correction was licensed by my own sentence *"same direction as every other slide on this
+card"*. That bias pattern is REAL, but invoking it is not evidence — it framed the new claim as
+corrected merely because the old one fit the pattern. **Pattern-matching your own bias is not a
+substitute for checking the claim**, and here one grep would have caught it. Note the unevenness
+within a single commit: the parts I DERIVED (handler ordering, sweep power) held up; the part I
+ACCEPTED FROM REVIEW WITHOUT CHECKING did not.
 
 What P13's zero DOES say, stated at its real strength: **no evidence of truncation at a rate
 comparable to the fixed arm** when the signal is absent. Not "safe" — at the pessimistic end of

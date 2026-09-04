@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T23:57:18+0200
+updated: 2026-09-05T00:00:21+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -31,6 +31,32 @@ labels: [flaky-test, pty, sudo-gate]
 # The sudo-gate pty tests are intermittent, and these are the tests that pin a security fix
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+## ⏵ THE STRONGEST CORRELATION ON THIS CARD, and it was mislabelled for the whole session
+
+**All 7 truncations are in the FIXED-DELAY typing path. Zero are in the wait-for-readiness
+path.** Verified by reading the file, not inferred:
+
+| typing strategy | site | tests | truncations |
+|---|---|---|---|
+| `typeWhenNoEcho` — POLLS the tty until it reports `-echo`, then writes | `:225` (`runAtTerminal`), `:486` (`runGate`) | P1, P2, P3, P4, P5 | **0, ever** |
+| `setTimeout(() => p.write(SECRET + '\r'), 1200)` — writes BLIND on a timer | `:561`, `:602`, `:624` | P8, P9, P10 | **all 7** |
+
+**The card has carried this as "the P8/P9 concentration" since it was first noticed, which
+framed it as *which test*. The real variable is *which typing strategy*** — and that has an
+obvious mechanism where "P8 vs P9" never did. `typeWhenNoEcho` waits until `read -rs` has
+actually configured the terminal; the 1200 ms path writes blind, betting the gate has resumed
+after the `^C`. A write landing in the transitional window — while the INT handler runs its
+`stty` calls, before `read` re-arms — can lose a byte at that boundary.
+
+**This is evidence for H5 (a harness artifact), and it is the cheapest decisive test on the
+card:** switch P8/P9/P10 to wait for readiness instead of a fixed delay. If the truncations
+vanish, the byte is being lost because the HARNESS types into a tty that is not ready — and
+`common.sh` is innocent. **NEXT EXPERIMENT, ahead of everything else**, because it answers
+"is there a product bug at all" rather than characterising one that may not exist.
+
+Recorded rather than acted on immediately only because the 40-char batch was already running;
+that batch's result is still informative about the loss's SHAPE either way.
 
 ## ⏵ THE EXPERIMENT FIRED — 2026-09-04T23:37, N = 21, TWICE
 
@@ -555,9 +581,16 @@ The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted 
    not a power of two and not a documented constant of any layer here.** Terminator-timing has an
    obvious candidate mechanism; a 21-byte cap has none.
 
-   Correct statement: *the prefix alone does not discriminate, but the cap branch has no
-   candidate implementation, so terminator-timing is favoured on PRIOR grounds — and the length
-   experiment makes the cap hypothesis decisively testable.*
+   **AND THAT CORRECTION REFUTED A HYPOTHESIS NOBODY PROPOSED — the same error, in the sentence
+   fixing the previous one, ONE COMMIT after naming the pattern.** A "21-byte CAP" is an
+   ABSOLUTE bound; the observation is a RELATIVE loss of exactly one byte from a 22-byte input.
+   Different shapes. Nothing in this card's history ever proposed an absolute cap — the live
+   alternative to terminator-timing was always an **off-by-one at a delivery boundary**. So
+   "no layer has a 21-byte bound" is true, and it defeats nothing anyone held.
+
+   Correct statement: *the prefix alone does not discriminate; a fixed 21-byte cap is
+   implausible but was never the live alternative; the live alternative is a ONE-BYTE OFF-BY-ONE
+   at a delivery boundary, which the length experiment tests directly.*
 
    **The pattern, named because it has now recurred three times:** a reviewer challenges a claim,
    I concede the reviewer's LOCAL point, and discard a PRIOR the reviewer never addressed. The
@@ -568,10 +601,16 @@ The backstop is DISCHARGED (40/40 completed), so instrument edits are permitted 
    and step 3 subsumes it anyway — a 40-character password ends in a different character, so
    "the last char, whatever it is" gets tested for free.
 
-3. **VARY THE PASSWORD LENGTH — THE NEXT EXPERIMENT, and it is DECISIVE, not marginal.** An
-   earlier version called it "LESS discriminating now that H1 is excluded". Wrong: at 40
-   characters the two branches predict **21 vs 39 bytes** — a divergence nothing else on this
-   card comes close to. One constant, no new machinery.
+3. **VARY THE PASSWORD LENGTH — RUNNING (40 chars, `7ee3ffb0`). PRE-REGISTERED OUTCOMES, and
+   the first version of this list was missing the likeliest one.**
+
+   | observed at 40 chars | reading |
+   |---|---|
+   | **39** (TAIL-1) | one byte at the end, length-independent — off-by-one at the line boundary. **Expected** |
+   | **21** | a genuine absolute bound — resurrects the cap frame, major surprise |
+   | **40, no loss** | length-, timing- or content-sensitive in a way 22 triggers and 40 does not — **AND it is also just what a batch that did not fire looks like.** At ~10 %/run, ~30 runs are needed before a clean batch means anything, and changing the length also changes the write's timing, so a null here is DOUBLY ambiguous. This row was missing entirely |
+   | **≤38, TAIL-n** | the loss SCALES with length ⇒ neither off-by-one nor cap; a proportional/streaming effect, and the most informative of the four |
+   | anything non-TAIL | contradicts all seven prior events — treat as a harness change, not a finding |
 
 4. **THE HARNESS-WRITE DISCRIMINATOR (H5), which may matter more than 3.** Split
    `p.write(password + '\r')` into two writes with a gap, or write char-by-char. If the loss

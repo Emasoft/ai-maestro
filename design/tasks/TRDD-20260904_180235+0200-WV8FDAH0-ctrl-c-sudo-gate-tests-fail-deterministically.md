@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T20:21:12+0200
+updated: 2026-09-04T20:34:38+0200
 current-owner: user
 created-by: ai-maestro-hub-session
 assignee: claude-opus-session
@@ -21,7 +21,7 @@ approval-datetime: 2026-09-04T18:02:35+0200
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [5542ca89, b93f1ada]
+implementation-commits: [5542ca89, b93f1ada, e4393a49]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
@@ -47,6 +47,26 @@ survives for the no-prior-trap case (P7), where there is nothing to order agains
 trap sees `-echo` (P6 red); drop the trailing `stty -echo` → the text typed after the ^C is
 echoed (P8 red). The pre-fix run is itself the third neuter — the old shape reddened exactly
 P6, both copies, everything else green.
+
+**`b93f1ada` REGRESSED the password-on-screen guarantee, and `e4393a49` fixes it.** An
+adversarial review caught it and both cases reproduce at a pty (`LEAK=YES` → `LEAK=no`).
+Running the caller's body inline is not a *pure* reordering, and this card said it was:
+
+1. **`trap '' INT`** — SIGINT *ignored* — has an **empty body**, which the handler read as
+   "no prior trap" and re-raised on. Under an ignored SIGINT the kill is a no-op, so the read
+   resumed with echo ON. An empty BODY is not an absent trap; the branch now tests the SPEC.
+2. **A body ending in `return`** returns from the *handler*, so a trailing re-disable is
+   never reached. It is now a `RETURN` trap on the handler — fires on whatever path leaves
+   the function, and `exit` still skips it, which is what P6 wants.
+
+**P9/P10 pin both, per copy**, and were neutered one copy at a time: spec→body reds exactly
+P9 [common.sh]; RETURN-trap→trailing-line reds exactly P10 [common.sh]; the agent-helper.sh
+twins stay green in both runs.
+
+**Two smaller behaviour changes this card did NOT state and should have:** the caller's trap
+now sees `$?` = 0 (from the preceding `unset`) rather than the interrupted read's status, and
+`FUNCNAME`/`BASH_SOURCE` differ from a trap bash invoked itself. Neither is pinned by a test;
+both are inherent to running the body inline rather than re-raising.
 
 **`tests/unit/maestro-sudo-gate-order.test.ts` was updated, and that is the one thing to check
 if you distrust anything here.** Its Ctrl-C assertion was `/trap '[^']*stty echo[^']*' INT/` —
@@ -134,8 +154,11 @@ investigation; see Acceptance.
       **#1 CODE. #2/#3 CODE** — P6 was reporting a real user-visible bug (^C at
       the prompt left the terminal echo-off). One test file DID change:
       `maestro-sudo-gate-order.test.ts` was keyed on the trap having an inline
-      body, which is a SHAPE, not the contract; its contract is unchanged and
-      now pinned tighter. See the STATE block.
+      body, which is a SHAPE, not the contract. **But this is NOT a pure
+      reordering, and an earlier version of this box said it was** — running the
+      caller's body inline also narrowed *when* echo is re-disabled, which
+      regressed the password-on-screen guarantee in two caller shapes (fixed in
+      `e4393a49`, pinned by P9/P10). See the STATE block.
 - [x] `bash scripts/with-node.sh yarn vitest run tests/unit/aimaestro-agent-ctrl-c.test.ts tests/unit/maestro-sudo-gate-pty.test.ts`
       exits 0. **Exit 0, 11/11.** All four gate files together: 19/19, exit 0.
 

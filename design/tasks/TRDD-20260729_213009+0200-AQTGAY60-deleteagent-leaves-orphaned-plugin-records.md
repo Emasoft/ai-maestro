@@ -163,9 +163,20 @@ until the user rules on it.
 `design/archived/`, so the record-scoped remover this card was waiting on exists and is exported.
 `column:` moved `todo → dev` — the code landed, the card had simply never been advanced.
 
-**⏹ COLUMN CORRECTED AGAIN 2026-09-05: the frontmatter still said `todo` — the `→ dev` above was
-recorded in this BODY and never written to the field, so the board has been counting a
-6-of-7-done card as unstarted backlog for five weeks.** Now `human_review`, which is the honest
+**⏹ COLUMN CORRECTED AGAIN 2026-09-05 — and my first account of WHY was false, checked with
+`git log -G'^column:'` only after review challenged it.** I wrote that the `→ dev` above "was
+recorded in this BODY and never written to the field". **It WAS written:** `41d4e5b7`
+(2026-07-30) is literally `column: todo → dev`. What actually happened is that `947d36cb`
+(2026-08-02) — *"triage the last 9 dev cards — dev 18 → 1, and the board reconciles"* — moved it
+**back** `dev → todo` as part of a WIP-reduction sweep.
+
+That sweep was not wrong at the time: nothing was working the card, so clearing it out of `dev`
+was correct WIP discipline. What it could not express is that the card was **6/7 done with the
+remainder operator-gated** — `todo` says "unstarted backlog", and for five weeks that is what the
+board reported. The defect is a vocabulary gap, not an omission by whoever moved it, and stating
+it as an omission blamed a past editor for a decision they made deliberately.
+
+Now `human_review`, which is the honest
 column, because the remaining box is OPERATOR-GATED by the card's own text — a real create +
 hard-delete on this host against a sudo-gated route, i.e. a UI-driven scenario run plus a
 destructive op on an untracked directory, which the card says in as many words must NOT be run

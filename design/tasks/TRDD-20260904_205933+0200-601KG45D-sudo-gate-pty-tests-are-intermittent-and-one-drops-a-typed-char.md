@@ -3,9 +3,9 @@ trdd-id: 601KG45D
 title: The sudo-gate pty tests fail intermittently and one failure showed a truncated password
 scope: project
 project-id: ai-maestro
-column: todo
+column: dev
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:41:00+0200
+updated: 2026-09-04T22:07:15+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -24,10 +24,42 @@ parent-trdd: WV8FDAH0
 blocked-by: []
 npt: []
 eht: []
+implementation-commits: [fc3b6f76]
 labels: [flaky-test, pty, sudo-gate]
 ---
 
 # The sudo-gate pty tests are intermittent, and these are the tests that pin a security fix
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
+
+**The instrument exists and is validated. The measurement it was built for has not been taken.**
+
+- **DONE — step (a), by a different route than the body prescribes.** `diagnoseTyped` +
+  `pwOf` live in `tests/unit/maestro-sudo-gate-pty.test.ts` (`fc3b6f76`) and are the failure
+  message on every assertion that pins the password reaching the server. Both neuters run
+  SEPARATELY and each reddens its own assertion (swap prefix/suffix → the TAIL line; freeze
+  the divergence index → the `index 2` line). 15 passed, tsc 0 lines.
+- **The route change, stated because the body still reads the old way.** The body ordered
+  (a) rebuild a throwaway probe under `scripts_dev/`, then (c) port it to the shipped gate.
+  The probe was SKIPPED: the shipped harness already has a real pty, a real server and the
+  real pipeline, so building an instrument there means never validating one that was going
+  to be thrown away. **(a) and (c) are therefore both discharged, and (b) and (d) now read
+  off the shipped file directly.** If a future reader wants the standalone probe back, the
+  reason it was skipped is this — not that it failed.
+- **What that buys the remaining steps.** A P-failure now self-reports WHERE the byte went,
+  so one run series answers step 0 (rate), (b) (rate + position) and feeds (d)
+  (hypothesis discrimination). They stopped being separate exercises.
+
+**NEXT ACTION.** 24 consecutive runs of the pty file are in flight (`/tmp/flake601/`),
+single-arm because P0 is deleted and there is no second arm left to interleave against.
+Score failures/24 and, on any failure, read the diagnosis line — that is the position three
+revisions of this card turned on. **A clean 24 does not close box 1's question**: §Verification's
+table shows a 4.5% true rate comes up clean about a quarter of the time at n=30, so report
+the count, not a verdict.
+
+**Do not re-derive the interleaving requirement for this run.** Box 4's randomisation clause
+is about comparing two ARMS. P0 is gone, so there is one arm; a single-arm rate needs no
+assignment mechanism, and none is claimed here.
 
 ## Problem
 
@@ -214,6 +246,12 @@ instrument, which is this card's own recurring theme. Induce a loss deliberately
 the diff output is right BEFORE trusting any position it reports. (b) Then run to a few
 hundred iterations for a rate and a position. (c) Port to the SHIPPED gate — this probe is
 not it. (d) Only then discriminate the hypotheses.
+
+**SUPERSEDED 2026-09-04 by the STATE block — (a) and (c) are DONE, and (c) absorbed (a).**
+The paragraph above is kept because its REASON still governs: an untested error path is not
+an instrument. What changed is only where the instrument lives. Building it in the shipped
+harness discharged (a) and (c) in one step and left no throwaway to port, so a reader
+following this list must not go and rebuild the `scripts_dev/` probe it describes.
 
 ## Proposed fix
 

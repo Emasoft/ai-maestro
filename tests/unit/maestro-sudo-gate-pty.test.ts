@@ -21,7 +21,16 @@
  *   common.sh empty-token refusal → `if false` ⇒ exactly P1 red.
  *   RETURN trap `eval prior` → `trap - INT`  ⇒ exactly P5 red.
  *   INT handler without `stty echo`          ⇒ exactly P6 red (prior trap saw `-echo`).
- *   INT handler without the `stty -echo` after the re-raise ⇒ exactly P8 red (typed text echoed).
+ *   INT handler without the `stty -echo` after the caller's trap ⇒ exactly P8 red (text echoed).
+ *
+ * Re-measured 2026-09-04 (TRDD-WV8FDAH0) at a pty, both neuters against the CURRENT handler:
+ * drop its leading `stty echo` → the prior trap sees `-echo`; drop its trailing `stty -echo` →
+ * the text typed after the ^C is echoed. The handler no longer re-raises with `kill -INT $$`
+ * when the caller HAS a trap, because a `kill` inside a trap is deferred until that trap
+ * returns — which ran the trailing `stty -echo` FIRST and reddened P6 for real (a ^C at the
+ * prompt left the user's own terminal echo-off). It now runs the caller's trap body inline, so
+ * the trailing re-disable is reached only when that trap returned. `kill -INT $$` survives for
+ * the no-prior-trap case (P7), where there is nothing to run and nothing to order against.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn as ptySpawn } from 'node-pty'

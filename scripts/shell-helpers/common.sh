@@ -678,6 +678,28 @@ api_query() {
 # that minted its own); if the server already consumed it, the request's 403 is
 # the honest outcome.
 # Usage:  maestro_sudo_ensure || return 1
+# The gate's own SIGINT handler. It runs the caller's prior trap SYNCHRONOUSLY
+# instead of re-raising, because `kill -INT $$` INSIDE a trap is DEFERRED until
+# that trap returns — bash will not re-enter a trap it is already running. The
+# previous one-liner re-raised and then ran `stty -echo` for the resume case, so
+# the deferred signal reached the caller's trap with echo already back OFF: at a
+# real pty the caller saw `-echo`, and a ^C at the prompt left the user's terminal
+# echo-off for good. Running the body here puts the ordering under our control.
+_maestro_sudo_on_int() {
+    stty echo < /dev/tty 2>/dev/null
+    trap - RETURN
+    # The body out of `trap -p INT`'s own output, unquoted by bash itself:
+    # `set -- trap -- 'BODY' SIGINT`, in a subshell so positionals stay isolated.
+    local _b
+    _b="$(eval "set -- ${_MAESTRO_PREV_INT}"; printf '%s' "${3-}")"
+    eval "${_MAESTRO_PREV_INT:-trap - INT}"    # the caller's trap is live again, never disarmed
+    unset _MAESTRO_PREV_INT
+    # No caller trap: re-raise so the default disposition kills the script.
+    if [ -z "$_b" ]; then kill -INT $$; return; fi
+    eval "$_b"
+    stty -echo < /dev/tty 2>/dev/null          # reached ONLY if that trap RETURNED — the read resumes
+}
+
 maestro_sudo_ensure() {
     # Agent path: AID authorizes, sudo does not apply. Must stay first — see above.
     if [ -n "${AID_AUTH:-}" ]; then
@@ -705,14 +727,15 @@ maestro_sudo_ensure() {
     # (TRDD-Q758CX98). Restored on return and on Ctrl-C, which is then re-raised so the
     # script still dies. Belt and braces with -s: this ORDER is pinned by a source test.
     # If the caller's INT trap RETURNS (aimaestro-agent.sh's cleanup does), bash resumes the
-    # interrupted read — so echo is switched OFF again right after the re-raise, or the
-    # password typed next would be on screen (measured, TRDD-2PCZ6L5W).
+    # interrupted read — so echo is switched OFF again once that trap has returned, or the
+    # password typed next would be on screen (measured, TRDD-2PCZ6L5W). See
+    # _maestro_sudo_on_int for why that cannot be done after a `kill -INT $$`.
     # The caller's own INT trap (aimaestro-agent.sh:84 has one) is SAVED and re-installed,
     # never reset to default: `trap - INT` would silently disarm it for the rest of the run.
     # Not a `local`: a RETURN trap runs as the function unwinds, when locals may be gone.
     _MAESTRO_PREV_INT="$(trap -p INT)"
     stty -echo < /dev/tty 2>/dev/null
-    trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT; kill -INT $$; stty -echo < /dev/tty 2>/dev/null' INT
+    trap '_maestro_sudo_on_int' INT
     trap 'stty echo < /dev/tty 2>/dev/null; trap - RETURN; eval "${_MAESTRO_PREV_INT:-trap - INT}"; unset _MAESTRO_PREV_INT' RETURN
     printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
     IFS= read -rs _pw < /dev/tty

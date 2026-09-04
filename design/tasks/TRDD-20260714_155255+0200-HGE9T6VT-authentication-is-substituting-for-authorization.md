@@ -3,7 +3,7 @@ trdd-id: HGE9T6VT
 title: Authentication is substituting for authorization — the headless router must be driven by the same table as the guard and fail closed
 column: planned
 created: 2026-07-14T15:52:55+0200
-updated: 2026-08-16T16:49:08+0200
+updated: 2026-09-04T18:06:27+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -180,9 +180,23 @@ boundary and must land with the parity test, not before it.
 **Blast radius today:** any authenticated agent, on a headless host, can stop or restart any
 session including the MANAGER's — and via R9.8, thereby hibernate every team agent on the host.
 
+## Verification pass — 2026-09-04, before any implementation
+
+The card is from 2026-07-14. Its premises were re-measured before building on them; three hold, one needs an unrecorded prerequisite.
+
+**Box 1 is satisfied.** `services/headless-router.ts`'s `/stop` handler authenticates, then calls `authorize(auth, 'send-command', stopTarget?.id)` and returns 403 when denied, before reaching any `tmux send-keys`. Its own comment records the reasoning ("401 answers who are you; only 403 …"). The card's cited line numbers `:864` / `:881` are STALE — the handler now sits at roughly `:925-975`.
+
+**A prerequisite the card does not record.** Box 2 proposes driving the headless router from `STRICT_AGENT_RULES` in `lib/sudo-guard.ts`. That symbol EXISTS — `lib/sudo-guard.ts:366`, `const STRICT_AGENT_RULES: Record<string, StrictAgentRule>` — but it is **module-private and never imported anywhere**. Measured: 23 repo-wide references under `lib/ services/ app/ tests/`, of which 15 are outside `sudo-guard.ts` and ALL of those are prose in comments except one, a string literal inside a test's error message. **So the systemic fix begins with exporting it or extracting it into a module both modes import — that work is not on this checklist.**
+
+**`security-registry.json` shape, for whoever implements box 3.** It is a flat map under `entries`: 51 keys of the form `"DELETE_/api/agents/[id]"` mapping to the scalar string `"strict"`. There is no per-entry object and no other classification value in the file.
+
+**Full mode already fails closed; headless is the gap.** Several full-mode route files carry comments stating the dual-path "fails CLOSED (403) for any strict route that has no `STRICT_AGENT_RULES` entry" — e.g. `app/api/agents/foreign-approvals/[id]/approve/route.ts` and `app/api/system/aid-recover/route.ts`. That is the behaviour box 3 asks headless to match, so the target semantics already exist and can be mirrored rather than designed.
+
+**An instrument note, because it nearly became a finding.** A first attempt to establish the "never imported" fact ran `grep -rn ... --include=*.ts` under zsh, which glob-expanded the flag and made the command FAIL — printing `no matches found` beneath a label reading "(empty = confined)". Empty output from a failed command is indistinguishable from a genuine negative result. The fact above was re-established with a quoted glob plus a positive control (23 total hits) proving the search reached the tree.
+
 ## Acceptance
 
-- [ ] `authorize()` is called in both `services/headless-router.ts` stop/restart handlers before any `tmux send-keys` (landed `6dcc57fd`, TRDD-BF3JN4TL, after R42 — verify still current before ticking).
+- [x] `authorize()` is called in both `services/headless-router.ts` stop/restart handlers before any `tmux send-keys` (landed `6dcc57fd`, TRDD-BF3JN4TL, after R42 — verify still current before ticking). — VERIFIED 2026-09-04: the /stop handler calls `authorize(auth, 'send-command', stopTarget?.id)` and returns 403 on denial BEFORE any send-keys. Note the card's line numbers are stale: the handler is now at ~:948, not :864.
 - [ ] `services/headless-router.ts` is driven by the same declarative table the Next.js guard uses (`STRICT_AGENT_RULES` in `lib/sudo-guard.ts` / `security-registry.json`), applied in `handle()` before any handler runs.
 - [ ] A route present in `security-registry.json` as `strict` with no authorization decision recorded on the request is refused (fail closed), not served.
 - [ ] The coverage guardrail test (TRDD-6A2I6ZO0) is extended to assert every strict route served headless applies its AuthAction.

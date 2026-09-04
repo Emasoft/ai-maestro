@@ -44,7 +44,14 @@ const REPO = path.resolve(__dirname, '..', '..')
 const TEAMS = path.join(REPO, 'scripts', 'aimaestro-teams.sh')
 const TEAM_ID = '11111111-2222-3333-4444-555555555555'
 // Distinctive enough that a match in ps/pty output can only be the secret itself.
-const SECRET = 'wrong-pw-9MZQ4T7E-x7q2'
+// TRDD-601KG45D step 3 — 40 chars, not 22. The truncation always lost the FINAL byte of a
+// 22-char password, and a 21-byte prefix is equally consistent with "the terminator arrived one
+// character early" and "something caps the line at 21". At 40 characters those diverge sharply:
+// terminator-timing predicts 39 bytes (TAIL-1), a 21-byte cap predicts 21 (TAIL-19). The cap
+// branch has no candidate implementation in this pipeline (MAX_CANON >= 1024, PIPE_BUF >= 512,
+// bash `read -rs` has no small cap), so this is expected to confirm TAIL-1 — but "expected" is
+// what this card has been wrong about four times, hence the measurement.
+const SECRET = 'wrong-pw-9MZQ4T7E-x7q2-40char-padding-AB'
 const GOOD = 'right-pw-9MZQ4T7E-k4m8'
 const TOKEN = 'tok-9MZQ4T7E-minted'
 

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:30:44+0200
+updated: 2026-09-04T22:31:53+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -43,19 +43,38 @@ labels: [flaky-test, pty, sudo-gate]
 - **The loss is at or before `read`** — the gate builds its body with `jq -Rnc` from the
   variable, so a well-formed body with a short value cannot come from a downstream cut.
 
-**NO MECHANISM IS ESTABLISHED. Three have been proposed and all three failed:** hypothesis 1
-(TCSAFLUSH) is refuted on TIMING — see §Step 2; hypothesis 3 (shell→curl) is excluded by the
-`jq` composition; hypothesis 2 (a line ending one byte early) survives only in the sense that
-nothing has tested it. **Do not adopt the next plausible story without measuring it — this
-card has produced one per pass and retracted each in turn.**
+**FOR THE TIMEOUTS THE LEADING EXPLANATION WAS ALREADY ON THIS CARD, in §Proposed fix step
+2, and I invented a kernel mechanism instead of reading two sections down.** The tests type
+at FIXED wall-clock offsets — `^C` at 300 ms, password at 1200 ms — which *assumes the
+caller's trap ran and the read resumed inside 900 ms*. Under load that assumption can fail:
+the password is typed before `read` is listening again, and the run times out. It needs no
+new physics, and it **predicts the load correlation the data already shows** (batch A, under
+background load, holds 3 of the 4 historical failures).
+
+**And the P8 concentration supports it.** Taking §"The clue"'s statement that batch A's P9
+was *not* a timeout, **all three timeouts are P8** (A: P8×2, C: P8×1). P8's prelude is
+`trap 'echo PRIOR-INT' INT` and P9's is `trap '' INT` — so P8 does strictly MORE work in the
+resume window. That is exactly what a timing slip predicts and exactly what a flush does NOT
+(a flush fires identically on both, since both handlers call the same two `stty`s). **I had
+this table in front of me and drew the opposite conclusion from it.**
+
+**FOR THE TRUNCATION no mechanism is established.** Hypothesis 1 (TCSAFLUSH) is refuted on
+TIMING — see §Step 2; hypothesis 3 (shell→curl) is excluded by the `jq` composition;
+hypothesis 2 (a line ending one byte early) survives only in the sense that nothing has
+tested it. **Do not adopt the next plausible story without measuring it — this card has
+produced one confident mechanism per pass and retracted every one.**
 
 - **DONE — step (a)'s CLASSIFIER half, by a different route than the body prescribes.**
   `diagnoseTyped`, `pwOf` and `diagnoseBody` live in
   `tests/unit/maestro-sudo-gate-pty.test.ts` (`fc3b6f76`, `1a2a1b2c`) and supply the failure
   message on every assertion that pins the password reaching the server. Pinned by P11a-g,
-  one `it()` per branch; **seven neuters run, every one of the seven tests reddens under at
-  least one, and FIVE of the seven pin a BRANCH rather than message text** (A→P11b · B→P11d ·
-  C→P11e · D→P11g · F→P11f · **H→P11c**; E and G perturb only interpolated text). 21 pty tests pass, tsc 0 lines.
+  one `it()` per branch; **eight neuters run and every one of the seven tests reddens under
+  at least one.** What they pin, corrected downward after a review — an earlier version of
+  this line said "five pin a BRANCH" and counted A among them, which is wrong: swapping which
+  STRING each branch returns leaves both branches running. **Branch selection: C, D, F, H
+  (4). Computation: B (the index). Message text only: A, E, G.** 21 pty tests pass, tsc 0
+  lines. (Inflating a coverage claim is exactly what the commit that wrote this line was
+  criticising a previous commit for.)
 - **The DETECTOR half is validated for `fc3b6f76`'s wiring only.** Run 23 fired it on a real
   loss end-to-end; `1a2a1b2c` then replaced that wiring with `diagnoseBody`, which has never
   fired on real data. Do not read "the instrument works" as covering the code in the tree.
@@ -87,12 +106,22 @@ production credential path", and a length derived from a live secret is still de
 live secret. It also would not have worked: `_pw` is `local`, and the gate `unset`s it one
 line after composing the body.
 
-**Do it with a PATH shim instead.** The pty tests already run `bash -c "source <copy>;
-maestro_sudo_ensure"` with a controlled `PATH`; put a `jq` wrapper first on that PATH which
-records the byte length of its stdin to a file and then `exec`s the real `jq`. That measures
-the exact boundary, touches **zero shipped code**, and cannot reach a real credential because
-it exists only inside the test's own environment. Run until a truncation fires and compare
-the recorded length with what the server received.
+**Do it with a `jq` PATH shim instead — but build it, do not assume it exists.** Two
+corrections to an earlier version of this paragraph, which claimed the tests "already run
+with a controlled PATH":
+
+- **They do not.** The pty spawns pass `PATH: process.env.PATH ?? ''` — the INHERITED path.
+  A shim needs a tmpdir PREPENDED to it, which is a harness change, small but real.
+- **The shim must filter on ARGV, not log every call.** `common.sh` calls `jq` roughly twenty
+  times for unrelated things. The gate's own call is uniquely identified by `-Rnc` (`:81`);
+  `:90` reads the RESPONSE and must not be counted. A shim that logs "stdin length" for every
+  invocation produces an uninterpretable stream.
+
+So: prepend a tmpdir to the test's `PATH`, put a `jq` wrapper there that records stdin length
+**only when its argv contains `-Rnc`** and then `exec`s the real `jq`. That measures the
+exact boundary, touches **zero shipped code**, and cannot reach a real credential because it
+exists only inside the test's own environment. Run until a truncation fires and compare the
+recorded length with what the server received.
 
 **Waiting on nothing and nobody** — no `blocked-by:`, no owner decision. It sits in `todo`
 because the turn ended, not because it is parked; the sibling `TRDD-BAXXIG0J` is the one
@@ -477,6 +506,13 @@ Investigate in this order, and do not skip to the third:
    that one is timing-bound when the others are not.
 
 ## Verification
+
+> **STALE — this section predates the two-modes split (§Step 2) and is kept for its
+> reasoning, not its numbers.** Every rate below is **per-run and ALL-MODES**: it pools the
+> truncations and the timeouts, which §Step 2 shows are distinct events with different
+> candidate causes. So the table answers "how often does the FILE go red", not "how often
+> does the truncation happen", and the "30 consecutive runs" criterion inherits that. Do not
+> read it as current guidance; recompute per mode when the modes have rates worth pooling.
 
 - The file passes **30 consecutive runs** — but read what that does and does not buy, because
   it depends entirely on the true rate, which is the thing in dispute. The table below is

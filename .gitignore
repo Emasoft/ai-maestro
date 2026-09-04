@@ -118,6 +118,10 @@ reports_dev/
 .rechecker/
 rck-*.md
 
+# The colony skill's per-session delegation ledger. Session scratch, and it
+# records absolute workdir paths — this repo is PUBLIC, so it stays local.
+DELEGATION.md
+
 # Dev folders (local only, not published)
 docs_dev/
 scripts_dev/

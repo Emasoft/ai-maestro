@@ -228,7 +228,7 @@ Editing between the fences is pointless; the next run overwrites it.
 
 <!-- WIKIMEM-INDEX-END -->
 
-<+-+-JANITOR-WIKIMEM-INDEX-START-(do-not-modify)-+-+> v1 digest=7cc8bf9e8566 generated=2026-09-04T15:13:16+0200
+<+-+-JANITOR-WIKIMEM-INDEX-START-(do-not-modify)-+-+> v1 digest=7efd5d8bc0d9 generated=2026-09-04T18:37:49+0200
 ## Wikimem index (PROJECT scope) — recall by symptom, read on demand
 
 Deep knowledge lives in these pages, not in this file. Search: `memgrep recall "<symptom>" .claude/project/memory`.

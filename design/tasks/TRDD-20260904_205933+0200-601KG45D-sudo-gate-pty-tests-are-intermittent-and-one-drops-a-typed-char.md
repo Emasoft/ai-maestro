@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T22:55:55+0200
+updated: 2026-09-04T22:57:19+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -196,13 +196,24 @@ the function each mutates nor the test each reddens has changed since. **That pr
 instrument.** `git log -S` was used first and is INSUFFICIENT here: it detects a change in the
 COUNT of a string, so an edit that rewrites a line while preserving occurrences is invisible to
 it — the same class of hole this card has been finding all session, in the very step claiming
-to close one. What actually
-establishes the claim is the OTHER check that was run alongside it: **enumerating every commit
-touching the file** since `1a2a1b2c` and inspecting each — that cannot miss an edit, because it
-lists every commit that touched the file at all. Confirmed independently by a **CONTENT diff**
-of the P11 block between `1a2a1b2c` (the commit that created P11a-g, and the tree these neuters
-ran against) and HEAD: **additions only** — P11h/i/j inserted — with **no line of P11a-g
-removed or modified**. The classifier functions are likewise untouched. Premise holds.
+to close one. What establishes the
+claim is a **CONTENT diff of the P11 block between the two END TREES** — `1a2a1b2c` (the commit
+that created P11a-g, and the tree these neuters ran against) and HEAD: **additions only**,
+P11h/i/j inserted, with **no line of P11a-g removed or modified**. A diff of the actual blobs at
+two commits cannot miss anything, whatever happened in between, which is why it is the check
+cited. The classifier functions are likewise untouched. Premise holds.
+
+A commit ENUMERATION (`git log -- <path>`) was also run and agrees, but it is CORROBORATING, not
+decisive: an earlier version of this paragraph said it "cannot miss an edit, because it lists
+every commit that touched the file at all", and that is too strong — `git log -- <path>` applies
+history simplification by default and prunes merges, so an edit made INSIDE a conflict
+resolution never appears — `--full-history -m` is what lists everything. Fine here
+(`1a2a1b2c..HEAD` is a linear string of this session's own commits, no merges), wrong as a
+general claim, and a future session would have copied it onto a repo that has them.
+
+**Both corrections in this paragraph are the same shape: the right answer, credited to a method
+that does not carry the guarantee claimed for it** — first `-S`, then the enumeration. Worth
+noticing as a pattern rather than twice as an incident.
 
 **Use `-G`, never `-S`, to ask "did anything touch these lines".** `-S` is a pickaxe on
 occurrence COUNT; `-G` matches any hunk touching the pattern. Worth writing down because the

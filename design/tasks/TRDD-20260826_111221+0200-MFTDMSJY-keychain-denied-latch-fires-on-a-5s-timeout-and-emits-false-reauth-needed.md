@@ -1,13 +1,13 @@
 ---
 trdd-id: MFTDMSJY
 title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-needed for 10 minutes each time
-column: testing
+column: human_review
 pre-block-column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-30T00:54:09+0200
+updated: 2026-09-04T23:40:17+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -31,7 +31,60 @@ labels: [credentials, alarm-noise, blocks-deadline]
 external-refs: [Emasoft/ai-maestro#95, TRDD-X4RK1NUW, TRDD-3GU9V70H, TRDD-EQJPPZ2L]
 ---
 
-## ⏵ STATE — 2026-08-30: the fix is LANDED. Only a soak window is left, so this is `testing`.
+## ⏵ STATE — 2026-09-04T23:40: THE SOAK NEVER STARTED. The server has been STOPPED since the fix landed.
+
+**`testing` → `human_review`.** `testing` asserts a soak is running. Measured tonight, it is
+not, and it never has been.
+
+| measurement | value |
+|---|---|
+| `pm2 jlist` | `status=stopped`, `pid=0`, `restart_time=9`, `unstable_restarts=0` |
+| `curl /api/sessions` | `000` — connection refused |
+| last `[oauth-rotator]` beat in `logs/pm2-out.log` | **2026-08-29 15:10:12** |
+| `logs/pm2-out.log` mtime | **Aug 29 15:10** — the whole log, not just the rotator's lines |
+
+`lib/oauth-rotator/tick.ts` runs only inside the server process. The server stopped on
+**2026-08-29 15:10**; the fixes this card records landed **after** that. **So the shipped fix
+has never once executed**, and there are ZERO beats of any class in the window.
+
+**This is exactly the failure the ≥95 % floor was written to catch, arriving by a route the
+floor cannot see.** Criterion (a) — *zero latch-attributable false `reauth-needed` beats over
+≥24 h* — is satisfied **VACUOUSLY**: there are no beats at all, so there are no false ones. The
+card's own STATE block predicted the shape of this ("zero false beats is also what a fully
+latched, fully silent rotator produces") and the floor guards the SILENT-ROTATOR case; it does
+not guard the **stopped-process** case, because criterion (b) then has a denominator of ZERO
+and is not merely failed but **unscoreable**. A floor of the form "≥95 % of that window's
+beats" needs the window to contain beats.
+
+**A grep would have ticked box (a).** `grep -c reauth-needed` over the window returns 0, which
+is the answer the criterion asks for. That is the whole trap: the measurement that satisfies
+the box is indistinguishable from the measurement that proves nothing happened.
+
+**Two near-misses recorded, because both were one step from a false claim of record:**
+1. I first searched the **janitor plugin** for the emitters of `reauth-needed` /
+   `slot-unreadable`, found them only in its design docs, and was about to write "the criterion
+   names strings nothing emits". Wrong project — they are emitted by **this** repo
+   (`lib/oauth-rotator/tick.ts:1407`). A needle aimed at the wrong codebase reports a confident
+   false absence.
+2. I then saw the rotator's beats stop on Aug 29 and was about to write "the rotator went
+   silent for six days". The **whole log** stops there and `oauth-rotator-tick-status.json` was
+   written today at 20:43, so the log looked stale rather than the rotator quiet — until
+   `pm2 jlist` showed the process is stopped and the tick-status file has a different writer
+   (the janitor's own rotator daemon, a separate subsystem from `tick.ts`).
+
+**NEXT ACTION — OWNER ONLY, and it is why the column moved.** The soak needs the server
+RUNNING (`pm2 restart ai-maestro`). I have not started it: it was stopped deliberately
+(`unstable_restarts=0` — no crash loop), and starting a service on the owner's machine to
+serve a test window is theirs to authorise, not mine. Once it runs ≥24 h, score BOTH criteria
+against `logs/pm2-out.log`, splitting `reauth-needed` by reason — `UNREADABLE from this
+process` is the latch-attributable class, `dead refresh` is the real one (the split is already
+documented in the correction below).
+
+**Amend criterion (b) when scoring:** it must require a MINIMUM BEAT COUNT, not only a ratio.
+At ~1 beat/min a 24 h window should carry ~1 440; anything near zero means the window is empty
+and the criterion did not apply, rather than passed.
+
+## ⏵ Superseded STATE — 2026-08-30: the fix is LANDED. Only a soak window is left, so this is `testing`.
 
 `todo` → **`testing`**. `todo` asserts work is waiting to start; the behavioural fixes shipped
 days ago and the sole remaining criterion is a **measurement that takes ≥24 h of wall clock**.

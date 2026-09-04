@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-05T01:09:26+0200
+updated: 2026-09-05T01:11:45+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -40,15 +40,26 @@ The card ran eight review rounds without ever stating one. Synthesis on the corr
    before the terminator, length-independent (22 and 40 chars both lose exactly one).
 2. **The trigger needs a signal PLUS a machine-timed write.** P13 removed the `^C` and got zero
    in 320 detecting typings; blind writing alone does not reproduce the rate.
-3. **An agent CANNOT supply the signal, and cannot reach the gate at all** — `common.sh:729`
-   refuses callers with no controlling terminal and directs them to `AIMAESTRO_SUDO_TOKEN`.
-4. **⇒ User-facing risk is confined to one narrow conjunction:** a human at a terminal who
-   presses `^C` mid-prompt and then PASTES, landing inside a millisecond window. The two halves
-   are near-mutually-exclusive in human use.
-5. **Ownership is probably NOT ai-maestro's.** The gate does the ordinary thing (`stty -echo`,
+3. **THE BINDING CONSTRAINT IS THE SIGNAL, NOT THE TERMINAL.** `common.sh:729` excludes
+   **pipe-spawned** callers (CI, `child_process.spawn`, a session-less daemon) — **it does NOT
+   exclude agents as this project actually deploys them.** ai-maestro agents live in **tmux**
+   panes (`scripts/remote-install.sh:1643` spawns them; `server.mjs:9` imports `node-pty`), and
+   a process in a tmux pane HAS a controlling terminal, so `: < /dev/tty` succeeds and the probe
+   PASSES. An agent running `aimaestro-agent.sh` in its own pane reaches `read -rs` exactly as a
+   human does. What it still cannot easily do is deliver **SIGINT** to itself mid-prompt — and
+   that is less exotic than "no plausible analogue", since the dashboard streams these terminals
+   and can write `\x03` into a pane.
+4. **⇒ User-facing risk is confined to one narrow conjunction:** a `^C` landing mid-prompt AND a
+   machine-timed write inside a millisecond window. For a human the two halves are
+   near-mutually-exclusive (someone pressing `^C` is not simultaneously pasting).
+5. **IT FAILS CLOSED. This is NOT a credential-disclosure or auth-bypass bug** — a short password
+   is simply wrong, the server refuses it, nothing is minted. **This is the fact that makes LOW
+   obviously right rather than a judgment call**, and its absence let a skim read "credential
+   truncation" as something graver.
+6. **Ownership is probably NOT ai-maestro's.** The gate does the ordinary thing (`stty -echo`,
    `trap INT`, `read -rs`), so every bash script reading a password under an INT trap shares the
    exposure.
-6. **The failure is LOUD, not silent** (`sudo exchange refused`, `RC=1`). The defect is that a
+7. **The failure is LOUD, not silent** (`sudo exchange refused`, `RC=1`). The defect is that a
    truncated password is indistinguishable from a mistyped one.
 
 **ACTIONABLE, in priority order:**
@@ -100,7 +111,11 @@ indistinguishable from a mistyped one, so a user who typed correctly is told the
 
 **The proportionate fix is therefore a RETRY AFFORDANCE — re-prompt once on refusal instead of
 `return 1`.** It needs no shape validation, it is good UX independent of this bug, and it is the
-lazy correct change; the shape check was the over-built one.
+lazy correct change; the shape check was the over-built one. **Scope it precisely: retry ONLY on
+`401 invalid password`, NEVER on a network/5xx error** (re-prompting someone who typed correctly
+is the diagnosis problem inverted), and **ONE retry, not a loop.** No brute-force amplification —
+the server is the rate-limit authority and a local re-prompt does not touch its accounting; no
+token-state hazard either, since a refusal means nothing was minted.
 
 **⚠ THE EXPOSURE QUESTION WENT WRONG TWICE, IN OPPOSITE DIRECTIONS, AND THE ANSWER IS A THIRD
 THING NEITHER ROUND NAMED.** First I wrote *"no human ever reproduces it… nobody at risk"*. Then
@@ -113,15 +128,24 @@ I over-corrected to *"agents drive this gate at machine speed by design — the 
 :731       "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN."
 ```
 
-**The gate EXPLICITLY REFUSES non-interactive callers, by design, with a documented alternative.**
-Prompt and read are BOTH on `/dev/tty` (`:752`, `:753`) — a controlling terminal, not a pipe — and
-the guard at `:729` is a real OPEN probe whose own comment records it was MEASURED against a
-session-less spawn. Agents authenticate over HTTP with a pre-minted `AIMAESTRO_SUDO_TOKEN` and
-**never reach this code**. That is also why every test in the suite pays for `ptySpawn` instead of
-`child_process.spawn`: the harness has to MANUFACTURE the terminal that no agent has.
+**The gate refuses PIPE-SPAWNED callers, by design, with a documented alternative.** Prompt and
+read are BOTH on `/dev/tty` (`:752`, `:753`), and the guard at `:729` is a real OPEN probe whose
+own comment records it was MEASURED against a session-less spawn. The tests pay for `ptySpawn`
+because **the gate needs a terminal** — which is all that proves.
 
-So "agents are exposed by design" is not merely unsupported — it is contradicted by an explicit,
-deliberate, documented guard inside the very function.
+**⚠ AND THIS REFUTATION OVER-CORRECTED IN TURN — the THIRD reversal on this one question,
+corrected 2026-09-05T01:11.** I wrote that agents "**never reach this code**". That is false on
+the deployment this repo actually ships: **ai-maestro agents live in tmux panes**
+(`scripts/remote-install.sh:1643`; `server.mjs:9` imports `node-pty`), a tmux pane IS a pty, so
+a process there HAS a controlling terminal and **passes the `:729` probe**. The guard excludes
+CI, `child_process.spawn`, and session-less daemons — **not agents as deployed.** The
+`AIMAESTRO_SUDO_TOKEN` path existing does not establish that every agent-driven strict operation
+takes it.
+
+**The binding constraint is the SIGNAL, not the terminal** — see bottom-line fact 3. Note the
+recursion: I accepted the prior round's `/dev/tty` inference without checking it against the
+architecture named in the first line of this project's own CLAUDE.md. I did catch it in parallel
+by grepping for `tmux new-session` — but only AFTER committing it.
 
 **WHAT ACTUALLY SURVIVES — the conjunction, stated so a reader can judge it:** a HUMAN, at a real
 terminal, who presses `^C` mid-prompt, and who then **PASTES** rather than types (paste is the one
@@ -129,13 +153,9 @@ plausible route to a machine-timed write into a real tty), and whose paste lands
 measured in milliseconds. Narrow — and note the two preconditions are near-mutually-exclusive in
 human use, since someone pressing `^C` is not simultaneously pasting.
 
-**THE META-LESSON, because it is the mechanism of the error and not just its content:** the
-over-correction was licensed by my own sentence *"same direction as every other slide on this
-card"*. That bias pattern is REAL, but invoking it is not evidence — it framed the new claim as
-corrected merely because the old one fit the pattern. **Pattern-matching your own bias is not a
-substitute for checking the claim**, and here one grep would have caught it. Note the unevenness
-within a single commit: the parts I DERIVED (handler ordering, sweep power) held up; the part I
-ACCEPTED FROM REVIEW WITHOUT CHECKING did not.
+**THE META-LESSON, in two sentences.** Invoking your own bias pattern is not evidence — check the
+claim; one grep settled this one, three times. And the tell is consistent: **what I DERIVED
+(handler ordering, sweep power) held up; what I ACCEPTED FROM REVIEW UNCHECKED did not.**
 
 What P13's zero DOES say, stated at its real strength: **no evidence of truncation at a rate
 comparable to the fixed arm** when the signal is absent. Not "safe" — at the pessimistic end of

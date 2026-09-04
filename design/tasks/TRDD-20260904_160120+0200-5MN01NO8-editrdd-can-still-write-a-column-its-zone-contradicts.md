@@ -86,17 +86,32 @@ one is not duplicating a gate that already exists elsewhere on this path.
 the verb that OWNS that zone move — `archiveTrdd`, `refuseTrdd`, `promoteTrdd`, or `advanceColumn`.
 Its own comment says why: *"`expectedZone` is the arbiter, not a table local to this file."*
 
-So every sanctioned column writer already consults the arbiter, and exactly one does not:
+**CORRECTED — the first version of this table credited the guard to the CALLER.** It listed one
+row as "`trddgrep move` → promote/refuse/archive/advance | YES (`scripts/trddgrep.mjs:1229`)",
+which asserts a property of three library functions on the strength of one consumer. A review
+caught the shape and predicted the consequence: `app/api/trdd/[id]/{promote,refuse,archive}`
+call those functions DIRECTLY, bypassing `move`'s dispatch, so they would be unguarded.
 
-| surface | writes `column`? | consults `expectedZone`? |
+**The shape criticism is right; the prediction is REFUTED.** Each verb enforces zone at its OWN
+layer, measured in `lib/trdd-store.ts`:
+
+| writer | writes `column`? | zone enforced, and WHERE |
 |---|---|---|
-| `setTrddField` | no — 409 | n/a |
-| `trddgrep move` → promote/refuse/archive/advance | yes | **YES** (`:1229`) |
-| `createTrdd` | yes | **YES** (TRDD-MWKCBLQN) + post-write gate |
-| **`editTrdd`** | **yes** | **NO — this card** |
+| `setTrddField` (`:885`) | no | 409 — refuses `field === 'column'` outright (`:894`) |
+| `promoteTrdd` (`:659`) | yes | 409 unless `zone === 'proposals'` (`:667`) |
+| `refuseTrdd` (`:708`) | yes | 409 unless `zone === 'proposals'` (`:716`) |
+| `advanceColumn` (`:752`) | yes (`:814`) | **calls `expectedZone` itself (`:801`)**, 409 when `wantZone !== 'tasks'` (`:802-807`) |
+| `archiveTrdd` (`:1022`) | yes | 409 if already terminal (`:1037`), plus further 409 gates |
+| `createTrdd` | yes | `expectedZone` (TRDD-MWKCBLQN) + the CLI's post-write gate |
+| **`editTrdd` (`:395`)** | **yes** | **NONE — this card** |
 
-That is what makes this a hole rather than a design choice: `editTrdd` is the odd one out among
-four, not a path the design deliberately left open.
+So the four API routes are safe BY CONSTRUCTION, because the library guards rather than because
+the CLI does — and `trddgrep move`'s `:1229` dispatch is a convenience on top of guards that hold
+without it. This also retires the "not measured" flag this card carried on `advanceColumn`: it is
+measured, and it is guarded. The table and the prose no longer disagree.
+
+That makes the finding SHARPER, not weaker: `editTrdd` is the only one of SEVEN write surfaces
+with no zone check — not a path the design left open, an omission.
 
 ## The other four write surfaces, since a half-census is what caused this
 
@@ -111,10 +126,12 @@ four, not a path the design deliberately left open.
 | `promoteTrdd` (`:659`) | YES | owns its own zone move (`proposal → planned`) |
 | `refuseTrdd` (`:708`) | YES | owns its own zone move (→ `refused/`) |
 
-`advanceColumn` is worth a second look during implementation: it gates on the card being in
-`tasks/` but is the function that legitimately writes terminal columns, so whether it can leave a
-terminal column in the OPEN zone without the `git mv` is the same question one level along. Do not
-assume either way — it was not measured here.
+**`advanceColumn` — MEASURED, and it is guarded.** This paragraph originally said "do not assume
+either way — it was not measured here", which was the honest state at the time. It has since been
+measured (see the corrected table above): `lib/trdd-store.ts:801` calls `expectedZone` and
+`:802-807` returns 409 — *"Column X belongs in design/<zone>/, not tasks/ — advance does not move
+folders; use the promote/refuse/archive verb for that transition"*. So it cannot leave a terminal
+column in the OPEN zone. The open question is closed; the table above is the authority.
 
 ## Why this is not a three-line fix
 

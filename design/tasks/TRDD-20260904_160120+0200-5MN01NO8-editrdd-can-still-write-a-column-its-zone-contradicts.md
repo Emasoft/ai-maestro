@@ -110,8 +110,39 @@ the CLI does — and `trddgrep move`'s `:1229` dispatch is a convenience on top 
 without it. This also retires the "not measured" flag this card carried on `advanceColumn`: it is
 measured, and it is guarded. The table and the prose no longer disagree.
 
-That makes the finding SHARPER, not weaker: `editTrdd` is the only one of SEVEN write surfaces
-with no zone check — not a path the design left open, an omission.
+That makes the finding SHARPER, not weaker: `editTrdd` is the only one of seven COLUMN-WRITING
+surfaces with no zone check — not a path the design left open, an omission.
+
+**"Column-writing" is load-bearing, and the census behind it was truncated until now.** The
+five-writer figure this card cited came from `grep -n "^export function" … | head -30`, and the
+`head` CAPPED it: `archiveTrdd` (`:1022`) was not in that output and entered the table only
+because a later grep happened to surface it. Re-run without `head`, `lib/trdd-store.ts` exports
+**22** functions, and `atomicWriteSync`/`renameSync` appear at nine sites — including two writers
+this card never had: `appendTrddSection` (`:955`, writes `:972`) and `checkTrddBox` (`:990`,
+writes `:1016`).
+
+Measured, neither is a column writer: both touch only body content (`appendToSection`, the box
+walker) plus `setFrontmatterField(content, 'updated', …)`, and the `column` in their return value
+is `trdd.column` read back, not written. So the seven-row table is complete FOR COLUMN WRITES,
+which is this card's subject — but the file has more writers than seven, and saying "seven write
+surfaces" implied a census I had not done.
+
+The instrument is the lesson: a `head`-truncated grep reports a SUBSET and reads as a SET, with no
+marker distinguishing the two. That is the same defect as `ls`-globbing a count or `tee`-ing into
+`head` — and it silently underpinned every "five exported writers" statement in this card until
+the re-run.
+
+**The enumeration is closed, including the route I had never opened.** `app/api/trdd/[id]/verify/`
+appeared in the first `find` of this investigation and was never checked, which is exactly the kind
+of residue that leaves a census quietly incomplete. Measured: it imports `verifyTrddDecision` from
+`lib/trdd-approval-token.ts`, and that file is 245 lines containing **zero** write primitives
+(`grep -cE "writeFileSync|atomicWriteSync|setFrontmatterField|renameSync"` → 0). It is read-only,
+so it is not a write surface and the seven above are all of them.
+
+Every line number in the table was also re-verified by absolute address rather than trusted from
+the `sed`+`grep -n` reads that produced it — those print FUNCTION-RELATIVE numbers, and citing one
+as absolute would have put every row off by its function's start offset. All five checked rows
+(`:667`, `:716`, `:801`, `:894`, `:1037`) resolve to the lines claimed.
 
 ## The other four write surfaces, since a half-census is what caused this
 

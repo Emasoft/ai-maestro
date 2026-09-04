@@ -3,9 +3,9 @@ trdd-id: WV8FDAH0
 title: Three Ctrl-C and sudo-gate tests fail deterministically and appear nowhere on the board
 scope: project
 project-id: ai-maestro
-column: ai_review
+column: complete
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T21:16:00+0200
+updated: 2026-09-04T21:38:00+0200
 current-owner: user
 created-by: ai-maestro-hub-session
 assignee: claude-opus-session
@@ -85,7 +85,18 @@ One failure showed the gate POSTing the password *minus its last character*, whi
 tty input loss around the handler's `stty` — if so that is a user-facing bug, not a test
 problem. Filed separately; do not treat the pin as reliable until it closes.
 
-**NEXT ACTION.** None on this card. Its pin's reliability is 601KG45D.
+**NEXT ACTION.** None — CLOSED 2026-09-04. The code is fixed and verified; what remains open
+is the RELIABILITY OF ITS PIN, which is TRDD-601KG45D's subject, not this card's. That is
+deliberately not a `blocked-by:`: this card's own work is done, and holding it open would
+make the board claim work is in flight when none is.
+
+## Approval log
+
+- 2026-09-04T21:38:00+0200 — COMPLETED by claude-opus-session. Three failures fixed across
+  two independent defects (`5542ca89`, `b93f1ada`, `e4393a49`); the two password-on-screen
+  regressions `b93f1ada` introduced were caught by review, fixed, and pinned per-copy with
+  neuter runs. Four gate test files green, 23/23. Acceptance boxes all closed, `npt`/`eht`
+  empty.
 
 ## Problem
 

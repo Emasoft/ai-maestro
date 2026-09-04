@@ -1,11 +1,11 @@
 ---
 trdd-id: FPE86FIF
-title: 39 non-auth array expansions are still unguarded under bash 3.2 and abort their script when empty
+title: 38 non-auth array expansions are still unguarded under bash 3.2 and abort their script when empty
 scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T19:51:28+0200
-updated: 2026-09-04T19:51:28+0200
+updated: 2026-09-04T19:54:39+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -27,7 +27,7 @@ eht: []
 labels: [bash32, shell, set-u]
 ---
 
-# The same bash 3.2 crash remains in 39 non-auth array expansions
+# The same bash 3.2 crash remains in 38 non-auth array expansions
 
 ## Problem
 
@@ -46,7 +46,7 @@ variable and aborts the script with exit 127. Measured on this machine's
 This is not machine-specific: `CLAUDE.md` documents **macOS 12+** as the platform
 and stock macOS ships 3.2.57, so it reproduces for every stock-macOS user.
 
-## The remaining set, measured 2026-09-04 (39 sites, 29 distinct arrays)
+## The remaining set, measured 2026-09-04 (38 sites, 28 distinct arrays — `_auth` fixed, see below)
 
 ```
 5 ACTIVE_INDICES   4 ATTACH_FILES   3 ARGS   2 stale_dirs   2 REACHABLE_INDICES
@@ -57,14 +57,20 @@ and stock macOS ships 3.2.57, so it reproduces for every stock-macOS user.
         AMP_BLOCKED_MIME_TYPES _auth
 ```
 
-**Several are near-certain live failures rather than theoretical ones**, because
-their *common* case is empty: `stale_dirs`, `msg_files`, `candidates`, `cands`,
-`REGISTRATIONS` and `plugin_skill_dirs` are all search-result collections that
-find nothing on a clean system, and `ATTACH_FILES` is optional by definition.
+**Triage first — and note this is inference from NAMES, not from reading the call
+sites.** `stale_dirs`, `msg_files`, `candidates`, `cands`, `REGISTRATIONS` and
+`plugin_skill_dirs` *sound like* search-result collections that would find nothing
+on a clean system, and `ATTACH_FILES` sounds optional by definition. **Unverified.**
+An earlier draft called these "near-certain live failures", which is a runtime
+claim derived from identifiers — the same name-based inference this session has
+repeatedly caught in other people's reports. Read each construction site; do not
+inherit the guess.
 
-`_auth` is the odd one out — the naming convention says it belongs to the auth
-family the parent card swept, and it escaped only because it lacks the
-`_auth_args` suffix the sweep keyed on. Check it first.
+`_auth` was listed here and is **already fixed** (`common.sh:732`) rather than
+deferred: it is an auth-family array that escaped the parent sweep only because it
+lacks the `_auth_args` suffix the filter keyed on, so the parent's already-proven
+premise covers it and no new judgement was needed. Filing a site whose answer was
+known would have been deferral, not scoping. **38 sites remain.**
 
 ## Why this is a separate card rather than part of WV8FDAH0
 
@@ -104,10 +110,11 @@ parent's sweep and clean.
 
 ## Acceptance
 
-- [ ] `_auth` triaged first — it is an auth-family array the parent's suffix
-      filter missed.
-- [ ] Each of the 39 sites either guarded, or left with a comment stating why the
-      array cannot be empty.
+- [x] `_auth` — an auth-family array the parent's suffix filter missed. Fixed
+      immediately (`common.sh:732`) rather than carried here: the parent's proven
+      premise already covers it, so filing it would have been deferral.
+- [ ] Each of the 38 remaining sites either guarded, or left with a comment
+      stating why the array cannot be empty.
 - [ ] `bash -n` clean on every touched script; no NEW shellcheck diagnostics
       (the nested-quote form is exactly the shape that trips quoting lints).
 - [ ] Inverse-transform diff clean, with its sed positive-controlled before use.

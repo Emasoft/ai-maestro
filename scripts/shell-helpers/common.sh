@@ -729,7 +729,7 @@ maestro_sudo_ensure() {
     _base="$(get_api_base)"
     local -a _auth=()
     get_auth_args _auth
-    _resp="$(printf '%s' "$_body" | curl -s --max-time 15 -X POST "${_auth[@]}" \
+    _resp="$(printf '%s' "$_body" | curl -s --max-time 15 -X POST "${_auth[@]+"${_auth[@]}"}" \
         -H "Content-Type: application/json" -d @- "${_base}/api/auth/sudo-password")"
     unset _body
     _tok="$(printf '%s' "$_resp" | jq -r '.token // empty' 2>/dev/null)"

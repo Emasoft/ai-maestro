@@ -41,11 +41,17 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
   // innerWidth=400 leaked forward and silently ran the NEXT test against the
   // mobile branch — found by neutering the mobile banner, which reddened two
   // tests instead of one. Restoring it keeps each test's branch its own choice.
+  // Same reasoning for document.visibilityState, which the tab-resume test also
+  // redefines. It happens to be harmless today (jsdom defaults to 'visible' and the
+  // test sets 'visible'), so nothing reds — which is exactly why it would have been
+  // left behind. A later test asserting the hidden-tab suspend would inherit it.
   const realInnerWidth = window.innerWidth
+  const realVisibility = document.visibilityState
 
   afterEach(() => {
     cleanup()
     Object.defineProperty(window, 'innerWidth', { value: realInnerWidth, writable: true, configurable: true })
+    Object.defineProperty(document, 'visibilityState', { value: realVisibility, writable: true, configurable: true })
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })

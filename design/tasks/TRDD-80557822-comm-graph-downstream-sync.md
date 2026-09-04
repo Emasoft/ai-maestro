@@ -187,6 +187,15 @@ the moment Phase 2 maestro auth wires H as an AMP recipient.
   `lib/communication-graph.ts::validateMessageRoute` and the
   "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10.
 - Update the honest wording in R6.10 to reclaim the strong invariant.
+- **INVERT the reply-only assertions in `tests/governance/r6-communication-graph.test.ts` IN THE
+  SAME COMMIT.** They currently pin the WEAK contract — that any truthy `inReplyToMessageId` is
+  accepted. Landing enforcement beside a test still asserting the weak behaviour does not merely
+  leave a stale test: it **silently re-documents the hole** as intended behaviour, and the suite
+  goes green either way, so nothing would ever flag it. (Carried in from TRDD-VLBVO0ZP's
+  Verification section when that card was superseded into this one on 2026-09-04. It was DROPPED
+  by the first version of that supersede — an adversarial review caught it, and the correction is
+  recorded here rather than in the archived card, which is frozen. Note this is a DIFFERENT claim
+  about the same file from the box-6 note further down, which is about edge-matrix altitude.)
 
 This MUST ship before any Phase 2 maestro-auth work lands — at that
 point the advisory gate becomes exploitable.
@@ -221,6 +230,7 @@ tripwire, not merely as a row in a table.
 - [ ] Each of the 8 role-plugin repos' main-agent "Communication Permissions" section is aligned with the current graph (per the per-repo table in §2.B), published independently
 - [ ] `isReplyToInbound(messageId, senderAgentId, humanUserId)` is implemented and called from both `send-message-service.ts` G06 and `amp-service.ts` at the reply-only branch of `validateMessageRoute`
 - [ ] A reply-only message marks the original inbound message `replied=true` atomically, and a second reply to the same inbound id is rejected
+- [ ] The reply-only assertions in `tests/governance/r6-communication-graph.test.ts` are INVERTED in the same commit as the enforcement — a test still asserting "any truthy string is accepted" would silently re-document the hole (absorbed from TRDD-VLBVO0ZP)
 - [ ] The "ADVISORY ONLY" comment in `lib/communication-graph.ts::validateMessageRoute` and the "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10 are removed once R6.10 is fully enforced
 - [ ] A test/scenario exercises an inter-title message on a tightened edge and confirms the API accepts/rejects per the current graph
 

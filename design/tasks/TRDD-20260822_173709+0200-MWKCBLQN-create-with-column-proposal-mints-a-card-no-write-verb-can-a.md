@@ -3,11 +3,12 @@ trdd-id: MWKCBLQN
 title: create with column proposal mints a card no write verb can act on
 column: ai_review
 created: 2026-08-22T17:37:09+0200
-updated: 2026-09-04T15:26:25+0200
+updated: 2026-09-04T16:01:20+0200
 current-owner: user
 created-by: user
 task-type: bugfix
 min-approval-requirement: manager
+eht: [5MN01NO8]
 mandate: true
 mandated-by: user
 approved: true
@@ -84,7 +85,22 @@ I first wrote this row as "7/7 still pass — no regression", which reads as tho
 had been exercised against the change. It had not. Same vacuity shape this session kept
 finding elsewhere, this time in my own census.
 
-### The OTHER write path — asked, checked, no gap
+### ⚠ THE SECTION BELOW IS WRONG — corrected 2026-09-04T16:01, see TRDD-5MN01NO8
+
+It says "the third write surface refuses column writes outright" and clears the file on the
+strength of ONE function. `lib/trdd-store.ts` is **1086 lines and exports FIVE writers**; I read
+40 lines. `editTrdd` (`:395`) DOES write `column`, its shared guard
+`lib/trdd-edit-guard.ts::validateTrddFieldEdits` validates only against `VALID_COLUMNS` (which
+admits the bracket values), and `grep -c expectedZone lib/trdd-edit-guard.ts` returns **0** — no
+zone check exists there at all. **So this card's fix is HALF-APPLIED**: the mint path refuses the
+contradiction and the edit path still writes it, which is precisely the failure mode this repo is
+named for and which the paragraph below confidently denies.
+
+Filed as **TRDD-5MN01NO8** (EHT of this card). Kept rather than deleted because the reasoning that
+produced it is the guardrail: the clearance was true of the surface I examined and stated as a
+property of the file.
+
+### The OTHER write path — asked, checked, no gap (TRUE OF `setTrddField` ONLY)
 
 `lib/trdd-store.ts:903`'s comment names "the other write path", which would be the classic
 half-applied guard. It is `setTrddField`, and it does not need this guard because it carries a

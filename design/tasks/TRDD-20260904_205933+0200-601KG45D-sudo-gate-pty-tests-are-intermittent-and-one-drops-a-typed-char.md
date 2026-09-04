@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:31:00+0200
+updated: 2026-09-04T21:33:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -156,46 +156,41 @@ UNVERIFIED — do not treat either as a finding, and do not test only the first:
 Ruled out: a truncated HTTP body. The JSON parsed cleanly and only the *value* was short.
 Also not `MAX_CANON` (1024 on Darwin) — the secret is 22 characters.
 
-## Step 1, 2026-09-04: the truncation REPRODUCES, and both of my earlier readings were wrong
+## Step 1, 2026-09-04: ONE loss seen in a probe (n=1), position unrecorded
 
-**The finding: a spontaneous one-character loss, same signature as the original.**
+**What is measured.** In a probe driving the P9 shape, one run returned a payload one
+character short (`len=35/36`); ten further runs at the same delay returned it intact. So the
+outcome is **reachable outside the full gate**, at a low and unquantified rate (1 in ~12 at
+that configuration). That is the whole claim.
 
-```
-ATE=[]  GOT len=36/36 INTACT
-ATE=[]  GOT len=35/36 LOSS      <- short by exactly one, at the tail
-```
+**What this card said an hour ago, and why it was wrong — three times over.**
 
-That is the P9 signature (`…x7q` for `…x7q2`) reproduced in a probe, so the phenomenon is
-real and reachable — not a one-off artifact of the full gate.
+1. *"10/10 intact, evidence against hypothesis 1."* A delay sweep with no demonstrated power.
+2. *"The instrument cannot detect input loss at all."* Retracted on an eat-control that
+   consumed nothing (`ATE=[]`, measured). Either the outer `read` had already taken the line,
+   or canonical mode had not yet released it — **both make the control void**, so it never
+   showed the probe was blind. This was a stronger false claim than the one it replaced.
+3. *"The P9 signature reproduced — short by exactly one, at the tail."* **The tail is
+   unmeasured.** The probe compared LENGTHS only; `len=35` is equally consistent with a lost
+   first, middle, or last character. "At the tail" was inherited from the original P9 failure
+   (`…x7q` vs `…x7q2`, genuinely a tail loss) and silently transferred onto an observation
+   that cannot support it. Commit `6c07f598`'s message carries that overstatement — a reader
+   following `implementation-commits` back should not inherit it.
 
-**Two wrong readings preceded it, both recorded because the sequence is instructive.**
+**One event is not a reproduction.** A single LOSS is exactly as weak as a single clean run,
+which this card spent several revisions establishing about clean runs. It shows the outcome
+is possible; it gives no rate and no mechanism.
 
-1. First I ran a delay sweep (0-80 ms, then a widened 400 ms window) and got 10/10 intact,
-   and reported that as evidence against hypothesis 1.
-2. Then I "controlled" it by making the handler eat pending input
-   (`read -rs -t 0.01 -n 100 _junk < /dev/tty`), got no loss, and concluded the probe was
-   blind — retracting (1) and writing "the instrument cannot detect input loss at all".
+**No mechanism is attributed.** An earlier draft blamed extra work (`printf`) inside the
+RETURN-trap window. The data contradicts it: the variant with `sleep 0.4` + a `read` in that
+same window lost nothing in 2 runs, and the losing run's own sibling at a different delay was
+intact. The variable that differed was the delay, on n=1. Guess withdrawn.
 
-**Both were unearned, and the second was the worse error** — a stronger negative claim than
-the one it replaced. Instrumenting the eat to report what it swallowed shows **`ATE=[]`**: it
-consumed nothing, every time. The tty is in CANONICAL mode, so the kernel delivers nothing
-until a line terminator arrives, and the payload's `\r` goes to the outer `read`'s line. The
-control could never have removed input, so it never showed the probe was blind.
-
-**What is now established:** the probe CAN see a loss (it saw one), the loss is a single
-tail character, and it appeared in the run carrying extra work (`printf`) inside the RETURN
-trap window — consistent with hypothesis 2 (the line terminated a byte early) and with a
-timing-sensitive race generally. NOT established: which hypothesis, and whether the same
-mechanism drives the loss in the SHIPPED gate — this probe is still `fix2.sh`, a
-reimplementation, without the `read -rs` → `jq` → `curl` pipeline.
-
-**Next, in order:** (a) re-run this probe n>=30 to get a reproduction rate now that one is
-known to exist; (b) port it onto the SHIPPED gate; (c) discriminate the two hypotheses by
-writing the payload and its `\r` as SEPARATE writes straddling the transition.
-
-**The probe scripts were written only in the session scratchpad and are lost.** That is a
-real cost, not a tidy outcome — the next session must rebuild an instrument that is now known
-to work. Rebuild it under `scripts_dev/`.
+**Next, in order:** (a) rebuild the probe under `scripts_dev/` — it must DIFF the strings,
+not compare lengths, so the next loss is characterised (the current one already does; it was
+written after the loss); (b) run it to a few hundred iterations to get a rate and a position;
+(c) port to the SHIPPED gate, which this probe is not — it is `fix2.sh`, a reimplementation
+without the `read -rs` → `jq` → `curl` pipeline; (d) only then discriminate the hypotheses.
 
 ## Proposed fix
 

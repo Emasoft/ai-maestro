@@ -61,6 +61,7 @@ exist ONLY there.
 - **`agent-control-monitor-api`** — how does the janitor / a governance agent CONTROL or MONITOR another agent's Claude Code terminal — inject a…
 - **`agent-deletion-all-in-one-pipeline`** — I deleted an agent but its folder keeps coming back
 - **`agent-first-architecture`** — why is data.governanceTitle always undefined
+- **`agent-isolation-is-not-enforced`** — can one agent read another agent's token or impersonate it
 - **`agent-launch-preconditions`** — an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in'
 - **`agent-title-role-persona`** — TITLE vs ROLE vs PERSONA in ai-maestro
 - **`agent-workdir-invariants-and-policy`** — why did my agent's shipped rule file come back
@@ -100,7 +101,6 @@ exist ONLY there.
 
 ### Security and Auth
 
-- **`agent-isolation-is-not-enforced`** — can one agent read another agent's token or impersonate it
 - **`env-var-security-delete-not-gate`** — adding a new process.env read / env var — is it safe? does a security-weakening env var get deleted or gated?…
 - **`env-vars-and-the-governance-password`** — which env vars does ai-maestro actually read
 - **`governance-password-invalidation`** — how does the user rotate / revoke

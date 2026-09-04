@@ -7,7 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
-  topic: security-and-auth
+  topic: agents
 publish-globally: false
 ---
 

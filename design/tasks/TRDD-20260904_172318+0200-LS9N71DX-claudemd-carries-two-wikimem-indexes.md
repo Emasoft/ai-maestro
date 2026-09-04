@@ -3,7 +3,7 @@ trdd-id: LS9N71DX
 title: CLAUDE.md carries two wikimem indexes over the same corpus
 column: ai_review
 created: 2026-09-04T17:23:18+0200
-updated: 2026-09-04T18:57:14+0200
+updated: 2026-09-04T19:03:35+0200
 implementation-commits: [164aad16]
 current-owner: claude-opus-session
 created-by: user
@@ -47,12 +47,9 @@ acceptance list demanded are done, and one of them settled it outright.
 **What is deliberately NOT changed:** `--check` and the `--write .claude/project/memory/ai-maestro-overview.md`
 target both stay. The script keeps its other two jobs; only `CLAUDE.md` is refused.
 
-**`metadata.topic:` is NOT orphaned by this change, and a review caught me implying it was.**
-The surviving overview target still builds a topic-grouped index from exactly that field, so
-`--check` remains a **live gate over live data** rather than a vestige. The framing I used
-while briefing the review — *"the two topic-less pages stay invisible to a block that no longer
-exists"* — was wrong: they were invisible in the overview index too, which is why fixing them
-was worth doing rather than moot.
+**`metadata.topic:` is NOT orphaned by this change.** The surviving overview target still builds
+a topic-grouped index from exactly that field, so `--check` remains a live gate over live data
+rather than a vestige.
 
 **Supersession recorded here because the other card is frozen.** `TRDD-5TELESBL` (archived,
 `complete`) fixed five topic-less pages, and its stated rationale is CLAUDE.md-specific —
@@ -69,26 +66,43 @@ a TRDD id you then have to go find. Drop the `--write CLAUDE.md` half; the rest 
 still does 5TELESBL's job. Its fix now serves one consumer instead of two — it was not
 invalidated.
 
-**Cost accepted, stated so nobody re-opens it as a defect:** the janitor's block groups by `tier:
-hub` + wikilinks, so the project block's 11 named `metadata.topic:` sections are lost. That is a
-real reduction in browsability, and it is the right trade: CLAUDE.md's own header says recall runs
-through `memgrep recall`, not through reading this file top-to-bottom, and a topic index nobody
-re-generates is worse than a flat one that is always current.
+**The cost, priced properly on the third pass — and the reasoning above was thinner than it
+looked.** The janitor's block groups by `tier: hub` + wikilinks, so the 11 named
+`metadata.topic:` sections are gone. Two facts I had on screen and never connected:
 
-**Why `todo` → `ai_review` skips five columns, stated so an in-harness reader is not confused.**
-The DEP overlay's Part B2 table walks `verify_assumptions → plan → dispatch → dev → testing`
-before `ai_review`, and none of those ran. That is correct HERE and would not be inside the
-harness: this is an external Claude session, where only the IND base binds, and the IND base
-mandates a column *vocabulary*, not a sequential walk. The column has to be TRUE, and
-`ai_review` is — the work is done and under adversarial review. `complete` is what it may not be
-yet, because IND step 12 freezes a terminal body and its exceptions (the closing edit, the
-append-only `## Approval log`, archival, removing a machine-verifiably false line) do not cover
-*"a review came back with a finding I must write into STATE"* — which is exactly what happened
-twice while this card sat here.
+- **This corpus has exactly TWO non-overview hubs** (`amp-messaging`,
+  `password-and-credential-system`) — my own probe printed that line, and I used it only to pick
+  a mutation target. So the replacement is 2 small groups plus ~60 entries under `**Other
+  topics**`. With 2 hubs the grouping is *structurally incapable* of being an index; it
+  degenerates to a flat list by construction, and gets worse as pages are added.
+- **`claudemd_slim` cannot read `metadata.topic:` at all.** `PageInfo` carries
+  `name, filename, description, tier, lmd, wikilinks`; `topic` appears in that module only in a
+  docstring, a comment, and the `**Other topics**` heading string. So "let the janitor group by
+  topic" is a `scan_pages` change too, not just a rendering one.
 
-**NEXT ACTION.** None pending beyond the acceptance boxes below. If the topic grouping is missed,
-the follow-up is a janitor issue asking `claudemd_slim` to group by `metadata.topic:` — not a
-revival of the second generator.
+**RETRACTED: "recall runs through `memgrep`, not through reading this file."** That argument
+proves too much — it argues no index belongs in CLAUDE.md at all, and I used it to justify
+keeping the worse one. The index serves the case `recall` cannot: an agent that does not yet
+have a symptom, browsing what areas exist. That is a pushed surface, and CLAUDE.md is the only
+one this project has.
+
+**What survives the correction, and why the decision still stands:** only one of the two write
+paths was mine to retire, so the alternative parks the duplicate cost on another repo's
+schedule; the local block was measurably stale; and every page still carries its one-line
+symptom either way, which is most of what an agent string-matching a list needs. The call is
+probably right. It was not *reasoned* as the three-way choice it actually was, and that is the
+finding.
+
+**Acted on rather than noted:** `Emasoft/ai-maestro-janitor#299` asks the janitor to group by
+`metadata.topic:` when present and fall back to hubs when absent. That was previously written
+here as a fallback *if the grouping is missed*; a review pointed out it was the dominating option
+all along, so it is filed now rather than held.
+
+`todo` → `ai_review` skips five columns: legal here because only the IND base binds an external
+session, and it mandates a column vocabulary, not a sequential walk.
+
+**NEXT ACTION.** None here. The topic grouping is now janitor#299's to restore — not this
+repo's, and never by reviving the second generator.
 
 ## Problem
 
@@ -165,13 +179,10 @@ that before anything is removed.
       grep at all:** `--check` was exiting **1** all day today and every commit
       in this session succeeded, so nothing in the commit path can have been
       gating on it. A wrapper invoking the script through a variable is the one
-      shape none of this would catch; the exit-1 argument covers that too, for
-      any gate on the local commit path. **What actually makes the residual
-      gap tolerable is the guard's failure mode, not the grep:** it was written
-      to `exit 1`, not to silently skip, so a caller nobody found fails LOUDLY
-      on its first run and names this card — instead of quietly reintroducing
-      the duplicate block, which is the outcome the card exists to prevent.
-      A missed invoker is therefore a nuisance, not a regression.
+      shape none of this would catch. What makes the residual gap tolerable is
+      the guard's failure mode rather than the grep: it exits 1 instead of
+      skipping silently, so a missed invoker fails loudly on first run rather
+      than quietly reintroducing the block.
 - [x] Grep the whole repo (and the janitor plugin cache, if reachable) for
       every trigger of `claudemd_slim.py` (SessionStart hook, PostCompact
       hook, any script/cron invoking it) before removing anything. **Found,
@@ -209,15 +220,8 @@ that before anything is removed.
       no-op re-run). Checked against the module itself, both directions:
       `index_is_stale(CLAUDE.md, scan_pages(memdir))` → **False**, and the
       freshly rendered body is **byte-identical** to the committed one
-      (10294 B each). **Caveat, filed as `Emasoft/ai-maestro-janitor#298`:**
-      that idempotence holds for the BODY, not for the header. The janitor's
-      `corpus_digest` mixes each page's FULL `description:` while the index
-      renders `_short_desc()` (first ` / ` segment only), so a description
-      edit past that segment flips the digest and rewrites CLAUDE.md with an
-      identical body. It fired during this session. The same issue records the
-      opposite defect — a file rename or a `tier: hub` change alters the
-      rendered body and does NOT flip the digest — so this box means *the
-      block does not churn on its own*, not *the freshness probe is correct*.
+      (10294 B each). Caveat: this holds for the BODY, not the header digest,
+      which over- and under-fires — `Emasoft/ai-maestro-janitor#298`.
 
 ## Approval log
 

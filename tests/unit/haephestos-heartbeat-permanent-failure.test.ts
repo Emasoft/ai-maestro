@@ -183,7 +183,11 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
     expect(screen.queryByText(/rejected/i)).toBeNull()
   })
 
-  it('teardown contract: innerWidth is an own data property, visibilityState a prototype accessor', () => {
+  // NOTE the title was WRONG until now — it said innerWidth "is an own data property",
+  // which is what a bare-node probe reports and what the assertions below DISPROVE in
+  // this environment. A test name is prose: it cannot fail, so it outlived the fix that
+  // falsified it by one commit. Same failure as the comment that fix deleted.
+  it('teardown contract: innerWidth is an own ACCESSOR, visibilityState a prototype accessor — opposite shapes, one restore', () => {
     // This test exists because the afterEach restores the two properties by OPPOSITE
     // means, and nothing else pins that. Deleting either restore reds no other test
     // here — the mobile test SETS innerWidth rather than reading a restored value, and
@@ -211,7 +215,14 @@ describe('Haephestos heartbeat — permanent vs transient failure (TRDD-VAXLW6RI
 
     // The invariant that actually matters, and the one restoreProp delivers for both
     // shapes: after teardown, each property's own descriptor is back to pristine.
-    // (This test runs last, so the preceding tests' overrides have been torn down.)
+    // This test runs last: vitest runs a file's tests in declaration order, these are
+    // plain `it` (no `.concurrent`), and `vitest.config.ts` sets no `sequence.shuffle`
+    // (default false) — checked, not assumed. Under shuffle the innerWidth half would
+    // still hold (afterEach restores after whichever test ran); only the reading of
+    // this comment depends on the order.
+    // NON-VACUITY, measured: neutering restoreProp to a no-op reds exactly this test
+    // with `expected { value: 400, … } to deeply equal { get: [Function get], … }` —
+    // the mobile test's leaked override, NOT an echo of what the teardown wrote.
     expect(Object.getOwnPropertyDescriptor(window, 'innerWidth')).toEqual(PRISTINE_INNERWIDTH)
     expect(Object.getOwnPropertyDescriptor(document, 'visibilityState')).toBeUndefined()
   })

@@ -1,6 +1,6 @@
 ---
 trdd-id: 601KG45D
-title: The sudo-gate pty tests fail about one run in eight and one failure showed a truncated password
+title: The sudo-gate pty tests fail intermittently and one failure showed a truncated password
 scope: project
 project-id: ai-maestro
 column: todo
@@ -31,14 +31,17 @@ labels: [flaky-test, pty, sudo-gate]
 
 ## Problem
 
-`tests/unit/maestro-sudo-gate-pty.test.ts` fails intermittently at roughly **1 run in 8**,
-and it is not always the same test. This matters more than an ordinary flake because P6, P8,
+`tests/unit/maestro-sudo-gate-pty.test.ts` has failed intermittently — 4 failures in 27 runs,
+and not always the same test. **Read that rate as conditional, not as the file's baseline**:
+every one of those 27 runs carried a version of the since-deleted P0, and 14 P0-free runs
+have been clean. The intermittency is real and was observed; what it depends on is open, and
+that is step 0. This matters more than an ordinary flake because P6, P8,
 P9 and P10 in that file are the *only* behavioural pin on TRDD-WV8FDAH0's fix — the one that
 stops a ^C at the password prompt leaving the terminal echo-off or putting the typed password
 on screen. **An unreliable pin on a security fix is close to no pin**: a real regression would
 read as "the flaky one again".
 
-## Evidence — measured 2026-09-04, three batches
+## Evidence — measured 2026-09-04, four batches
 
 | batch | condition | failures / runs | which |
 |---|---|---|---|
@@ -47,10 +50,17 @@ read as "the flaky one again".
 | C | with the final, non-pty P0 | 1 / 8 | P8 ×1 |
 | D | P0 fully removed | 0 / 8 | — |
 
-Batch B is what made me hypothesise that the extra pty allocation caused it. **Batch C
-refutes that** — the flake survives with no extra pty — so B's clean sweep was small-`n`
-luck. Recorded here because the wrong conclusion was one batch away from being written down
-as fact: `0/6` is not evidence of absence at a 1-in-8 rate.
+The order matters, because each batch overturned the reading of the one before, and two of
+those readings were nearly committed as fact:
+
+- After **B**, I believed the extra pty allocation caused it.
+- **C** appeared to refute that — the flake survived with no extra pty — so I called B's
+  clean sweep small-`n` luck and the flake "pre-existing".
+- **D** undercuts that in turn: C's P0 still ran `beforeEach`, so C was never a clean
+  P0-free condition, and with P0 fully gone the file is 0/8.
+
+So neither "P0 causes it" nor "it pre-dates P0" is established. What every reading shared
+was treating a clean batch of 6-8 as evidence of absence, which at a 1-in-8 rate it is not.
 
 **What is NOT established: that the flake pre-dates P0.** An earlier draft of this card said
 "pre-existing" in its own headline. Every observed failure had *some* version of P0 present,
@@ -61,7 +71,7 @@ present, and 0/6 cannot distinguish that from chance.* Batch C's P0 also ran `be
 did not restore batch B's baseline. **Step 0 is therefore to re-measure with P0 fully
 absent, at n ≥ 24, and settle it.**
 
-Nothing here establishes a rate to more than an order of magnitude. All three batches are
+Nothing here establishes a rate to more than an order of magnitude. All four batches are
 small, and batch A additionally ran while a background agent was live, so load is confounded
 with the P0 variable in exactly the batch that looked most significant.
 

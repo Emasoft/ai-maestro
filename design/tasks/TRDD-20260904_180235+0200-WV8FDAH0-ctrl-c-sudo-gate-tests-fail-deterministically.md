@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: ai_review
 created: 2026-09-04T18:02:35+0200
-updated: 2026-09-04T21:00:15+0200
+updated: 2026-09-04T21:07:00+0200
 current-owner: user
 created-by: ai-maestro-hub-session
 assignee: claude-opus-session
@@ -26,7 +26,7 @@ implementation-commits: [5542ca89, b93f1ada, e4393a49]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-04
 
-**All three failures are fixed and the four gate test files are green (19/19, exit 0).**
+**All three failures are fixed and the four gate test files are green (23/23, exit 0).**
 They were **two independent defects**, not one:
 
 1. **Test #1** — `_chk_auth_args[@]: unbound variable` under bash 3.2's `set -u`. Fixed in
@@ -75,8 +75,10 @@ unchanged and is now pinned *more* tightly: the order INSIDE the handler, which 
 property that actually regressed and which the old regex could not express.
 
 **CAVEAT ON THE PIN — TRDD-601KG45D.** P6/P8/P9/P10 are the only behavioural pin on this
-fix, and that file fails intermittently at roughly **1 run in 8** (measured over 27 runs in
-three batches). So a real regression here would currently read as "the flaky one again".
+fix, and that file has failed intermittently — 4 failures in 27 runs. Treat that rate as
+CONDITIONAL: all 27 carried a since-deleted test, and 14 runs without it were clean, so
+whether the file is flaky as it now stands is open (step 0 on that card). A real regression
+here could still read as "the flaky one again".
 One failure showed the gate POSTing the password *minus its last character*, which may be
 tty input loss around the handler's `stty` — if so that is a user-facing bug, not a test
 problem. Filed separately; do not treat the pin as reliable until it closes.

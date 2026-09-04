@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-04T20:59:33+0200
-updated: 2026-09-04T21:17:30+0200
+updated: 2026-09-04T21:20:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -34,8 +34,9 @@ labels: [flaky-test, pty, sudo-gate]
 `tests/unit/maestro-sudo-gate-pty.test.ts` has failed intermittently — 4 failures in 35 runs,
 and not always the same test. **Read that rate as conditional, not as the file's baseline.**
 Split by whether the since-deleted P0 was present, it is **4 / 21 with** and **0 / 14
-without** — but **three of those four failures are in one batch that ran under background
-load, and excluding it the data supports nothing** (p 0.11 → 0.36; see §Evidence). The
+without** — but **three of those four failures are in ONE batch that also ran under
+background load, so the experiment cannot separate P0 from load** (see §Evidence; no
+p-value is quotable here and earlier versions of this card wrongly quoted one). The
 intermittency is real and was observed; what it depends on is open, and that is step 0.
 This matters more than an ordinary flake because P6, P8,
 P9 and P10 in that file are the *only* behavioural pin on TRDD-WV8FDAH0's fix — the one that
@@ -73,14 +74,16 @@ overturned nothing):
 - **D** undercuts that in turn: C's P0 still ran `beforeEach`, so C was never a clean
   P0-free condition, and with P0 fully gone the file is 0/8.
 - Re-classifying **B** as P0-absent then moved 6 clean runs across the split, producing the
-  table above — and the statistics below then removed most of what it appeared to show.
+  table above.
+- Finally the p-values computed on that table were themselves withdrawn — see below — so the
+  table is a record of what was observed, not evidence for a cause.
 
 What every one of those readings shared was treating a clean batch of 6-8 as evidence of
-absence. It is not: even at the corrected 19%, six clean runs happen 28% of the time.
+absence. It is not — at any rate consistent with this data, a clean run of six is common.
 
 **Two confounders that survive all of this.** Batch A ran while a background agent was live,
 so machine load is confounded with the P0 variable in exactly the batch that carries **three
-of the four** failures — see the statistics below, where excluding A leaves nothing. And C's
+of the four** failures, so the two variables moved together and cannot be told apart. And C's
 P0, though it allocated no pty, still ran `beforeEach` — an HTTP `listen(0)` plus a
 `mkdtemp` — so "no extra pty" was never the same condition as "no P0".
 
@@ -89,24 +92,35 @@ P0, though it allocated no pty, still ran `beforeEach` — an HTTP `listen(0)` p
 first, and `describe.skip` and `-t` filtering are untested here. Do not generalise the
 result past the form batch B actually used.
 
-**Where that leaves it: suggestive at p ≈ 0.11, and the whole of it lives in the one batch
-that was confounded.** The right test is two-sample — do the buckets differ? — which is
-Fisher exact on 4/21 vs 0/14: `C(21,4)/C(35,4)` = 5985/52360 = **0.114**. An earlier version
-of this card quoted **0.052** from `(1 − 4/21)^14`, which tests one sample against a point
-estimate drawn from the other and treats 21 runs as if they gave the true rate. That is
-overstatement, arrived at while correcting over-caution — the opposite error, one revision
-later.
+**Where that leaves it: NO p-value belongs here, and two earlier versions of this card
+quoted one.** The measurement is:
 
-**Now exclude batch A**, which ran while a background agent was live: what remains is C's
-1/8 with P0 against B+D's 0/14 without, i.e. **one failure in 22 runs**, Fisher `8/22` =
-**0.36**. No signal whatever. So the honest summary is not "leans toward P0" — it is:
+> **4 failures in 35 runs. All 4 fell in P0-active batches. 3 of those 4 are in a single
+> batch that also ran under background-agent load.** The experiment cannot separate P0 from
+> machine load, because the two varied together.
 
-> Three of the four failures are in a single load-confounded batch, and with that batch
-> removed the data supports nothing at all. The confounder is not a footnote; it carries
-> the entire apparent result.
+That is the whole result, and it is a statement about the experiment's *design*, not a
+finding in either direction.
 
-Step 0's n >= 24 on a quiet machine is therefore the only thing that can settle this, and it
-should re-measure BOTH arms rather than assume the P0-free one is clean.
+**Why the p-values were deleted rather than corrected a third time.** A permutation test
+asks how often chance alone would put all 4 failures in the P0-active bucket — which
+presumes the runs were exchangeable, i.e. assignment was random. It was not: the batches ran
+in time order, against **four different versions of the file** (pty-P0 / P0 skipped /
+non-pty P0 / no P0), on a machine whose load changed between them. So the null the test
+inverts never described this experiment, and both numbers this card previously carried —
+`0.052`, then `0.114`, then `0.36` for the A-excluded split — were precise quantities
+computed on an assumption the card itself refutes two paragraphs earlier. A p-value lends
+borrowed authority; that is exactly the failure this card exists to record.
+
+**And "exclude batch A, therefore nothing" was also unfair.** Dropping the batch that
+contains 3 of the 4 events *because* it is confounded biases hard toward the null — almost
+no events survive, so of course nothing is detectable. An earlier version promoted that
+reading into a block quote. Both readings are defensible; neither is decisive; the design
+flaw is the honest summary.
+
+**Step 0 must therefore fix the DESIGN, not just raise `n`:** interleave or randomise the
+arms within a single session on a quiet machine, rather than running one condition per batch
+in time order. Without that, more runs buy more precision about nothing in particular.
 
 ## A separate gap this turned up: nothing executes the shebang
 
@@ -127,7 +141,11 @@ real. Every invocation in the suite passes the script as an ARGUMENT to bash:
 
 **`bash <script>` does not use the shebang line either** — that is the part the challenge
 missed, and it is why "a test runs the script" is not the same as "a test exercises the
-shebang". A search for any `.sh` invoked directly as a program returns nothing.
+shebang". Searched for a `.sh` executed with no leading interpreter across `tests/`,
+`package.json` and `.github/`, covering literal paths, template literals, `shell: true`, and
+`./x.sh` / `sh -c` forms: no hits. (An earlier, narrower grep matched only
+identifier-shaped arguments under `tests/unit` — it supported a much weaker claim than the
+one written beside it.)
 
 It is NOT this card's job: it belongs in its own file, where an extra pty costs nothing, and
 it must invoke the script as a program (`execFileSync(SCRIPT, …)`), not under `bash`.
@@ -176,7 +194,11 @@ Investigate in this order, and do not skip to the third:
 ## Verification
 
 - The file passes **30 consecutive runs** — but read what that does and does not buy, because
-  it depends entirely on the true rate, which is the thing in dispute:
+  it depends entirely on the true rate, which is the thing in dispute. The table below is
+  **ILLUSTRATIVE ONLY**: each row assumes independent runs at a fixed rate, which is the same
+  assumption the withdrawn p-values leaned on and which this data does not satisfy. It is
+  here to show how strongly the answer depends on a rate nobody has measured cleanly — not
+  to be quoted as a probability.
 
   | assumed rate | 30 clean runs by luck |
   |---|---|

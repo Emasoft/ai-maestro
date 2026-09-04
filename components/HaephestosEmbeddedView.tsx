@@ -107,8 +107,10 @@ export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedView
   // WT-004#1 (SCEN-004 P0-002, 2026-04-16): hardened heartbeat protocol.
   // Three improvements over the previous setInterval/30s/catch(()=>{}):
   //
-  //   1. Interval halved 30s -> 15s. The server watchdog fires at 30min,
-  //      so 15s = 120 heartbeats per watchdog window. Lots of headroom.
+  //   1. Interval halved 30s -> 15s. The server watchdog timeout is 120min
+  //      (WATCHDOG_TIMEOUT_MS in creation-helper-service.ts; its own 30s
+  //      setInterval is only the check cadence, not the timeout), so 15s
+  //      = 480 heartbeats per watchdog window. Lots of headroom.
   //   2. Failed heartbeats retry with exponential backoff (1s, 2s, 4s, 8s)
   //      before falling through. A single 503 / network blip no longer
   //      consumes a full interval cycle.

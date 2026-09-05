@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:13:47+0200
+updated: 2026-09-05T03:18:15+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -47,31 +47,47 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > **RE-MEASURED FOR THE PENDING DECISION** (read-only; the card's own text warns the count is not
 > frozen and to re-read rather than trust a recorded number):
 >
-> | when | value | instrument |
+> | when | indexes | instrument |
 > |---|---|---|
-> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live | `yarn pillar:reap` — a CLASSIFIER over indexes |
-> | 2026-08-26 | 144 | `find … -type f \| wc -l` |
-> | **2026-09-05 03:04** | **168 — 74 MB on disk** | `find … -type f \| wc -l` |
+> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live | `yarn pillar:reap` — classifies `*.sqlite` (`reap-pillar-index.mjs:25`) |
+> | 2026-08-26 | 144 ⚠ *files, not indexes — prior session's annotation, unverifiable* | `find … -type f \| wc -l` |
+> | **2026-09-05 03:13** | **167** (168 files incl. 1 `.heal.json`) — 74 MB | `find … -name '*.sqlite'`, measured first-hand |
 >
-> ⚠ **ROW 1 IS A DIFFERENT INSTRUMENT — BUT MEASUREMENT SHOWS THE THREE ARE COMPARABLE ANYWAY.**
-> An earlier version of this banner claimed they were NOT one series, on the reasoning that "an
-> index is not necessarily one file — a SQLite database in WAL mode carries `-wal`/`-shm`
-> sidecars". **That mechanism was imported from a different subsystem and is FALSE here.** Measured
-> 2026-09-05 03:13 in this directory:
+> **SETTLED FROM SOURCE — `pillar:reap` counts INDEXES, so the comparable number today is 167.**
+> `scripts/reap-pillar-index.mjs:25` is `readdirSync(dir).filter(f => f.endsWith('.sqlite'))`. Two
+> earlier versions of this banner argued about what row 1 counted instead of reading that line.
+> Measured 2026-09-05 03:13, at rest:
 >
 > ```
-> total files 168  ·  *.sqlite 167  ·  non-sqlite 1 (a .heal.json)  ·  -wal 0  ·  -shm 0
+> *.sqlite 167  ·  non-sqlite 1 (a .heal.json)  ·  total files 168  ·  -wal 0  ·  -shm 0
 > ```
 >
-> So the file count exceeds the index count by exactly ONE, not by a per-index multiplier, and a
-> `find` count and a classifier count over indexes track each other to within a file. **The growth
-> claim therefore rests on all three rows, not just 2-3, and the apparent DECELERATION (+42 in 4
-> days, then +24 in 10) is REAL rather than an artifact of switching instruments** — which is the
-> opposite of what the previous version of this banner told a reader.
+> **So the series is 102 → 144 → 167 in INDEXES** (row 2 is the one exception; see below). An
+> earlier version compared 102 indexes against 168 *files* — mixing units by one file, having
+> measured 167 in the same command.
 >
-> Row 2's instrument (144) is taken from the card's own annotation by a prior session and cannot be
-> re-verified now; it is the weakest link in the table, and it is the only row not measured
-> first-hand.
+> **The WAL mechanism is REAL, and my retraction of it over-corrected.** `:31-36` records that
+> these indexes ARE in WAL mode and that SQLite mints `-shm`/`-wal` on ANY open, read-only
+> included — a report-only run on 2026-08-28 created 147 of each beside 147 indexes and **TRIPLED
+> the inode count of the directory it exists to bound**. The sidecars are TRANSIENT (nothing holds
+> these open at rest, hence 0/0 above), not absent. The current script reads every index from a
+> COPY in a scratch dir specifically to avoid that observer effect.
+>
+> ⚠ **PRACTICAL CONSEQUENCE FOR THE DECISION BELOW:** the preview command is safe *now* because of
+> that scratch-copy fix, but the earlier cut of the same command was not — so do not reason about
+> this directory from a version of the tool you have not checked.
+>
+> **On the apparent DECELERATION (+42 in 4 days, then +23 in 10): the instrument objection is dead,
+> but that does not make the trend real.** These are TEST artifacts, so the rate tracks how much
+> testing ran in each window; a busy period followed by a quiet one produces exactly this shape
+> with no change in the leak itself. That alternative is NOT excluded here. Two of the three
+> intervals also rest on row 2 (144), which is taken from a prior session's annotation in this
+> card's prose and cannot be re-verified — the only row not measured first-hand. And row 1's
+> non-index file count in 2026-08-22 is unknown, though the direction is benign: if such files were
+> commoner then, growth is LARGER than stated, not smaller.
+>
+> **What survives all of that: the directory is growing, and it is 74 MB.** The rate's shape does
+> not.
 >
 > "74 MB on disk" and the card's "66.8 MB reclaimable" still measure different things; do not
 > difference them.

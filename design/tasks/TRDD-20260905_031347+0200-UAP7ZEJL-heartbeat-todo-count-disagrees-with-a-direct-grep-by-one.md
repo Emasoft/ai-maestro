@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T03:13:47+0200
+updated: 2026-09-05T03:18:15+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -30,8 +30,12 @@ labels: [kanban, board-reporting, measurement]
 
 ## ⏵ STATE — READ THIS FIRST — 2026-09-05
 
-**Two numbers the project runs on differ by one, and neither has been shown wrong.** Measured
-minutes apart on 2026-09-05:
+**Two numbers the project runs on differ by one, and neither has been shown wrong.** ⚠ Note what
+that does NOT assert: an earlier draft of this card said "one of the two is wrong and nobody knows
+which", and that assumes both instruments answer the SAME question. They may not — if the
+heartbeat deliberately excludes a card the grep includes, **both are correct answers to different
+questions** and nothing is broken. Deciding which case this is IS the card. Measured minutes apart
+on 2026-09-05:
 
 | instrument | value |
 |---|---|

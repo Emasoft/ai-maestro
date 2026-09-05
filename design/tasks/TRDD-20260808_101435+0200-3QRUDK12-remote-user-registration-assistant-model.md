@@ -3,7 +3,7 @@ trdd-id: 3QRUDK12
 title: Remote USER registration and the ASSISTANT collaboration model (USER ruling)
 column: planned
 created: 2026-08-08T10:14:35+0200
-updated: 2026-08-08T10:14:35+0200
+updated: 2026-09-05T21:07:28+0200
 current-owner: ai-maestro-hub-session
 task-type: feature
 min-approval-requirement: user
@@ -17,6 +17,8 @@ labels: [multi-user, assistant, registration, tailscale, security]
 external-refs: [ai-maestro#39, ai-maestro#86]
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
+npt: []
+eht: [K8UEIATW, Y894NLRQ, HB3OKWBN, U4KP0H92, U7MJUHWJ, 17X8X06D, FIOXLUCH]
 ---
 
 # Remote USER registration and the ASSISTANT collaboration model
@@ -116,10 +118,12 @@ filesystem hook set · MAINTAINER PR-review workflow wiring · dashboard multi-u
 
 - [x] USER dictation captured verbatim and distilled without invention (this card)
 - [ ] ai-maestro#39 updated with the ruling and this card's id
-- [ ] Implementation decomposition authored (separate cards; this box ticks when the first
+- [x] Implementation decomposition authored (separate cards; this box ticks when the first
       implementing card cites this one as parent)
 
 ## Approval log
 
 - 2026-08-08T10:14:35+0200 — MANDATE recorded: dictated by the USER in-session (AskUserQuestion
   answer, hub session). Pre-approved by authority: issuer is the USER. No approval request sent.
+2026-09-05T21:05:30+0200 — Depth-1 derived decomposition authored per box 3: NPT [K8UEIATW, Y894NLRQ, HB3OKWBN, 17X8X06D, FIOXLUCH], EHT [U4KP0H92, U7MJUHWJ] — all 7 self-mandated (authority: none, min-approval: none), citing this card as parent.
+2026-09-05T21:11:00+0200 — Correction: all 7 depth-1 derived cards reclassified NPT to EHT (a design-mandate decomposition gates the parent's COMPLETION, not a prerequisite-before-dev the parent no longer has). npt: [] eht: [K8UEIATW, Y894NLRQ, HB3OKWBN, U4KP0H92, U7MJUHWJ, 17X8X06D, FIOXLUCH].

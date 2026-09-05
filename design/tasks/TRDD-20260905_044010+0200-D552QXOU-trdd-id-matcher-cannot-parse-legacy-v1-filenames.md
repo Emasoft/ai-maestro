@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T04:40:10+0200
-updated: 2026-09-05T18:33:48+0200
+updated: 2026-09-05T18:42:07+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -118,3 +118,4 @@ touch 'design/tasks/TRDD-deadbeef-some-legacy-card.md'   # add valid frontmatter
   performs no cross-repo action. The route itself is a USER decision and is left open above.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T18:33:47+0200 — JANITOR COORDINATION (the hub goal's SendMessage clause; NOT a route choice — issue / fork+PR / decline remain the USER's, and neither this repo nor the janitor's tree was edited): an informational heads-up on the _TRDD_ID_RE defect went to the janitor's Claude (session ai-maestro-janitor-72) at ~18:28; it verified first-hand — scripts/lib/trdd_common.py:193-199 matches only the timestamped and 36-char-UUID shapes, extract_uid (:203/:212) is the sole wrapper, callers in dispatch.py, trdd-drift.py, trdd-reminder.py, trdd-cross-card-blindspot.py, ticket_proposal.py and findings_cli.py drop a bare TRDD-<8hex>-<slug>.md card — and queued the fix on its own board as TRDD-JDIJ76SW (todo, committed on its main; fix requirement: accept the bare shape as a third alternative, one test per shape, frontmatter trdd-id authoritative). Attribution: the net −1 measurement is claude-opus-session's (UAP7ZEJL, 03:13-04:58), not the hub's; the hub's own first-hand check was of the INSTALLED 3.4.14 cache only (regex at :193; five detectors import trdd_common — report-to-trdd-drift, trdd-reminder, trdd-cross-card-blindspot, trdd-drift, trdd-state-reconciliation; reports/colony/evidence/janitor-matcher-cache-check.txt). If the janitor lands JDIJ76SW before the owner picks a route, this card closes complete on a log line citing that commit — its four boxes model only issue / PR / decline.
+- 2026-09-05T18:42:03+0200 — FORWARD CORRECTION (the janitor's own, relayed ~18:41): of the six extract_uid callers named in the line above, the janitor verified three first-hand — dispatch.py:2656, trdd-drift.py:290, findings_cli.py:54; trdd-reminder.py, trdd-cross-card-blindspot.py and ticket_proposal.py came from its worker's listing and are second-hand on both sides. The regex gap (trdd_common.py:193-199) stays verified. Fix in progress under the janitor's TRDD-JDIJ76SW; the hub's attribution note is recorded there. Still no route chosen here — the USER's call.

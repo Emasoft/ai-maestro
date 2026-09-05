@@ -2,12 +2,12 @@
 trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: complete
-blocked-by: [1LFRP6GJ]
+blocked-by: []
 pre-block-column: ai_review
 blocker-probe: sh -c 'grep -m1 "^column:" design/tasks/TRDD-20260904_134338+0200-1LFRP6GJ-haephestos-persona-has-no-credential-so-its-own-api-calls-401.md || echo column-absent'
 blocker-holds-if: not-match:complete
 created: 2026-08-22T22:30:28+0200
-updated: 2026-09-05T10:59:10+0200
+updated: 2026-09-05T11:00:54+0200
 current-owner: user
 created-by: user
 task-type: security

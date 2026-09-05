@@ -2,7 +2,7 @@
 name: persistent-state-shaped-by-the-caller-oscillates
 description: "two tools keep overwriting each other's config and both report success / a setting flips back after the other one runs / branch protection differs across repos and I cannot tell which shape is right / the ruleset changed and nobody changed it / my conformance check passes here and fails on the same repo elsewhere"
 ocd: 2026-08-21
-lmd: 2026-08-21
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -79,5 +79,21 @@ the checks rule. Two had no local checkout — consistent with the story, but un
 "the apply context was wrong" from "the repo genuinely has no CI". The third HAD a checkout AND a
 workflow file and still got no rule: only that one DEMONSTRATES the cwd-dependence instead of
 merely fitting it. One discriminating case beats two corroborating ones.
+
+
+^ATOM-M907-Z5QU [desc: "three writers of extraKnownMarketplaces source.source, two emitting directory and one emitting local — the value flipped with whichever ran last, Claude Code refused settings.json on every boot throug", keywords: settings.json_Invalid_input_extraKnownMarketplaces source.source_invalid marketplace_source_local_vs_directory Claude_Code_refused_my_settings.json_after_a_server_restart which_value_does_Claude_Code_accept_for_a_path_marketplace settings.json_auto-fix_rewrote_my_file the_server_keeps_re-breaking_settings.json_on_boot known_marketplaces.json_is_the_arbiter two_writers_different_discriminant a_test_asserting_the_bug ChangeMarketplace_G03b startup-marketplaces.mjs_writes_local, trdd: TRDD-MUB7NTRF, ocd: 2026-09-05, lmd: 2026-09-05]
+
+**Measured 2026-09-05 on `~/.claude/settings.json`.** Three code paths write the same
+`extraKnownMarketplaces[name].source` entry: `plugin-storage-service.ts:938` and
+`role-plugin-service.ts:719` emit `{source:'directory', path}`; `ChangeMarketplace` G03b
+(`element-management-service.ts:5804`) emitted `{source:'local', path}` — and `startup-marketplaces.mjs`
+runs ChangeMarketplace on EVERY boot, so the last writer always won and every boot re-broke the file.
+Claude Code's settings schema accepts `github | git | directory` here; `local` is the value for a
+MANIFEST's `plugins[].source`, a different schema (`lib/marketplace-skills.ts:349`, correct). The arbiter
+is the CLI's own registry, `~/.claude/plugins/known_marketplaces.json`, which records path marketplaces
+as `directory`. A test (`change-marketplace-rollback.test.ts:244`) asserted `local`, so the wrong value
+had a green guard. Fixed `3e40eaa8`. **The tell was the server's own backup chain**: `settings.json.aim-bak-*`
+at 09:44 read `directory`, at 09:46 `local` — same file, two minutes, one boot. When a config
+value oscillates, `grep` every writer of that key before touching the value.
 
 ## Notes and lessons learned

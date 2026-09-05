@@ -2,7 +2,7 @@
 name: janitor-chore-absorbability
 description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all / is cache-prune absorbed now or does the table still say no / is there a per-chore handover now or does the daemon still exit wholesale / which chores does the janitor still run while the server is up / is the absorbability table out of date / is memory-guard absorbed or armed / why does the liveness beat not claim memory-guard / detect-only memory guard would kill / AIM_MEMORY_GUARD claim follows arming activeAbsorbedChores CONDITIONAL_CHORES / is rules-cleanup absorbed or does the row still say no / orphaned janitor rules never removed — fixed / AIM_RULES_CLEANUP dark-shipped lib rules-cleanup / is fleet-stop absorbed or does the row still say no / who delivers janitor-disarm on the kill-switch / AIM_FLEET_STOP"
 ocd: 2026-08-05
-lmd: 2026-08-20
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -218,6 +218,25 @@ PERSISTED field and renaming it needs a migration; the docstring in
 ^ATOM-VBE2-CV24 [desc:"Absorbed lane polls every 15min gated on the persisted stamp (db6cf8f8) — restarts no longer re-phase; stale alarm during a long tick is normal", keywords: restart_delayed_absorbed_chore_hours chore-stale_alarm_but_lane_alive absorbed_lane_tick_timing_after_pm2_restart user-plugins-update_late_after_reboot phase_skew_boot_anchored_interval, ocd: 2026-08-08, lmd: 2026-08-08]
 
 Since db6cf8f8 (2026-08-08) the absorbed lane's repeating timer is a 15-min POLL gated on the persisted lastAbsorbedRunAt stamp (runAbsorbedDutyPoll in services/auto-update-service.ts) — the tick grid anchors on the STAMP, never on boot. Before that, setInterval(cadence) anchored on BOOT, so a restart re-phased the lane and a due chore waited up to a full 4h interval (measured live: due 22:43, ran 01:03:50 = boot 21:03:50 + 4h). The 4h CADENCE constant is unchanged, still enforced by absorbedDutyIsOverdue; the poll does no network work (one local settings read). A chore-stale alarm during one long tick is expected: per-chore stamps write at chore COMPLETION, and a marketplace sweep alone can run 25+ minutes.
+
+
+^ATOM-VXXQ-DM54 [desc: "a capability token the janitor does not know CLAIMS NOTHING — publish the exact GLOBAL_CHORES name or family-a, never a coarse token of our own; singleton-chores was one and marketplace-refresh / vers", keywords: janitor_still_runs_a_chore_the_server_absorbed chore_runs_on_both_sides double-run_marketplace-refresh double-run_version-update singleton-chores_token what_capabilities_does_the_server_publish server-liveness.json_capabilities_vocabulary claimed_chores_ignores_my_token which_chore_names_does_the_janitor_honour family-a_expands_to_what publishing_a_chore_we_do_not_run_makes_the_janitor_yield_it three_chores_deliberately_not_published cache-prune_fleet-plugins-update_github-config-audit_not_in_capabilities, trdd: TRDD-X9VLHBFZ, ocd: 2026-09-05, lmd: 2026-09-05]
+
+**The janitor honours a capability token in exactly two forms** (v3.4.14 `harness_backend.py::claimed_chores`,
+quoted by its maintainer session 2026-09-05): an EXACT name from its 15-name `GLOBAL_CHORES`, or the
+coarse `family-a` which expands to ITS `SERVER_ABSORBED_TASKS`. **Any other token claims nothing**,
+silently, "failing toward coverage". Our writer published `["family-a","singleton-chores"]`;
+`singleton-chores` — our announcement that marketplace-refresh and version-update were absorbed — was
+never a claim, so both chores ran on both sides whenever the server was up. Our docstring said the
+janitor "never inspects token content"; true on 2026-08-02, false since the rev-8 contract of
+2026-08-18 (`docs/claimed-chores-contract.md`).
+
+Fixed `dc133c04`: `currentCapabilities` emits exact names, each gated by the predicate proving the
+chore is live on this process. Live file after restart: `oauth-rotator-tick`, `oauth-rotator-supervisor`,
+`marketplace-refresh`, `version-update`, plus whichever CONDITIONAL chores are armed; `family-a` kept
+one release as alias. **Never publish a chore you cannot prove is running** — the daemon yields on our
+word and the chore goes unrun fleet-wide. Three are deliberately unpublished until each scheduler
+exports a liveness check (`cache-prune`, `fleet-plugins-update`, `github-config-audit`; TRDD-X9VLHBFZ).
 
 ## Notes and lessons learned
 

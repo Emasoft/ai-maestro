@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:45:25+0200
+updated: 2026-09-05T04:48:13+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -22,7 +22,7 @@ approved: true
 approval-judge: claude-opus-session
 approval-datetime: 2026-09-05T03:13:47+0200
 blocked-by: [D552QXOU]
-blocker-probe: sh -c 'grep -m1 -h "^column:" design/*/TRDD-*D552QXOU*.md || echo column-PROBE-BROKEN'
+blocker-probe: sh -c 'grep -m1 -h "^column:" design/*/TRDD-*D552QXOU*.md | head -1 | grep . || echo column-PROBE-BROKEN'
 blocker-holds-if: not-match:(published|complete|live|failed|superseded|cancelled|refused)$
 npt: []
 eht: [D552QXOU]
@@ -279,6 +279,33 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:48:13+0200 — **NOTHING EXECUTES THIS PROBE, and that reframes the whole gate.**
+  Traced the consumer: `lib/trdd-doctor.ts:1044-1074` READS `blocker-probe:` and
+  `blocker-holds-if:` only to check the fields are present and that the predicate matches
+  `BLOCKER_HOLDS_IF_RE` (line 292). Its sole `execFileSync` (line 1391) runs `git log`. Nothing
+  in `lib/`, `scripts/` or the janitor's detectors spawns the probe. So `BLOCKED-WITHOUT-PROBE`
+  gates the DECLARATION of a re-answerable predicate, not its evaluation — the blocker is
+  re-answerable *by a human who runs it*, which is exactly what I did at 04:45 and 04:48.
+  A probe nothing runs still beats a bare `blocked-by:`, because the command is written down
+  and re-runnable; but "runnable" and "run" are different words and the card should not blur
+  them.
+
+  Consequence for the multi-line hazard (`grep -m1` is per-FILE, so a two-file glob emits two
+  lines): **moot today** — there is no evaluator whose semantics could get it wrong. Hardened
+  anyway, since the ambiguity becomes live the day someone writes one, and it costs one pipe.
+
+  **The hardening broke the thing it was added beside, and the test caught it.** Appending
+  `| head -1` made the fallback DEAD CODE: `head` exits 0 on empty input, so `||` can never
+  fire, and a missing card produced *silence* instead of `column-PROBE-BROKEN`. The verdict
+  stayed fail-safe (empty matches no terminal column ⇒ HOLDS) but the legibility fix from the
+  previous entry was silently undone. Final form inserts `| grep .`, which fails on empty input
+  and restores the sentinel. Verified in all THREE states, not just the happy one:
+
+  | state | probe output | verdict |
+  |---|---|---|
+  | live blocker (`column: todo`) | `column: todo` | HOLDS ✓ |
+  | blocker archived (real `design/archived/` card) | `column: superseded` | CLEARS ✓ |
+  | card missing entirely (`*NOSUCHID9*`) | `column-PROBE-BROKEN` | HOLDS ✓ |
 - 2026-09-05T04:45:25+0200 — **Blocker probe repaired: it would have died exactly when it should
   have fired.** The first version hard-coded D552QXOU's full `design/tasks/…` path. Three of that
   card's four acceptance branches end in closure, and a closed card is `git mv`d to
@@ -299,8 +326,14 @@ against the same files, and name the cards the two sets disagree about. Settled 
   existing `design/archived/` card returns `column: superseded`, which the regex matches — i.e.
   the archival case CLEARS as intended.
 
-  (Note: the sibling probe on TRDD-2LIS20K1 keys on a `design/tasks/` path the same way. Not
-  touched — another card's frontmatter — but it is the same latent defect.)
+  (An earlier draft of this entry said the sibling probe on TRDD-2LIS20K1 "is the same latent
+  defect". **Withdrawn — that was asserted from one grep line without opening the card.** Read
+  04:47: 2LIS20K1 is `column: approval` with `blocked-by: []` — it is not a parked card at all,
+  and its probe reads its OWN file's `approved:` field rather than a sibling's column. It shares
+  the *mechanical* shape (a `design/tasks/` path that dies on archival) and NOT the consequence,
+  because a self-referential probe on an archived card is one nobody evaluates. The accurate
+  claim is the narrow one: it keys on a `design/tasks/` path the same way; whether that matters
+  depends on its blocker's lifecycle.)
 - 2026-09-05T04:42:43+0200 — **`todo` → `blocked`** (`blocked-by: [D552QXOU]`,
   `pre-block-column: todo`). Wiring D552QXOU as an EHT at 04:40 left this card in an
   INCONSISTENT triple: a non-empty `eht:` naming a non-terminal child, an empty `blocked-by:`,

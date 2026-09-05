@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:04:49+0200
+updated: 2026-09-05T03:10:36+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -47,11 +47,23 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > **RE-MEASURED FOR THE PENDING DECISION** (read-only; the card's own text warns the count is not
 > frozen and to re-read rather than trust a recorded number):
 >
-> | when | files in `~/.aimaestro/pillar-index` |
-> |---|---|
-> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live |
-> | 2026-08-26 | 144 |
-> | **2026-09-05 03:04** | **168 — 74 MB on disk** |
+> | when | value | instrument |
+> |---|---|---|
+> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live | `yarn pillar:reap` — a CLASSIFIER over indexes |
+> | 2026-08-26 | 144 | `find … -type f \| wc -l` |
+> | **2026-09-05 03:04** | **168 — 74 MB on disk** | `find … -type f \| wc -l` |
+>
+> ⚠ **ROW 1 IS A DIFFERENT INSTRUMENT AND THE THREE ARE NOT ONE SERIES.** An index is not
+> necessarily one file — a SQLite database in WAL mode carries `-wal`/`-shm` sidecars — so a
+> classifier count over indexes and a raw file count are different quantities. **The growth claim
+> rests on rows 2-3 alone** (144 → 168, like-for-like, and the card itself records row 2's command).
+> Read across all three and the shape appears to DECELERATE (+42 in 4 days, then +24 in 10) — that
+> apparent shape may be an artifact of switching instruments, not a fact about the world. Likewise
+> "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
+> them.
+>
+> **The number the decision actually turns on is the ORPHAN count, and only `yarn pillar:reap`
+> (no flag) produces it.** It reaps nothing. The 168 above is a size signal, not a reap estimate.
 >
 > Still growing, as the card predicted (the writers were never contained — `TRDD-IMCEYV9F`).
 > **PENDING-USER, unchanged: authorize `yarn pillar:reap --reap` or decline.** Run

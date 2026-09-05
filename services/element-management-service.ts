@@ -5349,6 +5349,13 @@ export interface ChangeResult {
   operations: string[]
   restartNeeded: boolean
   error?: string
+  /** Forwarded from the failing `GateFailure` (lib/gate-transaction.ts) when a gate's underlying
+   *  cause was `UnreadableTargetError` — a settings file that EXISTS but does not parse, distinct
+   *  from a legitimately absent file or key. `handleDeleteMarketplace` reads this to answer 409
+   *  instead of the designed silent-absence partial success. Not set on any other failure. */
+  errorKind?: 'unreadable-target'
+  /** The gate id that failed, forwarded from `GateFailure.failedGateId` alongside `errorKind`. */
+  failedGateId?: string
   /** Set when the pipeline deliberately did NOT act, and carries the reason.
    *
    *  A skip is a THIRD outcome and neither of the other two describes it: reporting it as a
@@ -6094,6 +6101,11 @@ export async function ChangeMarketplace(desired: {
         result.error = txn.rolledBack
           ? `${txn.message} The marketplace registration, its plugin cache and every plugin the cascade uninstalled were restored.`
           : txn.message
+        // TRDD-Y0XEEUXN residue: forward the typed cause so a caller (handleDeleteMarketplace)
+        // can tell "G05 found the settings file unreadable" from every other failure without
+        // string-matching `error`.
+        result.errorKind = txn.errorKind
+        result.failedGateId = txn.failedGateId
         return result
       }
     } else if (desired.action === 'update') {

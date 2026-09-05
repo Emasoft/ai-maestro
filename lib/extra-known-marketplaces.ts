@@ -145,6 +145,20 @@ export async function applyExtraKnownMarketplaceOps(
           settingsOps.push({ op: 'set', keyPath: ['extraKnownMarketplaces', op.name, field], value })
         }
       } else if ('set' in op) {
+        // Container-shape guard (TRDD-Y0XEEUXN residue), mirroring lib/settings-gate.ts:216-227's
+        // rule for this exact key path. `op.set` is typed `unknown`, so a caller crossing a
+        // serialisation boundary (HTTP body, a future CLI/script caller) is not refused by
+        // TypeScript at all — and `applySettingsOps`'s `set` walk would happily REPLACE the whole
+        // entry with a string/number/array, corrupting the shape every reader of
+        // `extraKnownMarketplaces` expects. Thrown BEFORE `settingsOps` gains this op, so no
+        // earlier op in the same batch has been applied yet either (`applySettingsOps` runs once,
+        // after this whole loop, against the still-unmutated `data`).
+        if (op.set === null || typeof op.set !== 'object' || Array.isArray(op.set)) {
+          const kind = op.set === null ? 'null' : Array.isArray(op.set) ? 'array' : typeof op.set
+          throw new Error(
+            `applyExtraKnownMarketplaceOps: "${op.name}" set value must be a non-null, non-array object, got ${kind}`,
+          )
+        }
         settingsOps.push({ op: 'set', keyPath: ['extraKnownMarketplaces', op.name], value: op.set })
       } else {
         // Runtime backstop for a caller crossing a serialisation boundary (HTTP body, CLI argv)
@@ -161,13 +175,11 @@ export async function applyExtraKnownMarketplaceOps(
     // true no-op against a missing/malformed `extraKnownMarketplaces`, matching every writer
     // this module replaces ("absence is a silent success", never a reason to vivify a shell).
     //
-    // NO SCHEMA-SHAPE LINT HERE, unlike `editSettings` (lib/settings-gate.ts's `lintTouchedKeys`,
-    // private to that module): every writer this module owns already writes a plain object at
-    // this exact key path (plugin-storage-service.ts, role-plugin-service.ts x2,
-    // auto-update-service.ts, element-management-service.ts's G03b/G05), and `set`/`patch`'s
-    // types already refuse a bare string/number/array literal at every in-process call site. Not
-    // re-deriving that lint here is a deliberate, narrow gap — noted rather than silently
-    // dropped — traded for not exporting a private helper from `lib/settings-gate.ts` to close it.
+    // A whole-entry `set` now carries its OWN container-shape guard, thrown above BEFORE this
+    // point — closing the residue an earlier revision of this comment left open ("NO SCHEMA-SHAPE
+    // LINT HERE"). A `patch` needs no equivalent: it can only ever write into an EXISTING object
+    // slot (`walkToParent`'s `create: true` vivifies the entry itself, never a scalar in its
+    // place), so there is no non-object shape a patch's per-field `set` could produce here.
     applySettingsOps(data, settingsOps)
   }, { createIfMissing: opts.createIfMissing ?? true })
   // UnreadableTargetError, or any other error `updateJson` throws, propagates from here

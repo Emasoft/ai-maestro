@@ -75,6 +75,28 @@ describe('applyExtraKnownMarketplaceOps — direct', () => {
     expect(read()).toEqual(before) // nothing landed — not even 'valid-one'
   })
 
+  it('rejects a non-object whole-entry set (string / array / null) before anything is written', async () => {
+    /** TRDD-Y0XEEUXN residue: mirrors lib/settings-gate.ts:216-227's container-shape rule for
+     *  `extraKnownMarketplaces`, which `editSettings` enforced but this owner's batch path did
+     *  not. A bare string/array/null `set` value would otherwise replace the whole entry with a
+     *  shape no reader of `extraKnownMarketplaces` expects. */
+    const { applyExtraKnownMarketplaceOps } = await import('@/lib/extra-known-marketplaces')
+    seed({ extraKnownMarketplaces: { existing: { source: 'x' } } })
+    const beforeBytes = readFileSync(settingsPath, 'utf-8')
+
+    for (const { value, kind } of [
+      { value: 'a bare string', kind: 'string' },
+      { value: [1, 2, 3], kind: 'array' },
+      { value: null, kind: 'null' },
+    ]) {
+      await expect(
+        applyExtraKnownMarketplaceOps([{ name: 'bad', set: value }], settingsPath),
+      ).rejects.toThrow(new RegExp(`"bad" set value must be a non-null, non-array object, got ${kind}`))
+    }
+
+    expect(readFileSync(settingsPath, 'utf-8')).toBe(beforeBytes) // byte-identical — none of the three rejected calls wrote anything
+  })
+
   it('applies a patch (one field, on an existing entry) and a whole-entry set for a different name in ONE call', async () => {
     seed({
       extraKnownMarketplaces: {

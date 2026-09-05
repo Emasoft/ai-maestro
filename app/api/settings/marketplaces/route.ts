@@ -1234,6 +1234,18 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   for (const name of nameCandidates) {
     const result = await DeleteMarketplace({ name }, { isSystemOwner: true as const })
     if (!result.success) {
+      // TRDD-Y0XEEUXN residue: a settings.json that EXISTS but does not parse is a different
+      // fact than "this name variant was never registered", and it deserves a different
+      // response — 409, matching the outer `UnreadableTargetError` handler above, instead of
+      // the silent partial-success this loop gives every other per-name failure. Every other
+      // per-name failure (name genuinely absent, CLI refused, etc.) keeps today's behaviour:
+      // log and continue with the remaining candidates.
+      if (result.errorKind === 'unreadable-target') {
+        return NextResponse.json(
+          { error: result.error, errorType: 'unreadable-settings', failedGateId: result.failedGateId },
+          { status: 409 },
+        )
+      }
       // Non-fatal: the marketplace may not be registered under this name variant.
       // Continue with file cleanup and return a partial success below.
       console.error('[marketplaces] DeleteMarketplace failed for', name, result.error)

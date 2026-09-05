@@ -15,6 +15,8 @@
 // invalid, and it says so, naming every gate it could not revert (R51.5). That is not an escape
 // hatch from the guarantee; it is the refusal to claim "no changes were made" when changes remain.
 
+import { UnreadableTargetError } from './json-io'
+
 /** A gate that changes nothing needs no compensation; one that changes something MUST have one. */
 export interface Gate<Ctx> {
   /** Stable label used in the failure message, e.g. 'G05b'. */
@@ -55,6 +57,13 @@ export interface GateFailure {
   failedGateNumber: number
   failedGateId: string
   error: string
+  /**
+   * Set when the failing gate threw `UnreadableTargetError` (lib/json-io.ts) — a settings file
+   * that EXISTS but does not parse, as distinct from a legitimately absent file or key. A caller
+   * (e.g. `handleDeleteMarketplace`) that wants to answer "the target is corrupt" instead of "the
+   * target was absent" reads this field rather than string-matching `error`/`message`.
+   */
+  errorKind?: 'unreadable-target'
   /** True when every executed gate was successfully reverted. */
   rolledBack: boolean
   /** Gates whose compensation FAILED — non-empty means the system is invalid (R51.5). */
@@ -142,7 +151,12 @@ export async function runGateSequence<Ctx>(
 
   /** Undo everything already executed, then build the failure result. Shared by BOTH abort paths —
    *  a failing gate and a violated success-path invariant are the same event: the aim was not met. */
-  const abort = async (gateNumber: number, gateId: string, cause: string): Promise<GateFailure> => {
+  const abort = async (
+    gateNumber: number,
+    gateId: string,
+    cause: string,
+    errorKind?: GateFailure['errorKind'],
+  ): Promise<GateFailure> => {
     // Reverse order: the most recent change is the one whose undo is still valid; undoing an
     // earlier gate first could invalidate the state a later gate's undo depends on.
     const unrevertable: { id: string; error: string }[] = []
@@ -165,6 +179,7 @@ export async function runGateSequence<Ctx>(
       failedGateNumber: gateNumber,
       failedGateId: gateId,
       error: cause,
+      errorKind,
       rolledBack: unrevertable.length === 0,
       unrevertable,
       message: unrevertable.length
@@ -195,7 +210,7 @@ export async function runGateSequence<Ctx>(
     } catch (err) {
       const cause = err instanceof Error ? err.message : String(err)
       ops.push(`${gate.id}: FAILED — ${cause}`)
-      return abort(i + 1, gate.id, cause)
+      return abort(i + 1, gate.id, cause, err instanceof UnreadableTargetError ? 'unreadable-target' : undefined)
     }
   }
 

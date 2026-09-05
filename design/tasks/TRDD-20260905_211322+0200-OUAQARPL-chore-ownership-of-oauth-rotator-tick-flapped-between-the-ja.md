@@ -3,7 +3,7 @@ trdd-id: OUAQARPL
 title: chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
 column: live_auditing
 created: 2026-09-05T21:13:22+0200
-updated: 2026-09-05T22:10:00+0200
+updated: 2026-09-05T22:14:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: audit
@@ -73,3 +73,4 @@ janitor).
   can. By ai-maestro-hub-session.
 - 2026-09-05T21:58:30+0200 — our-side attribution landed in the tree: lib/server-liveness.ts logs a late beat (gap > 2x intervalMs) transition-only, test-pinned (neuter reddens 'logs a late-beat warning only once a gap exceeds 2x the interval — silent on normal beats'); pairs with the janitor's HXZ8B0IS reader-side line. Box 2 stays open until the commit sha is recorded. By ai-maestro-hub-session.
 - 2026-09-05T22:09:53+0200 — row-29 code commit aa961973 — feat(liveness): log a late heartbeat, 2 files (lib/server-liveness.ts, tests/unit/server-liveness.test.ts); the committed blob is byte-identical to the verifier's pre-neuter copy (cmp). Box 2 stays OPEN: this commit is the INSTRUMENT that will attribute the next flap (a '[server-liveness] late beat' line = the writer was late; none = the reader misjudged or the file was fine), not an attribution of the 15:01-19:18 window, whose cause is still unmeasured. Sha sent to the janitor session 22:08 (pairs with its HXZ8B0IS line). By ai-maestro-hub-session.
+- 2026-09-05T22:14:15+0200 — CORRECTION to the 22:09:53 line (append-only log, so appended, not edited). (1) 'pre-neuter copy' is imprecise: the verifier's .orig is the WORKER'S delivered lib/server-liveness.ts, snapshotted before the verifier's neuter/restore cycle — the cmp proves the committed source equals what the worker delivered; the TEST file was never touched by the verifier and has no such copy — its proof is the 24/24 run plus the neuter reddening its named test. (2) '22:08' was a clock read from adjacent shell output, not the send's own time; the send is identified by msg id fe60bad7. (3) Pairing asymmetry: our warn fires at gap > 2 x 30 s = 60 s; the janitor's staleness threshold is 90 s. A 61-89 s writer gap logs here and never trips the reader (harmless); a writer stall under 60 s that meets a late 60 s reader poll can trip the reader with NO line here. So a '[server-liveness] late beat' line means the writer's WALL-CLOCK gap exceeded 60 s — a real stall OR a clock jump (laptop sleep, NTP step; the gap is Date.now based), to be disambiguated against the janitor's own daemon.log timestamps, which would show the same jump; the absence of a line does NOT exonerate the writer. The janitor session will be told on the next owed message. By ai-maestro-hub-session.

@@ -3,7 +3,7 @@ trdd-id: 10J18FZX
 title: Include the live account in surveyAlternates read path only
 column: todo
 created: 2026-08-22T17:52:41+0200
-updated: 2026-08-22T17:52:41+0200
+updated: 2026-09-05T20:05:15+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -50,6 +50,7 @@ Drop the `continue` for the live account inside `surveyAlternates` ONLY. Do not 
   exclusions cannot be conflated by a later edit.
 
 ## Approval log
+- 2026-09-05T20:05:13+0200 — fix landing: the live-email skip in surveyAlternates removed (tick.ts:1414, now folded into the loop's TRDD-10J18FZX comment block starting :1413); keepaliveRefresh's exclusion (:838) untouched; regression test tests/unit/oauth-rotator-survey-alternates.test.ts (2 tests, both green; neuter reproduces exactly 1 red — the fix-confirming test — leaving the keepaliveRefresh control green).
 
 ## Approval log
 

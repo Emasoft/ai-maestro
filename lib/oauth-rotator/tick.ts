@@ -1410,8 +1410,15 @@ export function surveyAlternates(): AlternateSurvey {
   const slots = (state.slots ?? {}) as unknown as Record<string, Record<string, unknown>>
   const unreadable: string[] = []
   const refreshDead: string[] = []
+  // TRDD-10J18FZX: the LIVE account is INCLUDED here, deliberately — unlike `keepaliveRefresh`'s
+  // own exclusion a few hundred lines up, which stays untouched (it WRITES, and never refreshing
+  // the live account out from under Claude is still load-bearing). This function only READS
+  // (`readSlot` + inspection; it refreshes nothing), so surveying the live slot races nothing and
+  // can invalidate no token. Skipping it here made a live account whose refresh is dead AND whose
+  // token is locally expired invisible to `refreshDead`, so `nextAction` fell through to
+  // `stuck: all-maxed` (wait for a window) when the real remedy was `reauth-needed` (re-login) —
+  // two opposite instructions from one status file.
   for (const email of Object.keys(slots)) {
-    if (email === state.live_email) continue
     const b = readSlot(email)
     if (!b) { unreadable.push(email); continue } // unreadable alternate → needs attention
     const inner = oauthOf(b)

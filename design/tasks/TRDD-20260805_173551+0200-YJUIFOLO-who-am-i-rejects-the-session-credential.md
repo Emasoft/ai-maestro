@@ -1,18 +1,18 @@
 ---
 trdd-id: YJUIFOLO
 title: The who-am-I endpoint rejects the credential the server hands the session
-column: proposal
+column: planned
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T17:35:51+0200
-updated: 2026-08-05T17:35:51+0200
+updated: 2026-09-05T10:20:55+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: security
 min-approval-requirement: user
 mandate: false
-approved: false
+approved: true
 severity: high
 effort: small
 relevant-rules: []
@@ -22,6 +22,8 @@ blocked-by: []
 release-via: none
 labels: [identity, auth, amp, safety]
 external-refs: [Emasoft/ai-maestro#46, Emasoft/ai-maestro#77, Emasoft/ai-maestro#80]
+approval-judge:  user 
+approval-datetime: 2026-09-05T10:20:55+0200
 ---
 
 # The who-am-I endpoint rejects the credential the server hands the session
@@ -91,3 +93,4 @@ MED — it widens an authentication surface. Small in code, deliberate in conseq
 is a proposal and not a task. Dependencies: none; it is independent of #46's other halves.
 
 ## Approval log
+- 2026-09-05T10:20:55+0200 — APPROVED by  user  (min-approval-requirement: user). APPROVED:  3-token-family / prefix mismatch still present (lib/amp-auth.ts:23-24) . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.

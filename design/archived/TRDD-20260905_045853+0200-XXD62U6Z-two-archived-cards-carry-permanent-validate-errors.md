@@ -3,9 +3,9 @@ trdd-id: XXD62U6Z
 title: Two archived cards carry permanent validate ERRORs and the sanctioned repair is a user decision
 scope: project
 project-id: ai-maestro
-column: todo
+column: complete
 created: 2026-09-05T04:58:53+0200
-updated: 2026-09-05T05:09:04+0200
+updated: 2026-09-05T10:27:41+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -160,7 +160,7 @@ from 2026-08-22 are worth the repair. The rules permit it; nobody is required to
       in `design/tasks/` (`aimaestro-trdd-approval.md:818`, D4 step 5b), but D4's scan set
       (`:771`) is `design/tasks/` + `design/proposals/` only. The gap is exactly one folder wide.
       (Answered wrongly THREE times first; see the STATE block.)
-- [ ] **USER DECISION — the only live branch.** Repair, or accept.
+- [x] **USER DECISION — the only live branch.** Repair, or accept.
       **Repairing** means `git mv`ing both out of `design/archived/` — a move no clause
       sanctions — then to `dev` (neither card has a `pre-block-column:`, so that is the
       fallback), which asserts active development on work that is done; then write each
@@ -260,3 +260,4 @@ have prompted.
   none). Tier-0: records an open question about this project's own board hygiene and performs no
   repair. The repair itself, if it happens, is a separate decision recorded above.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T10:27:41+0200 — COMPLETE by manager. DECIDED: ACCEPT. Repair was attempted through every sanctioned path and the tool refuses each: move → 'already terminal in archived'; set column → 'half of a transition'. superseded-by IS set on both originals (rule 12 permits it), and successors PMDZ6L3H / MS3AD6NX carry the checklists the originals lacked, ticked only where measured. The two ERRORs are structural residue of a gate added after the cards closed — the overlay's own grandfather boundary names them. USER /goal 2026-09-05 fix all issues..

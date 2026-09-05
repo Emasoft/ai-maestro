@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:26:25+0200
+updated: 2026-09-05T03:29:35+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -80,18 +80,18 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 >
 > **The 1 non-`.sqlite` file is resolved, not an unknown** (read 2026-09-05):
 > `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
-> not itself orphaned. It records an `"open failed"` **on 2026-08-04** — a PAST event; the fault
-> string is a Node ABI mismatch (`NODE_MODULE_VERSION 127` vs `147`), i.e. the RUNTIME was wrong,
-> not the file. **How that index classifies today is UNVERIFIED** — under the correct Node 22 it
-> may well open fine and come back `live` or `orphaned`. Do not read this as a current
-> `unreadable`.
+> not itself orphaned. Read in full (`jq`, not a truncation): **3 entries, all `"open failed"`,
+> across TWO dates — 2026-08-04 and 2026-08-16.** So this is a RECURRING condition over 12 days,
+> not a one-off from a single bad install. The fault string is a Node ABI mismatch
+> (`NODE_MODULE_VERSION 127` vs `147`), i.e. the RUNTIME was wrong, not the file. All of it is
+> PAST: **how that index classifies today is UNVERIFIED** — under the correct Node 22 it may open
+> fine and come back `live`, `empty` or `orphaned`. Do not read it as a current `unreadable`.
 >
-> Its value is as evidence that **the wrong-Node open failure has actually occurred in this
-> directory**, which is the card's own subject. It is NOT the argument for never reaping
-> `unreadable`; that argument is structural and already made above — `[].every(gone)` is `true`
-> for an index whose target list could not be READ, so a two-state classifier deletes precisely the
-> files it could not inspect, whatever caused the failure (wrong ABI, corruption, permissions, a
-> crashed writer).
+> Its value is as evidence that **the wrong-Node open failure has actually occurred here, more than
+> once**, which is the card's own subject. The argument for never reaping `unreadable` is the
+> structural one already made above — `[].every(gone)` is `true` for an index whose target list
+> could not be READ, so a two-state classifier deletes precisely the files it could not inspect,
+> whatever caused the failure (wrong ABI, corruption, permissions, a crashed writer).
 >
 > The reap cannot touch this ledger either way (`.sqlite`-only); if its partner were ever reaped it
 > would be left dangling.

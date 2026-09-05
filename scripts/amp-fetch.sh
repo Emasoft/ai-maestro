@@ -128,6 +128,9 @@ TOTAL_NEW=0
 # during an outage. Drives the summary and the exit status below.
 TOTAL_UNREACHED=0
 
+# PROVIDERS is provably non-empty here (the `${#PROVIDERS[@]} -eq 0` check
+# above exits before this loop otherwise), so no bash-3.2 empty-array guard
+# is needed. TRDD-FPE86FIF.
 for provider in "${PROVIDERS[@]}"; do
     REG_FILE="${AMP_REGISTRATIONS_DIR}/${provider}.json"
     REGISTRATION=$(cat "$REG_FILE")

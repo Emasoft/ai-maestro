@@ -62,6 +62,9 @@ for a in "$@"; do
     *) ARGS+=("$a") ;;
   esac
 done
+# ARGS is provably non-empty at every later "${ARGS[@]}" expansion in this
+# file: the check below exits before any of them run if it is empty.
+# TRDD-FPE86FIF.
 [ "${#ARGS[@]}" -gt 0 ] || { usage >&2; exit 2; }
 
 command -v rg >/dev/null 2>&1 || {

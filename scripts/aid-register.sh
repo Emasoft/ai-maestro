@@ -194,6 +194,9 @@ if [ -n "$API_KEY" ]; then
     CURL_HEADERS+=(-H "X-Api-Key: ${API_KEY}")
 fi
 
+# CURL_HEADERS is provably non-empty: 4 literal elements assigned above
+# before any conditional can append more, so no bash-3.2 empty-array guard
+# is needed. TRDD-FPE86FIF.
 HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
     -X POST "$REGISTER_URL" \
     "${CURL_HEADERS[@]}" \

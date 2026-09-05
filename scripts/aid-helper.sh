@@ -43,6 +43,8 @@ _detect_openssl() {
         fi
     fi
 
+    # candidates is a literal, unconditionally non-empty array (5 hardcoded
+    # paths above), so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     # Search Homebrew paths
     for candidate in "${candidates[@]}"; do
         if [ -x "$candidate" ]; then

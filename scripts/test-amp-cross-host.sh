@@ -425,6 +425,9 @@ main() {
     local tenant
     tenant=$(jq -r '.organization // "rnd23blocks"' "$HOSTS_JSON")
 
+    # REACHABLE_INDICES (both loops below) is provably non-empty: the
+    # `$reachable_count -lt 2` check above exits before this point otherwise,
+    # so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     for i in "${REACHABLE_INDICES[@]}"; do
         local agent_name="xtest-${HOST_IDS[$i]}-${timestamp}"
         local agent_dir
@@ -471,6 +474,10 @@ main() {
 
     local pair_count=0
 
+    # ACTIVE_INDICES (every "${ACTIVE_INDICES[@]}" expansion in this file, and
+    # ACTIVE_INDICES[0]/[1]) is provably non-empty (>=2 elements): the
+    # `$active_count -lt 2` check above exits before this point otherwise, so
+    # no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     for si in "${ACTIVE_INDICES[@]}"; do
         for ri in "${ACTIVE_INDICES[@]}"; do
             # Skip self-sends (already tested in local test suite)

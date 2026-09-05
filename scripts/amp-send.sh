@@ -185,6 +185,10 @@ require_init
 
 ATTACHMENTS_JSON="[]"
 
+# ATTACH_FILES is provably non-empty inside this block (guarded by the
+# `${#ATTACH_FILES[@]} -gt 0` check right above), so the three
+# "${ATTACH_FILES[@]}" expansions below need no bash-3.2 empty-array guard.
+# TRDD-FPE86FIF.
 if [ ${#ATTACH_FILES[@]} -gt 0 ]; then
     # Check attachment count limit
     if [ ${#ATTACH_FILES[@]} -gt "$AMP_MAX_ATTACHMENTS" ]; then
@@ -238,6 +242,9 @@ MESSAGE_JSON=$(create_message "$RECIPIENT" "$SUBJECT" "$MESSAGE" "$TYPE" "$PRIOR
 # Upload Attachments (if any, and we have API credentials)
 # =============================================================================
 
+# Both "${ATTACH_FILES[@]}" loops below are provably non-empty (guarded by
+# the `${#ATTACH_FILES[@]} -gt 0` check right below), so no bash-3.2
+# empty-array guard is needed. TRDD-FPE86FIF.
 if [ ${#ATTACH_FILES[@]} -gt 0 ]; then
     # Find API credentials for upload
     UPLOAD_API_URL=""

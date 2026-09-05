@@ -91,6 +91,9 @@ GH_ARGS=("gh" "repo" "create" "$FULL_NAME" "$VISIBILITY" "--add-readme" "--clone
 [ -n "$DESCRIPTION" ] && GH_ARGS+=("--description" "$DESCRIPTION")
 
 echo "Creating repository $FULL_NAME..."
+# GH_ARGS is provably non-empty: 7 literal elements assigned above before any
+# conditional can append more, so no bash-3.2 empty-array guard is needed.
+# TRDD-FPE86FIF.
 "${GH_ARGS[@]}"
 
 # Get repo URL

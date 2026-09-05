@@ -64,6 +64,8 @@ detect_injection_patterns() {
     local content_lower
     content_lower=$(echo "$content" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 
+    # INJECTION_PATTERNS is a literal, unconditionally non-empty global
+    # constant, so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     for pattern_def in "${INJECTION_PATTERNS[@]}"; do
         # Parse pattern definition
         local category="${pattern_def%%:*}"

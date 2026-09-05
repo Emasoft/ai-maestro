@@ -325,7 +325,10 @@ run_claude_command() {
     # Run command capturing both streams
     # Unset CLAUDECODE to bypass nesting detection when invoked from within a Claude Code session.
     # The unset is scoped to the subshell and cannot affect the parent session. (Fix for issue 9.1)
-    (cd "$work_dir" && unset CLAUDECODE && claude "${cmd_args[@]}" >"$tmp_stdout" 2>"$tmp_stderr")
+    # cmd_args ("command_args..." per this function's docstring) can be called
+    # with zero extra args; under bash 3.2 + `set -u` an unguarded
+    # "${cmd_args[@]}" aborts with "unbound variable" in that case. TRDD-FPE86FIF.
+    (cd "$work_dir" && unset CLAUDECODE && claude "${cmd_args[@]+"${cmd_args[@]}"}" >"$tmp_stdout" 2>"$tmp_stderr")
     exit_code=$?
 
     # Output stdout
@@ -543,8 +546,11 @@ safe_json_edit() {
     fi
 
     # Apply jq transformation
+    # jq_args is OPTIONAL per this function's own usage docstring above, so it
+    # is empty on most calls; under bash 3.2 + `set -u` an unguarded
+    # "${jq_args[@]}" aborts with "unbound variable" in that case. TRDD-FPE86FIF.
     local result_file="$tmp_dir/result.json"
-    if ! jq "${jq_args[@]}" "$jq_filter" "$tmp_file" > "$result_file" 2>/dev/null; then
+    if ! jq "${jq_args[@]+"${jq_args[@]}"}" "$jq_filter" "$tmp_file" > "$result_file" 2>/dev/null; then
         print_error "JSON transformation failed"
         _safe_json_edit_cleanup
         return 1

@@ -50,6 +50,9 @@ if [ -d "$PROJECT_ROOT" ]; then
     # would double-count those dirs in the array.
     stale_dirs=( .next.stale* )
     stale_count=${#stale_dirs[@]}
+    # Both "${stale_dirs[@]}" loops below are provably non-empty (guarded by
+    # the `$stale_count -gt 0` check right below), so no bash-3.2 empty-array
+    # guard is needed. TRDD-FPE86FIF.
     if [ "$stale_count" -gt 0 ]; then
         stale_total_kb=0
         for d in "${stale_dirs[@]}"; do

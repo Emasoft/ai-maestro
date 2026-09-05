@@ -85,6 +85,10 @@ PY
         done
     fi
 
+    # cands is provably non-empty: the unconditional `command -v node`
+    # append above runs regardless of any branch and always adds at least
+    # one element (even an empty string), so no bash-3.2 empty-array guard
+    # is needed. TRDD-FPE86FIF.
     for cand in "${cands[@]}"; do
         [ -n "$cand" ] && [ -x "$cand" ] || continue
         major="$(_aim_node_major "$cand")"

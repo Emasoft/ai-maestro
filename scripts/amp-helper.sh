@@ -47,6 +47,8 @@ _detect_openssl() {
         fi
     fi
 
+    # candidates is a literal, unconditionally non-empty array (5 hardcoded
+    # paths above), so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     # Search Homebrew paths (check version string, not key generation)
     for candidate in "${candidates[@]}"; do
         if [ -x "$candidate" ]; then
@@ -1574,6 +1576,10 @@ list_inbox() {
         return 0
     fi
 
+    # Both "${msg_files[@]}" expansions below are provably non-empty (this
+    # function returns above when msg_files is empty), so no bash-3.2
+    # empty-array guard is needed. TRDD-FPE86FIF.
+
     # Use jq slurp to read all files at once, then filter and sort
     # Check both .metadata.status (old) and .local.status (new)
     if [ -n "$status_filter" ] && [ "$status_filter" != "all" ]; then
@@ -1977,6 +1983,8 @@ is_mime_blocked() {
     mime="${mime%%;*}"
     # Trim whitespace and convert to lowercase for case-insensitive comparison
     mime=$(echo "$mime" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+    # AMP_BLOCKED_MIME_TYPES is a literal, unconditionally non-empty global
+    # constant, so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     for blocked in "${AMP_BLOCKED_MIME_TYPES[@]}"; do
         if [ "$mime" = "$blocked" ]; then
             return 0

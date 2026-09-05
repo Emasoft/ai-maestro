@@ -154,7 +154,10 @@ maestro_ask_choice() {
 
     maestro_say "$msg"
     local i=1
-    for opt in "${options[@]}"; do
+    # options can be empty if this function is ever called with no choices;
+    # under bash 3.2 + `set -u` an unguarded "${options[@]}" aborts with
+    # "unbound variable" in that case. TRDD-FPE86FIF.
+    for opt in "${options[@]+"${options[@]}"}"; do
         echo "   $i) $opt"
         i=$((i + 1))
     done
@@ -439,7 +442,10 @@ portable_sed() {
     # Extract last argument as the file path, remaining args are sed expressions
     local file="${!#}"
     local args=("${@:1:$#-1}")
-    sed -i.bak "${args[@]}" "$file" && rm -f "${file}.bak"
+    # args is empty if this is ever called with only a file argument and no
+    # sed expression; under bash 3.2 + `set -u` an unguarded "${args[@]}"
+    # aborts with "unbound variable" in that case. TRDD-FPE86FIF.
+    sed -i.bak "${args[@]+"${args[@]}"}" "$file" && rm -f "${file}.bak"
 }
 
 # Install a system package on any Linux distro
@@ -510,6 +516,8 @@ uninstall() {
         "amp-thread.sh"
         "aimaestro-agent.sh"
     )
+    # scripts is a literal, unconditionally non-empty array (20 hardcoded
+    # names above), so no bash-3.2 empty-array guard is needed. TRDD-FPE86FIF.
     for script in "${scripts[@]}"; do
         rm -f "$HOME/.local/bin/$script" 2>/dev/null || true
         # Also remove symlinks without .sh extension (AMP convenience links)
@@ -1237,7 +1245,10 @@ act3_clone_and_build() {
                     [ ! -f "$HOME/.local/bin/amp-send.sh" ] && tool_flags+=(--skip-messaging)
                     [ ! -f "$HOME/.local/bin/aimaestro-agent.sh" ] && tool_flags+=(--skip-agent-cli)
                     chmod +x install.sh
-                    ./install.sh --from-remote -y "${tool_flags[@]}"
+                    # tool_flags is empty when both tools are already present.
+                    # Under bash 3.2 + `set -u` an unguarded "${tool_flags[@]}"
+                    # aborts with "unbound variable" in that case. TRDD-FPE86FIF.
+                    ./install.sh --from-remote -y "${tool_flags[@]+"${tool_flags[@]}"}"
                 fi
                 maestro_step 3 4 "Updating agent tools..." "done"
 
@@ -1246,6 +1257,9 @@ act3_clone_and_build() {
                 if [ "$SKIP_GATEWAYS" != true ] && [ -d "$INSTALL_DIR/services" ] && [ -n "$SELECTED_GATEWAYS" ]; then
                     cd "$INSTALL_DIR/services"
                     git pull origin main 2>/dev/null || git pull origin main 2>/dev/null || true
+                    # GW_ARRAY is provably non-empty here: SELECTED_GATEWAYS is
+                    # checked non-empty by the enclosing `if` above, so the
+                    # comma-split below always yields >=1 element. TRDD-FPE86FIF.
                     IFS=',' read -ra GW_ARRAY <<< "$SELECTED_GATEWAYS"
                     for gw in "${GW_ARRAY[@]}"; do
                         if [ -d "${gw}-gateway" ]; then
@@ -1277,6 +1291,9 @@ act3_clone_and_build() {
     # Honor --branch on the shallow clone; empty BRANCH = the repo's default branch.
     local -a clone_args=(--depth 1)
     [ -n "$BRANCH" ] && clone_args+=(--branch "$BRANCH")
+    # clone_args is provably non-empty: literal `--depth 1` above, before any
+    # conditional can append more, so no bash-3.2 empty-array guard is
+    # needed. TRDD-FPE86FIF.
     if ! git clone "${clone_args[@]}" "$REPO_URL" "$INSTALL_DIR"; then
         maestro_fail "Failed to clone repository. Check your network connection."
         exit 1
@@ -1304,6 +1321,9 @@ act3_clone_and_build() {
     if [ "$SKIP_GATEWAYS" != true ] && [ -n "$SELECTED_GATEWAYS" ]; then
         maestro_step 4 "$total_steps" "Installing gateways..." ""
         if git clone --depth 1 "$GATEWAYS_REPO" "$INSTALL_DIR/services" 2>/dev/null; then
+            # GW_ARRAY is provably non-empty here: SELECTED_GATEWAYS is checked
+            # non-empty by the enclosing `if` above, so the comma-split below
+            # always yields >=1 element. TRDD-FPE86FIF.
             IFS=',' read -ra GW_ARRAY <<< "$SELECTED_GATEWAYS"
             for gw in "${GW_ARRAY[@]}"; do
                 local gw_dir="$INSTALL_DIR/services/${gw}-gateway"
@@ -1523,6 +1543,9 @@ act4_start_and_register() {
             # in the replacement part of an inline s command, so we use awk for this substitution
             # which handles multiline replacement strings correctly on both macOS and Linux.
             local gw_list=""
+            # GW_ITEMS is provably non-empty here: SELECTED_GATEWAYS is checked
+            # non-empty by the enclosing `if` above, so the comma-split below
+            # always yields >=1 element. TRDD-FPE86FIF.
             IFS=',' read -ra GW_ITEMS <<< "$SELECTED_GATEWAYS"
             for gw_item in "${GW_ITEMS[@]}"; do
                 local gw_display=""

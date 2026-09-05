@@ -93,6 +93,9 @@ fi
 
 # ── 4. Compile ──────────────────────────────────────────────────────
 
+# BUILD_ARGS is provably non-empty: both branches above assign at least the
+# literal `--release` element, so no bash-3.2 empty-array guard is needed.
+# TRDD-FPE86FIF.
 pushd "$CRATE_DIR" >/dev/null
 cargo build "${BUILD_ARGS[@]}"
 popd >/dev/null

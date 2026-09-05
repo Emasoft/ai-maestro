@@ -162,7 +162,12 @@ else
   if $RAW; then ARGS+=("--dangerously-output-the-raw-response"); fi
   if [[ -n "$METHOD" ]]; then ARGS+=("--method" "$METHOD"); fi
   if [[ -n "$TOOL_NAME" ]]; then ARGS+=("--tool-name" "$TOOL_NAME"); fi
-  for arg in "${TOOL_ARGS[@]}"; do ARGS+=("--tool-arg" "$arg"); done
+  # TOOL_ARGS defaults to empty (only populated by repeated --tool-arg flags);
+  # under bash 3.2 + `set -u` an unguarded "${TOOL_ARGS[@]}" aborts with
+  # "unbound variable" when no --tool-arg was given. TRDD-FPE86FIF.
+  for arg in "${TOOL_ARGS[@]+"${TOOL_ARGS[@]}"}"; do ARGS+=("--tool-arg" "$arg"); done
 
+  # ARGS is provably non-empty here: 7 literal elements assigned above before
+  # any conditional can append more, so no guard is needed. TRDD-FPE86FIF.
   CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" uv run "$DISCOVER_SCRIPT" "${ARGS[@]}"
 fi

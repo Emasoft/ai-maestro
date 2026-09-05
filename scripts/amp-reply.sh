@@ -183,8 +183,15 @@ SEND_ARGS=(
 )
 
 # Forward attachment flags
-for attach_file in "${ATTACH_FILES[@]}"; do
+# bash 3.2 (macOS /bin/bash) treats "${arr[@]}" on an EMPTY array as an unbound
+# variable under `set -u` and aborts with exit 127. ATTACH_FILES defaults to
+# empty (only populated by an optional --attach flag), so the unguarded form
+# killed every reply with no attachments. TRDD-FPE86FIF (parent: WV8FDAH0).
+for attach_file in "${ATTACH_FILES[@]+"${ATTACH_FILES[@]}"}"; do
     SEND_ARGS+=(--attach "$attach_file")
 done
 
+# SEND_ARGS is provably non-empty here: it is built from 7 literal elements
+# above (recipient/subject/message/--priority/--type/--reply-to/--thread-id)
+# before this loop can add more, so no guard is needed. TRDD-FPE86FIF.
 "${SCRIPT_DIR}/amp-send.sh" "${SEND_ARGS[@]}"

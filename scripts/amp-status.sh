@@ -112,6 +112,9 @@ fi
 # JSON output
 if [ "$JSON_OUTPUT" = true ]; then
     REGS_JSON="[]"
+    # REGISTRATIONS is provably non-empty here (guarded by the
+    # `${#REGISTRATIONS[@]} -gt 0` check right above), so no bash-3.2
+    # empty-array guard is needed. TRDD-FPE86FIF.
     if [ ${#REGISTRATIONS[@]} -gt 0 ]; then
         REGS_JSON=$(printf '%s\n' "${REGISTRATIONS[@]}" | jq -s '.')
     fi

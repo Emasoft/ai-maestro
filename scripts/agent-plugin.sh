@@ -195,7 +195,11 @@ HELP
             [[ -d "$check_dir" ]] && [[ -f "$check_dir/SKILL.md" ]] && plugin_skill_dirs+=("$check_dir")
         done
 
-        for scan_dir in "${plugin_skill_dirs[@]}"; do
+        # plugin_skill_dirs is empty when none of the 3 candidate paths exist
+        # (the common case). Under bash 3.2 + `set -u` an unguarded
+        # "${plugin_skill_dirs[@]}" aborts with "unbound variable" in that
+        # case. TRDD-FPE86FIF.
+        for scan_dir in "${plugin_skill_dirs[@]+"${plugin_skill_dirs[@]}"}"; do
             if ! scan_skill_security "$scan_dir" "$plugin"; then
                 print_error "Plugin contains a skill with critical security issues."
                 print_error "Uninstalling plugin '$plugin'..."

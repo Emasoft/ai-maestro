@@ -1074,7 +1074,11 @@ run_claude_in_agent_dir() {
         return 1
     }
 
-    (cd "$canonical_dir" && claude "${claude_args[@]}")
+    # claude_args ("[claude_args...]" per this function's docstring above) can
+    # be called with zero extra args, which is a valid interactive-session
+    # invocation; under bash 3.2 + `set -u` an unguarded "${claude_args[@]}"
+    # aborts with "unbound variable" in that case. TRDD-FPE86FIF.
+    (cd "$canonical_dir" && claude "${claude_args[@]+"${claude_args[@]}"}")
 }
 
 # ============================================================================

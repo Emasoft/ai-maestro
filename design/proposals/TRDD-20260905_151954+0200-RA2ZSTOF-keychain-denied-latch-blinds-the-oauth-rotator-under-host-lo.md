@@ -3,7 +3,7 @@ trdd-id: RA2ZSTOF
 title: Keychain denied-latch blinds the OAuth rotator under host load — exempt attribute-only reads, harden the half-open probe, add a burn-rate horizon
 column: proposal
 created: 2026-09-05T15:19:54+0200
-updated: 2026-09-05T15:23:42+0200
+updated: 2026-09-05T15:24:58+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: security
@@ -55,8 +55,9 @@ MED: the rotator touches live OAuth credentials and the keychain; a wrong exempt
 ## Acceptance
 
 - [ ] USER decision recorded on all three asks (accept / modify / refuse each), with the janitor's report cross-checked against pm2-out.log and pm2-error.log first-hand
-- [ ] a Tier-0 implementation card minted for the accepted items, citing this card, with the latch threshold and exemption list stated as ONE shared contract with the janitor's python twin
+- [ ] a Tier-0 implementation card minted for the accepted items, citing this card, with the latch threshold and the attribute-only exemption PREDICATE (argv-based: find-generic-password / list-keychains without -w never count; -w reads and add-/delete-generic-password count) stated as ONE shared contract with the janitor's python twin — a config FILE for the constants is this card's decision, not the janitor's
 
 ## Approval log
 - 2026-09-05T15:22:28+0200 — janitor session ack (data, second-hand): their card TRDD-3VIXO8FA carries this id; the python twin is being built to be mirrored line for line — threshold 3 consecutive timeouts, per-process counter, reset on any answered op (equal to TIMEOUT_LATCH_THRESHOLD); the exemption is an argv PREDICATE, not a site list: find-generic-password or list-keychains WITHOUT -w cannot prompt and never latch on a timeout; anything carrying -w, and every add-/delete-generic-password, can prompt and counts. A shared config FILE for the two constants is left to this proposal's decision (the janitor is not creating one). Their one INFERENCE is the cap crossing itself (last reading 82% at 14:30, /login at ~14:55, no 429 line captured); every other timeline item is quoted from pm2-out/pm2-error.
 - 2026-09-05T15:23:40+0200 — provenance note on the body's Root cause section: its three claims about safe-storage.ts's latch counting every op, the half-open probe being a 5 s -w read, and tick.ts lacking a burn-rate horizon are the janitor session's readings of those files; none was read from source by this session. Box 1's first-hand cross-check covers the source as well as the pm2 logs.
+- 2026-09-05T15:24:54+0200 — clarification: the contract items in the 15:21 line describe what the JANITOR is building on its side; nothing is decided for safe-storage.ts/tick.ts — the USER's decision on boxes 1-2 is open. Box 2 reworded to say PREDICATE, not list.

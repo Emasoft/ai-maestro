@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:37:20+0200
+updated: 2026-09-05T03:39:45+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -79,22 +79,15 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > this directory from a version of the tool you have not checked.**
 >
 > **The 1 non-`.sqlite` file is resolved, not an unknown** (read 2026-09-05):
-> `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
-> not itself orphaned. Read in full (`jq`, not a truncation): **3 entries, all `"open failed"`,
-> across TWO dates — 2026-08-04 and 2026-08-16.** The fault string is a Node ABI mismatch
-> (`NODE_MODULE_VERSION 127` vs `147`) — a compiled-module-vs-running-Node mismatch, so a property
-> of the RUNTIME, not damage to the file. All of it is
-> PAST: **how that index classifies today is UNVERIFIED** — under the correct Node 22 it may open
-> fine and come back `live`, `empty` or `orphaned`. Do not read it as a current `unreadable`.
+> `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER; its partner index EXISTS, so it is
+> not itself orphaned. The reap classifies `*.sqlite` only, so it cannot touch this file; if its
+> partner were ever reaped, this ledger would dangle.
 >
-> Its value is as evidence that **the wrong-Node open failure has actually occurred here, more than
-> once**, which is the card's own subject. The argument for never reaping `unreadable` is the
-> structural one already made above — `[].every(gone)` is `true` for an index whose target list
-> could not be READ, so a two-state classifier deletes precisely the files it could not inspect,
-> whatever caused the failure (wrong ABI, corruption, permissions, a crashed writer).
->
-> The reap cannot touch this ledger either way (`.sqlite`-only); if its partner were ever reaped it
-> would be left dangling.
+> Its contents: 3 `"open failed"` entries, on 2026-08-04 and 2026-08-16, fault
+> `NODE_MODULE_VERSION 127` vs `147`. **Stated as the record, with no reading of it** — six
+> successive attempts to characterise these three lines each asserted more than they carry (see the
+> commit trail); what any of it implies about that index today is not established here, and nothing
+> about the reap turns on it.
 >
 > "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
 > them.

@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T02:21:52+0200
+updated: 2026-09-05T02:29:36+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -225,10 +225,10 @@ nor OWO449MR had been read. Both are now read, and they agree with each other ag
 
 | claim | measured |
 |---|---|
-| the gate's id and position | **`G08c`** at `services/element-management-service.ts:9510`, inside the AIO gate sequence and **BEFORE** `G09`'s folder delete at `:9656-9668` |
+| the gate's id and position | **`G08c`** at `services/element-management-service.ts:9510`, inside the AIO gate sequence and **BEFORE** `G09`'s folder delete at `:9656-9668`. **Established from CONTROL FLOW, not line order**: `await runGateSequence(deleteGates, dc)` at `:9647` drains the sequence, and G09's bare `if` block starts at `:9656`. Corroborated behaviourally by the gate test named *"uninstalls every local plugin for the doomed workdir, at local scope, **before the folder goes**"* |
 | its tombstone | `:9674` — *"G09b USED TO SIT HERE … It is now G08c, inside the gate sequence and BEFORE this deletion"* |
-| `removeLocalInstallRecords` | **does not exist.** One tree-wide hit, and it is a comment at `:1716` saying it *used to* — it became the read-only, fail-closed `listLocalInstallRecords` (`:1732`), called at `:9548` |
-| the compensation | **it has one**: `undo: compensateG08c` (`:9603`) |
+| `removeLocalInstallRecords` | **does not exist as a callable symbol.** ⚠ An earlier version of this row said "one tree-wide hit" off a grep scoped to `services/ lib/ app/` — re-run genuinely tree-wide, there are **TWO** hits and both are comments: `:1716` here, and `tests/unit/installed-plugins-records.test.ts:6`. The conclusion holds; the count did not. It became the read-only, fail-closed `listLocalInstallRecords` (`:1732`), called at `:9548` |
+| the compensation | **it has one, and the body was read (not taken from OWO449MR's prose)**: `undo: compensateG08c` (`:9603`) re-installs each uninstalled key via `adapter.install(…, dir, {scope:'local', marketplace})`, emits a `restore_plugin_records` op, and **throws** on any partial failure — deliberately, so the runner emits the CRITICAL INVALID STATE message rather than reporting "no changes were made" (R51.5) |
 | OWO449MR | `column: completed`, archived. Its STATE: *"`G09b` → **`G08c`**, inside the gate sequence, BEFORE `G09`'s folder delete, using the CLAUDE adapter with a CLI-reinstall compensation."* Commits `f1e4d7ec` (code), `5861db3b` (gate test) |
 
 **So box 2's premise was RIGHT and this card's rebuttal of it was wrong** — see below; the box is
@@ -284,6 +284,16 @@ of that test pinned nothing. Re-seeded with a user row that DOES carry the workd
 neuter then reddened exactly that one test.
 
 **What is still open, precisely:**
+
+> **⚠ EVERYTHING IN THIS NUMBERED BLOCK DESCRIBES THE PRE-RENAME WORLD (banner added 2026-09-05).**
+> It reasons about a gate called `G09b`, a test file
+> `tests/unit/deleteagent-g09b-plugin-records.test.ts`, and a neuter "move G09b out of the
+> folder-deleted branch" — **none of which exist.** The gate is `G08c`, the file is
+> `deleteagent-g08c-plugin-uninstall.test.ts`, and that branch structure is exactly what moved, so
+> N1's recipe is no longer performable as written. Kept because it records why the tests were built
+> and what the harness had to solve; **do not read any of it as a description of the current tree**,
+> and do not follow its neuter recipes. The current state is the STATE correction above and
+> boxes 1-4 below.
 
 1. **✅ CLOSED 2026-07-30 (commit `34849d8d`) — `DeleteAgent` is now driven.** Built exactly as
    sized below: a shared harness `tests/helpers/drive-delete-agent.ts` (both mock layers, real
@@ -356,7 +366,10 @@ neuter then reddened exactly that one test.
       placement no longer exists, so the argument was withdrawn and the box re-opened. Re-reading
       the replacement closes it on the original terms rather than the substituted ones: `G08c`
       **does** register a compensation — `undo: compensateG08c` at `:9603`, a CLI reinstall. The
-      requirement this card wrote in the first place is met by the code as it now stands
+      requirement this card wrote in the first place is met by the code as it now stands — and it
+      is met BEHAVIOURALLY, not just structurally: the compensation's body was read (a per-key CLI
+      re-install that throws rather than under-report), so this tick does not rest on a symbol
+      merely existing, which was the error that put the box here
 - [x] A soft delete provably does NOT remove them — DRIVEN, not merely true by construction.
       ⚠ The original wording cited a `G09b:` op line that is no longer emitted (the gate pushes
       `G08c:`, 6 sites). The behaviour survived the rename and gained a case: the current file
@@ -372,7 +385,12 @@ neuter then reddened exactly that one test.
       drives the compensation box 2 asked for, and a containment case asserting the developer's
       real `~/agents` and `installed_plugins.json` were never touched. PROBE: 7 tests / 3 neuters
       (`6c11bd7f`). **The neuter runs N1/N2 recorded in `34849d8d` were run against the DELETED
-      file, so they pin nothing that exists today — no neuter has been recorded for these 8**
+      file, so they pin nothing that exists today — no neuter has been recorded for these 8.**
+      ⚠ Two honesty markers on this box's own numbers: **8 is a FLOOR, not a proven count**
+      (`grep -c "^\s*it("` misses `it.each(`/`test(`/other indentation, though it correctly
+      excludes `it.skip(`); and the `34849d8d` claim is **INFERRED from the rename, not read** —
+      N1's recipe was "move G09b out of the folder-deleted branch", a shape that no longer exists,
+      which is why un-ticking is the safe direction even if the inference is wrong
 - [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **THE SEQUENCING
       BLOCKER IS LIFTED as of 2026-07-31; the box is now READY TO RUN, and what it waits on is an
       operator, not a dependency.** Verified first-hand: TRDD-OWO449MR is `completed` (archived), so
@@ -388,7 +406,10 @@ neuter then reddened exactly that one test.
       untracked directory. Both of those are the operator's call to schedule, not something to
       improvise unattended at the tail of another card.
 
-      The original sequencing note, kept because it is why the box was deferred at all:
+      The original sequencing note, kept because it is why the box was deferred at all — and note
+      that it CALLED THIS CORRECTLY: the relocation it anticipates below has since LANDED (the gate
+      is now `G08c`, before the folder delete), so the deferral was well-founded rather than
+      cautious. What follows is that note as written, in its original future tense:
       G09b's placement is one of the gates
       that retrofit MOVES: TRDD-OWO449MR's shape A2 relocates the local-plugin cleanup to BEFORE the
       `rm -rf` (the `claude plugin uninstall --scope local --cwd` it replaces the hand-edit with
@@ -400,14 +421,14 @@ neuter then reddened exactly that one test.
       **Re-measured 2026-08-05 (read-only; nothing was touched).** Still exactly **93** of 101
       local-scope records, only **8** live — and the count being UNCHANGED over 7 days is itself the
       useful number: **the population is CLOSED, not growing**, so a one-time reconcile finishes the
-      problem instead of being a treadmill. Newest orphan in either group predates G09b landing.
+      problem instead of being a treadmill. Newest orphan in either group predates the gate landing.
 
       **The reconcile is TWO different problems, which is why "delete the 93" would have been the
       wrong proposal:**
 
-      | group | n | `projectPath` | cause | G09b covers it? |
+      | group | n | `projectPath` | cause | the gate covers it? |
       |---|---|---|---|---|
-      | **A** | **77** | under `~/agents/` | deleted agent workdirs — this card's subject | **yes, going forward.** These are the historical backlog G09b was built to stop |
+      | **A** | **77** | under `~/agents/` | deleted agent workdirs — this card's subject | **yes, going forward.** These are the historical backlog the gate was built to stop |
       | **B** | **16** | under `/private/tmp` (11 in Claude Code session **scratchpads**) | **never an agent workdir.** Something installed a plugin at local scope with `projectPath` set to an ephemeral per-session dir | **NO — and it never will.** No agent owns them, so no DeleteAgent gate can ever reach them |
       | **C** | 0 | elsewhere | — | — |
 

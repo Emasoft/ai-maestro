@@ -3,12 +3,12 @@ trdd-id: FPE86FIF
 title: 38 non-auth array expansions are still unguarded under bash 3.2 and abort their script when empty
 scope: project
 project-id: ai-maestro
-column: todo
+column: complete
 created: 2026-09-04T19:51:28+0200
-updated: 2026-09-04T19:56:12+0200
+updated: 2026-09-05T13:13:41+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
-assignee: claude-opus-session
+assignee: governance-rules-session
 task-type: bugfix
 priority: 2
 severity: medium
@@ -25,6 +25,7 @@ blocked-by: []
 npt: []
 eht: []
 labels: [bash32, shell, set-u]
+implementation-commits: [81fb5dc9]
 ---
 
 # The same bash 3.2 crash remains in 38 non-auth array expansions
@@ -95,6 +96,10 @@ discriminate between them.
 Where the array provably cannot be empty, leave it and say why in a comment —
 an unexplained non-guard is indistinguishable from a missed one.
 
+MEASURED 2026-09-05 under /bin/bash 3.2.57 with `set -u` (fifteen `/bin/bash -c` probes; `f(){ echo $#; }`): unset array `${#a[@]}` → "unbound variable" exit 1; declared-empty `a=()` `${#a[@]}` → 0; bare `"${a[@]}"` → abort exit 127 for BOTH unset and declared-empty; `${a[@]+"${a[@]}"}` → argc 0 for both, argc 2 for `a=(x "")` (empty elements preserved); `"${a[@]:-}"` → argc 1 (one spurious empty argument); the colon-less `${a[@]-}` unquoted → argc 0 for unset and empty but argc 1 for `a=(x "")` (the empty element becomes an empty field that word-splitting drops), and quoted `"${a[@]-}"` → argc 2 on that array but argc 1 on an empty AND on an unset array (the same spurious-empty-argument defect as `:-`). So a `[ ${#a[@]} -gt 0 ]` wrapper is itself unsafe on an unset array, and `${a[@]+"${a[@]}"}` is the only MEASURED idiom that is both abort-free and element-preserving. The neuter half of any probe (guard removed → abort) holds only under /bin/bash 3.2: measured under the PATH bash 5.3.15, the bare expansion of an empty array yields argc 0 with no abort.
+
+MEASURED 2026-09-05 13:12 at close (governance-rules-session, first-hand, `/bin/bash` 3.2.57 `set -u`): the SHIPPED form keeps the outer quotes — `"${a[@]+"${a[@]}"}"`, the same shape the parent landed at agent-core.sh:416 (parent fix commit 5542ca89, verified by `git log --grep=WV8FDAH0`) — and it measures argc 0 on an empty array, argc 0 on an unset array, argc 3 on `(x "y z" "")` (the empty element preserved); identical under PATH bash 5.3.15. The worker's own probes used the unquoted form, so this is the measurement of what shipped. Diff shape: 9 removed lines (each a bare `"${NAME[@]}"`), 109 added = 9 guards + 99 comment lines + 1 blank separator (amp-helper.sh) + 0 other. Inverse transform (guard → `${NAME[@]}`, positive-controlled on a literal) applied to BOTH the HEAD and post images: 0 non-comment diff lines in all 19 files. shellcheck 0.11.0 per file, HEAD vs post: identical diagnostic counts and identical code histograms in all 19. Census: the card said 38; MEASURED 42 — I re-added the card's own table above: 5+4+3+2+2+2+2+2 = 22 plus twenty "1 each" names = 42 sites over 28 names, so the 38/27 headline was an arithmetic slip in the card, not a measurement gap. 9 guarded, 33 left with a WHY comment; the worker's report table omits the AMP_BLOCKED_MIME_TYPES row, but the site (amp-helper.sh:1988) carries its comment — 42 of 42 dispositioned. pin-node.sh (sourced from zsh) received a comment only, no guard. Worker report: reports/lean-worker/20260905_130431+0200-FPE86FIF-bash32-guards.md (gitignored).
+
 ## Verification
 
 - `bash -n` clean on every touched script.
@@ -117,15 +122,17 @@ parent's sweep and clean.
 - [x] `_auth` — an auth-family array the parent's suffix filter missed. Fixed
       immediately (`common.sh:732`) rather than carried here: the parent's proven
       premise already covers it, so filing it would have been deferral.
-- [ ] Each of the 38 remaining sites either guarded, or left with a comment
+- [x] Each of the remaining sites (the card said 38; MEASURED 42, the card table sums 22 + 20) either guarded (9), or left with a comment (33)
       stating why the array cannot be empty.
-- [ ] `bash -n` clean on every touched script; no NEW shellcheck diagnostics
+- [x] `bash -n` clean on every touched script; no NEW shellcheck diagnostics
       (the nested-quote form is exactly the shape that trips quoting lints).
-- [ ] Inverse-transform diff clean, with its sed positive-controlled before use.
-- [ ] Full unit suite no worse than before the change.
+- [x] Inverse-transform diff clean, with its sed positive-controlled before use.
+- [x] Full unit suite no worse than before the change.
 
 ## Approval log
 
 - 2026-09-04T19:51:28+0200 — MANDATE issued by claude-opus-session
   (min-approval-requirement: none). Tier 0: a bugfix inside this repo, reversible,
   no governance or public surface. Derived from TRDD-WV8FDAH0.
+- 2026-09-05T12:45:06+0200 — column → dev by governance-rules-session. lean-worker dispatched 2026-09-05 with the card as spec; write-scope = the shell scripts its site table names; it does not commit
+- 2026-09-05T13:13:41+0200 — COMPLETE by governance-rules-session. all 5 boxes measured first-hand at close: bash -n 19/19, shellcheck histograms identical, inverse transform 0 residue, yarn test 513/513 files, 42/42 sites dispositioned; fix commit 81fb5dc9.

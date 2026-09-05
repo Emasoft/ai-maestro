@@ -3,7 +3,7 @@ trdd-id: OUAQARPL
 title: chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
 column: live_auditing
 created: 2026-09-05T21:13:22+0200
-updated: 2026-09-05T21:21:20+0200
+updated: 2026-09-05T22:10:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: audit
@@ -71,3 +71,5 @@ janitor).
   memory-guard, fleet-plugins-update, cache-prune and github-config-audit run async execFile
   subprocesses and cannot stall the setInterval heartbeat the way a sync fs call on the main thread
   can. By ai-maestro-hub-session.
+- 2026-09-05T21:58:30+0200 — our-side attribution landed in the tree: lib/server-liveness.ts logs a late beat (gap > 2x intervalMs) transition-only, test-pinned (neuter reddens 'logs a late-beat warning only once a gap exceeds 2x the interval — silent on normal beats'); pairs with the janitor's HXZ8B0IS reader-side line. Box 2 stays open until the commit sha is recorded. By ai-maestro-hub-session.
+- 2026-09-05T22:09:53+0200 — row-29 code commit aa961973 — feat(liveness): log a late heartbeat, 2 files (lib/server-liveness.ts, tests/unit/server-liveness.test.ts); the committed blob is byte-identical to the verifier's pre-neuter copy (cmp). Box 2 stays OPEN: this commit is the INSTRUMENT that will attribute the next flap (a '[server-liveness] late beat' line = the writer was late; none = the reader misjudged or the file was fine), not an attribution of the 15:01-19:18 window, whose cause is still unmeasured. Sha sent to the janitor session 22:08 (pairs with its HXZ8B0IS line). By ai-maestro-hub-session.

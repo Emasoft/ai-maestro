@@ -1,9 +1,9 @@
 ---
 trdd-id: 1G8FBSKZ
 title: trddgrep move into blocked accepts an empty blocked-by and writes no pre-block-column
-column: todo
+column: complete
 created: 2026-09-05T11:37:23+0200
-updated: 2026-09-05T11:37:25+0200
+updated: 2026-09-05T11:47:19+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: bugfix
@@ -14,6 +14,7 @@ mandated-by: none
 approved: true
 approval-judge: emanuelesabetta
 approval-datetime: 2026-09-05T11:37:23+0200
+implementation-commits: [27350503]
 ---
 
 # trddgrep move into blocked accepts an empty blocked-by and writes no pre-block-column
@@ -22,11 +23,12 @@ Sibling of TRDD-XCQ9TDSK (the EXIT path). `advanceColumn` INTO `blocked` (lib/tr
 
 ## Acceptance
 
-- [ ] `trddgrep move <id> blocked` with an empty `blocked-by` and no other park form refuses with exit 2 and a message naming 3P-KAN-06
-- [ ] `trddgrep move <id> blocked` writes `pre-block-column` = the column the card left, and validate raises no BLOCKED-NO-RESTORE-POINT afterwards
-- [ ] tests pin both, and a recorded neuter (drop the refusal) reddens exactly the refusal test
+- [x] `trddgrep move <id> blocked` with an empty `blocked-by` and no other park form refuses with exit 2 and a message naming 3P-KAN-06
+- [x] `trddgrep move <id> blocked` writes `pre-block-column` = the column the card left, and validate raises no BLOCKED-NO-RESTORE-POINT afterwards
+- [x] tests pin both, and a recorded neuter (drop the refusal) reddens exactly the refusal test
 
 ## Approval log
 
 - 2026-09-05T11:37:23+0200 — MANDATE issued by emanuelesabetta (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T11:37:25+0200 — column → todo by manager. Tier 0 sibling of XCQ9TDSK (entry path). Authorization: USER /goal 2026-09-05.
+- 2026-09-05T11:47:19+0200 — COMPLETE by manager. Landed in 27350503. advanceColumn now refuses an empty blocked-by with no other park form (3P-KAN-06) and writes pre-block-column on entry. Verified first-hand: 55/55, tsc 0; worker neuter reddened exactly the refusal test; temp-dir PATH run showed both outcomes. Not pinned: the hub-blocked/fleet-ask label case (worker judged it covered by the shared predicate; recorded as a judgment, not a fact). Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'..

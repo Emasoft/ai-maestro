@@ -3,7 +3,7 @@ trdd-id: RA2ZSTOF
 title: Keychain denied-latch blinds the OAuth rotator under host load — exempt attribute-only reads, harden the half-open probe, add a burn-rate horizon
 column: proposal
 created: 2026-09-05T15:19:54+0200
-updated: 2026-09-05T15:19:54+0200
+updated: 2026-09-05T15:22:28+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: security
@@ -58,3 +58,4 @@ MED: the rotator touches live OAuth credentials and the keychain; a wrong exempt
 - [ ] a Tier-0 implementation card minted for the accepted items, citing this card, with the latch threshold and exemption list stated as ONE shared contract with the janitor's python twin
 
 ## Approval log
+- 2026-09-05T15:22:28+0200 — janitor session ack (data, second-hand): their card TRDD-3VIXO8FA carries this id; the python twin is being built to be mirrored line for line — threshold 3 consecutive timeouts, per-process counter, reset on any answered op (equal to TIMEOUT_LATCH_THRESHOLD); the exemption is an argv PREDICATE, not a site list: find-generic-password or list-keychains WITHOUT -w cannot prompt and never latch on a timeout; anything carrying -w, and every add-/delete-generic-password, can prompt and counts. A shared config FILE for the two constants is left to this proposal's decision (the janitor is not creating one). Their one INFERENCE is the cap crossing itself (last reading 82% at 14:30, /login at ~14:55, no 429 line captured); every other timeline item is quoted from pm2-out/pm2-error.

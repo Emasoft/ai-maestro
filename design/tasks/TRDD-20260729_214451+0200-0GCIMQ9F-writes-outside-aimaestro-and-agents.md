@@ -1,10 +1,10 @@
 ---
 trdd-id: 0GCIMQ9F
 title: ai-maestro must write only inside ~/.aimaestro and ~/agents
-column: todo
+column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-08-26T06:01:50+0200
+updated: 2026-09-05T03:04:49+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -30,6 +30,34 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 # ai-maestro must write only inside ~/.aimaestro and ~/agents
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
+
+> **⚠ COLUMN CORRECTED `todo` → `human_review`, 2026-09-05. NOTHING HERE IS AGENT-ACTIONABLE.**
+> I pulled this card off the board as available work and paid the discovery cost to learn it is
+> not: 9 of 10 boxes are done, and the tenth needs the USER to authorize `yarn pillar:reap --reap`.
+> `never_free_space.md` reserves deleting-to-free-space to the owner, and `min-approval-requirement:
+> user` already said so — but `todo` asserts "ready to be pulled", so the board was advertising a
+> card no agent can advance. An untrue column is worse than an unstarted one; this is the same
+> defect this session corrected on TRDD-AQTGAY60, found the same way.
+>
+> **The park had silently expired.** `review-after: 2026-09-02` passed three days ago, so the card
+> fell back into the drift-eligible pool and into every heartbeat's `todo` count with nothing
+> flagging it. The field is left as-is — it is spent, and re-arming a snooze on a card that waits
+> on a person would just re-hide it.
+>
+> **RE-MEASURED FOR THE PENDING DECISION** (read-only; the card's own text warns the count is not
+> frozen and to re-read rather than trust a recorded number):
+>
+> | when | files in `~/.aimaestro/pillar-index` |
+> |---|---|
+> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live |
+> | 2026-08-26 | 144 |
+> | **2026-09-05 03:04** | **168 — 74 MB on disk** |
+>
+> Still growing, as the card predicted (the writers were never contained — `TRDD-IMCEYV9F`).
+> **PENDING-USER, unchanged: authorize `yarn pillar:reap --reap` or decline.** Run
+> `yarn pillar:reap` (no flag) first for the exact preview; it reaps ORPHAN rows only, and never
+> the `empty` or `unreadable` states. I have NOT run the reaping form and will not without
+> explicit permission.
 
 **USER directive, verbatim (2026-07-29):** *"this is extremely dangerous, the only writings should
 be into ~/.aimaestro and into ~/agents"*.

@@ -1,10 +1,10 @@
 ---
 trdd-id: U6AS2YWB
 title: AskUserQuestion event ESC-flood then cursor-ready then directive
-column: todo
+column: blocked
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T09:43:06+0200
+updated: 2026-09-05T11:33:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -19,6 +19,10 @@ approval-datetime: 2026-07-24T14:55:30+0200
 parent-trdd: 5CIL7A07
 derived: true
 derived-kind: eht
+implementation-commits: [f2c8fb90]
+blocked-by: []
+blocker-probe: sh -c 'grep -m1 "^column:" design/tasks || echo column-absent'
+blocker-holds-if: not-match:complete
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
@@ -114,3 +118,4 @@ injection-proof); the verbatim directive is in the Spec below.
 ## Approval log
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: none). Pre-approved; born approved to author+execute.
+- 2026-09-05T11:33:14+0200 — column → blocked by manager. Machinery landed (770880b1 + f2c8fb90 test gaps); boxes 1-2 need a live AskUserQuestion frame capture, now TRDD- (operator territory). Parked, not stalled.

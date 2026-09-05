@@ -69,10 +69,16 @@ vi.mock('fs', () => ({
 // Mock the publish-request poller's file I/O. Since 458ecc52 the "already
 // running" branch arms the 2 s poller, and the reuse test enters that branch —
 // unmocked, one tick would read the developer's REAL
-// ~/agents/haephestos/publish-request.json and, if one existed, publish it
-// against the real marketplace. The `fs` mock above does not cover this:
-// lib/json-io has its own reader. Containment, not behaviour, is the point.
-vi.mock('@/lib/json-io', () => ({
+// ~/agents/haephestos/publish-request.json; had one existed, the publish
+// would have thrown on the first un-mocked readFileSync and the poller's
+// catch would then have written a REAL publish-response.json into the
+// developer's ~/agents/haephestos/. The `fs` mock above does not cover this:
+// lib/json-io has its own reader. PARTIAL mock on purpose — role-plugin-service
+// (in this file's import graph via haephestos-publish-service) imports other
+// json-io symbols, and a whole-module factory would turn any access to them
+// into a "no export defined on mock" throw. Containment, not behaviour.
+vi.mock('@/lib/json-io', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/json-io')>()),
   readJson: vi.fn().mockResolvedValue({ ok: false, reason: 'missing' }),
   saveJsonSafe: vi.fn().mockResolvedValue(undefined),
 }))

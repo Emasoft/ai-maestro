@@ -535,6 +535,12 @@ async function beat(log: (msg: string) => void): Promise<void> {
   }
 }
 
+// Set while the recurring timer is armed, cleared by the returned stop function — the same
+// not-null-handle shape `services/auto-update-service.ts::isAbsorbedDutySchedulerRunning` uses,
+// so `lib/server-liveness.ts` can honestly publish 'github-config-audit' only while this is true
+// (TRDD-X9VLHBFZ; the scheduler starts unconditionally in server.mjs with no prior liveness check).
+let githubConfigAuditTimerHandle: NodeJS.Timeout | null = null
+
 /**
  * Start the recurring audit. Returns a stop function, or null when disabled.
  * Same shape as `startJanitorResponsePublisher` / `startFleetLivenessWatchdog`: fires once
@@ -549,7 +555,15 @@ export function startGithubConfigAuditScheduler(opts: {
   const log = opts.log ?? ((msg: string) => console.warn(msg))
 
   void beat(log)
-  const timer = setInterval(() => void beat(log), intervalMs)
-  timer.unref?.()
-  return () => clearInterval(timer)
+  githubConfigAuditTimerHandle = setInterval(() => void beat(log), intervalMs)
+  githubConfigAuditTimerHandle.unref?.()
+  return () => {
+    clearInterval(githubConfigAuditTimerHandle!)
+    githubConfigAuditTimerHandle = null
+  }
+}
+
+/** True while the recurring audit's timer is armed (TRDD-X9VLHBFZ). */
+export function isGithubConfigAuditSchedulerRunning(): boolean {
+  return githubConfigAuditTimerHandle !== null
 }

@@ -20,6 +20,9 @@ import { statePath } from './ecosystem-constants'
 import { activeAbsorbedChores, CONDITIONAL_CHORES } from './janitor-chore-stamp'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
+import { isGithubConfigAuditSchedulerRunning } from './github-config-audit'
+import { isCachePruneSchedulerRunning } from './cache-prune'
+import { isFleetPluginsUpdateSchedulerRunning } from './fleet-plugins-update'
 
 /** The liveness+capability file the server maintains; both janitor backends read it. */
 export const SERVER_LIVENESS_FILE = statePath('server-liveness.json')
@@ -70,45 +73,50 @@ export interface ServerLiveness {
 /**
  * Compute the capability tokens the server can HONESTLY advertise, per the ratified rev-8 contract
  * (`docs/claimed-chores-contract.md`; janitor `harness_backend.claimed_chores()`). That function
- * honours a token in exactly TWO shapes: an EXACT name from its `GLOBAL_CHORES` roster (a per-chore
- * claim, preferred), or the coarse legacy token `family-a` (expanded to its own `SERVER_ABSORBED_TASKS`
- * set). Any other token — `singleton-chores` used to be one — claims NOTHING and is silently dropped,
- * so the janitor keeps running that chore even while we believe we told it otherwise.
+ * honours ONLY an EXACT name from its `GLOBAL_CHORES` roster (a per-chore claim). The coarse legacy
+ * token `family-a` is RETIRED here (TRDD-X9VLHBFZ) — every chore it used to stand in for now has its
+ * own exact-name publish below, so the coarse token adds nothing and is dropped rather than carried
+ * forever. Any other token — `singleton-chores` used to be one — claims NOTHING and is silently
+ * dropped, so the janitor keeps running that chore even while we believe we told it otherwise.
  *
  * So each pushed token is a chore name from `lib/janitor-chore-stamp.ts`, gated on the SAME predicate
  * that proves the chore is live right now:
  *   - `oauth-rotator-tick` / `oauth-rotator-supervisor` ← `oauthTickEnabled()` (the R16 flag file).
- *     `family-a` is ALSO pushed here for one release, purely for a janitor still on the old
- *     coarse-token contract — it expands to the same 5-chore legacy set and adds nothing once every
- *     consumer reads exact names.
  *   - `marketplace-refresh` / `version-update` ← `isAbsorbedDutySchedulerRunning()` (one scheduler
  *     runs both; ai-maestro#102 / TRDD-5X3P79Q6).
+ *   - `github-config-audit` ← `isGithubConfigAuditSchedulerRunning()`, `cache-prune` ←
+ *     `isCachePruneSchedulerRunning()`, `fleet-plugins-update` ← `isFleetPluginsUpdateSchedulerRunning()`
+ *     — each scheduler starts unconditionally at boot (server.mjs) and now exports its own
+ *     not-null-timer-handle liveness check (TRDD-X9VLHBFZ; promised on ai-maestro#126).
  *   - the 4 `CONDITIONAL_CHORES` (`memory-guard`, `rules-cleanup`, `fleet-stop`, `cold-cache-clear`)
  *     ← whichever are armed AND running right now, read via `activeAbsorbedChores()` (the same
  *     `markChoreLive`/`unmarkChoreLive` set `absorbed_chores` publishes) filtered down to just the
  *     conditional lanes — the unconditional 7 in `ABSORBED_CHORES` are handled by name above/below.
- *
- * `cache-prune`, `fleet-plugins-update`, and `github-config-audit` are DELIBERATELY absent: their
- * schedulers start unconditionally at boot with no exported "is it actually running" predicate, and
- * this function does not invent one — publishing a chore name with no live check to back it would be
- * exactly the dishonest-capability bug this contract exists to prevent. Add each once its scheduler
- * exposes a real liveness check.
  *
  * `fleet-recovery` is not a real chore name and was never pushed — left out here too.
  */
 export function currentCapabilities(deps: {
   oauthEnabled?: () => boolean
   singletonChoresLive?: () => boolean
+  githubConfigAuditLive?: () => boolean
+  cachePruneLive?: () => boolean
+  fleetPluginsUpdateLive?: () => boolean
   liveConditionalChores?: () => readonly string[]
 } = {}): string[] {
   const oauthEnabled = deps.oauthEnabled ?? oauthTickEnabled
   const singletonChoresLive = deps.singletonChoresLive ?? isAbsorbedDutySchedulerRunning
+  const githubConfigAuditLive = deps.githubConfigAuditLive ?? isGithubConfigAuditSchedulerRunning
+  const cachePruneLive = deps.cachePruneLive ?? isCachePruneSchedulerRunning
+  const fleetPluginsUpdateLive = deps.fleetPluginsUpdateLive ?? isFleetPluginsUpdateSchedulerRunning
   const liveConditionalChores =
     deps.liveConditionalChores ??
     (() => activeAbsorbedChores().filter((c) => (CONDITIONAL_CHORES as readonly string[]).includes(c)))
   const caps: string[] = []
-  if (oauthEnabled()) caps.push('family-a', 'oauth-rotator-tick', 'oauth-rotator-supervisor')
+  if (oauthEnabled()) caps.push('oauth-rotator-tick', 'oauth-rotator-supervisor')
   if (singletonChoresLive()) caps.push('marketplace-refresh', 'version-update')
+  if (githubConfigAuditLive()) caps.push('github-config-audit')
+  if (cachePruneLive()) caps.push('cache-prune')
+  if (fleetPluginsUpdateLive()) caps.push('fleet-plugins-update')
   caps.push(...liveConditionalChores())
   return caps
 }

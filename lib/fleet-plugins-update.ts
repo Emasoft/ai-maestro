@@ -299,6 +299,12 @@ async function beat(log: (msg: string) => void): Promise<void> {
   }
 }
 
+// Set while the recurring timer is armed, cleared by the returned stop function — the same
+// not-null-handle shape `services/auto-update-service.ts::isAbsorbedDutySchedulerRunning` uses,
+// so `lib/server-liveness.ts` can honestly publish 'fleet-plugins-update' only while this is true
+// (TRDD-X9VLHBFZ; the scheduler starts unconditionally in server.mjs with no prior liveness check).
+let fleetPluginsUpdateTimerHandle: NodeJS.Timeout | null = null
+
 /** Fires once immediately (a bare interval starves under restart loops shorter than 6 h),
  *  unref'd, never throws; null when disabled (AIM_FLEET_PLUGINS_UPDATE_INTERVAL_MS=0). */
 export function startFleetPluginsUpdateScheduler(
@@ -309,7 +315,15 @@ export function startFleetPluginsUpdateScheduler(
   if (!intervalMs || intervalMs <= 0) return null
   const log = opts.log ?? ((msg: string) => console.warn(msg))
   void beat(log)
-  const timer = setInterval(() => void beat(log), intervalMs)
-  timer.unref?.()
-  return () => clearInterval(timer)
+  fleetPluginsUpdateTimerHandle = setInterval(() => void beat(log), intervalMs)
+  fleetPluginsUpdateTimerHandle.unref?.()
+  return () => {
+    clearInterval(fleetPluginsUpdateTimerHandle!)
+    fleetPluginsUpdateTimerHandle = null
+  }
+}
+
+/** True while the recurring update's timer is armed (TRDD-X9VLHBFZ). */
+export function isFleetPluginsUpdateSchedulerRunning(): boolean {
+  return fleetPluginsUpdateTimerHandle !== null
 }

@@ -39,13 +39,19 @@ function readLiveness(): ServerLiveness {
 }
 
 describe('currentCapabilities — advertises ONLY exact chore names the janitor honours (rev-8 contract)', () => {
-  const noop = { oauthEnabled: () => false, singletonChoresLive: () => false, liveConditionalChores: () => [] }
+  const noop = {
+    oauthEnabled: () => false,
+    singletonChoresLive: () => false,
+    githubConfigAuditLive: () => false,
+    cachePruneLive: () => false,
+    fleetPluginsUpdateLive: () => false,
+    liveConditionalChores: () => [],
+  }
   it('is empty when nothing is live', () => {
     expect(currentCapabilities(noop)).toEqual([])
   })
-  it("advertises the oauth pair + legacy 'family-a' only when the OAuth rotator tick is enabled", () => {
+  it('advertises the oauth pair only when the OAuth rotator tick is enabled — no legacy family-a (TRDD-X9VLHBFZ)', () => {
     expect(currentCapabilities({ ...noop, oauthEnabled: () => true })).toEqual([
-      'family-a',
       'oauth-rotator-tick',
       'oauth-rotator-supervisor',
     ])
@@ -56,26 +62,38 @@ describe('currentCapabilities — advertises ONLY exact chore names the janitor 
       'version-update',
     ])
   })
+  it('advertises github-config-audit only when its own scheduler liveness check is true (TRDD-X9VLHBFZ)', () => {
+    expect(currentCapabilities({ ...noop, githubConfigAuditLive: () => true })).toEqual(['github-config-audit'])
+  })
+  it('advertises cache-prune only when its own scheduler liveness check is true (TRDD-X9VLHBFZ)', () => {
+    expect(currentCapabilities({ ...noop, cachePruneLive: () => true })).toEqual(['cache-prune'])
+  })
+  it('advertises fleet-plugins-update only when its own scheduler liveness check is true (TRDD-X9VLHBFZ)', () => {
+    expect(currentCapabilities({ ...noop, fleetPluginsUpdateLive: () => true })).toEqual(['fleet-plugins-update'])
+  })
   it('passes through whichever conditional chores are reported live', () => {
     expect(currentCapabilities({ ...noop, liveConditionalChores: () => ['memory-guard', 'fleet-stop'] })).toEqual([
       'memory-guard',
       'fleet-stop',
     ])
   })
-  it("NEVER advertises the retired 'singleton-chores' token or the unbuilt 'fleet-recovery' token", () => {
-    const caps = currentCapabilities({ oauthEnabled: () => true, singletonChoresLive: () => true })
+  it("NEVER advertises the retired 'family-a', 'singleton-chores', or the unbuilt 'fleet-recovery' token", () => {
+    const caps = currentCapabilities({
+      oauthEnabled: () => true,
+      singletonChoresLive: () => true,
+      githubConfigAuditLive: () => true,
+      cachePruneLive: () => true,
+      fleetPluginsUpdateLive: () => true,
+    })
+    expect(caps).not.toContain('family-a')
     expect(caps).not.toContain('singleton-chores')
     expect(caps).not.toContain('fleet-recovery')
   })
-  it('never publishes cache-prune, fleet-plugins-update, or github-config-audit (no live predicate exists yet)', () => {
-    const caps = currentCapabilities({ oauthEnabled: () => true, singletonChoresLive: () => true })
-    expect(caps).not.toContain('cache-prune')
-    expect(caps).not.toContain('fleet-plugins-update')
-    expect(caps).not.toContain('github-config-audit')
-  })
   it('defaults every dep to the real checks (non-vacuity) — reads honestly empty in a plain unit-test process', () => {
     // No injected deps at all — the real oauthTickEnabled/isAbsorbedDutySchedulerRunning/
-    // activeAbsorbedChores checks must be consulted. None of their lanes are armed here.
+    // isGithubConfigAuditSchedulerRunning/isCachePruneSchedulerRunning/
+    // isFleetPluginsUpdateSchedulerRunning/activeAbsorbedChores checks must be consulted. None
+    // of their lanes are armed in a plain unit-test process.
     expect(currentCapabilities()).toEqual([])
   })
   it('defaults liveConditionalChores to activeAbsorbedChores() filtered to CONDITIONAL_CHORES (non-vacuity)', () => {

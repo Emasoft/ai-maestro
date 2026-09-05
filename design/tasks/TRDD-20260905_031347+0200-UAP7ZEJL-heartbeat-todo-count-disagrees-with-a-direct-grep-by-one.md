@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:52:46+0200
+updated: 2026-09-05T04:55:20+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -302,14 +302,27 @@ against the same files, and name the cards the two sets disagree about. Settled 
   third row is scoped to its needle rather than claiming a bare absence. What closes that gap is
   a second, independent line of evidence:
 
-  **Corroboration from the card that INTRODUCED the field** (`TRDD-6054NY8H`, line 278):
-  *"no detector, lint, or schema in this repo parses `blocker-probe*` yet. These three lines are
-  inert documentation today. That is deliberate — the detector ships DISABLED."* This is not a
-  proxy read: it is not a document describing someone else's code, it is the authoring card
-  declaring its own field's adoption state — primary, not secondary. Its weakness is the word
-  *"yet"* (dated 2026-08-21), and that is exactly what the grep covers: a detector that had since
-  shipped enabled would have to NAME the field to parse it. The card cannot see the future; the
-  grep cannot see a generic consumer; a live executor would have to be visible to at least one.
+  **What the claim actually rests on is a DIRECT READ of the only site that holds the value**
+  (verified 04:55). In `lib/trdd-doctor.ts`, `probe` is assigned at :1044 and its every use is
+  `probe === ''` — an emptiness test. The file's only `execFileSync` is :1391, running `git log`.
+  So the one consumer that has the command in scope does not run it. That is an observation of
+  the thing, not an inference from instruments.
+
+  **A mutual-coverage argument was here and is WITHDRAWN, because it was false.** It said: the
+  authoring card cannot see the future, the grep cannot see a generic consumer, so a live
+  executor must be visible to at least one. The counterexample is `trdd-doctor.ts` itself — it
+  already NAMES both fields and holds `probe` in a local, so a future version needs only to add
+  `execFileSync(probe)` to become an executor that names no new field and post-dates the card.
+  Invisible to BOTH lines at once. The two instruments are complementary over *field-naming*
+  consumers only, not over "any possible executor", and the paragraph asserted a closure neither
+  can support.
+
+  **Corroboration (secondary, not load-bearing) from the card that INTRODUCED the field**
+  (`TRDD-6054NY8H`, line 278): *"no detector, lint, or schema in this repo parses
+  `blocker-probe*` yet … the detector ships DISABLED."* Worth keeping, and worth naming for what
+  it is: not a proxy read — it is the authoring card declaring its own field's adoption state,
+  primary about its own decision — but dated 2026-08-21 and hedged with *"yet"*, so it supports
+  the direct read rather than substituting for it.
 
   So `BLOCKED-WITHOUT-PROBE` gates the DECLARATION of a re-answerable predicate, not its
   evaluation — the blocker is re-answerable *by a human who runs it*, which is exactly what I did

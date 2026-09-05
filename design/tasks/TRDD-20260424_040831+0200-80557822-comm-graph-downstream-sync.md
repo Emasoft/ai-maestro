@@ -23,7 +23,10 @@ implementation-commits: []
 # TRDD-80557822 — R6 Communication Graph Downstream Sync
 
 **TRDD ID:** `80557822-b6f1-4b47-8770-7505947d8378`
-**Filename:** `design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`
+**Filename:** `design/tasks/TRDD-20260424_040831+0200-80557822-comm-graph-downstream-sync.md`
+(renamed 2026-09-05 from the legacy `TRDD-80557822-comm-graph-downstream-sync.md` — that shape is
+unparseable by `trdd_common.extract_uid`, so this card was invisible to the board count and to
+4 of 5 TRDD detectors. See TRDD-UAP7ZEJL.)
 **Tracked in:** this repo (design/tasks/ is git-tracked)
 
 **Coverage:** v1 tightening covered; v2 expansion (HUMAN node + reply-only edges) added 2026-04-22.

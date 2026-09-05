@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:26:12+0200
+updated: 2026-09-05T04:38:04+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -173,24 +173,33 @@ predicate and expect +2 (52 → 54 at the 04:33 board).
 > | `docs/COMMUNICATION-GRAPH.md:202` | downstream-sync tracking |
 > | both cards' own `**Filename:**` lines | self-referential, would become false |
 >
-> So the rename is a **6-file change touching a governance doc**, which by the objective floor
-> table (`aimaestro-trdd-approval.md` §D3 — *"SILVER PRRD / persona / governance file"*) is
-> **`min-approval-requirement: manager`**, not `none`. Three test files also contain these
-> strings (`tests/unit/trdd-store.test.ts:125`, `trdd-corpus-invariants.test.ts:210`,
-> `kanban-index.test.ts:109`) but they are FIXTURES written into temp dirs to exercise the
-> legacy-name path deliberately — they do not reference the real cards and must NOT be renamed.
+> So the rename is a **6-file change, not two `git mv`s** — the four citing references must be
+> updated in the SAME commit, per `check-all-files-after-breaking-change.md`. Three test files
+> also contain these strings (`tests/unit/trdd-store.test.ts:125`,
+> `trdd-corpus-invariants.test.ts:210`, `kanban-index.test.ts:109`) but they are FIXTURES that
+> WRITE synthetic content into temp dirs to exercise the legacy-name path deliberately — they
+> never read the repo path, and must NOT be renamed.
 >
-> This is the same error one more time, on the remedy instead of the diagnosis: a claim
-> ("two `git mv`s") committed on the cheapest available evidence rather than the evidence the
-> claim required. One grep would have caught it, and it was not run until after the option had
-> been put to the user four times.
+> **Its floor is `none`.** A previous draft of this box called it `manager` on the grounds that
+> `docs/GOVERNANCE-RULES.md` is a governance file. That was an OVER-escalation, and over-escalating
+> is not the safe direction — it parks a verified bug behind an approval nobody is coming to grant
+> (this board carries 14 `blocked` and 5 `approval` cards). Verified 04:36: all three doc hits are
+> bare paths inside `` tracked in `<path>` `` constructions, so the edit changes no rule text, no
+> enforcement status, no assertion. D3's governance row gates changes to what governance *says*;
+> repairing a pointer the rename itself made dangling is the mechanical cleanup
+> `check-all-files-after-breaking-change.md` **requires** — a rule cannot mandate a repair and
+> simultaneously gate it.
+>
+> Both errors here are the same one twice, on the remedy instead of the diagnosis: a claim
+> ("two `git mv`s", then "`manager`") committed on the cheapest available evidence rather than
+> the evidence the claim required.
 
 1. **In-project (this repo):** `git mv` the two files to the current spec shape
    `TRDD-<timestamp>-<id8>-<slug>.md`, timestamp from each card's own `created:` —
    `TRDD-20260424_154516+0200-8E8BE91A-upstream-amp-sync.md` and
    `TRDD-20260424_040831+0200-80557822-comm-graph-downstream-sync.md` — **and update the four
-   citing references above.** Ids unchanged, `git mv` preserves history. Needs MANAGER approval
-   per the floor above.
+   citing references above, in the same commit.** Ids unchanged, `git mv` preserves history.
+   Tier 0.
 2. **Upstream (ai-maestro-janitor):** widen `_TRDD_ID_RE` to admit the bare-8-hex legacy shape.
    Fixes it for every project with `v1-migrated` cards, but it is **another project's source** —
    per `how-to-fix-issues-of-other-projects.md` that means an issue or a fork+PR, never a
@@ -243,10 +252,15 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - [x] The exact cards the two instruments disagree about are named, by id — heartbeat DROPS
       `TRDD-8E8BE91A` and `TRDD-80557822`; grep MISSES `TRDD-BAXXIG0J` (local scope). The
       difference runs in BOTH directions; neither set contains the other
-- [ ] Whichever instrument is wrong is fixed, OR the difference is documented as intended
-      (with the reason) — **NOT DONE.** The heartbeat is WRONG (it drops two real open cards,
-      one of them `priority: 1`), so "documented as intended" does not apply. Two remedy
-      options are written up in the STATE block; neither is chosen or applied
+- [x] Whichever instrument is wrong is fixed, OR the difference is documented as intended
+      (with the reason) — **FIXED at the data, 04:37** (remedy option 1, Tier 0): both cards
+      renamed to the spec shape, the four citing references updated in the same commit, and the
+      board re-measured — the faithful predicate went **52 → 54 exactly as predicted**, with
+      **0 unparseable filenames remaining in ANY zone** (proposals/tasks/archived/refused all
+      clear). The two cards are now visible to the board count and to all 5 detectors.
+      **The MATCHER is still unfixed** — `_TRDD_ID_RE` cannot parse the legacy shape, so a
+      future `v1-migrated` card named that way would be invisible again. That is remedy
+      option 2, upstream, and it is NOT covered by this box.
 - [x] What each counting command actually counts is recorded in this card, so audits stop
       quoting one number as "the board" — recorded in the STATE block.
       (Re-worded 04:26: the original box read *"If the heartbeat is correct and the grep naive,
@@ -259,6 +273,26 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:38:04+0200 — **REMEDY 1 APPLIED (Tier 0).** The fifth review fork found one
+  material error and it was mine in the OTHER direction: I had escalated this to `manager` on
+  the grounds that `docs/GOVERNANCE-RULES.md` is a governance file. Verified the three doc hits
+  are bare paths inside `` tracked in `<path>` `` — the edit changes no rule text, no
+  enforcement status, no assertion — so D3's governance row does not apply and the floor is
+  `none`. Over-escalation is not the safe direction: it would have parked a verified bug behind
+  an approval nobody is coming to grant, on a board already carrying 14 `blocked` and 5
+  `approval`.
+
+  Applied: both cards renamed to the spec shape, four citing references updated in the same
+  commit (`check-all-files-after-breaking-change`), self-referential `**Filename:**` lines
+  updated with a deliberately-historical note. **Verified by effect, not by intent:** faithful
+  predicate 52 → **54**, matching the prediction; **0 unparseable filenames in all four zones**;
+  the three test files that contain these strings pass (96 tests, 3 files) — confirming they are
+  fixtures that WRITE synthetic content, never read the repo path.
+
+  **Revealed, not caused:** `trddgrep validate` now emits two `META-MISSING created-by` WARNs on
+  the renamed cards. They were always missing; the cards were simply invisible to the linter.
+  Left as-is — `created-by` is an authorship fact, and inventing one to silence a warning is
+  exactly the wrong trade.
 - 2026-09-05T04:33:40+0200 — Fourth review fork; **acted on its findings and then STOPPED
   reviewing, per its own closing advice.** It predicted I would verify the census hard and take
   its neighbour cheaply, and it was right: the `report-to-trdd-drift` row had been committed on

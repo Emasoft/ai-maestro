@@ -23,7 +23,10 @@ implementation-commits: []
 # TRDD-8e8be91a — Upstream AMP Sync Before PR Submission
 
 **TRDD ID:** `8e8be91a-cf88-426c-ac12-dcffba7dbdd6`
-**Filename:** `design/tasks/TRDD-8e8be91a-upstream-amp-sync.md`
+**Filename:** `design/tasks/TRDD-20260424_154516+0200-8E8BE91A-upstream-amp-sync.md`
+(renamed 2026-09-05 from the legacy `TRDD-8e8be91a-upstream-amp-sync.md` — that shape is
+unparseable by `trdd_common.extract_uid`, so this card was invisible to the board count and to
+4 of 5 TRDD detectors. See TRDD-UAP7ZEJL.)
 **Tracked in:** this repo (`design/tasks/` is git-tracked)
 **Deferred until:** governance + jsonl-viewer work is done
 **Priority:** P1 (gates upstream PR submission; not blocking current work)

@@ -199,7 +199,7 @@ When this file is edited, the following surfaces MUST be updated to match, in or
 3. **`CLAUDE.md`** — the matrix mirror in the AMP Messaging section.
 4. **`services/send-message-service.ts`** + **`services/amp-service.ts`** — validateMessageRoute callers if semantics change.
 5. **`reports/governance/20260422_170708+0200-communication-graph.md`** — narrative/mermaid companion.
-6. **External plugin repos** (tracked in `design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`):
+6. **External plugin repos** (tracked in `design/tasks/TRDD-20260424_040831+0200-80557822-comm-graph-downstream-sync.md`):
    - `Emasoft/ai-maestro-plugin` → `skills/agent-messaging/SKILL.md` + `skills/team-governance/SKILL.md`.
    - 8 role-plugin repos → each one's `agents/<name>-main-agent.md` "Communication Permissions" section.
 7. **Type declarations** — `types/agent.ts::AgentRole` if a new title is added. `lib/communication-graph.ts::GraphNode` if a new non-title node is added (H is already there).

@@ -394,7 +394,7 @@ a LATENT second layer awaiting a caller that can detect a subagent, kept as defe
 field to be a truthy string — it does NOT load the referenced message, verify its sender/recipient
 pair, or prevent multiple replies to the same id; the "one reply per inbound message" invariant (AMP
 inbox sets `replied=true` on the original and rejects subsequent attempts) is PLANNED not yet
-implemented (`design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`); the advisory check is
+implemented (`design/tasks/TRDD-20260424_040831+0200-80557822-comm-graph-downstream-sync.md`); the advisory check is
 latent in production because no flow currently routes messages to the human user; it becomes
 load-bearing the moment Phase 2 maestro auth wires H as an AMP recipient.
 

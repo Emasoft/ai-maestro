@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:10:36+0200
+updated: 2026-09-05T03:13:47+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -53,14 +53,28 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > | 2026-08-26 | 144 | `find … -type f \| wc -l` |
 > | **2026-09-05 03:04** | **168 — 74 MB on disk** | `find … -type f \| wc -l` |
 >
-> ⚠ **ROW 1 IS A DIFFERENT INSTRUMENT AND THE THREE ARE NOT ONE SERIES.** An index is not
-> necessarily one file — a SQLite database in WAL mode carries `-wal`/`-shm` sidecars — so a
-> classifier count over indexes and a raw file count are different quantities. **The growth claim
-> rests on rows 2-3 alone** (144 → 168, like-for-like, and the card itself records row 2's command).
-> Read across all three and the shape appears to DECELERATE (+42 in 4 days, then +24 in 10) — that
-> apparent shape may be an artifact of switching instruments, not a fact about the world. Likewise
-> "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
-> them.
+> ⚠ **ROW 1 IS A DIFFERENT INSTRUMENT — BUT MEASUREMENT SHOWS THE THREE ARE COMPARABLE ANYWAY.**
+> An earlier version of this banner claimed they were NOT one series, on the reasoning that "an
+> index is not necessarily one file — a SQLite database in WAL mode carries `-wal`/`-shm`
+> sidecars". **That mechanism was imported from a different subsystem and is FALSE here.** Measured
+> 2026-09-05 03:13 in this directory:
+>
+> ```
+> total files 168  ·  *.sqlite 167  ·  non-sqlite 1 (a .heal.json)  ·  -wal 0  ·  -shm 0
+> ```
+>
+> So the file count exceeds the index count by exactly ONE, not by a per-index multiplier, and a
+> `find` count and a classifier count over indexes track each other to within a file. **The growth
+> claim therefore rests on all three rows, not just 2-3, and the apparent DECELERATION (+42 in 4
+> days, then +24 in 10) is REAL rather than an artifact of switching instruments** — which is the
+> opposite of what the previous version of this banner told a reader.
+>
+> Row 2's instrument (144) is taken from the card's own annotation by a prior session and cannot be
+> re-verified now; it is the weakest link in the table, and it is the only row not measured
+> first-hand.
+>
+> "74 MB on disk" and the card's "66.8 MB reclaimable" still measure different things; do not
+> difference them.
 >
 > **The number the decision actually turns on is the ORPHAN count, and only `yarn pillar:reap`
 > (no flag) produces it.** It reaps nothing. The 168 above is a size signal, not a reap estimate.

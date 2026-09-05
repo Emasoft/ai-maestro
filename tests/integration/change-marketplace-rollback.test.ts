@@ -235,13 +235,17 @@ describe('ChangeMarketplace::add — the settings stamp is inside the transactio
     expect(readEkm()[NEW_MKT]).toEqual({ source: { source: 'github', repo: SOURCE_REPO } })
   })
 
-  it('records a path source with the local discriminant', async () => {
+  it('records a path source with the directory discriminant — the one settings.json accepts', async () => {
     const { CreateMarketplace } = await import('@/services/element-management-service')
     const LOCAL = join(H.FAKE_HOME, 'some-marketplace-dir')
     const result = await CreateMarketplace({ name: NEW_MKT, source: { path: LOCAL } }, OWNER)
 
     expect(result.success).toBe(true)
-    expect(readEkm()[NEW_MKT]).toEqual({ source: { source: 'local', path: LOCAL } })
+    // `directory`, never `local`: `local` is a MANIFEST plugins[].source value and Claude Code
+    // refuses settings.json with "Invalid input" when it appears here (2026-09-05). This test
+    // pinned `local` for weeks, which is how the wrong value survived — a test that asserts
+    // the bug is a guard for the bug. The sibling writers already emitted `directory`.
+    expect(readEkm()[NEW_MKT]).toEqual({ source: { source: 'directory', path: LOCAL } })
   })
 
   it('deregisters the marketplace it just registered when the settings write fails', async () => {

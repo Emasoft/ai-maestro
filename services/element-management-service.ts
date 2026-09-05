@@ -5799,9 +5799,20 @@ export async function ChangeMarketplace(desired: {
               // that chooses one: `marketplaceAddArg` merely SCAVENGES `repo`/`url`/`path`
               // off an entry someone else wrote. The two values below are exactly what
               // `CreateMarketplace`'s `{repo} | {path}` input can produce — nothing wider.
+              //
+              // `directory`, NOT `local`: Claude Code's settings.json schema accepts
+              // `github | git | directory` for `extraKnownMarketplaces[].source.source`;
+              // `local` is the value for a MANIFEST's `plugins[].source`, a different
+              // schema. This line wrote `local` until 2026-09-05 while the two sibling
+              // writers (plugin-storage-service.ts, role-plugin-service.ts) wrote
+              // `directory`, so the value oscillated with whichever path wrote last, and
+              // Claude Code refused settings.json with "Invalid input" on every server
+              // boot that went through here. The CLI's own registry
+              // (~/.claude/plugins/known_marketplaces.json) is the arbiter: it records
+              // these exact marketplaces as `directory`.
               const entry = 'repo' in source
                 ? { source: { source: 'github', repo: source.repo } }
-                : { source: { source: 'local', path: source.path } }
+                : { source: { source: 'directory', path: source.path } }
               await updateJson(SETTINGS_JSON, settings => {
                 const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
                 ekm[desired.name] = entry

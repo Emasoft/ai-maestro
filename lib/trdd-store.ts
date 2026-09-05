@@ -1029,6 +1029,7 @@ export function archiveTrdd(
     reason?: string
     supersededBy?: string
     iso: string
+    clearBlocker?: boolean
   },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, async () => {
@@ -1099,6 +1100,38 @@ export function archiveTrdd(
   if (trdd.zone === 'archived' || trdd.zone === 'refused') {
     return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
   }
+  // TRDD-XCQ9TDSK: `advanceColumn` (TRDD-ISGUYYLN) owns the leaving-`blocked`
+  // invariant for every WORKING-column move, but a blocked card archiving straight
+  // to a terminal column never went through it — `archiveTrdd` had no blocked-by
+  // handling at all, so the card landed in archived/ still carrying `blocked-by:`,
+  // and a terminal card's body is frozen (IND base step 12), so nothing could ever
+  // repair it afterwards. `trddgrep validate` then raises GRAPH-DANGLING-BLOCKER on
+  // a card no later edit can fix. Same contract as ISGUYYLN, copied rather than
+  // shared (the card says extraction into a helper is not required): refuse while
+  // a named blocker is still open or unresolvable, unless `clearBlocker` overrides;
+  // otherwise clear it in THIS write, before the card leaves tasks/ for good.
+  let clearBlockedBy = false
+  if (trdd.column === 'blocked') {
+    const refs = blockedByRefs(trdd.frontmatter?.['blocked-by'])
+    if (refs.length > 0) {
+      if (opts.clearBlocker) {
+        clearBlockedBy = true
+      } else {
+        const stillOpen = refs.filter((ref) => {
+          const blocker = findTrdd(designDir, ref)
+          return !blocker || !TERMINAL_DONE.has(blocker.column)
+        })
+        if (stillOpen.length > 0) {
+          return {
+            ok: false,
+            error: `Cannot leave blocked — still open or unresolvable: ${stillOpen.join(', ')} (use --clear-blocker to override)`,
+            status: 409,
+          }
+        }
+        clearBlockedBy = true
+      }
+    }
+  }
   // THE CHECKLIST GATE, ON THE WRITE PRIMITIVE (TRDD-I8UC56GZ). It existed only as
   // `rejectIncompleteChecklist` in lib/trdd-authz.ts — which returns a `NextResponse`,
   // so it is reachable from the HTTP route and from nothing else. `trddgrep move` would
@@ -1134,13 +1167,23 @@ export function archiveTrdd(
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }
+  let clearNote = ''
+  if (clearBlockedBy) {
+    edits.push(['blocked-by', '[]'])
+    if (trdd.frontmatter?.['pre-block-column'] !== undefined) {
+      edits.push(['pre-block-column', ''])
+    }
+    clearNote = opts.clearBlocker
+      ? ' Cleared blocked-by (--clear-blocker override).'
+      : ' Cleared blocked-by (all blockers terminal).'
+  }
   editAfterMove(
     designDir,
     trdd.filePath,
     newPath,
     tracked,
     edits,
-    `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.`,
+    `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.${clearNote}`,
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: trdd.zone, to: 'archived', column: opts.state, filePath: newPath }

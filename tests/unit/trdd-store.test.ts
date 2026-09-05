@@ -352,6 +352,71 @@ describe('trdd-store lifecycle transitions', () => {
     expect(t.frontmatter['blocked-by']).toEqual(['TRDD-OPEN0001'])
   })
 
+  // TRDD-XCQ9TDSK: `archiveTrdd` used to skip the leaving-`blocked` invariant that
+  // TRDD-ISGUYYLN put into `advanceColumn` — a blocked card archiving straight to a
+  // terminal (archived/) column left `blocked-by:` populated on a now-frozen card,
+  // which `trddgrep validate` then reports as GRAPH-DANGLING-BLOCKER forever (a
+  // terminal card's body is frozen, so nothing can repair it afterwards).
+  function withChecklist(file: string): string {
+    const content = fs.readFileSync(file, 'utf-8')
+    fs.writeFileSync(file, content.replace('## Approval log', '## Acceptance\n\n- [x] done\n\n## Approval log'))
+    return file
+  }
+
+  it('archiveTrdd out of blocked (blocked -> complete) clears blocked-by when every blocker is terminal', async () => {
+    writeTask('DONE0002', 'the-blocker-2', 'complete')
+    const f = writeTask(
+      'BLKD0005',
+      'archiving-blocked',
+      'blocked',
+      designDir,
+      'blocked-by: [TRDD-DONE0002]\npre-block-column: dev\n',
+    )
+    withChecklist(f)
+    const r = await archiveTrdd(designDir, 'BLKD0005', { approver: 'manager', state: 'complete', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'BLKD0005')!
+    expect(t.zone).toBe('archived')
+    expect(t.column).toBe('complete')
+    expect(t.frontmatter['blocked-by']).toEqual([])
+    expect(t.frontmatter['pre-block-column']).toBeFalsy()
+    expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('Cleared blocked-by (all blockers terminal)')
+  })
+
+  it('archiveTrdd out of blocked REFUSES (409) while a named blocker is still open, and writes nothing', async () => {
+    writeTask('OPEN0003', 'still-open-3', 'dev')
+    const f = writeTask('BLKD0006', 'archiving-blocked-early', 'blocked', designDir, 'blocked-by: [TRDD-OPEN0003]\n')
+    withChecklist(f)
+    const before = fs.readFileSync(f, 'utf-8')
+    const r = await archiveTrdd(designDir, 'BLKD0006', { approver: 'manager', state: 'complete', iso: ISO })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toContain('OPEN0003')
+    }
+    const t = findTrdd(designDir, 'BLKD0006')!
+    expect(t.zone).toBe('tasks')
+    expect(t.column).toBe('blocked')
+    expect(fs.readFileSync(t.filePath, 'utf-8')).toBe(before)
+  })
+
+  it('archiveTrdd --clear-blocker (clearBlocker: true) overrides a still-open blocker on blocked -> archived', async () => {
+    writeTask('OPEN0004', 'still-open-4', 'dev')
+    const f = writeTask('BLKD0007', 'archiving-blocked-forced', 'blocked', designDir, 'blocked-by: [TRDD-OPEN0004]\n')
+    withChecklist(f)
+    const r = await archiveTrdd(designDir, 'BLKD0007', {
+      approver: 'manager',
+      state: 'complete',
+      iso: ISO,
+      clearBlocker: true,
+    })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'BLKD0007')!
+    expect(t.zone).toBe('archived')
+    expect(t.frontmatter['blocked-by']).toEqual([])
+    expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('Cleared blocked-by (--clear-blocker override)')
+  })
+
   it('archive moves a task → archived/ with the terminal state + superseded-by', async () => {
     const id = 'ARCH0001'
     writeTask(id, 'archive-me', 'complete')

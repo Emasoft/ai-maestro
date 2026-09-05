@@ -1229,7 +1229,7 @@ switch (cmd) {
     const want = expectedZone(targetColumn, card.frontmatter ?? {}) ?? 'tasks'
     let res
     if (want === 'archived') {
-      res = await archiveTrdd(designDir, card.id, { approver: who, state: targetColumn, reason, supersededBy, iso })
+      res = await archiveTrdd(designDir, card.id, { approver: who, state: targetColumn, reason, supersededBy, iso, clearBlocker })
     } else if (want === 'refused') {
       res = await refuseTrdd(designDir, card.id, { approver: who, reason, iso })
     } else if (want === 'proposals') {

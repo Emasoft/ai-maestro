@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:24:01+0200
+updated: 2026-09-05T03:26:25+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -80,11 +80,21 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 >
 > **The 1 non-`.sqlite` file is resolved, not an unknown** (read 2026-09-05):
 > `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
-> not itself orphaned. It records an `"open failed"` on 2026-08-04 caused by the Node ABI mismatch
-> (`NODE_MODULE_VERSION 127` vs `147` — this project's Node-22 constraint). That is a live instance
-> of the classifier's `unreadable` state, and concrete evidence for why that state must never be
-> reaped: the file is intact, only unopenable by the wrong Node. The reap cannot touch this ledger
-> either way; if its partner were ever reaped it would be left dangling.
+> not itself orphaned. It records an `"open failed"` **on 2026-08-04** — a PAST event; the fault
+> string is a Node ABI mismatch (`NODE_MODULE_VERSION 127` vs `147`), i.e. the RUNTIME was wrong,
+> not the file. **How that index classifies today is UNVERIFIED** — under the correct Node 22 it
+> may well open fine and come back `live` or `orphaned`. Do not read this as a current
+> `unreadable`.
+>
+> Its value is as evidence that **the wrong-Node open failure has actually occurred in this
+> directory**, which is the card's own subject. It is NOT the argument for never reaping
+> `unreadable`; that argument is structural and already made above — `[].every(gone)` is `true`
+> for an index whose target list could not be READ, so a two-state classifier deletes precisely the
+> files it could not inspect, whatever caused the failure (wrong ABI, corruption, permissions, a
+> crashed writer).
+>
+> The reap cannot touch this ledger either way (`.sqlite`-only); if its partner were ever reaped it
+> would be left dangling.
 >
 > "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
 > them.

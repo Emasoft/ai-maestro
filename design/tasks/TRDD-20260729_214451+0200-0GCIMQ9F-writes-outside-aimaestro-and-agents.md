@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:31:29+0200
+updated: 2026-09-05T03:33:23+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -82,11 +82,10 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
 > not itself orphaned. Read in full (`jq`, not a truncation): **3 entries, all `"open failed"`,
 > across TWO dates — 2026-08-04 and 2026-08-16.** The fault string is a Node ABI mismatch
-> (`NODE_MODULE_VERSION 127` vs `147`), i.e. the RUNTIME was wrong, not the file. ⚠ **Do not read
-> the two dates as a recurrence.** An ABI mismatch is a PERSISTENT property of an install, not an
-> event: it lasts until someone rebuilds `better-sqlite3`. Two dates twelve days apart is what ONE
-> unfixed environment hit twice looks like, and the log cannot distinguish that from a condition
-> that genuinely re-arose. All of it is
+> (`NODE_MODULE_VERSION 127` vs `147`), i.e. the RUNTIME was wrong, not the file. **Whether that is
+> one unfixed install hit twice or a fault that recurred is NOT determinable from the log** — an
+> ABI mismatch persists until `better-sqlite3` is rebuilt, and nothing here records whether a
+> rebuild intervened. All of it is
 > PAST: **how that index classifies today is UNVERIFIED** — under the correct Node 22 it may open
 > fine and come back `live`, `empty` or `orphaned`. Do not read it as a current `unreadable`.
 >

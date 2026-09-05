@@ -1,8 +1,8 @@
 ---
 name: public-repo-personal-data
-description: "this repo is PUBLIC and a personal email / account name reached a tracked file — how it happens without anyone deciding to, what the gate is, and why the fix is a role label not an ignore list"
+description: "this repo is PUBLIC and a personal email / account name reached a tracked file — how it happens without anyone deciding to / what test enforces the no-personal-address rule and where the line between a fixture address and a real one falls / why the fix is a role label and never an ignore list / redacting the file forward does not undo a push, and wildcard git add is the sibling leak vector"
 ocd: 2026-08-07
-lmd: 2026-08-16
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -14,7 +14,7 @@ publish-globally: false
 # public-repo-personal-data
 
 
-^ATOM-HPWV-Q73A [desc:"PUBLIC repo. A real mailbox at a real provider must never reach a tracked file — the gate is tests/governance/no-personal-addresses-in-tracked-files.ts; the fix is a role label, never an ignore list.", keywords: this_repo_is_public personal_email_in_a_tracked_file PII_leaked_into_git account_name_in_a_TRDD is_it_safe_to_write_an_account_name third_party_address_in_a_public_repo, ocd: 2026-08-07, lmd: 2026-08-07]
+^ATOM-HPWV-Q73A [desc:"PUBLIC repo. A real mailbox at a real provider must never reach a tracked file — the gate is tests/governance/no-personal-addresses-in-tracked-files.ts; the fix is a role label, never an ignore list.", keywords: this_repo_is_public personal_email_in_a_tracked_file PII_leaked_into_git account_name_in_a_TRDD is_it_safe_to_write_an_account_name third_party_address_in_a_public_repo, ocd: 2026-08-07, lmd: 2026-09-05]
 
 **`Emasoft/ai-maestro` and upstream `23blocks-OS/ai-maestro` are BOTH `visibility: PUBLIC`.** Every
 tracked file is world-readable. Verify rather than assume: `gh repo view <owner>/<repo> --json
@@ -32,6 +32,9 @@ Nobody chose to publish them. No reviewer looks at a diff line about a credentia
 address — enforced by TOOLING, not intent. **A hazard that looks like documentation is invisible to
 review by construction**, which is why only an every-suite gate catches the next one.
 
+
+^ATOM-MGFX-JMV8 [desc: "the personal-data gate itself: what test enforces it, the exact line it draws between a fixture address and a real one, and the role-label fix when it trips", keywords: what_test_enforces_the_no_personal_address_rule gate_test_file_name difference_between_a_fixture_email_and_a_real_one example_dot_com_always_passes role_label_instead_of_a_real_name PLACEHOLDER_LOCALS_list never_add_a_real_address_to_an_ignore_list redacting_forward_does_not_undo_a_push purge_and_force_push_needed_to_remove_history sibling_leak_vector_wildcard_staging, ocd: 2026-09-05, lmd: 2026-09-05]
+
 **THE GATE:** `tests/governance/no-personal-addresses-in-tracked-files.test.ts`. The line it draws
 is not "no email addresses" — the mailer / SMTP-autodetect / password-reset suites need fixtures.
 It is: *a mailbox at a REAL consumer provider whose local-part is not an obvious placeholder is
@@ -44,6 +47,9 @@ has never once been load-bearing in this corpus, and the mapping stays recoverab
 `rotator.py list`. For a genuinely new fixture, widen `PLACEHOLDER_LOCALS` or move it to
 `@example.com`. **NEVER add a real address to an ignore list — that writes it into a tracked file,
 which is the bug itself.**
+
+
+^ATOM-V75L-XX7M [desc: "redacting the file forward never undoes a git push, and the sibling leak vector is wildcard git add sweeping untracked private files into a commit", keywords: redacting_forward_does_not_undo_a_push history_still_carries_the_removed_data purge_and_force_push_RULE_0.6_owner_only GitHub_retains_orphaned_commits gate_is_prevention_not_remediation sibling_leak_vector_wildcard_staging git_add_dash_A_sweeps_untracked_private_files stage_files_by_name_always cross_scope_link_only_checked_as_a_union PROJECT_scope_page_must_not_link_a_LOCAL_page, ocd: 2026-09-05, lmd: 2026-09-05]
 
 **REDACTING FORWARD DOES NOT UNDO A PUSH.** Editing the file cleans what a GitHub file-view shows;
 history still carries it. Removal means a purge + force-push (**RULE 0.6 — the owner's exact written

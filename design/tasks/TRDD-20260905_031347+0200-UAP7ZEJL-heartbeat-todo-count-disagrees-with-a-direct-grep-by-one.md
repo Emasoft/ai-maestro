@@ -43,9 +43,12 @@ moved in and out of `todo` in between). Had one unrelated card entered `todo`, t
 would have shown 52 / 53. Do not cite the digit match as proof; cite the −1 offset.
 
 **The live heartbeat was then observed directly at 04:24: `open board: 51 in todo`.** That is the
-instrument itself, not a reconstruction of it — it settles both the count and the question of
-which janitor version is executing, which two proxy reads (`integrity/last-good.json` says
-`3.4.14`; `3.4.14` is also the highest cached) had only pointed at.
+instrument itself, not a reconstruction of it. What it settles is the doubt that actually
+mattered — **the reconstruction is behaviourally equivalent to the running instrument on this
+input.** It does NOT identify the version: any version sharing this predicate prints 51. The
+version reading stays what it is, two agreeing proxies (`integrity/last-good.json` says `3.4.14`,
+which is also the highest cached directory) — a certification record and a directory listing,
+neither of them the executing artifact.
 
 > ### ⚠ THIS BLOCK REPLACES A WRONG DIAGNOSIS I COMMITTED AT 04:17 (`d301b00f`)
 >
@@ -105,37 +108,55 @@ The two dropped files are named `TRDD-<8hex>-<slug>.md` — the `v1-migrated` le
 only `TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md` or a **36-char** UUID, so these match neither
 branch, `extract_uid` returns `None`, and `_board_summary_bit` skips them with `continue`.
 
-**This is not confined to the board count — VERIFIED at every call site, not inferred from the
-comment.** An earlier draft of this paragraph asserted the blast radius from `trdd_common`'s own
-comment (*"all three TRDD detectors now share this single matcher"*), which is a document, not
-the thing; a review fork flagged it, correctly, as an inference dressed as a finding — the more
-so because **both cards DO carry a valid `trdd-id:` in frontmatter**, so a detector reading the
-field rather than the filename would see them fine. Checked directly; every site drops on a
-`None` uid, and none falls back to the field:
+**This is not confined to the board count. FOUR of the five TRDD detectors drop these cards,
+plus the board count — the population is enumerated, not sampled.**
 
-| site | on `uid is None` |
-|---|---|
-| `trdd-drift.py:290` | `return` |
-| `trdd-drift.py:451` | guarded `if _uid is not None and …` |
-| `trdd-drift.py:500` | guarded `if defect is not None and uid is not None` |
-| `trdd-drift.py:552` | guarded `if uid is not None` |
-| `trdd-drift.py:647` | `continue` |
-| `trdd-reminder.py:190` | `continue` |
+Getting here took three tries, each fixing the previous one's quantifier:
 
-So the two cards are invisible to `trdd-drift` and `trdd-reminder` as well as to the board count.
+1. asserted from `trdd_common`'s own comment (*"all three TRDD detectors now share this
+   matcher"*) — a document, not the thing;
+2. checked the **two** detectors that comment implied, and reported that as the radius — the
+   comment's *census* survived unexamined after its *behaviour* claim was replaced;
+3. enumerated **every** detector that reads TRDD files (`grep -l 'trdd_common\|trdd_files'` →
+   5 files), and checked each.
+
+| detector | keys on the FILENAME id? | these two cards |
+|---|---|---|
+| `trdd-drift.py` | yes — 5 sites (`:290` `return`; `:451` `:500` `:552` guarded, **no `else`** at any; `:647` `continue`) | **dropped** |
+| `trdd-reminder.py:190` | yes — `continue` | **dropped** |
+| `trdd-cross-card-blindspot.py:245` | yes — `_parse_card` returns `None` | **dropped** |
+| `trdd-state-reconciliation.py:481` | yes, **INDIRECTLY** — `trdd_common.parse_trdd_record:764` calls `extract_uid(path.name)` | **excluded from every uid-keyed map** (`column_by_uid`, `scope_by_uid`, `idle_by_uid`); any finding naming them shows `uid = r["uid"] or "?"` |
+| `report-to-trdd-drift.py:260` | **no** — matches report basenames against card CONTENT | **sees them normally** |
+
+**The indirect site is the one that matters methodologically.** A `grep` for
+`extract_uid|trdd-id|frontmatter` over the *detector files* finds nothing in
+`trdd-state-reconciliation.py`, which reads as "this one doesn't key on the filename". It does —
+through a helper in another module. A name-based search cannot answer a behavioural question,
+and that near-miss is why the population is now enumerated by what each file *reads* rather than
+by what it is *named after*.
+
+Note what makes this a real bug rather than a naming preference: **both cards DO carry a valid
+`trdd-id:` in frontmatter.** Every dropping site had the id available and keyed on the filename
+anyway.
 
 **What that does and does NOT mean for `TRDD-80557822` (`priority: 1`, `severity: MEDIUM`).**
-It is dropped from the board count and from both detectors — verified. It is NOT true that the
-nudge would otherwise have named it: `_board_summary_bit` prints at most 3 ids per column plus
-`+N more`, so with ~51 todo cards no individual card is named, and being dropped costs it one
-increment of a number. Nor is "it has been invisible *since April*" established — that is a
-duration claim, and neither the card's continuous residence in `todo` nor the matcher's history
-was checked.
+It is dropped from the board count and from four of the five detectors — verified. It is NOT true
+that the nudge would otherwise have named it: `_board_summary_bit` prints `sorted(ids)[:3]` plus
+`+N more`, so a card is named only when its column holds ≤3 (or it sorts into the first three) —
+`1 in dev (TRDD-UAP7ZEJL)` in the 04:24 nudge is exactly that case. With ~51 cards in `todo`, no
+individual todo card is named, so being dropped costs it one increment of a number. Nor is "it
+has been invisible *since April*" established — that is a duration claim, and neither the card's
+continuous residence in `todo` nor the matcher's history was checked.
 
 Verified: exactly 2 of the project's task files fail `extract_uid`, and they are precisely these
 two.
 
 ### Remedy — two options, different owners, NOT yet chosen
+
+**Unmeasured, and it gates option 1:** nobody has confirmed that renaming the two files actually
+makes the detectors see them. It follows from the mechanism, and "it follows" is what three
+corrections in a row have punished. Before or immediately after the rename, re-run the faithful
+predicate and expect 53, not 51.
 
 1. **In-project (this repo):** `git mv` the two files to the current spec shape
    `TRDD-<timestamp>-<id8>-<slug>.md`, deriving the timestamp from each card's own `created:`.
@@ -208,6 +229,22 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:29:55+0200 — Third review fork. Enumerated the FULL detector population (5, not
+  2): `trdd-cross-card-blindspot` also drops these cards, and `trdd-state-reconciliation` drops
+  them **indirectly** via `trdd_common.parse_trdd_record:764` — a call a name-based grep of the
+  detector files cannot see, which is precisely the gap the fork predicted. Radius is 4/5 plus
+  the board count, LARGER than the previous pass stated. Also: the three guarded `trdd-drift`
+  sites confirmed to have no `else` (a ±3-line window shows a guard's opening, not its
+  complement); "no individual card is named" corrected to the true rule (`sorted(ids)[:3]`, so
+  columns of ≤3 DO name every card — the 04:24 nudge named this very card in `dev`); and the
+  live-heartbeat observation re-scoped to what it proves (reconstruction ≡ instrument on this
+  input) rather than to the version, which two proxies still only point at.
+
+  **The process defect, named because it is now three-for-three:** every one of these was a
+  QUANTIFIER error — `EMPTY`, `every detector`, `all 6`, `no individual card` — and each pass
+  verified hard exactly where the last one was caught while accepting its neighbour on the
+  cheapest read. The check is to ask, before committing any claim carrying a quantifier: *what
+  is the population, and did I enumerate it or sample it?*
 - 2026-09-05T04:26:12+0200 — Second review fork on the revocation. Acted on all of it:
   `column: dev` → `todo` (`dev` asserts a worker is on it; `assignee: unassigned` and the card
   waits on a human remedy choice, so `dev` was the one affirmatively false statement in the

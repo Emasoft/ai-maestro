@@ -5,7 +5,7 @@
  * Covers session lifecycle, message relay, response capture, config parsing.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ============================================================================
 // Mocks — vi.hoisted() ensures availability before vi.mock() runs
@@ -93,6 +93,15 @@ beforeEach(() => {
   mockAgentRegistry.getAgentByName.mockReturnValue(null)
   mockAgentRegistry.createAgent.mockResolvedValue({ id: 'test-uuid', name: '_aim-creation-helper' })
   mockFs.existsSync.mockReturnValue(true)
+})
+
+// Every path through createCreationHelper — including the "already running"
+// branch since 458ecc52 — arms real setInterval timers (30 s watchdog, 2 s
+// publish poller). Tear them down after each case so no timer leaks past the
+// test that armed it; deleteCreationHelper is the one exported path that
+// stops both, and every side effect it touches is mocked above.
+afterEach(async () => {
+  await deleteCreationHelper()
 })
 
 // ============================================================================

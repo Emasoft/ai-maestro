@@ -308,6 +308,7 @@ Adding it:
 
 - 2026-08-22T22:30:28+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T10:59:10+0200 — COMPLETE by manager. Its last open box was carved out as TRDD-1LFRP6GJ, now complete in e768504e (both former agent-callable wizard routes owner-gated; persona lookups moved off the API). Probe ALL-TERMINAL. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'..
+- 2026-09-05T11:04:58+0200 — blocked-by cleared AFTER the blocked→complete move (5d400f01): trddgrep move left blocked-by: [1LFRP6GJ] in place on a terminal card; clearing it completes the closing edit the move left half-done. pre-block-column / blocker-probe / blocker-holds-if remain as frozen history.
 
 ## CLOSED 2026-09-04 — and one finding this card's ledgers could not have seen
 

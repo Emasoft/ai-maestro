@@ -1,9 +1,9 @@
 ---
 trdd-id: U1EYWIPT
 title: Nothing evaluates blocker-probe — validate must run the probes and report BLOCKER-RELEASED, never silence
-column: todo
+column: complete
 created: 2026-09-05T11:37:21+0200
-updated: 2026-09-05T11:37:23+0200
+updated: 2026-09-05T11:50:03+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: infra
@@ -14,6 +14,7 @@ mandated-by: none
 approved: true
 approval-judge: emanuelesabetta
 approval-datetime: 2026-09-05T11:37:21+0200
+implementation-commits: [04a36990]
 ---
 
 # Nothing evaluates blocker-probe — validate must run the probes and report BLOCKER-RELEASED, never silence
@@ -22,12 +23,13 @@ Nothing evaluates `blocker-probe:` / `blocker-holds-if:`. Measured 2026-09-05: l
 
 ## Acceptance
 
-- [ ] `trddgrep validate` reports BLOCKER-RELEASED for a fixture blocked card whose every `blocked-by` id resolves to a terminal-done column, naming the restore column, without spawning any process
-- [ ] a `blocked-by` id that resolves to nothing reports BLOCKER-UNRESOLVED and the card stays blocked (fail-open pinned by a test); a still-open blocker reports nothing
-- [ ] a test pins both findings and a recorded neuter (skip the evaluation) reddens exactly those tests; no code path in the doctor executes `blocker-probe` (grep-pinned)
-- [ ] the live corpus validate lists every currently-releasable parked card, and the coordinator releases each by hand (`trddgrep move <id> <pre-block-column>`) or records why not
+- [x] `trddgrep validate` reports BLOCKER-RELEASED for a fixture blocked card whose every `blocked-by` id resolves to a terminal-done column, naming the restore column, without spawning any process
+- [x] a `blocked-by` id that resolves to nothing reports BLOCKER-UNRESOLVED and the card stays blocked (fail-open pinned by a test); a still-open blocker reports nothing
+- [x] a test pins both findings and a recorded neuter (skip the evaluation) reddens exactly those tests; no code path in the doctor executes `blocker-probe` (grep-pinned)
+- [x] the live corpus validate lists every currently-releasable parked card, and the coordinator releases each by hand (`trddgrep move <id> <pre-block-column>`) or records why not
 
 ## Approval log
 
 - 2026-09-05T11:37:21+0200 — MANDATE issued by emanuelesabetta (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T11:37:23+0200 — column → todo by manager. Tier 0 tool work: the drain rule's self-releasing park is fiction until something runs the probes. Authorization: USER /goal 2026-09-05.
+- 2026-09-05T11:50:03+0200 — COMPLETE by manager. Landed in 04a36990 as the NO-EXEC declarative evaluator (security ruling in this card's body). Verified first-hand on the joint tree: tsc 0, doctor suite green, store 55/55, zero exec calls in the diff; live validate lists no releasable parked card, matching my own scan of the 14 blocked cards (every one has an open, backburner, design, planned, todo or human_review blocker). Box 4 therefore closes with 'none releasable today'. The two gate-test exclusions (G6A54OYK, 39OPYXQ9) retired in the same commit — their self-retiring pins fired because MUB7NTRF's verb superseded both cards. Known overlap: GRAPH-DANGLING-BLOCKER (any terminal blocker) coexists with BLOCKER-RELEASED (all terminal); a design note, not a defect. The 10 non-column probes stay lint-only documentation. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'..

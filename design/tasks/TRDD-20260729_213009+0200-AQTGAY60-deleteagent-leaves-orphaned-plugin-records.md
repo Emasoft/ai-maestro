@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T02:29:36+0200
+updated: 2026-09-05T02:36:39+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -237,6 +237,15 @@ needs `<dir>` to still exist, so handing the mutation to the file's owner forces
 folder delete, which is exactly what turns a free irreversible step into one R51 requires be
 compensated.
 
+**THE COLUMN, RE-JUSTIFIED 2026-09-05 — and it was briefly wrong.** Un-ticking box 4 put a
+SECOND open item on this card, and that one was **agent-actionable** (run the tests, mutate the
+guard, re-run, record) rather than operator-gated. For those minutes `human_review` asserted "waits
+on a human" about work no human was needed for — the exact untrue-column defect this project's
+kanban rule calls worse than an unstarted card, and which I had spent the session enforcing against
+other cards. Resolved the honest way: the neuters were RUN (box 4), so the tally is now **6 checked
+/ 1 open**, and the single open box is the genuinely operator-gated live create/hard-delete cycle.
+`human_review` is true again — but it was true by repair, not by having been right.
+
 **A second finding, about XNW6THVC itself.** Its NEXT ACTION told the reader to grep for the
 placement of the `removeLocalInstallRecords` call — a symbol that has not existed since
 `f1e4d7ec`. That card was written from THIS card's description rather than from source, so it
@@ -286,14 +295,31 @@ neuter then reddened exactly that one test.
 **What is still open, precisely:**
 
 > **⚠ EVERYTHING IN THIS NUMBERED BLOCK DESCRIBES THE PRE-RENAME WORLD (banner added 2026-09-05).**
-> It reasons about a gate called `G09b`, a test file
-> `tests/unit/deleteagent-g09b-plugin-records.test.ts`, and a neuter "move G09b out of the
-> folder-deleted branch" — **none of which exist.** The gate is `G08c`, the file is
-> `deleteagent-g08c-plugin-uninstall.test.ts`, and that branch structure is exactly what moved, so
-> N1's recipe is no longer performable as written. Kept because it records why the tests were built
-> and what the harness had to solve; **do not read any of it as a description of the current tree**,
-> and do not follow its neuter recipes. The current state is the STATE correction above and
-> boxes 1-4 below.
+> It reasons about a gate called `G09b` and a test file
+> `tests/unit/deleteagent-g09b-plugin-records.test.ts` — **neither exists.** The gate is `G08c`,
+> the file is `deleteagent-g08c-plugin-uninstall.test.ts`. **Do not read any of it as a description
+> of the current tree.**
+>
+> **CORRECTED SAME DAY — the first version of this banner said N1's recipe was "no longer
+> performable as written" because "that branch structure is exactly what moved". That was an
+> inference, and the comment at `:9526` — which I had already read — says the opposite in plain
+> words: "THE TWO CONDITIONS BELOW ARE THE OLD PLACEMENT'S GUARDS, CARRIED WITH IT."** The guards
+> did not vanish; they changed SHAPE, from `if`-nesting to an early return. **The recipes transfer,
+> and N1 is now easier than the original** (a smaller, more surgical mutation):
+>
+> | old recipe | today's equivalent |
+> |---|---|
+> | **N1** move G09b out of the folder-deleted branch | neuter `G08c`'s FIRST early-return guard (`hard && options?.deleteFolder`) |
+> | **N2** delete the gate | early-`return` from `G08c`'s `run` |
+>
+> Both were RUN on 2026-09-05 — results in box 4. Saying a recipe was unperformable while box 4
+> was un-ticked *for want of that exact recipe* left the card arguing against its own open work,
+> which is why this correction matters more than its size suggests.
+>
+> **Kept VERBATIM as the historical record of why the harness was built this way — do NOT "finish
+> the job" by de-naming `G09b` in the block below.** That is deliberate, and it is the opposite of
+> the treatment the orphan table got: the table makes a TIMELESS claim, so it was de-named in
+> place; this block is a dated record, so it keeps its original names.
 
 1. **✅ CLOSED 2026-07-30 (commit `34849d8d`) — `DeleteAgent` is now driven.** Built exactly as
    sized below: a shared harness `tests/helpers/drive-delete-agent.ts` (both mock layers, real
@@ -369,14 +395,34 @@ neuter then reddened exactly that one test.
       requirement this card wrote in the first place is met by the code as it now stands — and it
       is met BEHAVIOURALLY, not just structurally: the compensation's body was read (a per-key CLI
       re-install that throws rather than under-report), so this tick does not rest on a symbol
-      merely existing, which was the error that put the box here
+      merely existing, which was the error that put the box here. **And it is INVOKED, not merely
+      registered** — the distinction matters, because reading a body proves only what it WOULD do.
+      The gate test *"FAILS the whole delete when the CLI refuses, and re-installs what it already
+      took"* asserts the runner actually calls it, and that test is one of the 6 that redden under
+      N2 (box 4), so it is itself pinned
 - [x] A soft delete provably does NOT remove them — DRIVEN, not merely true by construction.
       ⚠ The original wording cited a `G09b:` op line that is no longer emitted (the gate pushes
       `G08c:`, 6 sites). The behaviour survived the rename and gained a case: the current file
       drives **three** skip paths, not two — soft delete, hard-without-folder, and an ADOPTED
       workdir outside `~/agents/` whose folder `G09` refuses to delete
-- [ ] Unit tests cover all three, each with a recorded neuter run — **UN-TICKED 2026-09-05: the
-      coverage half holds, the neuter half does not.** ⚠ **the path this box cited,
+- [x] Unit tests cover all three, each with a recorded neuter run — **UN-TICKED then RE-TICKED on
+      2026-09-05, by running the neuters rather than arguing about them.** Baseline: **8 passed**
+      (vitest's own count — this supersedes the earlier `grep -c "^\s*it("` "floor" caveat, which
+      was an inferior instrument for a question the runner answers exactly).
+      - **N1** — neuter `G08c`'s first early-return guard (`hard && options?.deleteFolder`):
+        **exactly 2 redden** — *"never uninstalls on a soft delete"* and *"never uninstalls on a
+        hard delete that did not ask for the folder"*. The adopted-workdir case stays GREEN,
+        because it is pinned by the SECOND guard. So N1 discriminates the placement guard alone.
+      - **N2** — early-`return` from `G08c`'s `run`: **6 of 8 redden.**
+      - ⚠ **N1 and N2 are NOT clean complements, and the old card claimed they were.** N2 reddens
+        the soft-delete and adopted-workdir cases too — because those tests assert the gate RAN AND
+        CORRECTLY SKIPPED (they check for the `G08c: Folder preserved…` / `Folder outside ~/agents/`
+        ops line), not merely that no uninstall happened. That is a BETTER test design than a bare
+        negative — it distinguishes "skipped on purpose" from "never executed" — but it means the
+        two neuters overlap, and recording them as exact complements would be false.
+      - Source verified restored afterwards: `git diff services/element-management-service.ts`
+        EMPTY, and the file re-runs 8/8 green.
+      ⚠ **the path this box previously cited,
       `tests/unit/deleteagent-g09b-plugin-records.test.ts`, DOES NOT EXIST**; it was renamed with
       the gate. GATE, re-measured 2026-09-05: **8 tests** in
       `tests/unit/deleteagent-g08c-plugin-uninstall.test.ts` over the shared harness
@@ -384,13 +430,10 @@ neuter then reddened exactly that one test.
       ("FAILS the whole delete when the CLI refuses, and re-installs what it already took") that
       drives the compensation box 2 asked for, and a containment case asserting the developer's
       real `~/agents` and `installed_plugins.json` were never touched. PROBE: 7 tests / 3 neuters
-      (`6c11bd7f`). **The neuter runs N1/N2 recorded in `34849d8d` were run against the DELETED
-      file, so they pin nothing that exists today — no neuter has been recorded for these 8.**
-      ⚠ Two honesty markers on this box's own numbers: **8 is a FLOOR, not a proven count**
-      (`grep -c "^\s*it("` misses `it.each(`/`test(`/other indentation, though it correctly
-      excludes `it.skip(`); and the `34849d8d` claim is **INFERRED from the rename, not read** —
-      N1's recipe was "move G09b out of the folder-deleted branch", a shape that no longer exists,
-      which is why un-ticking is the safe direction even if the inference is wrong
+      (`6c11bd7f`). The neuter runs recorded in `34849d8d` were run against the DELETED file, so
+      they pin nothing that exists today — **which is why fresh ones were run above rather than
+      inherited.** That `34849d8d` characterisation remains INFERRED from the rename, not read;
+      it no longer matters, because this box no longer rests on it.
 - [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **THE SEQUENCING
       BLOCKER IS LIFTED as of 2026-07-31; the box is now READY TO RUN, and what it waits on is an
       operator, not a dependency.** Verified first-hand: TRDD-OWO449MR is `completed` (archived), so
@@ -406,10 +449,13 @@ neuter then reddened exactly that one test.
       untracked directory. Both of those are the operator's call to schedule, not something to
       improvise unattended at the tail of another card.
 
-      The original sequencing note, kept because it is why the box was deferred at all — and note
-      that it CALLED THIS CORRECTLY: the relocation it anticipates below has since LANDED (the gate
-      is now `G08c`, before the folder delete), so the deferral was well-founded rather than
-      cautious. What follows is that note as written, in its original future tense:
+      The original sequencing note, kept because it is why the box was deferred at all. It makes
+      TWO predictions and **only the first has been checked**: the OWO449MR relocation it
+      anticipates has since LANDED (verified — the gate is now `G08c`, before the folder delete);
+      whether **DQ6XN2VP** re-ordered the pipeline around a commit point is UNVERIFIED here. The
+      deferral rests on both, so it is well-founded on one leg and unexamined on the other — enough
+      to keep the box deferred, not enough to call the whole note vindicated. What follows is that
+      note as written, in its original future tense:
       G09b's placement is one of the gates
       that retrofit MOVES: TRDD-OWO449MR's shape A2 relocates the local-plugin cleanup to BEFORE the
       `rm -rf` (the `claude plugin uninstall --scope local --cwd` it replaces the hand-edit with

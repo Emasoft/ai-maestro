@@ -17,7 +17,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
-import { activeAbsorbedChores } from './janitor-chore-stamp'
+import { activeAbsorbedChores, CONDITIONAL_CHORES } from './janitor-chore-stamp'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
 
@@ -68,52 +68,48 @@ export interface ServerLiveness {
 }
 
 /**
- * Compute the capability tokens the server can HONESTLY advertise. Each appears ONLY when its chore
- * class is actually live:
- *   - `family-a`         → the OAuth rotator tick is ENABLED (the R16 flag file is present). Reuses
- *                          `oauthTickEnabled()` so the flag name is never duplicated. Absent today
- *                          (the flag is USER-held and absent by default — the rotator ships INERT).
- *   - `singleton-chores` → marketplace-refresh / version-update absorption is
- *                          running. Live as of ai-maestro#102 / TRDD-5X3P79Q6 — the absorbed-duty
- *                          scheduler (`services/auto-update-service.ts::startAbsorbedDutyScheduler`)
- *                          is started unconditionally at boot, so its OWN ticking (not the per-host
- *                          "is the janitor installed+armed?" fact it re-checks every tick) is what
- *                          this token reports. It ships WITH `marketplace-op.lock`.
- *   - `fleet-recovery`   → server-internal session-liveness/fleet-stop for harness agents (CHN16JXZ,
- *                          gated on ai-maestro#60). NOT built yet, so not pushed.
+ * Compute the capability tokens the server can HONESTLY advertise, per the ratified rev-8 contract
+ * (`docs/claimed-chores-contract.md`; janitor `harness_backend.claimed_chores()`). That function
+ * honours a token in exactly TWO shapes: an EXACT name from its `GLOBAL_CHORES` roster (a per-chore
+ * claim, preferred), or the coarse legacy token `family-a` (expanded to its own `SERVER_ABSORBED_TASKS`
+ * set). Any other token — `singleton-chores` used to be one — claims NOTHING and is silently dropped,
+ * so the janitor keeps running that chore even while we believe we told it otherwise.
  *
- * ⚠ THESE TOKENS GATE NOTHING TODAY — VERIFIED ON BOTH SIDES, 2026-08-02. This docstring used to
- * end "an absent token means the janitor still owns this — the safe default", which describes a
- * PER-TOKEN gating contract. The consumer RETIRED that contract in janitor TRDD-LU0C5KAR (owner
- * directive 2026-07-17: "if the ai-maestro server is running, those chores are its responsibility
- * … any other event is a bug"). Measured, not inferred:
+ * So each pushed token is a chore name from `lib/janitor-chore-stamp.ts`, gated on the SAME predicate
+ * that proves the chore is live right now:
+ *   - `oauth-rotator-tick` / `oauth-rotator-supervisor` ← `oauthTickEnabled()` (the R16 flag file).
+ *     `family-a` is ALSO pushed here for one release, purely for a janitor still on the old
+ *     coarse-token contract — it expands to the same 5-chore legacy set and adds nothing once every
+ *     consumer reads exact names.
+ *   - `marketplace-refresh` / `version-update` ← `isAbsorbedDutySchedulerRunning()` (one scheduler
+ *     runs both; ai-maestro#102 / TRDD-5X3P79Q6).
+ *   - the 4 `CONDITIONAL_CHORES` (`memory-guard`, `rules-cleanup`, `fleet-stop`, `cold-cache-clear`)
+ *     ← whichever are armed AND running right now, read via `activeAbsorbedChores()` (the same
+ *     `markChoreLive`/`unmarkChoreLive` set `absorbed_chores` publishes) filtered down to just the
+ *     conditional lanes — the unconditional 7 in `ABSORBED_CHORES` are handled by name above/below.
  *
- *   - janitor side: `server_capabilities()` has exactly ONE caller, `server_is_alive`, which
- *     returns `server_capabilities(now) is not None` — the token CONTENT is never inspected, and
- *     its own docstring says so ("deliberately IGNORED");
- *   - our side: nothing reads the tokens back either.
+ * `cache-prune`, `fleet-plugins-update`, and `github-config-audit` are DELIBERATELY absent: their
+ * schedulers start unconditionally at boot with no exported "is it actually running" predicate, and
+ * this function does not invent one — publishing a chore name with no live check to back it would be
+ * exactly the dishonest-capability bug this contract exists to prevent. Add each once its scheduler
+ * exposes a real liveness check.
  *
- * So the field is WRITE-ONLY across the whole ecosystem, and the janitor yields ALL absorbed chores
- * on FILE FRESHNESS alone. The correction matters because the old sentence was a trap for the next
- * author: it invites you to add a token believing it gates a chore, when it would gate nothing —
- * silently, and looking exactly like it worked. (That is the "control that reads as correct and
- * does nothing" class the janitor hit three times in one day; see janitor#167.)
- *
- * Keep computing them honestly anyway: they are the ecosystem's only machine-readable statement of
- * what the server actually absorbed, they cost nothing, and janitor#134 is an OPEN proposal to gate
- * on them again — at which point this warning is what tells you the contract changed back.
+ * `fleet-recovery` is not a real chore name and was never pushed — left out here too.
  */
 export function currentCapabilities(deps: {
   oauthEnabled?: () => boolean
   singletonChoresLive?: () => boolean
+  liveConditionalChores?: () => readonly string[]
 } = {}): string[] {
   const oauthEnabled = deps.oauthEnabled ?? oauthTickEnabled
   const singletonChoresLive = deps.singletonChoresLive ?? isAbsorbedDutySchedulerRunning
+  const liveConditionalChores =
+    deps.liveConditionalChores ??
+    (() => activeAbsorbedChores().filter((c) => (CONDITIONAL_CHORES as readonly string[]).includes(c)))
   const caps: string[] = []
-  if (oauthEnabled()) caps.push('family-a')
-  if (singletonChoresLive()) caps.push('singleton-chores')
-  // 'fleet-recovery' is deliberately NOT computed until its chore is live — its owning NPT adds the
-  // guard here when it lands (see TRDD-P7RPOR5O STATE).
+  if (oauthEnabled()) caps.push('family-a', 'oauth-rotator-tick', 'oauth-rotator-supervisor')
+  if (singletonChoresLive()) caps.push('marketplace-refresh', 'version-update')
+  caps.push(...liveConditionalChores())
   return caps
 }
 

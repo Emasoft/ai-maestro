@@ -38,28 +38,55 @@ function readLiveness(): ServerLiveness {
   return JSON.parse(fs.readFileSync(dest, 'utf8')) as ServerLiveness
 }
 
-describe('currentCapabilities — advertises ONLY what is live (janitor#100 rule)', () => {
-  it('is empty when the OAuth rotator flag is absent (the R16-safe default today)', () => {
-    expect(currentCapabilities({ oauthEnabled: () => false })).toEqual([])
+describe('currentCapabilities — advertises ONLY exact chore names the janitor honours (rev-8 contract)', () => {
+  const noop = { oauthEnabled: () => false, singletonChoresLive: () => false, liveConditionalChores: () => [] }
+  it('is empty when nothing is live', () => {
+    expect(currentCapabilities(noop)).toEqual([])
   })
-  it("advertises 'family-a' only when the OAuth rotator tick is enabled", () => {
-    expect(currentCapabilities({ oauthEnabled: () => true })).toEqual(['family-a'])
+  it("advertises the oauth pair + legacy 'family-a' only when the OAuth rotator tick is enabled", () => {
+    expect(currentCapabilities({ ...noop, oauthEnabled: () => true })).toEqual([
+      'family-a',
+      'oauth-rotator-tick',
+      'oauth-rotator-supervisor',
+    ])
   })
-  it("never advertises 'fleet-recovery' (that chore is not built yet)", () => {
+  it('advertises marketplace-refresh + version-update only when the absorbed-duty scheduler runs (ai-maestro#102)', () => {
+    expect(currentCapabilities({ ...noop, singletonChoresLive: () => true })).toEqual([
+      'marketplace-refresh',
+      'version-update',
+    ])
+  })
+  it('passes through whichever conditional chores are reported live', () => {
+    expect(currentCapabilities({ ...noop, liveConditionalChores: () => ['memory-guard', 'fleet-stop'] })).toEqual([
+      'memory-guard',
+      'fleet-stop',
+    ])
+  })
+  it("NEVER advertises the retired 'singleton-chores' token or the unbuilt 'fleet-recovery' token", () => {
     const caps = currentCapabilities({ oauthEnabled: () => true, singletonChoresLive: () => true })
+    expect(caps).not.toContain('singleton-chores')
     expect(caps).not.toContain('fleet-recovery')
   })
-  it("'singleton-chores' is absent when the absorbed-duty scheduler isn't running", () => {
-    expect(currentCapabilities({ oauthEnabled: () => false, singletonChoresLive: () => false })).toEqual([])
+  it('never publishes cache-prune, fleet-plugins-update, or github-config-audit (no live predicate exists yet)', () => {
+    const caps = currentCapabilities({ oauthEnabled: () => true, singletonChoresLive: () => true })
+    expect(caps).not.toContain('cache-prune')
+    expect(caps).not.toContain('fleet-plugins-update')
+    expect(caps).not.toContain('github-config-audit')
   })
-  it("advertises 'singleton-chores' only when the absorbed-duty scheduler IS running (ai-maestro#102)", () => {
-    const caps = currentCapabilities({ oauthEnabled: () => false, singletonChoresLive: () => true })
-    expect(caps).toEqual(['singleton-chores'])
+  it('defaults every dep to the real checks (non-vacuity) — reads honestly empty in a plain unit-test process', () => {
+    // No injected deps at all — the real oauthTickEnabled/isAbsorbedDutySchedulerRunning/
+    // activeAbsorbedChores checks must be consulted. None of their lanes are armed here.
+    expect(currentCapabilities()).toEqual([])
   })
-  it('defaults singletonChoresLive to the real isAbsorbedDutySchedulerRunning check (non-vacuity)', () => {
-    // No injected dep at all — the real check must be consulted. In a plain unit-test process
-    // the absorbed-duty scheduler was never started, so this reads honestly as absent.
-    expect(currentCapabilities({ oauthEnabled: () => false })).toEqual([])
+  it('defaults liveConditionalChores to activeAbsorbedChores() filtered to CONDITIONAL_CHORES (non-vacuity)', () => {
+    markChoreLive('memory-guard')
+    try {
+      expect(currentCapabilities({ oauthEnabled: () => false, singletonChoresLive: () => false })).toEqual([
+        'memory-guard',
+      ])
+    } finally {
+      unmarkChoreLive('memory-guard')
+    }
   })
 })
 

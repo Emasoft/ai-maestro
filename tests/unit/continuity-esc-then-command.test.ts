@@ -111,6 +111,32 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
     expect(sends[2]).toMatchObject({ command: DIRECTIVE, addNewline: true, requireIdle: true })
   })
 
+  it('NO 300s TIMEOUT: a not-idle final send fails immediately — no internal wait/retry loop', async () => {
+    /** Acceptance box 2. `requireIdle: true` on the final send is a SINGLE synchronous check in
+     *  `sendAgentSessionCommand` (409 "Session is not idle" when the pane is busy) — there is no
+     *  polling loop inside this injector waiting for idleness, which is what would reproduce the
+     *  old 300s-timeout failure mode. A not-idle answer must therefore surface immediately, with
+     *  no extra send attempted and no hidden delay beyond the ESC re-check pacing already pinned
+     *  by the happy-path test above. */
+    mockCapture.mockResolvedValueOnce(MENU_FRAME).mockResolvedValueOnce(CLEAN_FRAME)
+    mockSend
+      .mockResolvedValueOnce({ error: undefined, status: 200 }) // ESC 1
+      .mockResolvedValueOnce({ error: undefined, status: 200 }) // ESC 2
+      .mockResolvedValueOnce({ error: 'Session is not idle', status: 409 }) // final send — pane busy
+    const { inject } = continuityActuatorDeps(Date.now())
+    const started = Date.now()
+    const r = await inject(action())
+    const elapsedMs = Date.now() - started
+
+    expect(r.ok).toBe(false)
+    expect(r.detail).toBe('Session is not idle')
+    // Exactly 3 sends: 2 ESCs + 1 final attempt — no retry, no re-send after the 409.
+    expect(mockSend).toHaveBeenCalledTimes(3)
+    // Resolves inside the two real ESC-recheck delays alone (well under a 300s wait); a hidden
+    // poll/backoff on this branch would blow this ceiling.
+    expect(elapsedMs).toBeLessThan(5000)
+  })
+
   it('BOUNDED: a menu that survives maxEsc ESCs aborts and the command is NOT sent', async () => {
     /** Acceptance box 3 — the ESC count is bounded, and the abort direction is no-command */
     mockCapture.mockResolvedValue(MENU_FRAME) // never dismissed

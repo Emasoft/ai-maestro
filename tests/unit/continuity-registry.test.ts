@@ -150,6 +150,27 @@ describe('continuity-registry — the shipped table', () => {
     }
   })
 
+  it('continuityCommandKeys collects BOTH command-carrying kinds — command and esc-then-command', () => {
+    // The typo-catcher above is only as good as this collector: a fixture registry entry using
+    // 'esc-then-command' proves the function does not silently limit itself to 'command' (the
+    // gap this test would have caught before the collector covered both kinds).
+    const fixture: readonly ContinuityClientEntry[] = [
+      {
+        program: 'faux-cli',
+        events: [
+          { id: 'plain-command', match: () => false, response: { kind: 'command', commandKey: 'compact' } },
+          {
+            id: 'esc-then-command',
+            match: () => false,
+            response: { kind: 'esc-then-command', commandKey: 'continuity-decide-yourself', maxEsc: 3 },
+          },
+          { id: 'no-key', match: () => false, response: { kind: 'esc' } },
+        ],
+      },
+    ]
+    expect(continuityCommandKeys(fixture).sort()).toEqual(['compact', 'continuity-decide-yourself'])
+  })
+
   it('claude is registered and carries the E3 retry-wedge event', () => {
     const claude = findClientEntry('claude')
     expect(claude).not.toBeNull()
@@ -237,6 +258,28 @@ describe('actuateContinuity — dispatch through the ONE injector', () => {
     ]
     const { deps, injected } = makeDeps({ registry: bogus })
     const d = await actuateContinuity({ agentId: 'a4', observation: obs({ program: 'faux-cli' }), lastActuatedAtMs: null }, deps)
+    expect(d).toEqual({ fired: false, reason: 'unknown_command_key', detail: 'not-a-real-key' })
+    expect(injected).toHaveLength(0)
+  })
+
+  it('a NON-allowlisted key on the esc-then-command kind refuses to fire too (TRDD-U6AS2YWB)', async () => {
+    // The comment on the gate (fleet-recovery-actuator.ts) says both command-carrying kinds are
+    // covered — pin it directly, with its own bogus key, rather than trusting the 'command' test
+    // above to stand in for it.
+    const bogus: readonly ContinuityClientEntry[] = [
+      {
+        program: 'faux-cli',
+        events: [
+          {
+            id: 'typo-esc-then-command',
+            match: () => true,
+            response: { kind: 'esc-then-command', commandKey: 'not-a-real-key', maxEsc: 3 },
+          },
+        ],
+      },
+    ]
+    const { deps, injected } = makeDeps({ registry: bogus })
+    const d = await actuateContinuity({ agentId: 'a4b', observation: obs({ program: 'faux-cli' }), lastActuatedAtMs: null }, deps)
     expect(d).toEqual({ fired: false, reason: 'unknown_command_key', detail: 'not-a-real-key' })
     expect(injected).toHaveLength(0)
   })

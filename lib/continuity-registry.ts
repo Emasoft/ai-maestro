@@ -225,14 +225,22 @@ export function classifyContinuity(
 
 /** Every curated command key any registered response names. A test pins these to real
  *  `lib/agent-commands.ts` entries so a typo fails loudly at build time rather than silently
- *  refusing to actuate the first time the event ever fires in production. */
+ *  refusing to actuate the first time the event ever fires in production.
+ *
+ *  BOTH command-carrying kinds are collected (TRDD-U6AS2YWB): `command` and `esc-then-command`
+ *  each name a `commandKey`, and the actuator's `unknown_command_key` gate refuses either kind
+ *  equally (`fleet-recovery-actuator.ts`). Collecting only `command` here would leave an
+ *  `esc-then-command` typo undetected until the event actually fires in production — silently
+ *  reproducing the exact failure mode this function exists to catch at build time. */
 export function continuityCommandKeys(
   registry: readonly ContinuityClientEntry[] = CONTINUITY_REGISTRY,
 ): string[] {
   const keys: string[] = []
   for (const entry of registry) {
     for (const event of entry.events) {
-      if (event.response.kind === 'command') keys.push(event.response.commandKey)
+      if (event.response.kind === 'command' || event.response.kind === 'esc-then-command') {
+        keys.push(event.response.commandKey)
+      }
     }
   }
   return keys

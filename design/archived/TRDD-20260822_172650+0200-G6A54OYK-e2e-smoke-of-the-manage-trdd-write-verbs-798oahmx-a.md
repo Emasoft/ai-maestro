@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:26:50+0200
+superseded-by: [TRDD-PMDZ6L3H]
 ---
 
 # E2E smoke of the manage-trdd write verbs 798OAHMX A

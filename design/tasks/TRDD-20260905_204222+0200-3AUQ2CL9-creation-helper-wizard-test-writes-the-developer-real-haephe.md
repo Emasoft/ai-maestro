@@ -3,7 +3,7 @@ trdd-id: 3AUQ2CL9
 title: creation-helper wizard test writes the developer real haephestos workdir
 column: todo
 created: 2026-09-05T20:42:22+0200
-updated: 2026-09-05T20:48:22+0200
+updated: 2026-09-05T20:50:14+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -23,6 +23,7 @@ labels: [tests, containment]
 
 - 2026-09-05T20:42:22+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T20:43:48+0200 — self-mandate (min-approval-requirement: none) by ai-maestro-hub-session; found while verifying TRDD-E5AAE555.
+- 2026-09-05T20:50:13+0200 — identity stamps corrected before the first commit (fc5c8b8e): the create route stamped created-by/mandated-by/approval-judge as user because the call was owner-authenticated with no AID (app/api/trdd/create/route.ts lines 36-44); this is a hub-session self-mandate, so created-by and approval-judge now read ai-maestro-hub-session and mandated-by reads self (Tier-0 spelling). Whether a hub session without an AID should mint as the user is a design question surfaced to the owner.
 
 ## Problem
 

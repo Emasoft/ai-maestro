@@ -297,6 +297,48 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'GRAPH-DANGLING-BLOCKER')).toContain('B2B2B2B2')
   })
 
+  // ============ BLOCKER-RELEASED / BLOCKER-UNRESOLVED (TRDD-U1EYWIPT) ============
+  // `blocker-probe:`/`blocker-holds-if:` are lint-checked above for presence and
+  // grammar ONLY — the doctor never executes them (frontmatter is git-tracked and
+  // agent-writable; running a stored `sh -c` string out of it would be arbitrary
+  // command execution for every caller, including CI and the janitor heartbeat).
+  // Release is judged DECLARATIVELY off `blocked-by:` instead: this pins that path.
+
+  it('BLOCKER-RELEASED — every blocked-by id resolves to a terminal-done column', () => {
+    write('archived', 'TRDD-20260101_000000+0100-RELDONE1-x.md', good('RELDONE1', { column: 'complete' }))
+    write('tasks', 'TRDD-20260101_000000+0100-RELBLKD1-x.md', good('RELBLKD1', {
+      column: 'blocked',
+      'blocked-by': '[TRDD-RELDONE1]',
+      'pre-block-column': 'dev',
+    }))
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'BLOCKER-RELEASED')
+    expect(f.map((x) => x.id)).toContain('RELBLKD1')
+    // Names the restore column — the release is a decision the owner records, never
+    // an auto-move, so the finding must say WHERE it goes back to.
+    expect(f[0]!.message).toMatch(/dev/)
+  })
+
+  it('BLOCKER-RELEASED does NOT fire while one blocker is still open — the block genuinely holds', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-OPNCARD1-x.md', good('OPNCARD1', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-OPNBLKD1-x.md', good('OPNBLKD1', {
+      column: 'blocked',
+      'blocked-by': '[TRDD-OPNCARD1]',
+      'pre-block-column': 'dev',
+    }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKER-RELEASED')).toEqual([])
+  })
+
+  it('BLOCKER-UNRESOLVED — a blocked-by id resolving to no card in any zone stays blocked, fail-open', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-UNRBLKD1-x.md', good('UNRBLKD1', {
+      column: 'blocked',
+      'blocked-by': '[TRDD-NOPEID99]',
+      'pre-block-column': 'dev',
+    }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKER-UNRESOLVED')).toContain('UNRBLKD1')
+    // Fail-open: an unresolved reference is never read as "cleared".
+    expect(idsOf(lintCorpus(tmp), 'BLOCKER-RELEASED')).toEqual([])
+  })
+
   it('ORDER-NPT-VIOLATED — a card past `dev` while its prerequisite is unfinished', () => {
     write('tasks', 'TRDD-20260101_000000+0100-C1C1C1C1-n.md', good('C1C1C1C1', { column: 'dev' }))
     write('tasks', 'TRDD-20260101_000000+0100-C2C2C2C2-p.md',
@@ -1063,7 +1105,13 @@ describe('THE GATE — the real corpus lints clean', () => {
     // the checklist gate, so no NEW card can be created this way. The reproduction is therefore
     // historical evidence, not an open wound — but it is still the only in-corpus example of the
     // shape, so deleting it would remove the one thing that makes the fix's motivation legible.
-    const PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION = new Set(['G6A54OYK'])
+    // RETIRED 2026-09-05 (TRDD-MUB7NTRF): G6A54OYK was superseded IN PLACE by PMDZ6L3H through
+    // the new archived complete -> superseded verb (ea2aca7c, applied in b2dd5269), which rule 12
+    // permits on a terminal card. A superseded card is outside the checklist gate's terminal set,
+    // so the reproduction no longer errors — exactly the day the self-retiring pin below was
+    // written for. The set is kept EMPTY rather than deleted so the filter shape and this history
+    // stay legible; the pin now asserts the retirement.
+    const PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION = new Set<string>([])
 
     // A THIRD set, again on its own justification and kept apart for the same reason. These
     // three closed AFTER the 2026-07-31 grandfather boundary with an open box or no checklist —
@@ -1078,7 +1126,11 @@ describe('THE GATE — the real corpus lints clean', () => {
     // TICK — the work HAD landed (`_api` at 20f44bad; COS card 8E8D6618 `complete` 08-25) and only
     // the tick was missed, which rule 12 permits as the closing edit made late — so they lint
     // clean. 39OPYXQ9 (no checklist) is genuinely unrepairable and stays.
-    const FROZEN_POST_BOUNDARY_TRUE_FINDINGS = new Set(['39OPYXQ9'])
+    // RETIRED 2026-09-05 (TRDD-MUB7NTRF): 39OPYXQ9 was superseded IN PLACE by MS3AD6NX
+    // (339cad77) — the "unrepairable BY RULE" reading above held only while rule 12's one
+    // permitted terminal transition (complete -> superseded) had no verb; it has one now. Kept
+    // EMPTY for the same reason as the set above.
+    const FROZEN_POST_BOUNDARY_TRUE_FINDINGS = new Set<string>([])
 
     const unexpected = errors.filter(
       (e) =>
@@ -1111,9 +1163,16 @@ describe('THE GATE — the real corpus lints clean', () => {
     // retained by a card that is still open. If it ever stops erroring — someone edits the frozen
     // card, or P6MSMQ2I closes and the reproduction is cleaned up — this fails and forces the
     // exclusion to be re-justified rather than silently outliving its reason.
-    expect(
-      errors.filter((e) => PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION.has(e.id)),
-    ).toHaveLength(1)
+    // Retired 2026-09-05: the pin fired as designed when G6A54OYK went superseded, and the
+    // exclusion was removed rather than re-justified. Both former exclusions must now produce
+    // ZERO errors AND still be present in the corpus as `superseded` — a card that vanished
+    // would also satisfy "zero errors", and that is not the state this asserts.
+    expect(errors.filter((e) => e.id === 'G6A54OYK' || e.id === '39OPYXQ9')).toHaveLength(0)
+    for (const id of ['G6A54OYK', '39OPYXQ9']) {
+      const card = report.findings.find((f) => f.id === id)
+      // No finding of any severity: superseded cards are outside every terminal-gate rule.
+      expect(card).toBeUndefined()
+    }
 
     // And the third set (TRDD-3OS166YI): the frozen-card exclusion was the ONLY one of the three
     // with no self-retire pin, so a repaired (or deleted, or re-columned) 39OPYXQ9 would have left
@@ -1121,7 +1180,9 @@ describe('THE GATE — the real corpus lints clean', () => {
     // allowlist entry cannot outlive the finding that earned it. Neuter measured 2026-08-28:
     // removing '39OPYXQ9' from the set reds the `unexpected` assertion above; keeping it in the
     // set while the card stopped erroring reds THIS line — disjoint red sets, both halves pinned.
-    expect(errors.filter((e) => FROZEN_POST_BOUNDARY_TRUE_FINDINGS.has(e.id))).toHaveLength(1)
+    // Retired with the set above (39OPYXQ9 superseded 2026-09-05); the zero-error + still-present
+    // assertion for both ids is made once, above.
+    expect(errors.filter((e) => FROZEN_POST_BOUNDARY_TRUE_FINDINGS.has(e.id))).toHaveLength(0)
   })
 })
 

@@ -1075,6 +1075,55 @@ export function lintCorpus(designDir: string): DoctorReport {
             autofixable: false,
           })
         }
+        // NOTE: `blocker-probe` is checked ABOVE for presence and grammar ONLY — this
+        // doctor never EXECUTES it. The field is git-tracked and agent-writable, so
+        // making `validate` run an arbitrary `sh -c` string out of frontmatter would be
+        // arbitrary command execution for every caller that lints this corpus (CI, the
+        // janitor heartbeat, and any cloner of this PUBLIC repo). Release is judged
+        // DECLARATIVELY below instead, off `blocked-by:`, never by spawning anything.
+      }
+    }
+
+    // ---- declarative blocker resolution (TRDD-U1EYWIPT) ----
+    //
+    // A `column: blocked` card names its blockers in `blocked-by:`. Each id is resolved
+    // through the SAME cross-zone `byId` map the NPT-ordering check and the graph
+    // delegation below already use (case/prefix-insensitive, via `normalizeTrddRef`) —
+    // this is the `findTrdd`-equivalent lookup, not a re-implementation of it. When
+    // EVERY blocker resolves to a terminal-done column, nothing is left holding the
+    // block and BLOCKER-RELEASED fires; it never auto-moves the card (a release is a
+    // decision the owner records against `pre-block-column:`). A blocker id that
+    // resolves to NO card in any zone cannot be judged either way, so it is reported
+    // BLOCKER-UNRESOLVED and the card stays blocked — fail-open, the same direction as
+    // every other probe-adjacent rule in this file, because silently treating an
+    // unresolved reference as "cleared" is how a stale block reads as current.
+    // Cards parked only by a future `review-after:` or a `hub-blocked`/`fleet-ask`
+    // label carry no `blocked-by:` and are out of scope here — nothing in that shape
+    // claims to be waiting on another CARD, so there is nothing to resolve.
+    if (c.column === 'blocked' && blockedBy.length > 0) {
+      const unresolved = blockedBy.filter((b) => !byId.get(b)?.[0])
+      if (unresolved.length > 0) {
+        add({
+          rule: 'BLOCKER-UNRESOLVED',
+          severity: 'warn',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`blocked-by:\` names ${unresolved.join(', ')} which resolve(s) to no card in any zone — cannot judge whether the block still holds, so it stays blocked (fail-open)`,
+          autofixable: false,
+        })
+      } else {
+        const resolved = blockedBy.map((b) => ({ id: b, card: byId.get(b)![0] }))
+        if (resolved.every((r) => TERMINAL_DONE.includes(r.card.column))) {
+          const restore = String(c.fm['pre-block-column'] ?? '').trim()
+          add({
+            rule: 'BLOCKER-RELEASED',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: `\`blocked-by:\` [${resolved.map((r) => `${r.id}:${r.card.column}`).join(', ')}] are ALL terminal-done — nothing is left holding this block. Restore to \`${restore || 'no restore point recorded — pre-block-column: is empty'}\` (this doctor never auto-moves a card; the release is a decision the owner records)`,
+            autofixable: false,
+          })
+        }
       }
     }
 

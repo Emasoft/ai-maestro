@@ -1,9 +1,9 @@
 ---
 trdd-id: 39OPYXQ9
 title: aimaestro-continuity.sh is entirely non-functional — _api is never defined
-column: complete
+column: superseded
 created: 2026-08-22T18:07:14+0200
-updated: 2026-08-22T18:07:14+0200
+updated: 2026-09-05T11:30:44+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -13,7 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T18:07:14+0200
-superseded-by: []
+superseded-by: [MS3AD6NX]
 ---
 
 # aimaestro-continuity.sh is entirely non-functional — _api is never defined
@@ -86,6 +86,7 @@ each of those can make it lie in the SAFE direction. Neuter: deleting `_api` red
 `aimaestro-continuity.sh`.
 
 ## Approval log
+- 2026-09-05T11:30:44+0200 — SUPERSEDED by manager. Closed 2026-08-22 before the checklist gate existed; permanent TERMINAL-WITHOUT-CHECKLIST since. Superseded by MS3AD6NX, the successor minted for it on 2026-09-05 (see MUB7NTRF's Artifacts section for the inherited ticks). Verb landed in ea2aca7c. (in-place archived → superseded, no zone move — IND base step 12).
 
 ## Approval log
 

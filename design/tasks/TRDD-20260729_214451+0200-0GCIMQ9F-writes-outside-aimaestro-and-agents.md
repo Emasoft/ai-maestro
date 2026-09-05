@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:39:45+0200
+updated: 2026-09-05T03:41:45+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -84,10 +84,8 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > partner were ever reaped, this ledger would dangle.
 >
 > Its contents: 3 `"open failed"` entries, on 2026-08-04 and 2026-08-16, fault
-> `NODE_MODULE_VERSION 127` vs `147`. **Stated as the record, with no reading of it** — six
-> successive attempts to characterise these three lines each asserted more than they carry (see the
-> commit trail); what any of it implies about that index today is not established here, and nothing
-> about the reap turns on it.
+> `NODE_MODULE_VERSION 127` vs `147`. **Stated as the record, with no reading of it** — what any of
+> it implies about that index today is not established here.
 >
 > "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
 > them.

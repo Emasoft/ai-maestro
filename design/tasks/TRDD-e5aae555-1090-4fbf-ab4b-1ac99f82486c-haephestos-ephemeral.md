@@ -3,7 +3,7 @@ trdd-id: E5AAE555
 title: Haephestos ephemeral-session hardening
 column: todo
 created: 2026-04-20T07:00:21+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-09-05T18:45:13+0200
 current-owner: main
 assignee: main
 priority: 3
@@ -17,7 +17,7 @@ parent-trdd: null
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: []
+implementation-commits: [a6da60bc, 9f46fb91]
 created-by: main
 ---
 

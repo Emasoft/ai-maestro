@@ -609,6 +609,24 @@ function detectResponseState(capturedLines: string[]): {
   return { isThinking: false, isComplete: true, responseText }
 }
 
+/**
+ * Build the argv (as a display-string array) used to launch the Haephestos
+ * persona inside its tmux session. Extracted to a pure function (TRDD-E5AAE555)
+ * so the `--continue`-never / `--agent haephestos-creation-helper`-always
+ * invariants can be asserted by a unit test without spawning tmux or a real
+ * Claude Code process — the directive is "always fresh, no cross-session
+ * memory", and a silently-added `--continue` would defeat that invisibly.
+ */
+export function buildHaephestosLaunchArgs(): string[] {
+  return [
+    'claude',
+    `--agent ${AGENT_FILE_NAME.replace('.md', '')}`,
+    `--model ${MODEL}`,
+    `--tools ${TOOLS}`,
+    `--permission-mode ${PERMISSION_MODE}`,
+  ]
+}
+
 // ===========================================================================
 // PUBLIC API — called by API routes
 // ===========================================================================
@@ -709,13 +727,7 @@ export function createCreationHelper(): Promise<ServiceResult<{
     await new Promise(resolve => setTimeout(resolve, 300))
 
     // Launch claude with the Haephestos agent persona
-    const launchCmd = [
-      'claude',
-      `--agent ${AGENT_FILE_NAME.replace('.md', '')}`,
-      `--model ${MODEL}`,
-      `--tools ${TOOLS}`,
-      `--permission-mode ${PERMISSION_MODE}`,
-    ].join(' ')
+    const launchCmd = buildHaephestosLaunchArgs().join(' ')
 
     await runtime.sendKeys(SESSION_NAME, launchCmd, { literal: true, enter: true })
 

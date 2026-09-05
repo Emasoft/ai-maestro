@@ -151,6 +151,11 @@ error one commit later. After any move to a terminal column, run `trddgrep unblo
 `grep -l "blocked-by:.*<id>" design/*/*.md`) and `trddgrep set <dep> blocked-by "[...]" --no-bump`
 each citing card in the same commit. [^10]
 
+
+^ATOM-5A0N-945A [desc: "trddgrep new --body '<one string>' writes the whole body as ONE line, so checkboxes typed inline are prose and the card has NO checklist — move to complete then refuses with 'has NO acceptance checkli", keywords: X_has_NO_acceptance_checklist_so_archiving_it_would_record_a_completion_that_proves_nothing trddgrep_move_refused_no_checklist card_boxes_are_on_one_line trddgrep_new_--body_one_line checkboxes_inline_not_a_checklist 0_boxes_on_a_card_I_wrote_with_boxes how_to_write_a_multi-line_TRDD_body_with_trddgrep trddgrep_edit_--replace_multi-line check-box_says_no_such_box acceptance_section_missing_after_trddgrep_new move_exit_2_checklist, trdd: TRDD-X9VLHBFZ, ocd: 2026-09-05, lmd: 2026-09-05]
+
+`trddgrep new --title … --body "…"` stores the body verbatim as a single paragraph: `- [ ]` items typed into that string land on ONE line and are prose, not a checklist, so `trddgrep check-box` finds no boxes and `trddgrep move <id> complete` refuses with "has NO acceptance checklist … archiving it as 'complete' would record a completion that proves nothing" (exit 2). Hit twice on 2026-09-05 (one card fixed early in the session; X9VLHBFZ caught only at close time, after a commit whose subject already said "close"). DO write the body in a file and rewrite it with `trddgrep edit <id> --at-line <body-line> --expect "$(sed -n <n>p "$F")" --replace "$(cat body.txt)"` — `--replace` accepts embedded newlines — with a `## Acceptance` heading and one `- [ ]` per line; then `grep -cE '^- \[ \]'` before believing the card has boxes.
+
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned
   there as `3P-TRDD-09` (status is not column), `3P-TRDD-10` (one state claim) and `3P-TRDD-11`

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T04:58:53+0200
-updated: 2026-09-05T05:03:28+0200
+updated: 2026-09-05T05:06:44+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -72,18 +72,54 @@ What IS verified (`lib/trdd-doctor.ts`, read 2026-09-05 04:58):
 
 So the linter's remedy is well-formed and location-agnostic in shape.
 
-**SETTLED at 05:03: the move IS sanctioned, by a governing rule that prescribes it for EXACTLY
-this defect.** `rules/aimaestro/aimaestro-trdd-approval.md:818` (the D4 watchdog, step 5b):
+**CONVERGED at 05:06, after THREE wrong verdicts. The gap is exactly ONE FOLDER wide.**
+
+> The rules prescribe this repair for a terminal-without-checklist card **still in
+> `design/tasks/`**. **No clause reaches one already in `design/archived/`** — which is where
+> both of these are.
+
+Why the 05:03 answer below is wrong: `aimaestro-trdd-approval.md:818` lives inside **D4, the
+classification watchdog**, whose scan set is stated at `:771` — *"For each TRDD in
+`design/tasks/` + `design/proposals/`"*. **`design/archived/` is not in it.** So the watchdog
+never encounters these two cards, and step 5b's remedy is written for a card it found in
+`tasks/` — i.e. one not yet archived. "and flag" is the tell: flagging is a detector's output.
+
+**This is the same actor-substitution error a THIRD time, and I withdrew its twin one paragraph
+earlier.** At 05:03 I struck the `tasks/` → `proposals/` citation (`:553`, D4 **step 2**) for
+being watchdog machinery rather than a human permission — and in the same edit promoted `:818`
+(D4 **step 5b**) to carry the verdict. Same numbered list, one step down.
+
+**The DEP-overlay applicability question, checked rather than assumed:** the file's header says
+it is *"installed by the ai-maestro server into each registered agent workdir's `.claude/rules/`"*,
+and this repo is the ai-maestro SOURCE tree, not a registered workdir — which would make the
+citation inapplicable outright. But the overlay IS loaded into this project's instruction set, so
+it governs work here. Applicability holds; the scan-set problem is what defeats the citation.
+
+**A practical objection the repair itself has to answer** (`B`, unflagged until now): the clause's
+remedy is *"move it back to its `pre-block-column:` (or `dev`)"*, and **neither card has a
+`pre-block-column:`** — that field is written when a card enters `blocked`, and both went straight
+to terminal. So the fallback is `dev`, and moving a card whose work is genuinely DONE to `dev`
+asserts a worker is actively developing it — the same untrue-column defect corrected on
+TRDD-UAP7ZEJL earlier tonight, created deliberately and twice. The clause is coherent for its
+intended case (a card wrongly marked complete, work possibly unfinished); it is incoherent for a
+card whose only defect is a missing checklist.
+
+---
+
+### The 05:03 finding, retained for the record and NOT operative
+
+`rules/aimaestro/aimaestro-trdd-approval.md:818` (the D4 watchdog, step 5b):
 
 > *"a TRDD may sit in a terminal column … ONLY when its bottom checklist **EXISTS (≥1 box)** and
 > every `- [ ]` box in it is `- [x]`. A terminal column with ANY unchecked box is a **false
 > completion**, and so is a terminal column with **NO checklist at all** → **move it back to its
 > `pre-block-column:` (or `dev`) and flag.**"*
 
-`TERMINAL-WITHOUT-CHECKLIST` is that clause's second case, verbatim. The linter's remedy string
-and this rule are the same instruction, and the rule is normative. So there is no gap: repairing
-`G6A54OYK` and `39OPYXQ9` by moving them back, writing the checklist, and re-closing is the
-**prescribed** handling, not an unsanctioned improvisation.
+`TERMINAL-WITHOUT-CHECKLIST` is that clause's second case, verbatim — the linter's remedy string
+and this rule are the same instruction. ~~So there is no gap: repairing `G6A54OYK` and `39OPYXQ9`
+… is the **prescribed** handling.~~ **STRUCK 05:06 — the clause's scan set excludes
+`design/archived/` (see above), so it prescribes the handling for a card still in `tasks/`, not
+for these two.**
 
 > ### ⚠ TWO WRONG ANSWERS PRECEDED THIS ONE, BOTH FROM A SEARCH TOO NARROW ON A DIFFERENT AXIS
 >
@@ -104,25 +140,30 @@ from 2026-08-22 are worth the repair. The rules permit it; nobody is required to
 
 ## Acceptance
 
-- [x] Determine whether moving a card out of `design/archived/` is sanctioned — **YES.**
-      `rules/aimaestro/aimaestro-trdd-approval.md:818` prescribes *"move it back to its
-      `pre-block-column:` (or `dev`) and flag"* for a terminal column with no checklist — this
-      exact defect. (Answered wrongly twice first; see the STATE block.)
-- [ ] **USER DECISION — the only live branch.** Repair, or accept. Repairing means: move each
-      card to its `pre-block-column:` (or `dev`), write the acceptance checklist recording what
-      it promised and whether it delivered, re-close, re-archive; then `trddgrep validate`
-      reports 0 ERRORs. Accepting means recording that here and closing this card, so the two
-      ERRORs become a known-and-accepted floor rather than an unexplained recurring line.
-      Both are legitimate; the rules permit the repair and nobody is obliged to spend the time.
+- [x] Determine whether moving a card out of `design/archived/` is sanctioned — **NO CLAUSE
+      REACHES IT.** The rules prescribe this repair for a terminal-without-checklist card still
+      in `design/tasks/` (`aimaestro-trdd-approval.md:818`, D4 step 5b), but D4's scan set
+      (`:771`) is `design/tasks/` + `design/proposals/` only. The gap is exactly one folder wide.
+      (Answered wrongly THREE times first; see the STATE block.)
+- [ ] **USER DECISION — the only live branch.** Repair, or accept.
+      **Repairing** means `git mv`ing both out of `design/archived/` — a move no clause
+      sanctions — then to `dev` (neither card has a `pre-block-column:`, so that is the
+      fallback), which asserts active development on work that is done; then write each
+      checklist, re-close, re-archive. `trddgrep validate` would reach 0 ERRORs.
+      **Accepting** means recording that decision here and closing this card, so the two ERRORs
+      become a known-and-accepted floor rather than an unexplained recurring line.
+      Both are legitimate. Note the repair requires two things the rules do not currently
+      authorise (the un-archive, and a `dev` column that would be untrue), so "accept" is the
+      lower-friction answer unless a clean `validate` is worth those.
 - [x] ~~If sanctioned: repair both cards …~~ / ~~If NOT sanctioned …~~ — **STRUCK 05:03.** These
       were drafted as an either/or pair *before* box 1 had an answer. Once it did, one antecedent
       became permanently false, leaving a box that could never be truthfully ticked while the
       completion gate requires every box checked — the exact landmine removed from UAP7ZEJL's
       box 4 three commits earlier, reintroduced here. Collapsed into the single live decision
       above.
-- [ ] The phrase "2 ERRORs, both pre-existing" in future commit messages cites this card instead
-      of standing alone (the one box closable by my own behaviour — and missed in the two commits
-      after this card was filed)
+- [x] The phrase "2 ERRORs, both pre-existing" in future commit messages cites this card instead
+      of standing alone — first done in `677dff75`, after being missed in the two commits
+      following this card's creation. The one box closable by my own behaviour.
 
 ## Why this is a card and not a chat message
 
@@ -135,6 +176,28 @@ have prompted.
 
 ## Approval log
 
+- 2026-09-05T05:06:44+0200 — **THIRD WRONG VERDICT CORRECTED; the answer converges one folder
+  away from where it started.** D4's scan set (`:771`) is `design/tasks/` + `design/proposals/` —
+  **not `archived/`** — so `:818`'s remedy never reaches these two cards. The rules prescribe the
+  repair for a terminal-without-checklist card still in `tasks/`; nothing addresses one already
+  archived.
+
+  **Same actor-substitution error, third instance, and its twin was withdrawn in the very edit
+  that committed it:** at 05:03 I struck the `:553` citation (D4 **step 2**) for being watchdog
+  machinery rather than human permission, and promoted `:818` (D4 **step 5b**) to carry the
+  verdict. Same numbered list, one step down. The lesson is not "check the scan set" but
+  **"ask WHOSE ACTION a clause describes before reading it as permission for yours"** — and
+  having just applied that test to one clause is no protection against failing it on the next.
+
+  Two things checked rather than assumed this pass: the DEP overlay DOES govern here (its header
+  says it is installed into agent workdirs and this is the source tree, but it is loaded into
+  this project's instruction set — so applicability holds, and the scan set is what defeats the
+  citation); and NEITHER card has a `pre-block-column:`, so the prescribed fallback is `dev` —
+  which would assert active development on finished work, the untrue-column defect corrected on
+  UAP7ZEJL tonight, created deliberately and twice. Both now in the decision box.
+
+  Box 4 finally ticked: `677dff75` was the first commit message to cite this card rather than
+  quote the bare phrase.
 - 2026-09-05T05:03:28+0200 — **BOX 1 ANSWERED, AND THE 05:01 ANSWER WAS WRONG.** The 05:01 pass
   widened the NEEDLE and kept a two-file set; a review asked whether the FILE SET was now the
   narrow dimension. It was. Running the same needle over `universal-kanban.md` plus this repo's

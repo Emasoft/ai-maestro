@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:35:19+0200
+updated: 2026-09-05T03:37:20+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -82,8 +82,8 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
 > not itself orphaned. Read in full (`jq`, not a truncation): **3 entries, all `"open failed"`,
 > across TWO dates — 2026-08-04 and 2026-08-16.** The fault string is a Node ABI mismatch
-> (`NODE_MODULE_VERSION 127` vs `147`). The dates are above; this card offers no reading of them,
-> because three log lines support none. All of it is
+> (`NODE_MODULE_VERSION 127` vs `147`) — a compiled-module-vs-running-Node mismatch, so a property
+> of the RUNTIME, not damage to the file. All of it is
 > PAST: **how that index classifies today is UNVERIFIED** — under the correct Node 22 it may open
 > fine and come back `live`, `empty` or `orphaned`. Do not read it as a current `unreadable`.
 >

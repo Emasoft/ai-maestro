@@ -155,3 +155,30 @@ export async function revokeDevToken(): Promise<void> {
   delete config.devModeLogin
   saveGovernance(config)
 }
+
+/**
+ * TRDD-7IJ08EUV — a possessable credential for the root of the whole key
+ * hierarchy must never be able to reach a production host. Throws (never
+ * warns) when `NODE_ENV === 'production'` and a dev token is either enabled
+ * OR merely minted-but-parked (`issued`) — "presence" is the trigger, not
+ * just an active bypass, because a parked token is still a live secret an
+ * owner could re-enable with one `PATCH`.
+ *
+ * This is the CHECK, not the wiring: the caller is the server boot sequence
+ * (server.mjs / a Next `instrumentation.ts` `register()`), which is outside
+ * this file's ownership. Nothing in this repo invokes it yet — see the
+ * card's Findings section for the follow-up that must call this before the
+ * production server starts serving requests.
+ */
+export function assertDevModeAbsentInProduction(): void {
+  if (process.env.NODE_ENV !== 'production') return
+  const status = getDevTokenStatus()
+  if (status.enabled || status.issued) {
+    throw new Error(
+      'FATAL: a dev-mode login token is present (enabled=' + status.enabled +
+      ', issued=' + status.issued + ') on a production build. Revoke it via ' +
+      'DELETE /api/auth/dev-token (or PATCH { enabled: false } is NOT enough — ' +
+      'revoke destroys the credential) before starting a production server.'
+    )
+  }
+}

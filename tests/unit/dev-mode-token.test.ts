@@ -128,3 +128,37 @@ describe('dev-mode token — mint / verify / revoke', () => {
     expect(m.getDevTokenStatus().lastUsedAt).toBeTruthy()
   })
 })
+
+describe('dev-mode token — assertDevModeAbsentInProduction (TRDD-7IJ08EUV)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('throws in production when a token is enabled', async () => {
+    const m = await load()
+    await m.mintDevToken()
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(() => m.assertDevModeAbsentInProduction()).toThrow(/dev-mode login token is present/)
+  })
+
+  it('throws in production even when merely issued-but-parked (enabled=false)', async () => {
+    const m = await load()
+    await m.mintDevToken()
+    await m.setDevModeEnabled(false)
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(() => m.assertDevModeAbsentInProduction()).toThrow(/dev-mode login token is present/)
+  })
+
+  it('does not throw in production when nothing was ever minted', async () => {
+    const m = await load()
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(() => m.assertDevModeAbsentInProduction()).not.toThrow()
+  })
+
+  it('does not throw outside production, however present the token is', async () => {
+    const m = await load()
+    await m.mintDevToken()
+    vi.stubEnv('NODE_ENV', 'development')
+    expect(() => m.assertDevModeAbsentInProduction()).not.toThrow()
+  })
+})

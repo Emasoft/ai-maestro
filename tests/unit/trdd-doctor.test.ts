@@ -27,6 +27,7 @@ import {
   countAcceptanceBoxes,
   frontmatterDay,
   CHECKLIST_GATE_SINCE,
+  loadCorpus,
 } from '@/lib/trdd-doctor'
 import { DEFAULT_STATUSES } from '@/types/task'
 
@@ -1168,10 +1169,19 @@ describe('THE GATE — the real corpus lints clean', () => {
     // ZERO errors AND still be present in the corpus as `superseded` — a card that vanished
     // would also satisfy "zero errors", and that is not the state this asserts.
     expect(errors.filter((e) => e.id === 'G6A54OYK' || e.id === '39OPYXQ9')).toHaveLength(0)
+    // PRESENCE, through the doctor's own walker — not a glob over design/archived/. "Zero
+    // findings" is also what a deleted, renamed-to-a-legacy-shape, or otherwise unparseable
+    // card produces (ATOM-XC3R-GAZ4: the filename is the parse key), which is the state the
+    // 7123D51A pin above was written to catch. So each retired exclusion must still be a
+    // parsed card, in a terminal zone, `superseded` with a non-empty successor.
+    const corpusById = new Map(loadCorpus('design').cards.map((c) => [c.id, c]))
     for (const id of ['G6A54OYK', '39OPYXQ9']) {
-      const card = report.findings.find((f) => f.id === id)
-      // No finding of any severity: superseded cards are outside every terminal-gate rule.
-      expect(card).toBeUndefined()
+      const card = corpusById.get(id)
+      expect(card, `${id} must still be parsed by the doctor's walker`).toBeDefined()
+      expect(card?.column).toBe('superseded')
+      expect(String(card?.fm['superseded-by'] ?? '')).toMatch(/[A-Z0-9]{8}/)
+      // And no finding of any severity: a superseded card is outside every terminal-gate rule.
+      expect(report.findings.find((f) => f.id === id)).toBeUndefined()
     }
 
     // And the third set (TRDD-3OS166YI): the frozen-card exclusion was the ONLY one of the three

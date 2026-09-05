@@ -454,7 +454,11 @@ const STATE_READS_DONE =
  * or the linter reproduces the exact bug it exists to catch (an input that vanishes
  * without an error).
  */
-function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nodes: TrddNode[] } {
+// Exported for the gate test's PRESENCE pin (TRDD-U1EYWIPT follow-up): a retired exclusion must
+// assert its card is still IN the corpus as `superseded` through the SAME walker the doctor
+// uses — a glob over design/archived/ would pass on a file the walker cannot parse, which is
+// exactly the vanished-or-unparseable state the pin exists to catch (ATOM-XC3R-GAZ4).
+export function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nodes: TrddNode[] } {
   const cards: Card[] = []
   const unparsed: string[] = []
   const nodes: TrddNode[] = []

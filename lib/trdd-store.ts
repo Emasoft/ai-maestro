@@ -26,7 +26,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
-import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE } from './trdd-vocabulary'
+import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, isParkedByOtherForm } from './trdd-vocabulary'
 import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
@@ -749,44 +749,13 @@ function blockedByRefs(v: unknown): string[] {
   return []
 }
 
-/**
- * Local YYYY-MM-DD from an ISO-ish string or a `Date`; `''` if unparseable.
- * Re-derived from `trdd-doctor.ts`'s `frontmatterDay` (not imported — the doctor
- * imports FROM this module, so importing back would create a store→doctor→store
- * cycle; same reason `normalizeBlockerRef` above is re-derived rather than shared).
- */
-function frontmatterDayLocal(v: unknown): string {
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
-  return String(v ?? '').trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
-}
-
-/**
- * Does this card carry a park justification the doctor's own "parked" predicate
- * recognizes (TRDD-CV5KDCB7 in trdd-doctor.ts), OTHER than a non-empty `blocked-by`
- * (checked separately by the caller) and `column === 'blocked'` (trivial here — this
- * IS the gate deciding whether `blocked` is earned)? A future `review-after:`, or a
- * `hub-blocked`/`fleet-ask` label. TRDD-1G8FBSKZ: the entry gate must accept every
- * park form the doctor accepts, or a legitimately-parked card (e.g. snoozed via
- * `review-after:` alone) would be refused entry by a rule stricter than the one that
- * later audits it.
- */
-function hasOtherParkForm(fm: Record<string, unknown>): boolean {
-  // NOT `asList`: that is the REFERENCE-field parser and drops every non-id token, so
-  // `labels: [governance, fleet-ask]` reads as [] through it (mirrors trdd-doctor.ts).
-  const rawLabels = fm['labels']
-  const labels = (Array.isArray(rawLabels)
-    ? rawLabels.map(String)
-    : String(rawLabels ?? '').replace(/^\s*\[|\]\s*$/g, '').split(','))
-    .map((l) => l.trim().toLowerCase())
-    .filter(Boolean)
-  const reviewAfter = frontmatterDayLocal(fm['review-after'])
-  // LOCAL calendar day, matching trdd-doctor.ts's PARKED predicate exactly — using the
-  // UTC day here would make a just-expired park read as still parked for the hours the
-  // two days disagree.
-  const now = new Date()
-  const todayDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  return (reviewAfter !== '' && reviewAfter > todayDay) || labels.includes('hub-blocked') || labels.includes('fleet-ask')
-}
+// This module's private day-part-read and other-park-form helpers MOVED to
+// lib/trdd-vocabulary.ts's `frontmatterDay` and `isParkedByOtherForm` (TRDD-4P798U6P). They
+// were re-derived here as private copies because this module imports FROM `trdd-doctor.ts`
+// (the other-park-form check mirrored the doctor's own PARKED predicate from TRDD-CV5KDCB7),
+// so importing the doctor's versions back would have closed a store->doctor->store cycle;
+// both now live in the leaf vocabulary module both files already import from, so there is
+// exactly one copy of each.
 
 /** ADVANCE an in-flight TRDD's column within tasks/ (no folder move); bumps `updated`. */
 export function advanceColumn(
@@ -855,7 +824,9 @@ export function advanceColumn(
   let setPreBlockColumn = ''
   if (column === 'blocked') {
     const enteringRefs = blockedByRefs(trdd.frontmatter?.['blocked-by'])
-    if (enteringRefs.length === 0 && !hasOtherParkForm(trdd.frontmatter ?? {})) {
+    const now = new Date()
+    const todayDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    if (enteringRefs.length === 0 && !isParkedByOtherForm(trdd.frontmatter ?? {}, todayDay)) {
       return {
         ok: false,
         error:

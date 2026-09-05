@@ -25,10 +25,10 @@ import {
   VALID_COLUMNS,
   AUTHORITY_RANK,
   countAcceptanceBoxes,
-  frontmatterDay,
   CHECKLIST_GATE_SINCE,
   loadCorpus,
 } from '@/lib/trdd-doctor'
+import { frontmatterDay } from '@/lib/trdd-vocabulary'
 import { DEFAULT_STATUSES } from '@/types/task'
 
 let tmp: string
@@ -338,6 +338,50 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'BLOCKER-UNRESOLVED')).toContain('UNRBLKD1')
     // Fail-open: an unresolved reference is never read as "cleared".
     expect(idsOf(lintCorpus(tmp), 'BLOCKER-RELEASED')).toEqual([])
+  })
+
+  // ============ PARKED via `isParkedByOtherForm` (TRDD-4P798U6P) ============
+  // BLOCKED-WITHOUT-PROBE fires whenever the doctor's PARKED predicate is true, whether
+  // parked by `column: blocked`, a non-empty `blocked-by:`, or one of the "other" forms
+  // shared with lib/trdd-store.ts's entry gate via `isParkedByOtherForm` — a FUTURE
+  // `review-after:`, or a `hub-blocked`/`fleet-ask` label. This card is `column: dev` with
+  // an EMPTY `blocked-by:`, so only the shared predicate can make it PARKED; it pins the
+  // doctor side of the store/doctor split this TRDD removed.
+  //
+  // NEUTER RUN (measured 2026-09-05, TRDD-4P798U6P — `parkReason` in lib/trdd-vocabulary.ts,
+  // the three suites run together under Node 22, one form's `return` line deleted at a time):
+  //   drop review-after → 4 red: this suite's review-after case, trdd-store's review-after
+  //     case, trdd-vocabulary 2.
+  //   drop hub-blocked  → 4 red: this suite's hub-blocked case, trdd-store's hub-blocked case,
+  //     trdd-vocabulary 2.
+  //   drop fleet-ask    → 5 red: this suite's fleet-ask case, trdd-store's fleet-ask case,
+  //     trdd-vocabulary 3.
+  //   Each form reds exactly its own case in BOTH consumers, so a private copy left in either
+  //   would show up as a consumer suite that stays green under one of these deletions. The
+  //   "does NOT fire" test below is the negative direction (a `parkReason` forced to return a
+  //   form reds it, and the store's REFUSES-409 test with it — the commit body carries that run).
+  it('BLOCKED-WITHOUT-PROBE fires for a card parked via review-after alone (no blocked column, no blocked-by)', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-PRKREVA1-x.md',
+      good('PRKREVA1', { column: 'dev', 'blocked-by': '[]', 'review-after': '2099-01-01' }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).toContain('PRKREVA1')
+  })
+
+  it('BLOCKED-WITHOUT-PROBE fires for a card parked via a hub-blocked label alone', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-PRKHUB01-x.md',
+      good('PRKHUB01', { column: 'dev', 'blocked-by': '[]', labels: '[governance, hub-blocked]' }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).toContain('PRKHUB01')
+  })
+
+  it('BLOCKED-WITHOUT-PROBE fires for a card parked via a fleet-ask label alone', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-PRKFLT01-x.md',
+      good('PRKFLT01', { column: 'dev', 'blocked-by': '[]', labels: '[fleet-ask]' }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).toContain('PRKFLT01')
+  })
+
+  it('BLOCKED-WITHOUT-PROBE does NOT fire for a card with no park form at all', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-NOPARK01-x.md',
+      good('NOPARK01', { column: 'dev', 'blocked-by': '[]' }))
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).not.toContain('NOPARK01')
   })
 
   it('ORDER-NPT-VIOLATED — a card past `dev` while its prerequisite is unfinished', () => {
@@ -938,25 +982,10 @@ describe('the terminal-column checklist gate — every shape, seeded', () => {
   })
 })
 
-describe('the gate primitives — both date shapes, and what a box is', () => {
-  // BOTH branches are pinned rather than one assumed. A YAML reader may hand back an ISO
-  // string or a parsed Date depending on its timestamp settings, and `String(someDate)` is
-  // "Fri Jul 31 2026 …" — whose first ten characters are not a date, so a string-only reader
-  // would compare garbage and quietly grandfather every card forever.
-  it('frontmatterDay reads an ISO string', () => {
-    expect(frontmatterDay('2026-08-02T15:37:19+0200')).toBe('2026-08-02')
-  })
-
-  it('frontmatterDay reads a parsed Date', () => {
-    expect(frontmatterDay(new Date('2026-08-02T13:37:19Z'))).toBe('2026-08-02')
-  })
-
-  it('frontmatterDay returns empty for absent, malformed, and invalid input', () => {
-    expect(frontmatterDay(undefined)).toBe('')
-    expect(frontmatterDay('soon')).toBe('')
-    expect(frontmatterDay(new Date('nonsense'))).toBe('')
-  })
-
+describe('the gate primitives — the boundary, and what a box is', () => {
+  // `frontmatterDay`'s two date shapes (ISO string / parsed Date) are pinned where it now
+  // lives, tests/unit/trdd-vocabulary.test.ts (TRDD-4P798U6P); what stays here is how THIS
+  // module's boundary constant composes with it.
   it('an empty day never satisfies the boundary — a card with no `updated:` is not swept in', () => {
     // String-compares against the boundary: '' < '2026-07-31' is true, so the guard must be
     // `day && day >= SINCE`, not `day >= SINCE`. A dateless card is UPDATED-MISSING's finding,

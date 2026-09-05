@@ -388,6 +388,24 @@ describe('trdd-store lifecycle transitions', () => {
     expect(t.frontmatter['pre-block-column']).toBe('testing')
   })
 
+  // TRDD-4P798U6P: one fixture per "other" park form in THIS suite too, so a per-form
+  // neuter of the shared `parkReason` (lib/trdd-vocabulary.ts) reds that form's case in
+  // the store as well as in the doctor — the proof that the gate routes through the shared
+  // predicate for every form, not only for review-after.
+  it('advanceColumn into blocked with a hub-blocked label (no blocked-by) is accepted as a valid park form', async () => {
+    writeTask('ENTR0005', 'entering-blocked-hub-label', 'dev', designDir, 'labels: [governance, hub-blocked]\n')
+    const r = await advanceColumn(designDir, 'ENTR0005', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    expect(findTrdd(designDir, 'ENTR0005')!.column).toBe('blocked')
+  })
+
+  it('advanceColumn into blocked with a fleet-ask label (no blocked-by) is accepted as a valid park form', async () => {
+    writeTask('ENTR0006', 'entering-blocked-fleet-label', 'dev', designDir, 'labels: [fleet-ask]\n')
+    const r = await advanceColumn(designDir, 'ENTR0006', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    expect(findTrdd(designDir, 'ENTR0006')!.column).toBe('blocked')
+  })
+
   it('advanceColumn into blocked keeps an existing non-empty pre-block-column (re-park never overwrites the real restore point)', async () => {
     writeTask(
       'ENTR0004',

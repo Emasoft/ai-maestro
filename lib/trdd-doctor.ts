@@ -60,6 +60,8 @@ import {
   TIER_TO_REQUIREMENT,
   defaultColumnForMissing,
   expectedZone,
+  frontmatterDay,
+  parkReason,
 } from './trdd-vocabulary'
 export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT, defaultColumnForMissing }
 
@@ -244,21 +246,6 @@ function scanStateClaimLines(lines: readonly string[]): { idx: number; claim: st
 // of this predicate had already diverged (start index, and unclosed frontmatter) before
 // either shipped. Re-exported so every importer of this module is unchanged.
 export { countAcceptanceBoxes }
-
-/**
- * The DAY part of a frontmatter date, as `YYYY-MM-DD`, or `''` when there is none.
- *
- * Handles BOTH shapes on purpose. A YAML reader may hand back an ISO string or a parsed
- * `Date` depending on its timestamp settings, and which one it is here is not something a
- * rule should silently depend on: `String(someDate)` yields `"Fri Jul 31 2026 …"`, whose
- * first ten characters are not a date at all, so a string-only reader would compare garbage
- * and quietly grandfather every card forever. Both branches are pinned by tests rather than
- * one being assumed and the other left as dead code.
- */
-export function frontmatterDay(v: unknown): string {
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
-  return String(v ?? '').trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
-}
 
 /**
  * The GRANDFATHER BOUNDARY of the terminal-column checklist gate.
@@ -1023,13 +1010,6 @@ export function lintCorpus(designDir: string): DoctorReport {
     // HEALTHY output always contains); its absence is verdict "could not run", never
     // "cleared". `not-match:` on a success sentinel is already fail-closed and needs none.
     {
-      // NOT `asList`: that is the REFERENCE-field parser and drops every non-id token, so
-      // `labels: [governance, fleet-ask]` reads as [] through it (measured: F5 red).
-      const rawLabels = c.fm['labels']
-      const labels = (Array.isArray(rawLabels) ? rawLabels.map(String) : String(rawLabels ?? '').replace(/^\s*\[|\]\s*$/g, '').split(','))
-        .map((l) => l.trim().toLowerCase())
-        .filter(Boolean)
-      const reviewAfter = frontmatterDay(c.fm['review-after'])
       // LOCAL calendar day — `review-after:` is written local, and `frontmatterDay(new Date())`
       // would go through toISOString() = the UTC day, making a just-expired park read as parked
       // for the hours the two days disagree (review fork, 2026-08-27; test U2 pins it).
@@ -1038,12 +1018,13 @@ export function lintCorpus(designDir: string): DoctorReport {
       // silently breaks every comparison here (review fork, 2026-08-27).
       const now = new Date()
       const todayDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-      const parked =
-        c.column === 'blocked' ||
-        blockedBy.length > 0 ||
-        (reviewAfter !== '' && reviewAfter > todayDay) ||
-        labels.includes('hub-blocked') ||
-        labels.includes('fleet-ask')
+      // The "other" park forms (future review-after, hub-blocked/fleet-ask label) are decided by
+      // the shared predicate in lib/trdd-vocabulary.ts — the same call lib/trdd-store.ts makes
+      // when it gates entry into `blocked` (TRDD-4P798U6P). The REASON is taken from that call
+      // too, never re-derived here from the fields, so the message below can only name a form
+      // the predicate actually honoured.
+      const otherReason = parkReason(c.fm, todayDay)
+      const parked = c.column === 'blocked' || blockedBy.length > 0 || otherReason !== null
       if (parked) {
         const probe = String(c.fm['blocker-probe'] ?? '').trim()
         const holds = String(c.fm['blocker-holds-if'] ?? '').trim()
@@ -1057,7 +1038,7 @@ export function lintCorpus(designDir: string): DoctorReport {
             severity: sev,
             id: c.id,
             filePath: c.filePath,
-            message: `is parked (${c.column === 'blocked' ? 'column blocked' : blockedBy.length ? 'blocked-by non-empty' : reviewAfter > todayDay && reviewAfter !== '' ? `review-after ${reviewAfter}` : 'hub-blocked/fleet-ask label'}) with no runnable blocker probe — its blocker is a VALUE with a silent timestamp and will rot while reading as current. Add \`blocker-probe: <argv>\` + \`blocker-holds-if: exit-0|exit-nonzero|match:<re>|not-match:<re>\` (take the needle from the EMITTER's source, never from vocabulary seen elsewhere)`,
+            message: `is parked (${c.column === 'blocked' ? 'column blocked' : blockedBy.length ? 'blocked-by non-empty' : otherReason === 'review-after' ? `review-after ${frontmatterDay(c.fm['review-after'])}` : `${otherReason} label`}) with no runnable blocker probe — its blocker is a VALUE with a silent timestamp and will rot while reading as current. Add \`blocker-probe: <argv>\` + \`blocker-holds-if: exit-0|exit-nonzero|match:<re>|not-match:<re>\` (take the needle from the EMITTER's source, never from vocabulary seen elsewhere)`,
             autofixable: false,
           })
         } else if (!BLOCKER_HOLDS_IF_RE.test(holds)) {

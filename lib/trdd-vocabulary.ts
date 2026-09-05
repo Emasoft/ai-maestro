@@ -157,3 +157,72 @@ export function expectedZone(column: string, fm: Record<string, unknown>): TrddZ
   if (WORKING_COLUMNS.includes(column)) return 'tasks'
   return null
 }
+
+/**
+ * The DAY part of a frontmatter date, as `YYYY-MM-DD`, or `''` when there is none.
+ *
+ * Handles BOTH shapes on purpose. A YAML reader may hand back an ISO string or a parsed
+ * `Date` depending on its timestamp settings, and which one it is here is not something a
+ * rule should silently depend on: `String(someDate)` yields `"Fri Jul 31 2026 …"`, whose
+ * first ten characters are not a date at all, so a string-only reader would compare garbage
+ * and quietly grandfather every card forever. Both branches are pinned by tests rather than
+ * one being assumed and the other left as dead code.
+ *
+ * MOVED HERE from `lib/trdd-doctor.ts` (TRDD-4P798U6P). `lib/trdd-store.ts` needed this same
+ * day-part logic inside `advanceColumn`'s entry gate and could not import it — the doctor
+ * imports FROM the store, so store -> doctor would close a cycle — so it re-derived a
+ * byte-identical private copy under its own name. One copy here, imported by both,
+ * removes the chance of the two silently drifting apart.
+ */
+export function frontmatterDay(v: unknown): string {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
+  return String(v ?? '').trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
+}
+
+/**
+ * Does this card carry a park justification OTHER than `column === 'blocked'` or a
+ * non-empty `blocked-by:` — both of which every caller checks separately, because one is
+ * the very column the caller may be deciding to enter and the other already has its own
+ * parsed-refs list? A FUTURE `review-after:`, or a `hub-blocked`/`fleet-ask` label.
+ *
+ * MOVED HERE from `lib/trdd-store.ts`'s own private other-park-form helper (TRDD-4P798U6P). The
+ * store needed the doctor's PARKED predicate (TRDD-CV5KDCB7 in `lib/trdd-doctor.ts`) inside
+ * `advanceColumn`'s entry gate and could not import it for the same store->doctor cycle
+ * reason `frontmatterDay` above states, so it re-derived a private copy of this half too.
+ * Two copies of one predicate is exactly the shape `.claude/rules/lessons-verification.md`
+ * warns about (a linter and its own `--fix` drifted apart this way): the doctor decides what
+ * counts as parked when it LINTS, the store decides separately when it GATES entry into
+ * `blocked`, and the first time a fourth park form is added to only one of the two copies,
+ * the tool either refuses a park the lint would accept or accepts one the lint later flags.
+ *
+ * `todayDay` is a parameter rather than computed inside this function so every caller uses
+ * the exact local calendar day it already computed for its own message or log line — this
+ * function constructs no `Date` of its own, so there is only one `new Date()` per caller to
+ * reason about, not two that could read a different instant.
+ *
+ * `parkReason` returns WHICH form holds (first match wins, in the order below) so a caller
+ * that prints "parked because X" prints the reason this predicate decided on, instead of
+ * re-deriving one from the same fields — a second copy of the inputs is the drift this
+ * extraction exists to remove. `isParkedByOtherForm` is the boolean view of the same call.
+ */
+export type ParkReason = 'review-after' | 'hub-blocked' | 'fleet-ask'
+
+export function parkReason(fm: Record<string, unknown>, todayDay: string): ParkReason | null {
+  // NOT `asList`: that is the REFERENCE-field parser and drops every non-id token, so
+  // `labels: [governance, fleet-ask]` reads as [] through it (measured: doctor test F5 red).
+  const rawLabels = fm['labels']
+  const labels = (Array.isArray(rawLabels)
+    ? rawLabels.map(String)
+    : String(rawLabels ?? '').replace(/^\s*\[|\]\s*$/g, '').split(','))
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean)
+  const reviewAfter = frontmatterDay(fm['review-after'])
+  if (reviewAfter !== '' && reviewAfter > todayDay) return 'review-after'
+  if (labels.includes('hub-blocked')) return 'hub-blocked'
+  if (labels.includes('fleet-ask')) return 'fleet-ask'
+  return null
+}
+
+export function isParkedByOtherForm(fm: Record<string, unknown>, todayDay: string): boolean {
+  return parkReason(fm, todayDay) !== null
+}

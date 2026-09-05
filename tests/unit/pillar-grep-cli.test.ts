@@ -373,10 +373,16 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     // EXPECTED FUTURE MOVE (TRDD-CV5KDCB7): 22 parked cards carry a WARN BLOCKED-WITHOUT-PROBE;
     // the next routine edit of any of them flips it to ERROR (the `updated:` boundary is the
     // ratchet working, not this test breaking). Add the card's probe, or re-pin here.
-    expect(lines).toHaveLength(2)
-    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
-    expect(lines[1]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\t39OPYXQ9\t/)
-    expect(r.status).toBe(1)
+    // 2→0 on 2026-09-05 (TRDD-MUB7NTRF): trddgrep gained the one terminal transition rule 12
+    // permits — complete -> superseded IN PLACE on an archived card — and both frozen cards were
+    // superseded by their successors (b2dd5269, 339cad77), so "unrepairable by rule" ended the
+    // day the verb existed. With zero ERROR lines the length alone would be a vacuous filter
+    // proof, so the positive control is explicit: the UNFILTERED run must still print findings.
+    expect(r.stdout.trim()).toBe('')
+    expect(r.status).toBe(0)
+    const unfiltered = runCli('trddgrep.mjs', ['validate'])
+    expect(unfiltered.stdout.trim().split('\n').length).toBeGreaterThanOrEqual(5)
+    expect(unfiltered.stdout).not.toMatch(/^ERROR\t/m)
   })
 
   it('--rule STALE-COLUMN prints exactly the 1 STALE-COLUMN finding and exits 0 (no error among them)', () => {

@@ -1179,7 +1179,16 @@ describe('THE GATE — the real corpus lints clean', () => {
       const card = corpusById.get(id)
       expect(card, `${id} must still be parsed by the doctor's walker`).toBeDefined()
       expect(card?.column).toBe('superseded')
-      expect(String(card?.fm['superseded-by'] ?? '')).toMatch(/[A-Z0-9]{8}/)
+      // The SUCCESSOR must resolve in the same corpus — "some 8-char token is present" would also
+      // pass on a dangling or hand-typed value. The field arrives as a YAML array or a `[X]`
+      // string; both flatten to one id here (the verb writes exactly one).
+      const successors = String(card?.fm['superseded-by'] ?? '')
+        .replace(/[[\]\s]|TRDD-/gi, '')
+        .split(',')
+        .filter(Boolean)
+        .map((s) => s.toUpperCase())
+      expect(successors).toHaveLength(1)
+      expect(corpusById.get(successors[0]), `${id}'s successor ${successors[0]} must exist`).toBeDefined()
       // And no finding of any severity: a superseded card is outside every terminal-gate rule.
       expect(report.findings.find((f) => f.id === id)).toBeUndefined()
     }

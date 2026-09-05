@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:48:13+0200
+updated: 2026-09-05T04:50:50+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -279,20 +279,33 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
-- 2026-09-05T04:48:13+0200 — **NOTHING EXECUTES THIS PROBE, and that reframes the whole gate.**
-  Traced the consumer: `lib/trdd-doctor.ts:1044-1074` READS `blocker-probe:` and
-  `blocker-holds-if:` only to check the fields are present and that the predicate matches
-  `BLOCKER_HOLDS_IF_RE` (line 292). Its sole `execFileSync` (line 1391) runs `git log`. Nothing
-  in `lib/`, `scripts/` or the janitor's detectors spawns the probe. So `BLOCKED-WITHOUT-PROBE`
-  gates the DECLARATION of a re-answerable predicate, not its evaluation — the blocker is
-  re-answerable *by a human who runs it*, which is exactly what I did at 04:45 and 04:48.
-  A probe nothing runs still beats a bare `blocked-by:`, because the command is written down
-  and re-runnable; but "runnable" and "run" are different words and the card should not blur
-  them.
+- 2026-09-05T04:50:50+0200 — **NO CONSUMER EXECUTES THIS PROBE — scope stated, and now
+  corroborated by the field's own author.** An earlier draft of this entry said flatly "nothing
+  in `lib/`, `scripts/` or the janitor's detectors spawns the probe" while having grepped two
+  directories of ONE repo with a needle (`blocker-holds-if`) that a generic frontmatter consumer
+  would never contain. Same quantifier-over-a-sampled-population defect as everything above.
+  Widened, and here is the actual population searched:
+
+  | searched | result |
+  |---|---|
+  | `ai-maestro/lib/`, `scripts/`, `app/` | only `trdd-doctor.ts:1044-1074`, which READS the two fields to check presence + `BLOCKER_HOLDS_IF_RE:292`; its sole `execFileSync:1391` runs `git log` |
+  | `ai-maestro/tests/` | `trdd-doctor-blocker-probe.test.ts` — exercises the doctor's VALIDATION gate, never runs a probe |
+  | the janitor plugin 3.4.14, whole tree | 2 TRDD cards that USE the field as data; no code |
+
+  **Decisive corroboration, from the janitor card that introduced the field** (`TRDD-6054NY8H`,
+  line 278): *"no detector, lint, or schema in this repo parses `blocker-probe*` yet. These
+  three lines are inert documentation today. That is deliberate — the detector ships DISABLED."*
+
+  So `BLOCKED-WITHOUT-PROBE` gates the DECLARATION of a re-answerable predicate, not its
+  evaluation — the blocker is re-answerable *by a human who runs it*, which is exactly what I did
+  at 04:45 and 04:48. A probe nothing runs still beats a bare `blocked-by:`, because the command
+  is written down and re-runnable; but "runnable" and "run" are different words and this card
+  should not blur them.
 
   Consequence for the multi-line hazard (`grep -m1` is per-FILE, so a two-file glob emits two
-  lines): **moot today** — there is no evaluator whose semantics could get it wrong. Hardened
-  anyway, since the ambiguity becomes live the day someone writes one, and it costs one pipe.
+  lines): **inert while no evaluator exists** — and that claim is now conditional on the search
+  above rather than on a bare "nothing does". Hardened anyway, since the ambiguity goes live the
+  day the disabled detector ships, and it costs one pipe.
 
   **The hardening broke the thing it was added beside, and the test caught it.** Appending
   `| head -1` made the fallback DEAD CODE: `head` exits 0 on empty input, so `||` can never

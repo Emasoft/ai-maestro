@@ -3,7 +3,7 @@ trdd-id: X9VLHBFZ
 title: Export a liveness check per unconditionally-started scheduler so cache-prune, fleet-plugins-update and github-config-audit can be published to the janitor
 column: todo
 created: 2026-09-05T10:22:41+0200
-updated: 2026-09-05T10:22:41+0200
+updated: 2026-09-05T11:19:25+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: infra
@@ -14,6 +14,7 @@ mandated-by: none
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-09-05T10:22:41+0200
+implementation-commits: [2fb4ef1c]
 ---
 
 # Export a liveness check per unconditionally-started scheduler so cache-prune, fleet-plugins-update and github-config-audit can be published to the janitor

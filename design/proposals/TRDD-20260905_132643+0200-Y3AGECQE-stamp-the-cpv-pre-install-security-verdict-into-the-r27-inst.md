@@ -42,4 +42,4 @@ MED — a stamped verdict that agents trust is an enforcement surface; a wrong d
 ## Approval log
 - 2026-09-05T13:29:13+0200 — parent-trdd dropped by governance-rules-session: this card is a follow-up decision, not an NPT/EHT of 523V1N4I (the wrapper opens no hole), so the derivation field would have made it an orphan platelet the watchdog repairs into 523V1N4I's eht — lineage recorded in external-refs instead.
 
-## Approval log
+

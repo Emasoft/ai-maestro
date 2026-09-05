@@ -165,7 +165,12 @@ beforeEach(async () => {
       if (req.url === '/api/auth/sudo-password') {
         // The live argv sweep: taken while curl (and the bash that spawned it) is
         // still blocked on this very response.
-        psSnapshot = execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8' })
+        // maxBuffer: on this dev machine the live process table (many concurrent agent/tmux
+        // sessions) can push `ps -eo args` output well past Node's 1 MiB execFileSync default,
+        // and macOS's synchronous spawn then fails with ENOBUFS rather than the JS-level
+        // ERR_CHILD_PROCESS_STDIO_MAXBUFFER — measured live (r28, 2 of 6 standalone runs) at
+        // this exact call site. 64 MiB is comfortably above anything this table has produced.
+        psSnapshot = execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
         let pw = ''
         try { pw = JSON.parse(body).password } catch { /* malformed → refuse */ }
         if (pw === GOOD) { res.end(JSON.stringify({ token: TOKEN })); return }

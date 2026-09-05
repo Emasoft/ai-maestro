@@ -24,6 +24,8 @@ labels: [scenario-testing, plugin, dev-browser, reusable-harness]
 impacts: [install-script]
 external-refs: []
 created-by: ai-maestro-session
+blocker-probe: sh -c 'for id in 44RGLOO8; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # TRDD-f181a4ae — Standalone scenario-UI-testing plugin

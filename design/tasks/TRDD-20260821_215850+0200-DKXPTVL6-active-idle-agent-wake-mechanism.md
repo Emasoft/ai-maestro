@@ -23,6 +23,8 @@ severity: medium
 effort: L
 labels: [fleet-ask, hub-blocked]
 external-refs: [Emasoft/ai-maestro#51, Emasoft/ai-maestro#46, Emasoft/ai-maestro#45, Emasoft/ai-maestro#27, Emasoft/ai-maestro#43, Emasoft/ai-maestro#40]
+blocker-probe: sh -c 'grep -h -E "^approved:|^mandate:" design/*/TRDD-*DKXPTVL6*.md 2>/dev/null | grep -qE "true" && echo APPROVED || echo NOT-APPROVED'
+blocker-holds-if: not-match:^APPROVED$
 ---
 
 ## Problem

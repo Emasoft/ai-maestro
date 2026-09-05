@@ -22,6 +22,8 @@ labels: [governance, agents, lifecycle, chief-of-staff, authorization]
 blocked-by: [F1SL03CK]
 pre-block-column: planned
 assignee: ai-maestro-hub-session
+blocker-probe: sh -c 'for id in F1SL03CK; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # A CHIEF-OF-STAFF may delete agents of its own team with MANAGER approval

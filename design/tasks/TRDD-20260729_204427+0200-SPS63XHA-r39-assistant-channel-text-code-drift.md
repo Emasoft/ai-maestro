@@ -26,6 +26,8 @@ eht: [HW72YBZW]
 blocked-by: [HW72YBZW]
 pre-block-column: planned
 external-refs: []
+blocker-probe: sh -c 'for id in HW72YBZW; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # R39.5 and R39.7 are marked ENFORCED but their guards encode the pre-2026-07-22 rule

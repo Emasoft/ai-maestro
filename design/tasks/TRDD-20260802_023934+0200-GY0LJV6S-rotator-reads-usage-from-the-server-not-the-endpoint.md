@@ -26,6 +26,8 @@ blocked-by: [MVZTEKX4]
 pre-block-column: dev
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
+blocker-probe: sh -c 'for id in MVZTEKX4; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook

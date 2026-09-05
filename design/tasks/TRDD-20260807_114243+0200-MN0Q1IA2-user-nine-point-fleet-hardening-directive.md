@@ -29,6 +29,8 @@ severity: high
 effort: large
 labels: [user-mandate, auto-update, oauth-rotator, ledger, agentlenspro, fleet-recovery]
 external-refs: [Emasoft/ai-maestro#128, Emasoft/ai-maestro#110, Emasoft/ai-maestro#90, Emasoft/ai-maestro#108, Emasoft/ai-maestro#105]
+blocker-probe: sh -c 'for id in DPPYVLVH; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # USER nine-point fleet-hardening directive (2026-08-07)

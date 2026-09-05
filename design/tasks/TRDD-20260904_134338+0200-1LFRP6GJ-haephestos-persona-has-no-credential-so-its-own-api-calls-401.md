@@ -1,9 +1,9 @@
 ---
 trdd-id: 1LFRP6GJ
 title: The Haephestos persona has no credential so its two documented API calls are refused 401
-column: todo
+column: dev
 created: 2026-09-04T13:43:38+0200
-updated: 2026-09-04T13:43:38+0200
+updated: 2026-09-05T09:52:56+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -78,7 +78,7 @@ scoped deliberately; option 2 changes a documented interface.
 
 ## Acceptance
 
-- [ ] the shape is RULED between "give it a credential" and "move the lookups off the API",
+- [x] the shape is RULED between "give it a credential" and "move the lookups off the API",
       with the reason recorded here
 - [ ] the persona's documented path either works or is corrected — no shipped instruction may
       describe a call that 401s
@@ -89,3 +89,4 @@ scoped deliberately; option 2 changes a documented interface.
 
 - 2026-09-04T13:43:38+0200 — MANDATE issued by ai-maestro-hub-session as a derived carve-out of TRDD-DQVPODKW's
   final box. Not pre-approved above tier: min-approval-requirement stays `manager`.
+- 2026-09-05T09:52:55+0200 — column → dev by manager. RULED option 2 (move the two lookups off the API to files, the raw-materials-state.json pattern): no credential to scope, nothing leaks into a persona transcript, the two routes join the six owner-gated in 85865270. The author's own lean and the smaller surface. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'. Implementation delegated; assignee ai-maestro-hub-session.

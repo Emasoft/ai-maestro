@@ -28,6 +28,8 @@ eht: [DPPYVLVH]
 blocked-by: [DPPYVLVH]
 implementation-commits: [c4805975, 7effa4aa, b00b447d, f9c92837, dec2d777, aa10c921, 3846c840, 68b6ab85, 63f1335f, 1fa79385, fc58aa52, 59022e79, 976fa045, f257600f, c053736f]
 external-refs: [Emasoft/ai-maestro-janitor#222]
+blocker-probe: sh -c 'for id in DPPYVLVH; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # Automatic fallback when a model-scoped window is exhausted

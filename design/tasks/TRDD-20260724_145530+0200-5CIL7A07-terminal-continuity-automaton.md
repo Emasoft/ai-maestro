@@ -19,6 +19,8 @@ approval-judge: user
 approval-datetime: 2026-07-24T14:55:30+0200
 npt: [6HEF0XLS, X8801GT4]
 eht: [Y8VPE3NS, U6AS2YWB, 9DYUI97S, 8C1Z42GV]
+blocker-probe: sh -c 'for id in Y8VPE3NS U6AS2YWB 8C1Z42GV; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20

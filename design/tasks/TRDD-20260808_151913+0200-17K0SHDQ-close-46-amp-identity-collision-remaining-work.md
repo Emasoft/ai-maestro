@@ -16,6 +16,8 @@ project-id: ai-maestro
 labels: [amp, identity, fleet-blocker]
 external-refs: [ai-maestro#46, ai-maestro#40, ai-maestro#47]
 blocked-by: [U4N18CRY]
+blocker-probe: sh -c 'for id in U4N18CRY; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # Close ai-maestro#46 — the four remaining work items

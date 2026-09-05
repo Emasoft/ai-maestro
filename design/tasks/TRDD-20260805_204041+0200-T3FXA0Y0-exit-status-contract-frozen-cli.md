@@ -26,6 +26,8 @@ release-via: none
 relevant-rules: []
 labels: [manager-filed, testbot-session, owner-ours]
 external-refs: [Emasoft/ai-maestro#121]
+blocker-probe: sh -c 'for id in YU37A3M4; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 # Establish and enforce an exit-status contract across the frozen CLI
 

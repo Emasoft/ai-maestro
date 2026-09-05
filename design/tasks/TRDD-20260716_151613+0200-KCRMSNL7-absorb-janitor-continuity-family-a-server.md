@@ -22,6 +22,8 @@ npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RP
 release-via: none
 created-by: ai-maestro
 assignee: ai-maestro-hub-session
+blocker-probe: sh -c 'for id in 1GGQ4HWY 9ZIF82HI CHN16JXZ; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server

@@ -36,6 +36,8 @@ impacts: [agent-lifecycle, role-plugins, fleet]
 attempts: 0
 implementation-commits: []
 external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plugin-dependencies.md", "gh:Emasoft/ai-maestro-plugin#24", "gh:Emasoft/ai-maestro-plugin#25(PR)", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
+blocker-probe: sh -c 'for id in 9Z2P2SDA; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # TRDD-JT3U4ZVM — The dependency resolver wants `{name}--v{version}` tags; we never published them

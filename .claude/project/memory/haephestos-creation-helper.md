@@ -1,6 +1,6 @@
 ---
 name: haephestos-creation-helper
-description: "haephestos creation-helper remembers a previous session / --continue crept into the helper launch args / creation-helper cleanup route left files behind / unit test wrote to the real ~agents/haephestos directory / yarn test rewrote my haephestos settings.local.json / unexpected file appeared under ~/agents/haephestos/uploads / how are haephestos launch args built / raw.txt uploaded during a test landed in the real uploads folder / file-picker route pins homedir at module load / ensure-persona route always overwrites settings.local.json / vi.stubEnv HOME did not stop a test from writing real files / test containment defect in creation-helper wizard test / why did plain yarn test touch my real agent folder"
+description: "haephestos creation-helper remembers a previous session / --continue crept into the helper launch args / creation-helper cleanup route left files behind / unit test wrote to the real ~/agents/haephestos directory including its uploads subfolder / yarn test rewrote my haephestos settings.local.json / how are haephestos launch args built / raw.txt uploaded during a test landed in the real uploads folder / file-picker route pins homedir at module load / ensure-persona route always overwrites settings.local.json / vi.stubEnv HOME did not stop a test from writing real files / test containment defect in creation-helper wizard test / why did plain yarn test touch my real agent folder"
 ocd: 2026-09-05
 lmd: 2026-09-05
 publish-globally: false

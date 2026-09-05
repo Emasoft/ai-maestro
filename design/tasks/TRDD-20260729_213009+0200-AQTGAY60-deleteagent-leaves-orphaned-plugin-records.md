@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T01:40:10+0200
+updated: 2026-09-05T02:21:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -56,8 +56,17 @@ registered before it runs — and it must land where the workdir path is still k
 
 **⚠ SUPERSEDED 2026-07-30 — no longer blocked, and the gate is built.** Read
 `## ⏵ UNBLOCKED + PARTLY BUILT` below before acting on anything in this STATE block: the NPT is
-terminal, G09b exists, and the only open work is a test that drives `DeleteAgent` itself. The
-paragraph below is kept because it records WHY the block existed.
+terminal, the gate exists (as ~~`G09b`~~ **`G08c`** since TRDD-OWO449MR), and the only open work
+is a test that drives `DeleteAgent` itself. The paragraph below is kept because it records WHY the
+block existed.
+
+**AND THE NEXT ACTION ABOVE WAS RIGHT ALL ALONG — noted 2026-09-05.** It asked for a compensation
+registered before the gate runs, landing *"before `G09` deletes the folder"*. That is precisely
+where `G08c` sits today, with `undo: compensateG08c`. What went wrong in between was not the
+design but a mid-card rebuttal that argued the compensation away on a placement that later moved;
+see the withdrawal below. **A superseded design note can be more accurate than the "resolution"
+that replaced it**, which is a reason to re-read the original before trusting a later rewrite of
+it.
 
 **BLOCKED on NPT TRDD-FHBGF0WG.** The helper at `element-management-service.ts:1718` CANNOT be
 reused as-is: `installed_plugins.json` maps a key to an ARRAY of per-install records, and that
@@ -210,30 +219,56 @@ could sweep any column.**
 **Not touched, deliberately:** the open box itself. Nothing about finding a stale column
 authorizes running the destructive verification the box defers.
 
-**⚠ AN OPEN CONTRADICTION AGAINST THIS CARD — FILED AS TRDD-XNW6THVC (2026-09-05).** The "what is
-actually in the tree" table above places G09b AFTER the workdir removal, and box 2's
-no-compensation argument DEPENDS on that placement. TRDD-OWO449MR (`completed`, archived) is
-described as relocating the cleanup to BEFORE the workdir is deleted. Both cannot be current —
-and if the relocation landed, box 2's argument does not hold and its tick is unearned. **I have
-not read OWO449MR, only this card's description of it**, so XNW6THVC asserts the DISAGREEMENT and
-deliberately names no stale side. It lived only in a commit message until now, which is where
-findings go to be lost.
+**⚠ THE CONTRADICTION IS RESOLVED, AND THIS CARD WAS THE STALE SIDE (TRDD-XNW6THVC, 2026-09-05).**
+XNW6THVC asserted a disagreement and deliberately named no stale side, because neither the code
+nor OWO449MR had been read. Both are now read, and they agree with each other against this card:
+
+| claim | measured |
+|---|---|
+| the gate's id and position | **`G08c`** at `services/element-management-service.ts:9510`, inside the AIO gate sequence and **BEFORE** `G09`'s folder delete at `:9656-9668` |
+| its tombstone | `:9674` — *"G09b USED TO SIT HERE … It is now G08c, inside the gate sequence and BEFORE this deletion"* |
+| `removeLocalInstallRecords` | **does not exist.** One tree-wide hit, and it is a comment at `:1716` saying it *used to* — it became the read-only, fail-closed `listLocalInstallRecords` (`:1732`), called at `:9548` |
+| the compensation | **it has one**: `undo: compensateG08c` (`:9603`) |
+| OWO449MR | `column: completed`, archived. Its STATE: *"`G09b` → **`G08c`**, inside the gate sequence, BEFORE `G09`'s folder delete, using the CLAUDE adapter with a CLI-reinstall compensation."* Commits `f1e4d7ec` (code), `5861db3b` (gate test) |
+
+**So box 2's premise was RIGHT and this card's rebuttal of it was wrong** — see below; the box is
+re-opened. The relocation was not a preference: `claude plugin uninstall --scope local --cwd <dir>`
+needs `<dir>` to still exist, so handing the mutation to the file's owner forces it ahead of the
+folder delete, which is exactly what turns a free irreversible step into one R51 requires be
+compensated.
+
+**A second finding, about XNW6THVC itself.** Its NEXT ACTION told the reader to grep for the
+placement of the `removeLocalInstallRecords` call — a symbol that has not existed since
+`f1e4d7ec`. That card was written from THIS card's description rather than from source, so it
+inherited the dead symbol along with the stale placement. It is the card's own thesis, confirmed
+by the card.
 
 **What is actually in the tree** (read, not inferred):
 
 | piece | where |
 |---|---|
-| the gate | `DeleteAgent` **G09b**, inside the hard-delete-with-folder branch, right after the workdir is removed. Calls `removeLocalInstallRecords(resolvedDir)` and pushes a counted ops line |
+| the gate | ⚠ **STALE — corrected above.** Was: `DeleteAgent` **G09b**, inside the hard-delete-with-folder branch, right after the workdir is removed, calling `removeLocalInstallRecords(resolvedDir)`. It is now **`G08c`** (`:9510`), inside the gate sequence and BEFORE the folder delete, calling read-only `listLocalInstallRecords` (`:9548`) and asking the `claude` CLI to do the mutation, with `undo: compensateG08c`. Both of the old branch's guards moved with it (`hard && deleteFolder`, and the `~/agents/` prefix check) — the comment at `:9526` says losing them would strip an adopted workdir that `G09` then correctly refuses to delete |
 | the post-condition probe | `lib/agent-teardown.ts` store id `plugin-records` — the thing that can PROVE the gate ran |
 | the manifest pin | `AGENT_STORES` includes `plugin-records`, and `tests/unit/agent-teardown.test.ts` pins the id list, so adding a store without a probe now breaks a test |
 | the probe's tests | 7 cases + 3 recorded neuter runs (commit `6c11bd7f`) |
 
-**Box 2's premise was wrong, and the code is right.** The box asks for a compensation. G09b
-deliberately has none, and says why: it runs **after** the folder is gone, at which point every
-`{scope:'local', projectPath: resolvedDir}` record asserts a plugin is installed for a directory
-that does not exist — the record is provably FALSE, so removing it cannot be the wrong call and
-there is nothing a rollback would restore that anyone should want back. That is a better answer
-than the box asked for; the box is rewritten below rather than ticked.
+**~~Box 2's premise was wrong, and the code is right.~~ WITHDRAWN 2026-09-05 — the premise was
+right.** The argument was: G09b deliberately has no compensation because it runs **after** the
+folder is gone, at which point every `{scope:'local', projectPath: resolvedDir}` record asserts a
+plugin is installed for a directory that does not exist — provably FALSE, so removing it cannot be
+wrong and a rollback would restore nothing anyone wants back.
+
+That reasoning was sound **for the placement it described**, and the placement is gone. The gate
+now runs BEFORE the folder delete, so at the moment it mutates, the records are still TRUE and a
+rollback restores something real — which is why the code that replaced it carries
+`undo: compensateG08c`. The comment at `:9518` reaches the same conclusion in the opposite
+direction: Shape A *"turns a free irreversible step into a mutation with a fallible gate after it,
+which R51 requires be compensated; hence the undo below."*
+
+**The transferable error is not the stale fact, it is what the stale fact was used FOR.** This
+paragraph did not merely record an out-of-date placement; it spent that placement to overturn an
+acceptance box and tick it, so one unverified detail became a closed requirement. A card that
+argues *from* a fact it has not re-read converts staleness into false completion.
 
 **The probe was VACUOUS before this session, in a way worth recording.** Its body was
 *unreachable*: the shared guard pair returns null unless `expectFolderGone` is true AND the workdir
@@ -313,17 +348,31 @@ neuter then reddened exactly that one test.
 
 ## Acceptance
 
-- [x] A `DeleteAgent` gate removes the deleted agent's `installed_plugins.json` records — G09b
-- [x] ~~The gate registers a compensation~~ → **resolved by placement instead**: G09b runs after the
-      folder is gone, so the records are provably false and no compensation is meaningful
-- [x] A soft delete provably does NOT remove them — now DRIVEN, not merely true by construction:
-      two cases (soft, and hard-without-folder) assert the workdir AND its records survive and that
-      no `G09b:` op line was emitted. Neuter N1 (move the gate out of the branch) reddens exactly
-      those two
-- [x] Unit tests cover all three, each with a recorded neuter run — GATE: 6 tests in
-      `tests/unit/deleteagent-g09b-plugin-records.test.ts` over the shared harness
-      `tests/helpers/drive-delete-agent.ts`, with the complementary neuters N1/N2 recorded in
-      `34849d8d`; PROBE: 7 tests / 3 neuters (`6c11bd7f`)
+- [x] A `DeleteAgent` gate removes the deleted agent's `installed_plugins.json` records — ~~G09b~~
+      **G08c** (`services/element-management-service.ts:9510`), via the `claude` CLI
+- [x] The gate registers a compensation — **RE-OPENED then RE-CLOSED on evidence, 2026-09-05.**
+      The tick had been argued away (~~"resolved by placement instead"~~: G09b ran after the folder
+      was gone, so the records were provably false and no compensation was meaningful). That
+      placement no longer exists, so the argument was withdrawn and the box re-opened. Re-reading
+      the replacement closes it on the original terms rather than the substituted ones: `G08c`
+      **does** register a compensation — `undo: compensateG08c` at `:9603`, a CLI reinstall. The
+      requirement this card wrote in the first place is met by the code as it now stands
+- [x] A soft delete provably does NOT remove them — DRIVEN, not merely true by construction.
+      ⚠ The original wording cited a `G09b:` op line that is no longer emitted (the gate pushes
+      `G08c:`, 6 sites). The behaviour survived the rename and gained a case: the current file
+      drives **three** skip paths, not two — soft delete, hard-without-folder, and an ADOPTED
+      workdir outside `~/agents/` whose folder `G09` refuses to delete
+- [ ] Unit tests cover all three, each with a recorded neuter run — **UN-TICKED 2026-09-05: the
+      coverage half holds, the neuter half does not.** ⚠ **the path this box cited,
+      `tests/unit/deleteagent-g09b-plugin-records.test.ts`, DOES NOT EXIST**; it was renamed with
+      the gate. GATE, re-measured 2026-09-05: **8 tests** in
+      `tests/unit/deleteagent-g08c-plugin-uninstall.test.ts` over the shared harness
+      `tests/helpers/drive-delete-agent.ts` (which does exist), including a rollback case
+      ("FAILS the whole delete when the CLI refuses, and re-installs what it already took") that
+      drives the compensation box 2 asked for, and a containment case asserting the developer's
+      real `~/agents` and `installed_plugins.json` were never touched. PROBE: 7 tests / 3 neuters
+      (`6c11bd7f`). **The neuter runs N1/N2 recorded in `34849d8d` were run against the DELETED
+      file, so they pin nothing that exists today — no neuter has been recorded for these 8**
 - [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **THE SEQUENCING
       BLOCKER IS LIFTED as of 2026-07-31; the box is now READY TO RUN, and what it waits on is an
       operator, not a dependency.** Verified first-hand: TRDD-OWO449MR is `completed` (archived), so

@@ -1,6 +1,6 @@
 ---
 name: trdd-conventions
-description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped by every consumer that enumerates the corpus by filename / the filename is the parse key, not the frontmatter / my decomposition of the difference sums correctly but I only measured one term / is my arithmetic explanation actually measured / writing a headcount into a memory page that no test checks / state the mechanism instead of a headcount."
+description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped by every consumer that enumerates the corpus by filename / the filename is the parse key, not the frontmatter / my decomposition of the difference sums correctly but I only measured one term / is my arithmetic explanation actually measured / writing a headcount into a memory page that no test checks / state the mechanism instead of a headcount. AND: my batch logged FAIL edit but the deprecated field was already gone — trddgrep set removes approval-tier itself / a GRAPH-DANGLING-BLOCKER appeared right after I closed a root card — move clears blocked-by only on the card it moves, never on the cards that cite it."
 ocd: 2026-06-23
 lmd: 2026-09-05
 metadata:
@@ -132,6 +132,24 @@ difference is a COMPOSITE of at least two mechanisms pointing in OPPOSITE direct
 drops subtract, extra scopes add. **A small net difference is not evidence of a small single
 cause**: decompose it before naming one, and measure each term rather than picking terms that
 sum to the observed gap.[^9]
+
+
+^ATOM-JPDJ-77A3 [desc: "two trddgrep write-verb behaviours that are NOT in its help text: set min-approval-requirement removes the retired approval-tier line itself, and move clears blocked-by only on the card it moves — eve", keywords: trddgrep_edit_failed_line=_empty_after_set my_batch_logged_FAIL_edit_but_the_field_was_already_gone approval-tier_line_vanished_after_trddgrep_set GRAPH-DANGLING-BLOCKER_appeared_right_after_I_closed_a_card blocked-by_still_names_a_card_that_is_complete trddgrep_move_did_not_clear_the_other_card's_blocked-by a_card_I_archived_is_still_cited_as_a_blocker does_trddgrep_set_remove_the_deprecated_field migrating_approval-tier_to_min-approval-requirement after_closing_a_root_blocker_validate_got_a_new_error which_cards_cite_the_card_I_just_moved stale_blocker_after_move, ocd: 2026-09-05, lmd: 2026-09-05]
+**Two write-verb behaviours you learn only by running them, measured 2026-09-05 on 80 + 1 cards.**
+
+`trddgrep set <id> min-approval-requirement <rung> --no-bump` on a card that still carries the
+retired `approval-tier:` line **deletes that line as part of the same write** — the verb enforces
+"a file carries exactly one of the two fields" itself. A batch that follows it with a separate
+`edit --replace ""` to remove the old line finds nothing at that line number and logs a failure
+for every card; **76 "FAIL edit" lines were nothing of the kind**. Positive-control the outcome
+(0 `approval-tier` lines, new field present), never the loop's own exit codes.
+
+`trddgrep move <id> <column>` clears `blocked-by:` **on the card being moved** when its blockers
+are terminal. It does NOT visit the cards that cite the moved card. So closing a root blocker
+leaves every dependant still naming it, and the next `validate` mints a `GRAPH-DANGLING-BLOCKER`
+error one commit later. After any move to a terminal column, run `trddgrep unblocks <id>` (or
+`grep -l "blocked-by:.*<id>" design/*/*.md`) and `trddgrep set <dep> blocked-by "[...]" --no-bump`
+each citing card in the same commit.
 
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned

@@ -1,12 +1,12 @@
 ---
 trdd-id: 3TPWA71L
 title: SCEN-015 frontmatter drift — deprecated chrome-devtools required_tools and cleanup gaps
-column: planned
+column: complete
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-09-05T18:59:16+0200
+updated: 2026-09-05T19:03:42+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 3
@@ -57,8 +57,11 @@ step is read-only.
 ## Estimated risk
 
 LOW — scenario-authoring only, no product code.
+- [x] SCEN-015 Action lines route amp-send.sh/amp-reply.sh through the agent's Chat section (Rule 0): S005, S012, S016, S019 reworded; Verify lines keep the script names as the read-only check (7e84ce8c).
 
 ## Approval log
 
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: chief-of-staff). Re-measured: tests/scenarios/SCEN-015_amp-end-to-end-messaging.scen.md still carries `required_tools: [mcp__chrome-devtools__*]` at line 40-46 with no `browser_stack:` field, and steps S161/S214 still call `amp-send.sh` as an Action verb directly — the drift is unrepaired.
 - 2026-09-05T18:59:15+0200 — Reworded S012/S016/S019 Actions in SCEN-015 so the runner instructs the agent via its Chat section instead of invoking amp-send.sh/amp-reply.sh itself (Rule 0); reworded S005's which-check to avoid literal script names in an Action line; Goal/Verify fields keep the exact CLI syntax and script names for reference. required_tools/browser_stack were already fixed in an earlier pass.
+- 2026-09-05T19:03:15+0200 — planned → complete by ai-maestro-hub-session (assignee; min-approval none): the card's single item landed as 7e84ce8c and is verified by grep (0 Action lines name the scripts); the checklist box above was added at close-out because the card predates the checklist gate — it records the one thing the card asked for, nothing else. The stations planned→todo→dev→testing→ai_review are collapsed into this one tool-permitted move on the mono-agent board (a docs-only change: the grep is its test, the worker report its review).
+- 2026-09-05T19:03:42+0200 — COMPLETE by emanuelesabetta. archived → complete.

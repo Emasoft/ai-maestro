@@ -2,7 +2,7 @@
 name: pillar-tooling-scale-and-index
 description: "trddgrep / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can trddgrep's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it / --min-severity or --rule on trddgrep does nothing / an unknown CLI flag is silently ignored / cmp says the installed pillar CLI differs from the source but I didn't touch it / which file do I diff an installed trddgrep/prrdgrep/specgrep against / the pillar-index directory is huge and full of test litter / ~/.aimaestro/pillar-index has hundreds of sqlite files / an index whose corpus was deleted is still on disk / how do I find or remove orphaned pillar indexes / what does yarn pillar:reap do / a temp-dir corpus left a permanent index behind / grep on a checker's report returns zero for a file I know it compared / is this file in the scan set or not / the tool prints only a summary line when clean / a zero that came from the output format rather than the population"
 ocd: 2026-07-28
-lmd: 2026-08-22
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -202,6 +202,7 @@ only when its `.mjs` exists (never a stub that refuses). `trddgrep env` prints
 `mode=standalone` or `mode=agent <name>` with its reason — detection is read-only by
 construction (an `existsSync` gate + a minimal parse, deliberately NOT `loadAgents()`, which
 `mkdir`s the state dir before its own guard and SAVES a migration)[^8].
+- [[nul-byte-makes-a-file-invisible-to-grep]]
 
 ## Notes and lessons learned
 

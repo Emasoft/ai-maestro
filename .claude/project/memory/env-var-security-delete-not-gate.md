@@ -2,7 +2,7 @@
 name: env-var-security-delete-not-gate
 description: "adding a new process.env read / env var — is it safe? does a security-weakening env var get deleted or gated? how does ai-maestro treat env overrides for keychain/backend/paths? the test-only allowlist + regression fence"
 ocd: 2026-07-17
-lmd: 2026-07-17
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -53,6 +53,11 @@ the tests avoided the developer's real keychain.
 
 See also [[governance-password-invalidation]] (the `x-forwarded-for` can't-trust-client-headers
 security lesson), and TRDD-CC9PY337 for the full phase-by-phase record.
+
+
+## See also
+
+- [[env-vars-and-the-governance-password]]
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-CC9P-Y337, status:valid, keywords:"gated_a_var_on_a_stale_comment env_override trusted_code_comment no_test_actually_sets_it", ocd:2026-07-17, lmd:2026-07-17]

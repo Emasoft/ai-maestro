@@ -2,7 +2,7 @@
 name: two-server-modes-the-headless-router-reimplements-routes
 description: "I added the guard in lib/ and the tests are green — but is it actually enforced? the same request behaves differently in headless mode / the route still returns 200 / a central edit was supposed to close every route"
 ocd: 2026-07-14
-lmd: 2026-08-02
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -82,3 +82,4 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
   in Next and in NONE of the headless table's entries, so the hook 404s and presence is never
   recorded there — while `/portfolio/verify` appears in both AND delegates to the same module, so
   those two cannot drift.
+- [[agent-isolation-is-not-enforced]]

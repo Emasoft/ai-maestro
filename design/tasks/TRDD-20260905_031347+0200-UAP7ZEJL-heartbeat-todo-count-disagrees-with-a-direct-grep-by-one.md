@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:55:20+0200
+updated: 2026-09-05T04:57:06+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -303,10 +303,22 @@ against the same files, and name the cards the two sets disagree about. Settled 
   a second, independent line of evidence:
 
   **What the claim actually rests on is a DIRECT READ of the only site that holds the value**
-  (verified 04:55). In `lib/trdd-doctor.ts`, `probe` is assigned at :1044 and its every use is
-  `probe === ''` — an emptiness test. The file's only `execFileSync` is :1391, running `git log`.
-  So the one consumer that has the command in scope does not run it. That is an observation of
-  the thing, not an inference from instruments.
+  (verified 04:55), stated as two separate measurements because they have different reach:
+
+  | measured | reach |
+  |---|---|
+  | `probe` assigned at `trdd-doctor.ts:1044`; its uses in **:1044-1090** are `probe === ''` emptiness tests | a 47-line WINDOW — a use in the same block below :1090 would be outside it |
+  | the file contains **no exec of any kind** beyond `execFileSync('git', …)` at :1391 | the WHOLE file, scope-independent |
+
+  The second is what carries the conclusion: a later `execFileSync(probe)` anywhere in the file
+  would have been caught regardless of where `probe`'s block ends. An earlier draft of this
+  paragraph said *"its EVERY use is `probe === ''`"* — a universal asserted from a partial read,
+  which is the same window defect as the ±3-line guard check further up this card, at 47 lines
+  instead of 3. Corrected to what was measured.
+
+  Residual gap, stated rather than searched away: the exec grep is VERB-based, so a helper module
+  (`runProbe(probe)` imported from elsewhere) would name no exec verb here. Narrow, because the
+  whole-tree field-name grep found only this file and its test.
 
   **A mutual-coverage argument was here and is WITHDRAWN, because it was false.** It said: the
   authoring card cannot see the future, the grep cannot see a generic consumer, so a live

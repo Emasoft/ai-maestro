@@ -1,9 +1,9 @@
 ---
 trdd-id: XCQ9TDSK
 title: trddgrep move out of blocked leaves blocked-by populated, which the 3-pillars spec calls drift
-column: backburner
+column: todo
 created: 2026-09-05T11:25:38+0200
-updated: 2026-09-05T11:25:38+0200
+updated: 2026-09-05T11:26:07+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: bugfix
@@ -29,3 +29,4 @@ approval-datetime: 2026-09-05T11:25:38+0200
 ## Approval log
 
 - 2026-09-05T11:25:38+0200 — MANDATE issued by emanuelesabetta (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T11:26:07+0200 — column → todo by manager. Tier 0 self-mandate (min-approval-requirement: none): bounded tool fix against a spec clause the tool already violates (3P-KAN-06 corollary, 3-pillars-spec.md:297). Ready once MUB7NTRF lands in the same move-verb source. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'.

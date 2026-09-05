@@ -2,7 +2,7 @@
 name: code-analysis-tooling
 description: "what is tldr / fastedit / distill / why don't the tldr hooks fire automatically / how does an agent read only relevant symbol lines instead of whole files / where do the code-analysis skills live for codex or gemini agents / scoped code reads without inflating context"
 ocd: 2026-08-02
-lmd: 2026-08-20
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: reference
@@ -81,6 +81,24 @@ assuming either one is how a check silently returns garbage.
 against this repo (observed live). It is NOT this repo's hooks, scripts or settings, NOT the
 janitor's scripts, and NOT another Claude session — every candidate was checked by cwd. If stale
 locks recur, that is where to look next.
+
+
+^ATOM-RJV0-RLD6 [desc: "A recurring 0-byte index.lock right after every commit, held by nobody, is a git-status POLLER (statusline/IDE) whose subprocess timeout kills it mid index-refresh; fix the poller with --no-optional-l", keywords: Another_git_process_seems_to_be_running_in_this_repository index.lock_File_exists 0-byte_index.lock stale_lock_after_every_commit statusline_git_status --no-optional-locks GIT_OPTIONAL_LOCKS lsof_shows_no_holder git_status_rewrites_the_index recurring_stale_lock_after_commit git_status_poller_kills_index.lock who_creates_index.lock_repeatedly, trdd: TRDD-523V1N4I, ocd: 2026-09-05, lmd: 2026-09-05]
+
+A recurring 0-byte `.git/index.lock` that appears seconds after a commit and is held by
+nobody (lsof empty, no git process) is the signature of a `git status` POLLER (a
+statusline, an IDE git extension) killed by its own short subprocess timeout mid
+index-refresh — `git status` rewrites the refreshed index through `index.lock`, and a
+kill between create and rename leaves the empty file. It is worst right after a commit
+because a fresh index makes the refresh slowest, and worst on a loaded host.
+
+Diagnose with a sub-100ms watcher on the lock path that prints every git process's argv
+and cwd the instant the file exists — a 2s poll misses a lock that lives 60ms.
+
+Fix at the poller: `git --no-optional-locks status --porcelain` (or `GIT_OPTIONAL_LOCKS=0`)
+— the same flag this repo's `lib/pillar/freshness.ts` already uses. Never fix it by
+deleting locks on a schedule; see `scripts/dev/git-lock-status` for the lsof-based
+stale-vs-held decision.
 
 ## See also
 

@@ -634,15 +634,18 @@ export function createCreationHelper(): Promise<ServiceResult<{
     let agent = getAgentByName(SESSION_NAME)
     const exists = await sessionExists()
 
-    // Already running — return it (idempotent). Still (re)arm the in-process
-    // timers: after a server restart the tmux session can outlive the process
-    // that created it (the boot-time kill in server.mjs swallows its own
-    // failure), and without this every publish request would sit unread until
-    // the persona's 30 s poll timed out. Both start* calls stop any existing
-    // timer first, so re-arming inside the same process is harmless.
+    // Already running — return it (idempotent). Arm the in-process timers ONLY
+    // if they are absent: after a server restart the tmux session can outlive
+    // the process that created it (the boot-time kill in server.mjs swallows
+    // its own failure), and without this every publish request would sit
+    // unread until the persona's 30 s poll timed out. The guard is
+    // load-bearing — startWatchdog() resets lastHeartbeat and startPublishPoll()
+    // clears publishInFlight, so calling them unconditionally here would let
+    // any repeated ensure/create call starve the zombie watchdog and admit a
+    // second concurrent publish (review finding on c8da6532).
     if (agent && exists) {
-      startWatchdog()
-      startPublishPoll()
+      if (!watchdogTimer) startWatchdog()
+      if (!publishPollTimer) startPublishPoll()
       return {
         data: {
           success: true,

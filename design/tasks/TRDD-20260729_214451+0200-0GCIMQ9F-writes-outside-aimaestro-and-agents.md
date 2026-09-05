@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:18:15+0200
+updated: 2026-09-05T03:21:16+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -44,56 +44,44 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > flagging it. The field is left as-is — it is spent, and re-arming a snooze on a card that waits
 > on a person would just re-hide it.
 >
-> **RE-MEASURED FOR THE PENDING DECISION** (read-only; the card's own text warns the count is not
-> frozen and to re-read rather than trust a recorded number):
+> **RE-MEASURED FOR THE PENDING DECISION — CURRENT FACTS ONLY.** This section was rewritten FLAT
+> on 2026-09-05: four commits had layered claim → retraction → retraction-of-retraction into the
+> passage a human reads before authorizing a deletion, which is the same "the paragraph became a
+> monument" defect this session fixed on TRDD-AQTGAY60, in a worse place. The corrections live in
+> the commit trail (`f96fdf6c`, `33d68cc4`, `171ad9b4`, `73b77a82`); what follows is only what is
+> true now.
+>
+> **Measured at rest, 2026-09-05 03:13:** `*.sqlite` **167** · non-sqlite **1** (a `.heal.json`) ·
+> total files **168** · `-wal` **0** · `-shm` **0** · **74 MB**.
 >
 > | when | indexes | instrument |
 > |---|---|---|
-> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live | `yarn pillar:reap` — classifies `*.sqlite` (`reap-pillar-index.mjs:25`) |
-> | 2026-08-26 | 144 ⚠ *files, not indexes — prior session's annotation, unverifiable* | `find … -type f \| wc -l` |
-> | **2026-09-05 03:13** | **167** (168 files incl. 1 `.heal.json`) — 74 MB | `find … -name '*.sqlite'`, measured first-hand |
+> | 2026-08-22 | 102 scanned — 70 orphaned, 26 empty, 6 live | `yarn pillar:reap` ⚠ *predates a known rewrite of that script (its own comment: "the first cut did not" read from a copy)* |
+> | 2026-08-26 | 144 ⚠ *a FILE count, from a prior session's annotation — unverifiable now* | `find … -type f` |
+> | **2026-09-05** | **167** | `find … -name '*.sqlite'`, first-hand |
 >
-> **SETTLED FROM SOURCE — `pillar:reap` counts INDEXES, so the comparable number today is 167.**
-> `scripts/reap-pillar-index.mjs:25` is `readdirSync(dir).filter(f => f.endsWith('.sqlite'))`. Two
-> earlier versions of this banner argued about what row 1 counted instead of reading that line.
-> Measured 2026-09-05 03:13, at rest:
+> **What is solid: the directory is growing, and it is 74 MB.** The rate's *shape* is not — the
+> three rows come from two instruments and one predates a script rewrite, and because these are
+> TEST artifacts the rate tracks how much testing ran in each window, which is not excluded.
 >
-> ```
-> *.sqlite 167  ·  non-sqlite 1 (a .heal.json)  ·  total files 168  ·  -wal 0  ·  -shm 0
-> ```
+> **`pillar:reap` classifies `*.sqlite` only** (`scripts/reap-pillar-index.mjs:25`). Two
+> consequences that matter here: it is why row 3's comparable number is 167 rather than 168, and it
+> means any leaked `-wal`/`-shm` would be **invisible to the tool** while still inflating the file
+> count and the 74 MB.
 >
-> **So the series is 102 → 144 → 167 in INDEXES** (row 2 is the one exception; see below). An
-> earlier version compared 102 indexes against 168 *files* — mixing units by one file, having
-> measured 167 in the same command.
+> ⚠ **These indexes are WAL-mode, and SQLite mints `-shm`/`-wal` on ANY open — read-only
+> included.** They are removed on a CLEAN close; **a crashed process leaves them behind**, which is
+> exactly this directory's subject. The 0/0 above therefore means "no crashed reader at 03:13", not
+> "this cannot happen". A report-only run on 2026-08-28 created 147 of each beside 147 indexes and
+> TRIPLED the inode count of the directory the tool exists to bound; the current script reads every
+> index from a COPY in a scratch dir to avoid precisely that. **Do not reason about this directory
+> from a version of the tool you have not checked.**
 >
-> **The WAL mechanism is REAL, and my retraction of it over-corrected.** `:31-36` records that
-> these indexes ARE in WAL mode and that SQLite mints `-shm`/`-wal` on ANY open, read-only
-> included — a report-only run on 2026-08-28 created 147 of each beside 147 indexes and **TRIPLED
-> the inode count of the directory it exists to bound**. The sidecars are TRANSIENT (nothing holds
-> these open at rest, hence 0/0 above), not absent. The current script reads every index from a
-> COPY in a scratch dir specifically to avoid that observer effect.
+> "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
+> them.
 >
-> ⚠ **PRACTICAL CONSEQUENCE FOR THE DECISION BELOW:** the preview command is safe *now* because of
-> that scratch-copy fix, but the earlier cut of the same command was not — so do not reason about
-> this directory from a version of the tool you have not checked.
->
-> **On the apparent DECELERATION (+42 in 4 days, then +23 in 10): the instrument objection is dead,
-> but that does not make the trend real.** These are TEST artifacts, so the rate tracks how much
-> testing ran in each window; a busy period followed by a quiet one produces exactly this shape
-> with no change in the leak itself. That alternative is NOT excluded here. Two of the three
-> intervals also rest on row 2 (144), which is taken from a prior session's annotation in this
-> card's prose and cannot be re-verified — the only row not measured first-hand. And row 1's
-> non-index file count in 2026-08-22 is unknown, though the direction is benign: if such files were
-> commoner then, growth is LARGER than stated, not smaller.
->
-> **What survives all of that: the directory is growing, and it is 74 MB.** The rate's shape does
-> not.
->
-> "74 MB on disk" and the card's "66.8 MB reclaimable" still measure different things; do not
-> difference them.
->
-> **The number the decision actually turns on is the ORPHAN count, and only `yarn pillar:reap`
-> (no flag) produces it.** It reaps nothing. The 168 above is a size signal, not a reap estimate.
+> **The number the decision turns on is the ORPHAN count, and only `yarn pillar:reap` (no flag)
+> produces it.** It reaps nothing. The 167 above is a size signal, not a reap estimate.
 >
 > Still growing, as the card predicted (the writers were never contained — `TRDD-IMCEYV9F`).
 > **PENDING-USER, unchanged: authorize `yarn pillar:reap --reap` or decline.** Run

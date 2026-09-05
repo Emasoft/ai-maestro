@@ -4,7 +4,7 @@ title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: blocked
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-09-05T11:37:20+0200
+updated: 2026-09-05T11:53:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,7 +21,7 @@ derived: true
 derived-kind: eht
 implementation-commits: [f2c8fb90]
 blocked-by: [3RIWC3FI]
-blocker-probe: sh -c 'F=$(find design/tasks design/archived -iname "TRDD-[0-9]*_[0-9]*-3RIWC3FI-*" | head -1); [ -n "$F" ] && grep -m1 "^column:" "$F" || echo column-absent'
+blocker-probe: sh -c 'F=$(find design/tasks design/archived -iname "TRDD-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9][+-][0-9][0-9][0-9][0-9]-3RIWC3FI-*" | head -1); [ -n "$F" ] && grep -m1 "^column:" "$F" || echo column-absent'
 blocker-holds-if: not-match:complete
 pre-block-column: todo
 ---

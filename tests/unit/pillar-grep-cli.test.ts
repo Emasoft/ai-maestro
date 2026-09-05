@@ -357,32 +357,47 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * filter on the real thing.
  */
 describe('trddgrep validate — --min-severity and --rule actually filter', () => {
-  it('--min-severity error prints ONLY the two ERROR lines, not all ~247', () => {
+  it('--min-severity error prints nothing (0 ERROR rows); --min-severity warn prints EXACTLY the five WARN rows in CLI order', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'error'])
-    const lines = r.stdout.trim().split('\n')
-    // The length is the FILTER assertion — 2 of ~247 is what proves --min-severity filters at
-    // all. Every id is then pinned individually, in the CLI's own sort order (rule, then id —
-    // MEASURED, not assumed), so a future third error cannot hide by arriving in a slot nobody
-    // names. History of this census: 2→5 on 2026-08-27 (three archived cards closed with an
-    // open box or no checklist after the gate landed); 5→2 on 2026-08-28 under TRDD-55H0DOO6 —
-    // DXJZM3BW and IBKR7F74 got their late closing tick with cited evidence (Approval log),
-    // and 7123D51A dropped to WARN because BODY-STATE-CLAIM now reports v1 UUID-named cards
-    // as history, not contradiction. The two that remain are frozen and unrepairable by rule;
-    // TRDD-3OS166YI owns the gate that must allowlist both. The filter was never broken — this
-    // test pins a census, and the census moves.
-    // EXPECTED FUTURE MOVE (TRDD-CV5KDCB7): 22 parked cards carry a WARN BLOCKED-WITHOUT-PROBE;
-    // the next routine edit of any of them flips it to ERROR (the `updated:` boundary is the
-    // ratchet working, not this test breaking). Add the card's probe, or re-pin here.
-    // 2→0 on 2026-09-05 (TRDD-MUB7NTRF): trddgrep gained the one terminal transition rule 12
-    // permits — complete -> superseded IN PLACE on an archived card — and both frozen cards were
-    // superseded by their successors (b2dd5269, 339cad77), so "unrepairable by rule" ended the
-    // day the verb existed. With zero ERROR lines the length alone would be a vacuous filter
-    // proof, so the positive control is explicit: the UNFILTERED run must still print findings.
+    // History of this census: 2→5 on 2026-08-27 (three archived cards closed with an open box
+    // or no checklist after the gate landed); 5→2 on 2026-08-28 under TRDD-55H0DOO6 — DXJZM3BW
+    // and IBKR7F74 got their late closing tick with cited evidence (Approval log), and 7123D51A
+    // dropped to WARN because BODY-STATE-CLAIM now reports v1 UUID-named cards as history, not
+    // contradiction. 2→0 on 2026-09-05 (TRDD-MUB7NTRF): trddgrep gained the one terminal
+    // transition rule 12 permits — complete -> superseded IN PLACE on an archived card — and
+    // both frozen cards were superseded by their successors (b2dd5269, 339cad77). The filter was
+    // never broken — this test pins a census, and the census moves.
+    // The BLOCKED-WITHOUT-PROBE WARN block this comment once predicted would flip to ERROR is
+    // gone: measured 2026-09-05, all 14 `column: blocked` cards in tasks/ carry a
+    // `blocker-probe:` (0 without). The `updated:` ratchet still applies to any card parked from
+    // now on (TRDD-CV5KDCB7).
+    // With ZERO error rows, "error → empty" alone is VACUOUS: a filter that drops EVERYTHING
+    // passes it too, and so did the first re-pin's "unfiltered has ≥5 lines" control (a review
+    // fork caught it — that control never exercised the filter). The two assertions below are a
+    // PAIR and each catches the direction the other cannot — do not delete either as redundant:
+    //   - WARN pin: EXACTLY these five rows, in the CLI's own sort order (rule, then id —
+    //     MEASURED 2026-09-05 from the live corpus, not assumed). A filter that drops everything
+    //     yields [''] here (neutered `>=` → `>`: this test red, received value `['']`); a
+    //     sixth finding cannot hide in an unnamed slot; a reorder reddens.
+    //   - error → empty: a filter that drops NOTHING prints the five WARN rows under
+    //     `--min-severity error` (neutered predicate → `true`: this test red on `toBe('')`).
+    // A severity outside SEVERITY_RANK would be dropped by every threshold; the closed `Severity`
+    // union in lib/trdd-doctor.ts makes that a tsc error, so the type-check gate — not this pin —
+    // guards it.
+    // When the corpus moves, re-measure (`trddgrep validate --min-severity warn | cut -f1-3`)
+    // and re-pin the list.
     expect(r.stdout.trim()).toBe('')
     expect(r.status).toBe(0)
-    const unfiltered = runCli('trddgrep.mjs', ['validate'])
-    expect(unfiltered.stdout.trim().split('\n').length).toBeGreaterThanOrEqual(5)
-    expect(unfiltered.stdout).not.toMatch(/^ERROR\t/m)
+    const warn = runCli('trddgrep.mjs', ['validate', '--min-severity', 'warn'])
+    const warnRows = warn.stdout.trim().split('\n').map((l) => l.split('\t').slice(0, 3).join('\t'))
+    expect(warnRows).toEqual([
+      'WARN\tSTALE-COLUMN\t979DBDAA',
+      'WARN\tBODY-STATE-CLAIM\t70A521D9',
+      'WARN\tBODY-STATE-CLAIM\t7123D51A',
+      'WARN\tBODY-STATE-CLAIM\tEAC02238',
+      'WARN\tBODY-STATE-CLAIM\tEF0C6C0A',
+    ])
+    expect(warn.status).toBe(0)
   })
 
   it('--rule STALE-COLUMN prints exactly the 1 STALE-COLUMN finding and exits 0 (no error among them)', () => {

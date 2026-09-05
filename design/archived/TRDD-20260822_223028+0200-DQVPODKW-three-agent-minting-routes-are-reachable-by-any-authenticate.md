@@ -1,13 +1,13 @@
 ---
 trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
-column: blocked
+column: complete
 blocked-by: [1LFRP6GJ]
 pre-block-column: ai_review
 blocker-probe: sh -c 'grep -m1 "^column:" design/tasks/TRDD-20260904_134338+0200-1LFRP6GJ-haephestos-persona-has-no-credential-so-its-own-api-calls-401.md || echo column-absent'
 blocker-holds-if: not-match:complete
 created: 2026-08-22T22:30:28+0200
-updated: 2026-09-04T18:12:25+0200
+updated: 2026-09-05T10:59:10+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -307,6 +307,7 @@ Adding it:
 ## Approval log
 
 - 2026-08-22T22:30:28+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T10:59:10+0200 — COMPLETE by manager. Its last open box was carved out as TRDD-1LFRP6GJ, now complete in e768504e (both former agent-callable wizard routes owner-gated; persona lookups moved off the API). Probe ALL-TERMINAL. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'..
 
 ## CLOSED 2026-09-04 — and one finding this card's ledgers could not have seen
 

@@ -3,7 +3,7 @@ trdd-id: FZRTRCGL
 title: a package-manager safety knob is disabled in package-manager config — 1 gap(s)
 column: complete
 created: 2026-07-16T03:17:19+0200
-updated: 2026-09-05T17:34:11+0200
+updated: 2026-09-05T17:36:29+0200
 current-owner: janitor
 task-type: bugfix
 severity: medium
@@ -73,3 +73,4 @@ path, and closes the ticket with an explicit status.
 - 2026-09-05T17:30:22+0200 — REFUTED for this repo by measurement (assignee, Tier 0 — the card is min-approval-requirement none): yarn classic 1.22.22 is the installer and the three requested .npmrc keys are unknown to it and to npm 10.9.8; boxes 1-3 settled, box 4 waits on the janitor's answer about ticket T-A1EHL7K6 (SendMessage sent). The finding's author (janitor package-manager-policy) was told its detector should gate on the package manager in use.
 - 2026-09-05T17:34:04+0200 — Box 4 closed on the janitor's reply (ai-maestro-janitor-72, ~17:34), verified first-hand (reports/colony/evidence/fz-ticket-T-A1EHL7K6.txt): T-A1EHL7K6 is in THIS project's ticket store, status needs_human (terminal), dispatched 2026-07-21 — not re-closed, no ticket verbs run. The janitor's detector already gates on the lockfile's package manager (its commit 49baa78c, 2026-07-29, janitor issue 130) and clears PKGPOL-001 where the policy does not apply — no card owed on its side; this finding predates that fix. The refutation's yarn half is now first-hand (reports/colony/evidence/fz-yarn-and-npm-definitions.txt): 0 occurrences of the three keys in yarn 1.22.22's bundled cli.js and in yarn config list, 0 in npm 10.9.8's node_modules/@npmcli/config definitions.js (positive control save-prefix: 4). Scope of the refutation: the two installers present here; newer npm or pnpm may define these keys — this refutes the finding for this repo, not the knobs. The janitor was notified, not consulted (Tier 0, assignee). COMPLETE.
 - 2026-09-05T17:34:11+0200 — COMPLETE by emanuelesabetta. archived → complete.
+- 2026-09-05T17:36:28+0200 — DECLARED: this card moved planned → complete directly (trddgrep move permitted it; a refuted finding has no dev/test/review surface) — declared here so the jump is not silent. Second-hand, labelled: the three-entry dispatch ledger the janitor cited was NOT found at .janitor/state/dispatch-ledger.jsonl in this repo (the ticket JSON's terminal needs_human status is the first-hand fact); dispatched_at 1784668568 =  by local conversion; the detector fix 49baa78c / janitor issue 130 is per the janitor, unverified here (the installed janitor here is 3.4.14 by plugin-cache path; whether it postdates that commit was not checked).

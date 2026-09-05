@@ -1,6 +1,6 @@
 ---
 name: runtime-install-tree
-description: "where does ai-maestro store data on a host / what is in ~/.aimaestro / what lives under the agents home / where are plugins installed vs where is plugin source / is ~/ai-maestro the install tree / where does claude code store chat transcripts / where are AMP messages stored on disk / where are role-plugins vs custom-plugins vs core-plugins / what is verified vs legacy in the state dir"
+description: "where does ai-maestro store data on a host / what is in ~/.aimaestro / what is inside the ~/agents folder / where are plugins installed vs where is plugin source / is ~/ai-maestro the install tree / where does claude code store chat transcripts / where are AMP messages stored on disk / where are role-plugins vs custom-plugins vs core-plugins / what is verified vs legacy in the state dir"
 ocd: 2026-08-02
 lmd: 2026-09-05
 metadata:

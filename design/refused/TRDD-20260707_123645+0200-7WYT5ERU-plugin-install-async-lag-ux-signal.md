@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:36:45+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 3
 severity: NIT
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/SCEN-002_2026-06-23T10-24-11Z.report.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-7WYT5ERU — Show an installing-state signal while role-plugin install lags the title-change confirmation

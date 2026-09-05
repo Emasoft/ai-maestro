@@ -11,7 +11,7 @@ current-owner: scenario-runner
 task-type: feature
 scope: project
 min-approval-requirement: manager
-approval-tier: 2
+
 priority: 2
 severity: minor
 effort: medium

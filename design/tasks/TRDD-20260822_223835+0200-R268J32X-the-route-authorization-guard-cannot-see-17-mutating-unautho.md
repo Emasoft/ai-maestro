@@ -14,6 +14,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T22:38:35+0200
+assignee: ai-maestro-hub-session
 ---
 
 # The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents

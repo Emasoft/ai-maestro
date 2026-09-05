@@ -5,7 +5,7 @@ column: backburner
 created: 2026-06-21T03:15:13+0200
 updated: 2026-08-16T16:37:17+0200
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-hub-session
 priority: 3
 severity: MEDIUM
 task-type: security
@@ -15,6 +15,8 @@ relevant-rules: []
 test-requirements: [unit, typecheck]
 labels: [security, auth, websocket, bearer, server-mjs, deferred]
 external-refs: ["TRDD-ba9d6df2 §Scope + §Follow-up", "reports/verify-governance-fixes/servermjs-cookie.md"]
+min-approval-requirement: none
+created-by: ai-maestro-session
 ---
 
 # TRDD-f1d89143 — Deep-validate Bearer at the downstream WS/pty handler

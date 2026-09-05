@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T18:22:45+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Flip the statusLine command so the built ingest pipeline actually receives data

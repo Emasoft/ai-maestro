@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:36:45+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: HIGH
 effort: M
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/SCEN-002_2026-06-23T10-24-11Z.report.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-AOFL94O3 — COS-demotion ungated in Title Assignment Dialog and ChangeTitle Gate 8

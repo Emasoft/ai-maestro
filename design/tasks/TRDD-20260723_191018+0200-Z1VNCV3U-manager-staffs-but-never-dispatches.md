@@ -16,6 +16,8 @@ severity: critical
 effort: medium
 labels: [scenario-improvement, scen-031, phase-1, manager-behaviour]
 external-refs: [reports/scenarios-runner/SCEN-031-phase-1b_20260723T170147Z.report.md]
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # The MANAGER organizes a portfolio but does not delegate it

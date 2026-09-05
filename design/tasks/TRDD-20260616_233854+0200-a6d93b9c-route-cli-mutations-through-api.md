@@ -3,7 +3,6 @@ trdd-id: A6D93B9C
 title: Route CLI plugin skill and local-message mutations through the server API and forbid agent user-scope
 column: planned
 pre-block-column: null
-approval-tier: 2
 created: 2026-06-16T23:38:54+0200
 updated: 2026-08-16T16:49:08+0200
 current-owner: ai-maestro-session
@@ -14,6 +13,9 @@ priority: 2
 severity: HIGH
 relevant-rules: []
 external-refs: ["reports/script-audit/AUDIT-REPORT-20260616_233416+0200.md"]
+min-approval-requirement: manager
+created-by: ai-maestro-session
+assignee: ai-maestro-hub-session
 ---
 
 # TRDD-a6d93b9c — Route CLI plugin/skill/local-message mutations through the server (and forbid agent user-scope)

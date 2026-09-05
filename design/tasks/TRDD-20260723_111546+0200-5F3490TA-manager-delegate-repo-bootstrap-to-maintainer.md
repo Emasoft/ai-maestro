@@ -21,6 +21,8 @@ implementation-commits: []
 external-refs:
   - reports/fleet-evaluation/20260723_110953+0200-scen031-fleet-behaviour-eval.md
   - tests/scenarios/SCEN-031_end-to-end-fleet-ship.scen.md
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 ## Problem (eval SH-3, P2)

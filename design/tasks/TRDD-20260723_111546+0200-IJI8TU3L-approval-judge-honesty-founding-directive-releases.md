@@ -21,6 +21,8 @@ implementation-commits: []
 external-refs:
   - reports/fleet-evaluation/20260723_110953+0200-scen031-fleet-behaviour-eval.md
   - rules/aimaestro/aimaestro-trdd-approval.md
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 ## Problem (eval SH-5, P4)

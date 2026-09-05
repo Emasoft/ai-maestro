@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:45:00+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-12N53KYX — SCEN-001 wording: titles shown-disabled, not hidden

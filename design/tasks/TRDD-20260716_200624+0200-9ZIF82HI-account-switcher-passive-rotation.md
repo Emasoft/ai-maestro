@@ -23,6 +23,8 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
+created-by: ai-maestro
+assignee: ai-maestro-hub-session
 ---
 
 # Account switcher — passive rotation to a fresh account/token on 429 / dead-refresh / network interruption

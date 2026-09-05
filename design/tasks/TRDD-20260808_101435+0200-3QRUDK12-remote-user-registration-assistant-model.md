@@ -15,6 +15,8 @@ approval-datetime: 2026-08-08T10:14:35+0200
 project-id: ai-maestro
 labels: [multi-user, assistant, registration, tailscale, security]
 external-refs: [ai-maestro#39, ai-maestro#86]
+created-by: ai-maestro-hub-session
+assignee: ai-maestro-hub-session
 ---
 
 # Remote USER registration and the ASSISTANT collaboration model

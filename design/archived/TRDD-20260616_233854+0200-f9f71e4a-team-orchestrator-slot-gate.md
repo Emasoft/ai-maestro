@@ -2,7 +2,6 @@
 trdd-id: F9F71E4A
 title: Gate the team orchestratorId slot — sudo plus eligibility plus titling on PUT
 column: completed
-approval-tier: 2
 created: 2026-06-16T23:38:54+0200
 updated: 2026-07-13T10:40:07+0000
 current-owner: null
@@ -11,6 +10,7 @@ priority: 0
 severity: HIGH
 relevant-rules: []
 external-refs: ["reports/script-audit/AUDIT-REPORT-20260616_233416+0200.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-f9f71e4a — Gate the team `orchestratorId` slot (sudo + eligibility + titling) on PUT

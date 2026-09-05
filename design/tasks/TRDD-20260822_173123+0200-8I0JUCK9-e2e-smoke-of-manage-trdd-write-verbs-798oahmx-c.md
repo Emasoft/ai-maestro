@@ -14,6 +14,7 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:31:24+0200
 approval-token: 55de283f-a278-49b7-a168-2a210caaa324
+assignee: ai-maestro-hub-session
 ---
 
 # E2E smoke of manage-trdd write verbs 798OAHMX C

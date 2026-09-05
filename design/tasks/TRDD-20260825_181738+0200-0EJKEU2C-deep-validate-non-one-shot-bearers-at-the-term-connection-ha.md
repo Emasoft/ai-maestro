@@ -16,6 +16,7 @@ approval-datetime: 2026-08-25T18:17:38+0200
 parent-trdd: 47A35BA2
 derived: true
 derived-kind: eht
+assignee: ai-maestro-hub-session
 ---
 
 # Deep-validate non-one-shot bearers at the term connection handler without consuming one-shot AID tokens

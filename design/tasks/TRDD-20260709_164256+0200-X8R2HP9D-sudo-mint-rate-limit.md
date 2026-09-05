@@ -2,11 +2,10 @@
 trdd-id: X8R2HP9D
 title: Successful sudo-token mints consume a global 5-per-minute bucket
 column: planned
-approval-tier: 2
 created: 2026-07-09T16:42:56+0200
 updated: 2026-08-16T16:49:08+0200
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-hub-session
 priority: 2
 severity: MEDIUM
 effort: S
@@ -25,6 +24,8 @@ impacts: []
 attempts: 1
 implementation-commits: [916f7f30]
 external-refs: []
+min-approval-requirement: manager
+created-by: ai-maestro-session
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10

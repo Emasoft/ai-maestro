@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:35:24+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: MEDIUM
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_003_2026-06-23T10-35-11Z.md"]
 implementation-commits: [ec4e307d]
+min-approval-requirement: manager
 ---
 
 # TRDD-0EZG26KI — Sidebar search excludes hibernated agents under the ACTIVE filter

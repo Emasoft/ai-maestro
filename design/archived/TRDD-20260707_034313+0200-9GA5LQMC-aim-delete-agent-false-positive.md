@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:43:13+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: HIGH
 effort: S
@@ -13,6 +12,7 @@ labels: [scenario-improvement, scen-020, batch-backlog-20260707]
 task-type: bugfix
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_020_20260625T153541Z.md"]
 implementation-commits: [6e032ab6]
+min-approval-requirement: manager
 ---
 
 # TRDD-9GA5LQMC — aim_delete_agent returns false-positive success

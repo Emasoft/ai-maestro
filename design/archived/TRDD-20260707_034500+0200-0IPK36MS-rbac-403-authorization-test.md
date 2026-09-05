@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:45:00+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: MEDIUM
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-0IPK36MS — Add the missing RBAC-403 authorization unit test

@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:41:00+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 0
 severity: HIGH
 effort: M
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 implementation-commits: [48ac2273]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-4IYPNZWT — Allow Add Marketplace to accept a local directory path, not only GitHub URLs

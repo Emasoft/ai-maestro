@@ -16,6 +16,7 @@ approval-datetime: 2026-08-25T18:17:40+0200
 parent-trdd: 47A35BA2
 derived: true
 derived-kind: eht
+assignee: ai-maestro-hub-session
 ---
 
 # Decide and apply the auth policy for the GET role-plugins status and governance reachable info-leak endpoints

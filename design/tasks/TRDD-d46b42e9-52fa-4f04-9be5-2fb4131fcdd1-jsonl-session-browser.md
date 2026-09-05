@@ -18,6 +18,7 @@ npt: []
 eht: []
 blocked-by: []
 implementation-commits: [c003168f, 8f3677b3, b19b146b, d90da019, 462c9dd3, e86e5b16, 6462ec49]
+created-by: main
 ---
 
 # TRDD-d46b42e9 — JSONL Session Browser (Rust streaming reader + chat transcript UI)

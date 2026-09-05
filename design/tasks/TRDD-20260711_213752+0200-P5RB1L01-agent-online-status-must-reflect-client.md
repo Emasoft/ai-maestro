@@ -8,7 +8,7 @@ approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
 updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
-assignee: null
+assignee: ai-maestro-hub-session
 priority: 1
 severity: HIGH
 effort: M
@@ -17,6 +17,7 @@ labels: [scenario-improvement, scen-015]
 relevant-rules: []
 min-approval-requirement: manager
 external-refs: ["reports/scenarios-runner/SCEN-015_2026-07-11T18-33-14Z.report.md"]
+created-by: scenario-runner
 ---
 
 ## Problem

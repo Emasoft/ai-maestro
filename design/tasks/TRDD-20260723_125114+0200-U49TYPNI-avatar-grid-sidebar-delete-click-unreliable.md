@@ -20,6 +20,8 @@ npt: []
 implementation-commits: []
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260723T033213Z.report.md (ISSUE-002)
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 # TRDD-U49TYPNI — Avatar-grid sidebar view: agent card clicks unreliable, near-miss on Delete

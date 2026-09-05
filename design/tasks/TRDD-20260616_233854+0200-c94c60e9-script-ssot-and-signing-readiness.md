@@ -14,6 +14,8 @@ approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
 relevant-rules: []
 external-refs: ["reports/script-audit/AUDIT-REPORT-20260616_233416+0200.md"]
+created-by: null
+assignee: ai-maestro-hub-session
 ---
 
 # TRDD-c94c60e9 — Script SSOT + code-signing readiness

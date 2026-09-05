@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:35:40+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: NIT
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_024_2026-05-04T11-36-31Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-P7HGMW5Z — Show agent name alongside persona label in agent listings

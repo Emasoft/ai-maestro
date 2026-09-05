@@ -27,6 +27,8 @@ attempts: 0
 last-test-result: not-run
 implementation-commits: []
 external-refs: []
+min-approval-requirement: none
+created-by: claude-opus-session
 ---
 
 # TRDD-N1FYP2AW — Token-optimized scenario-runner (Sonnet[1m] executor + Opus screenshot-interpreter)

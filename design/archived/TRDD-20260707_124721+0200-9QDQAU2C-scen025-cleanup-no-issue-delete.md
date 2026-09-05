@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:47:21+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_025_2026-05-04T12-16-23Z.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-9QDQAU2C — SCEN-025 cleanup should close and archive GitHub issues, not delete them

@@ -5,11 +5,10 @@ column: backburner
 created: 2026-07-09T17:51:47+0200
 updated: 2026-08-16T16:45:09+0200
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-hub-session
 priority: 3
 severity: MEDIUM
 effort: M
-approval-tier: 2
 task-type: security
 release-via: none
 parent-trdd: null
@@ -28,6 +27,8 @@ impacts: [config-schema]
 attempts: 0
 implementation-commits: []
 external-refs: []
+min-approval-requirement: manager
+created-by: ai-maestro-session
 ---
 
 # TRDD-B6XN2VKD — an agent must not be able to run `claude`

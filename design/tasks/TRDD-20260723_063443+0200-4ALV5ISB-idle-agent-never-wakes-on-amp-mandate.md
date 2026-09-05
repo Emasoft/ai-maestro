@@ -10,7 +10,7 @@ updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
-approval-tier: 2
+
 priority: 0
 severity: critical
 effort: L
@@ -20,6 +20,8 @@ external-refs:
   - reports/scenarios-runner/SCEN-031_20260723T033213Z.report.md
   - design/tasks/TRDD-20260716_151613+0200-KCRMSNL7-absorb-janitor-continuity-family-a-server.md
   - design/proposals/TRDD-20260722_231837+0200-F898NXLU-manager-must-create-fleet-and-delegate.md
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # Idle agent never wakes to process an inbound AMP mandate

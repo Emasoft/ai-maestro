@@ -14,11 +14,11 @@ task-type: feature
 parent-trdd: TRDD-57EBNB72
 derived: true
 derived-kind: eht
-approval-tier: 0
 release-via: none
 test-requirements: [dev-browser-headless]
 relevant-rules: []
 implementation-commits: []
+min-approval-requirement: none
 ---
 
 # New UI scenario — wizard folder-adoption of a git plugin repo

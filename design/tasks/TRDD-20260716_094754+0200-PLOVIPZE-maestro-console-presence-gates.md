@@ -15,6 +15,8 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-07-16T09:47:54+0200
 labels: [multi-host, transition-phase]
+created-by: opus-governance-rules-session
+assignee: ai-maestro-hub-session
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16

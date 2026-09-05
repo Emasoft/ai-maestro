@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:47:21+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 3
 severity: NIT
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_025_2026-05-04T12-16-23Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-5P3OYZ46 — Add a top-of-file callout requiring fixture-prep for scenarios with git-fixtures

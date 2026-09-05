@@ -19,6 +19,8 @@ relevant-rules: []
 labels: [finalization, governance, role-plugins, final-form, pr-prep]
 external-refs: [Emasoft/ai-maestro#66, Emasoft/ai-maestro#65, Emasoft/ai-maestro-assistant-manager-agent#28]
 release-via: none
+created-by: ai-maestro
+assignee: ai-maestro-hub-session
 ---
 
 # Finalize ai-maestro to a 3-role-plugin governance model for the PR

@@ -14,6 +14,7 @@ labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
 external-refs:
   - reports/scenarios-runner/SCEN-029_20260714T212851Z.report.md
+created-by: scenario-runner
 ---
 
 # The one CLI that takes the governance password can leak it in cleartext

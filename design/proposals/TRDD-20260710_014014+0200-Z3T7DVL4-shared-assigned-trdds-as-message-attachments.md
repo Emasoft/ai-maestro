@@ -27,6 +27,7 @@ impacts: [public-api, config-schema, migration]
 attempts: 0
 implementation-commits: []
 external-refs: []
+created-by: ai-maestro-session
 ---
 
 # TRDD-Z3T7DVL4 — an assigned TRDD is a shared object, not a copy
@@ -424,7 +425,7 @@ a mis-filing, it is a **forged approval** — revoked, moved back to
 **Frontmatter (open-schema expansion, DEP layer):**
 
 ```yaml
-approval-tier: 2          # the REQUIRED authority — the objective floor (§D3)
+
 mandate: true             # author authority >= required approver
 mandated-by: manager      # the TITLE that pre-approves it; 'self' at tier 0
 ```

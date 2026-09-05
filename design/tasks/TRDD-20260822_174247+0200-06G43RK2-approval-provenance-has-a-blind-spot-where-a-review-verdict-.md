@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:42:47+0200
+assignee: ai-maestro-hub-session
 ---
 
 # approval provenance has a blind spot where a review verdict is the authority

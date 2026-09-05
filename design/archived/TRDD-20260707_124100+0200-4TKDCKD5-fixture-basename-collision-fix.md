@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:41:00+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: MEDIUM
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
 implementation-commits: [6e032ab6]
+min-approval-requirement: manager
 ---
 
 # TRDD-4TKDCKD5 — Support publisher-prefixed fixture paths in scenario-setup.sh to avoid basename collisions

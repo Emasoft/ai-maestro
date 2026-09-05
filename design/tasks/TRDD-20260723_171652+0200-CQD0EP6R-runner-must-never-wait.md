@@ -16,6 +16,8 @@ release-via: none
 relevant-rules: []
 labels: [harness-readiness, scen-031, scenario-runner]
 implementation-commits: []
+created-by: ai-maestro-dev-session
+assignee: ai-maestro-hub-session
 ---
 
 # The runner must never wait

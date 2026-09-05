@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:35:40+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 3
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_024_2026-05-04T11-36-31Z.md"]
 implementation-commits: [ec4e307d]
+min-approval-requirement: manager
 ---
 
 # TRDD-01XGWKNF — Fix Agent Creation Wizard avatar-pagination vs advance-arrow coordinate collision

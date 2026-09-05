@@ -10,7 +10,7 @@ updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
-approval-tier: 2
+
 priority: 0
 severity: high
 effort: M

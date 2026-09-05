@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:45:00+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: HIGH
 effort: M
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_024_2026-05-04T11-36-31Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-0301PUYW — Reconcile soft-delete vs cemetery vs orphan-folder semantics

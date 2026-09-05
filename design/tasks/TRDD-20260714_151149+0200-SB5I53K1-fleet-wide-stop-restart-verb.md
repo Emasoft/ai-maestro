@@ -17,6 +17,7 @@ effort: medium
 release-via: none
 relevant-rules: [17, 23, 32]
 labels: [agents, lifecycle, script-layer, janitor, fleet]
+assignee: ai-maestro-hub-session
 ---
 
 # A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent

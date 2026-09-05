@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T18:19:33+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Live install and update of the parameterized installer against a clean target host

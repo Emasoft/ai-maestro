@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:43:13+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: MEDIUM
 effort: S
@@ -13,6 +12,7 @@ labels: [scenario-improvement, scen-012, scen-013, batch-backlog-20260707]
 task-type: feature
 implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_012_20260623T114625Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_013_20260623T115232Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-8HTHE4LA — Wake/Hibernate lifecycle actions in the profile panel

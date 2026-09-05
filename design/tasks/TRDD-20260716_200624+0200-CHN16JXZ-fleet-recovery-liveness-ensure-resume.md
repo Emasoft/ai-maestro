@@ -25,6 +25,8 @@ eht: []
 blocked-by: []
 implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347, 33ea9743, 02de8959]
 release-via: none
+created-by: ai-maestro
+assignee: ai-maestro-hub-session
 ---
 
 # Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet

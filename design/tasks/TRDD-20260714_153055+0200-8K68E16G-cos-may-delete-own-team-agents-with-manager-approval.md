@@ -21,6 +21,7 @@ relevant-rules: [6, 10, 28, 29, 30, 32]
 labels: [governance, agents, lifecycle, chief-of-staff, authorization]
 blocked-by: [F1SL03CK]
 pre-block-column: planned
+assignee: ai-maestro-hub-session
 ---
 
 # A CHIEF-OF-STAFF may delete agents of its own team with MANAGER approval

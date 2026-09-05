@@ -16,6 +16,7 @@ audit-requirements: [security-scan, adversarial-scan]
 review-requirements: [human-review]
 relevant-rules: []
 labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
+created-by: ai-maestro-session
 ---
 
 # TRDD-903b7a20 — Overnight fleet-readiness campaign

@@ -5,7 +5,6 @@ column: cancelled
 created: 2026-07-07T12:36:45+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/SCEN-002_2026-06-23T10-24-11Z.report.md"]
 implementation-commits: [ec4e307d]
+min-approval-requirement: manager
 ---
 
 # TRDD-86EN8UK7 — Top-level Profile tab button ignores synthetic element.click calls

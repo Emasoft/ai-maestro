@@ -14,11 +14,11 @@ task-type: docs
 parent-trdd: TRDD-57EBNB72
 derived: true
 derived-kind: eht
-approval-tier: 0
 release-via: none
 test-requirements: []
 relevant-rules: []
 implementation-commits: []
+min-approval-requirement: none
 ---
 
 # Docs alignment for folder adoption

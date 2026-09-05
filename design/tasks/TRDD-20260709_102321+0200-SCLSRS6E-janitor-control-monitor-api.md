@@ -27,6 +27,7 @@ audit-requirements: [security-scan]
 review-requirements: [human-review]
 impacts: [public-api, install-script]
 external-refs: []
+created-by: ai-maestro-session
 ---
 
 # TRDD-SCLSRS6E — AI Maestro control/monitor API + script layer for governance agents

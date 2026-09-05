@@ -14,6 +14,8 @@ approval-judge: user
 approval-datetime: 2026-07-16T08:26:32+0200
 derived: false
 labels: [security, webauthn, tailscale, network, passkey]
+created-by: opus-governance-rules-session
+assignee: ai-maestro-hub-session
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16

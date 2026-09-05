@@ -9,7 +9,7 @@ task-type: security
 scope: project
 min-approval-requirement: none
 mandate: true
-mandated-by: ai-maestro
+mandated-by: self
 approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-18T09:44:16+0200

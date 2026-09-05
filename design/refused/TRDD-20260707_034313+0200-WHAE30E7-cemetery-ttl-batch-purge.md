@@ -5,13 +5,13 @@ column: refused
 created: 2026-07-07T03:43:13+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: MEDIUM
 effort: M
 labels: [scenario-improvement, scen-012, scen-016, batch-backlog-20260707]
 task-type: feature
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_012_20260623T114625Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_016_2026-06-23T13-18-05Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-WHAE30E7 — Cemetery TTL + batch purge

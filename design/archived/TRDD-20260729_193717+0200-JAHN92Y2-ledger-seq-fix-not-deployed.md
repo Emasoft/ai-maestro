@@ -10,7 +10,7 @@ approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
-approval-tier: 2
+
 priority: 0
 severity: critical
 effort: small

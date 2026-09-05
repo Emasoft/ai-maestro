@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-25T18:25:09+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Wire the ama-star skill surface into every role plugin's agents — AMAMA F5883DCC item B.2

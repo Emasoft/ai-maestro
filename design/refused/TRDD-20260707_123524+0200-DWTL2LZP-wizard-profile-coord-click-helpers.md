@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:35:24+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 3
 severity: NIT
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_003_2026-06-23T10-35-11Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-DWTL2LZP — Add aim_wizard_select_card and aim_open_profile_tab helpers

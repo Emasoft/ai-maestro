@@ -23,6 +23,7 @@ blocked-by: [TRDD-44RGLOO8]
 labels: [scenario-testing, plugin, dev-browser, reusable-harness]
 impacts: [install-script]
 external-refs: []
+created-by: ai-maestro-session
 ---
 
 # TRDD-f181a4ae — Standalone scenario-UI-testing plugin

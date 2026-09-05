@@ -9,7 +9,7 @@ task-type: feature
 scope: project
 min-approval-requirement: none
 mandate: true
-mandated-by: ai-maestro
+mandated-by: self
 approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-16T20:06:24+0200

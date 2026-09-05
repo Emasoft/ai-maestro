@@ -22,6 +22,8 @@ external-refs:
   - reports/scenarios-runner/SCEN-031_20260723T093923Z.report.md
   - design/tasks/TRDD-20260723_111546+0200-5F3490TA-manager-delegate-repo-bootstrap-to-maintainer.md
   - design/tasks/TRDD-20260723_111546+0200-E1AROIGW-reconcile-rule1-with-manager-mandate-model.md
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-23

@@ -13,7 +13,6 @@ labels: [fleet-readiness, import-system, agent-workdir]
 task-type: bugfix
 parent-trdd: TRDD-903b7a20
 eht: [TRDD-VT6SSI0T, TRDD-QH6WD7XI, TRDD-E6MD2FNX]
-approval-tier: 0
 release-via: none
 test-requirements: [unit, integration, typecheck, lint]
 review-requirements: []
@@ -22,6 +21,7 @@ relevant-rules: []
 implementation-commits: [e5f0481d, f214be8c, 90ebeda2, bc01cb4d, a1724058, 912ce7ca]
 last-test-result: pass
 last-test-at: 2026-07-08T17:20:00+0200
+min-approval-requirement: none
 ---
 
 # Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)

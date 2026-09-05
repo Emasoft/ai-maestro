@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:44:38+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_027_2026-05-23T00-42-41Z.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-73OQ8JSV — Loosen SCEN-027 S011 context-breakdown bucket-count assertion to at-least-7

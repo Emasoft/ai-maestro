@@ -17,6 +17,7 @@ effort: medium
 release-via: none
 relevant-rules: [9, 10, 17, 27, 28, 30, 32]
 labels: [security, authorization, headless, governance, root-cause]
+assignee: ai-maestro-hub-session
 ---
 
 # Authentication is substituting for authorization — headless stop/restart let any agent silence the MANAGER

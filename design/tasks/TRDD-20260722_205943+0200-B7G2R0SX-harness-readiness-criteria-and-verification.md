@@ -13,6 +13,8 @@ relevant-rules: [41, 42]
 eht: []
 npt: []
 implementation-commits: []
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-23

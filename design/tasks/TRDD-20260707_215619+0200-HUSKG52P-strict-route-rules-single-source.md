@@ -8,7 +8,7 @@ approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-07T21:56:19+0200
 updated: 2026-08-21T21:59:38+0200
 current-owner: code-review
-assignee: null
+assignee: ai-maestro-hub-session
 priority: 1
 severity: MEDIUM
 effort: L
@@ -20,6 +20,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports/code-review/20260707_175225+0200-finder-CLEAN.json"]
+created-by: code-review
 ---
 
 # TRDD-HUSKG52P — Derive strict-route rules from one source instead of 4-way string duplication

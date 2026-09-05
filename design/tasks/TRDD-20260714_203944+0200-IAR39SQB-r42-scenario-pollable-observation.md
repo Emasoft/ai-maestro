@@ -15,6 +15,8 @@ approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 labels: [scenario-improvement, scen-030]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 ## Problem

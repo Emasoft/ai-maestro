@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:36:45+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: NIT
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/SCEN-002_2026-06-23T10-24-11Z.report.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-Q91OT6AI — Kanban board columns drifted from docs — update to TRDD-v2 14-stage set

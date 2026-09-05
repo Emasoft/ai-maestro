@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:48:31+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Owner performs the live recovery-relay verification with real SMTP credentials

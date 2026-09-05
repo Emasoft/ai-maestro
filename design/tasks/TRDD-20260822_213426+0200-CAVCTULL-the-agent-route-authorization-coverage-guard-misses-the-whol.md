@@ -14,6 +14,7 @@ approved: true
 approval-judge: main
 approval-datetime: 2026-08-22T21:34:26+0200
 external-refs: [TRDD-F1SL03CK, TRDD-JWE3CFLV, TRDD-FRRJ80YQ]
+assignee: ai-maestro-hub-session
 ---
 
 # The agent-route authorization coverage guard misses the whole collection subtree

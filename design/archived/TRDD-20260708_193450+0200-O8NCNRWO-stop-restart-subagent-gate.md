@@ -13,13 +13,13 @@ labels: [fleet-readiness, session-control, cc-compat]
 task-type: bugfix
 parent-trdd: TRDD-903b7a20
 npt: []
-approval-tier: 0
 release-via: none
 test-requirements: [unit, typecheck]
 impacts: []
 relevant-rules: []
 implementation-commits: [47676228, c88ffda8, 3f47dce4, a97594f8, 44860243, 5fed79b3]
 external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17 (CLOSED 2026-07-16, plugin v2.10.0)"]
+min-approval-requirement: none
 ---
 
 # Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents

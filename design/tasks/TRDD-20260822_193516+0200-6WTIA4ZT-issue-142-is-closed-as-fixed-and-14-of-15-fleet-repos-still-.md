@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T19:35:16+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Issue 142 is closed as fixed and 14 of 15 fleet repos still run the pre-fix pre-push hook

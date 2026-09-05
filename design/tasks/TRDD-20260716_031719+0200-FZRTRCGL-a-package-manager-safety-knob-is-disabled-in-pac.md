@@ -12,6 +12,9 @@ ticket-severity: medium
 ticket-evidence: [package.json, .npmrc]
 ticket-dedupe-key: PKGPOL-001:package-manager config
 ticket-origin: package-manager-policy
+min-approval-requirement: none
+created-by: janitor
+assignee: ai-maestro-hub-session
 ---
 
 # a package-manager safety knob is disabled in package-manager config: 1 gap(s)

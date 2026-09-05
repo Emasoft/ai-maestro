@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:41:00+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: LOW
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-55T8NUX2 — Document that Add Marketplace currently accepts GitHub URLs only

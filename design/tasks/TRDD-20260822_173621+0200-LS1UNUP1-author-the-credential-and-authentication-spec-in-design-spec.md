@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:36:21+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Author the credential and authentication spec in design specs

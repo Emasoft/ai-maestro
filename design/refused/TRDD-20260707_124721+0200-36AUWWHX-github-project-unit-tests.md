@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:47:21+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: MEDIUM
 effort: M
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: [25]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_025_2026-05-04T12-16-23Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-36AUWWHX — Add gh-CLI-mocked unit tests for lib/github-project.ts CRUD functions

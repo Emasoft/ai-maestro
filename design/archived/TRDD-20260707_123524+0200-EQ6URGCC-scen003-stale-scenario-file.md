@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T12:35:24+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -17,6 +16,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_003_2026-06-23T10-35-11Z.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-EQ6URGCC — Fix stale expectations in tests/scenarios/SCEN-003_agent-creation-wizard.scen.md

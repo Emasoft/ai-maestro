@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:43:13+0200
 updated: 2026-07-07T14:58:53+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: MEDIUM
 effort: S
@@ -13,6 +12,7 @@ labels: [scenario-improvement, scen-020, batch-backlog-20260707]
 task-type: docs
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_020_20260625T153541Z.md"]
 implementation-commits: [a7d2bfc7]
+min-approval-requirement: manager
 ---
 
 # TRDD-GBYMRL2K — SCEN-020 spec refresh (MAINTAINER repo field + Role section)

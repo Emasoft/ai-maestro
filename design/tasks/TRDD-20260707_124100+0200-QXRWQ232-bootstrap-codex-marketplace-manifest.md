@@ -5,7 +5,6 @@ column: planned
 created: 2026-07-07T12:41:00+0200
 updated: 2026-08-16T16:49:08+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -16,6 +15,9 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
+min-approval-requirement: manager
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # TRDD-QXRWQ232 — Bootstrap the Codex marketplace manifest file when absent

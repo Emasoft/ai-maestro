@@ -19,6 +19,7 @@ effort: medium
 release-via: none
 relevant-rules: [9, 12, 29, 30, 31]
 labels: [governance, teams, lifecycle, chief-of-staff, r31]
+assignee: ai-maestro-hub-session
 ---
 
 # Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF

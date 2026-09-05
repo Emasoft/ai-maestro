@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: blocked
 pre-block-column: design
-blocked-by: [TRDD-H24DF6ZC, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ]
+blocked-by: [TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ]
 created: 2026-07-16T15:16:13+0200
 updated: 2026-08-26T04:48:20+0200
 current-owner: ai-maestro
@@ -20,6 +20,8 @@ labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, 
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
 npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T, NIU5RQ1S, JBFM8XR0, B8B6D56P, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242, Z310XDAF]
 release-via: none
+created-by: ai-maestro
+assignee: ai-maestro-hub-session
 ---
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server

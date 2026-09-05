@@ -21,6 +21,8 @@ eht: []
 blocked-by: []
 release-via: none
 implementation-commits: []
+created-by: ai-maestro
+assignee: ai-maestro-hub-session
 ---
 
 # three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent

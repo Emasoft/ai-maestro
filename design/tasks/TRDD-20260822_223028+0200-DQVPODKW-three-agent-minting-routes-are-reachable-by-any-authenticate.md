@@ -20,6 +20,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T22:30:28+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four

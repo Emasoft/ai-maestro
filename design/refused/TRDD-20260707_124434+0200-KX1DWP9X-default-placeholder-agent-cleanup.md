@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:44:38+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 3
 severity: NIT
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_027_2026-05-23T00-42-41Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-KX1DWP9X — Decide fate of the permanently-Exited default placeholder agent in the sidebar

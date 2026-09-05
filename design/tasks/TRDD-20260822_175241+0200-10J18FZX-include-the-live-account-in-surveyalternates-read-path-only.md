@@ -13,6 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:52:41+0200
+assignee: ai-maestro-hub-session
 ---
 
 # Include the live account in surveyAlternates read path only

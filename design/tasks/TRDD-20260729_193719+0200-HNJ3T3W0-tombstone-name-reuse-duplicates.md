@@ -17,6 +17,8 @@ severity: minor
 effort: small
 labels: [scenario-improvement, scen-001, agent-registry]
 external-refs: [reports/scenarios-runner/SCEN-001_20260729T170344Z.report.md]
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # Name uniqueness is enforced against live agents only, so a tombstoned name can be taken twice

@@ -18,6 +18,7 @@ release-via: none
 relevant-rules: [28, 29, 30, 31, 32, 34, 41]
 labels: [governance, security, portfolio, enforcement]
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/47]
+assignee: ai-maestro-hub-session
 ---
 
 # Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam

@@ -16,6 +16,8 @@ severity: medium
 effort: small
 labels: [scenario-improvement, scen-031, phase-1, manager-behaviour, governance]
 external-refs: [reports/scenarios-runner/SCEN-031-phase-1b_20260723T170147Z.report.md]
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # Requirements should be authored as project-scope TRDDs on `main`, not local markdown

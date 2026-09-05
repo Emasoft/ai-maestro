@@ -5,7 +5,6 @@ column: refused
 created: 2026-07-07T12:35:24+0200
 updated: 2026-07-07T13:24:46+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 2
 severity: LOW
 effort: S
@@ -16,6 +15,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_003_2026-06-23T10-35-11Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-9KMWH05E — Manual cleanup of accumulated scen* test residue

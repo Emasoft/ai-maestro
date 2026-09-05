@@ -13,6 +13,8 @@ approval-datetime: 2026-08-15T01:30:26+0200
 project-id: ai-maestro
 labels: [fleet-readiness, token-economy, rules-layer]
 external-refs: []
+created-by: ai-maestro-hub-session
+assignee: ai-maestro-hub-session
 ---
 
 # One portable cheap-delegation rule in the installed layer

@@ -5,7 +5,6 @@ column: complete
 created: 2026-07-07T03:43:13+0200
 updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
-approval-tier: 2
 priority: 1
 severity: HIGH
 effort: M
@@ -13,6 +12,7 @@ labels: [scenario-improvement, scen-012, batch-backlog-20260707]
 task-type: security
 implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_012_20260623T114625Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-I75EMTK0 — New Session path must run the R17 core-plugin self-heal

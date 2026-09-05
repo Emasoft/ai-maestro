@@ -6,7 +6,6 @@ created: 2026-07-07T12:41:00+0200
 updated: 2026-07-08T01:05:30+0200
 implementation-commits: [77305472]
 current-owner: scenario-runner
-approval-tier: 2
 priority: 0
 severity: HIGH
 effort: M
@@ -17,6 +16,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
+min-approval-requirement: manager
 ---
 
 # TRDD-39ABGST4 — Decide and fix codex-emitted role-plugin name suffix vs CLAUDE.md no-suffix rule

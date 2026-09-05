@@ -14,6 +14,7 @@ mandated-by: self
 project-id: ai-maestro
 labels: [governance, containment, fleet, assistant-role]
 external-refs: [ai-maestro#39, ai-maestro#127, TRDD-FAW31N6F (assistant-role repo)]
+created-by: ai-maestro-hub
 ---
 
 # Workdir-containment hooks are SERVER-provisioned — no role plugin may own containment

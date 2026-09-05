@@ -28,6 +28,8 @@ review-requirements: [human-review]
 impacts: [public-api]
 runtime-targets: [macos, linux]
 external-refs: ["github.com/Emasoft/ai-maestro-janitor"]
+min-approval-requirement: manager
+created-by: main
 ---
 
 # TRDD-OZZB3DJA — Migrate janitor functions into the ai-maestro server (script-wrapped APIs)

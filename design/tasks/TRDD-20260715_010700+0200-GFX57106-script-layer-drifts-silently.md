@@ -20,6 +20,8 @@ labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
 external-refs:
   - reports/scenarios-runner/SCEN-029_20260714T212851Z.report.md
+created-by: scenario-runner
+assignee: ai-maestro-hub-session
 ---
 
 # The installed CLI is stale, and no invariant notices

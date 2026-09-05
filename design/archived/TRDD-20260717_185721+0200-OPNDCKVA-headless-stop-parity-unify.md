@@ -9,7 +9,7 @@ task-type: refactor
 scope: project
 min-approval-requirement: none
 mandate: true
-mandated-by: ai-maestro
+mandated-by: self
 approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-17T18:57:21+0200

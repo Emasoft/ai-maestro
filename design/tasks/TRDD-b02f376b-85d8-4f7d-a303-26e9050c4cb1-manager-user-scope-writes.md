@@ -18,6 +18,7 @@ npt: []
 eht: []
 blocked-by: []
 implementation-commits: []
+created-by: main
 ---
 
 # TRDD-b02f376b — Tamper-proof title verification for the directory guard hook (MANAGER user-scope writes)

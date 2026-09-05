@@ -21,6 +21,8 @@ implementation-commits: []
 external-refs:
   - reports/fleet-evaluation/20260723_110953+0200-scen031-fleet-behaviour-eval.md
   - design/tasks/TRDD-20260716_200624+0200-CHN16JXZ-fleet-recovery-liveness-ensure-resume.md
+created-by: session
+assignee: ai-maestro-hub-session
 ---
 
 ## Problem (eval SH-1, P5)

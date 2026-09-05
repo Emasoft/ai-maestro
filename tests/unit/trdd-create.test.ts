@@ -116,5 +116,32 @@ describe('frontmatter injection guard', () => {
     const text = fs.readFileSync(r.file, 'utf8')
     expect(text).toMatch(/^parent-trdd: AAAA1111$/m)
     expect(text).toMatch(/^npt: \[BBBB2222\]$/m)
+    // TRDD-O1ZW03DG box 1: derivedKind is optional (trddgrep.mjs and the test
+    // above both mint a parent-trdd with no kind) — this call omits it too, so
+    // no derived: line should appear.
+    expect(text).not.toMatch(/^derived: /m)
+  })
+
+  it('TRDD-O1ZW03DG box 1: a derived-at-birth card carries derived: true and derived-kind:', () => {
+    const r = createTrdd(design, {
+      title: 'an npt of the parent', taskType: 'feature', authorAuthority: 'none', author: 'a',
+      parent: 'AAAA1111', derivedKind: 'npt',
+    })
+    const parsed = parseTrddFile(r.file, r.zone)
+    expect(parsed).not.toBeNull()
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(text).toMatch(/^parent-trdd: AAAA1111$/m)
+    expect(text).toMatch(/^derived: true$/m)
+    expect(text).toMatch(/^derived-kind: npt$/m)
+  })
+
+  it('TRDD-O1ZW03DG box 1: derivedKind without a parent is a caller error — nothing is minted', () => {
+    expect(() => createTrdd(design, {
+      title: 'orphan platelet', taskType: 'feature', authorAuthority: 'none', author: 'a',
+      derivedKind: 'eht',
+    })).toThrow(/derivedKind requires parent/)
+    for (const z of ['tasks', 'proposals']) {
+      expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
+    }
   })
 })

@@ -11,7 +11,7 @@
  * proposals/ as `column: proposal` — the mandate rule enforced at mint, from the
  * VERIFIED title, never from a body field the caller could inflate.
  *
- * Body: { title, taskType, column?, minApproval?, parent?, npt?, eht?, body?, agentId? }
+ * Body: { title, taskType, column?, minApproval?, parent?, derivedKind?, npt?, eht?, body?, agentId? }
  * `agentId` selects WHICH project's design/ (default: the server's own repo),
  * exactly like GET /api/trdd.
  */
@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
       authorAuthority,
       author,
       parent: str('parent'),
+      // TRDD-O1ZW03DG box 1: validated at the ONE site (lib/trdd-create) — the
+      // route only forwards whatever string the caller sent, enum-checked there.
+      derivedKind: str('derivedKind') as 'npt' | 'eht' | undefined,
       npt: list('npt'),
       eht: list('eht'),
       body: str('body'),

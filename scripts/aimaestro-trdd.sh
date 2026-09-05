@@ -26,8 +26,8 @@
 #
 # Usage:
 #   aimaestro-trdd.sh create --title <t> --type <task-type> [--column C] [--min-approval <title>]
-#       [--parent <id8>] [--npt <id8,id8,...>] [--eht <id8,id8,...>] [--body-file <path>|--body -]
-#       [--agent A]
+#       [--parent <id8>] [--derived-kind npt|eht] [--npt <id8,id8,...>] [--eht <id8,id8,...>]
+#       [--body-file <path>|--body -] [--agent A]
 #       Server-side minting (TRDD-40DYBI4T): id8 (collision-checked across every scope
 #       root), timestamps, minimal v2 frontmatter, and ZONE ROUTING per the mandate
 #       rule — a --min-approval above YOUR verified authority lands the card in
@@ -155,9 +155,11 @@ Commands:
       --column C                 (collision-checked), timestamps, minimal v2
       --min-approval W           frontmatter, and ZONE ROUTING — a --min-approval
       --parent ID                above YOUR verified authority lands the card in
-      --npt ID,ID                design/proposals/ as `column: proposal` (the
-      --eht ID,ID                server decides from your AID title, never from a
-      --body-file P | --body -   flag). Title must not contain a colon. Prints
+      --derived-kind npt|eht     design/proposals/ as `column: proposal` (the
+      --npt ID,ID                server decides from your AID title, never from a
+      --eht ID,ID                flag). --derived-kind requires --parent and stamps
+      --body-file P | --body -   `derived: true`/`derived-kind:` (TRDD-O1ZW03DG box
+                                 1). Title must not contain a colon. Prints
                                  `TRDD-<id8> <zone> <column> <file>` (TSV). The
                                  file is written but NOT committed — commit it
                                  yourself, staged by name.
@@ -573,7 +575,7 @@ cmd_archive() {
 }
 
 cmd_create() {
-    local title="" ttype="" column="" minap="" parent="" npt="" eht="" bodyf="" agent=""
+    local title="" ttype="" column="" minap="" parent="" derivedkind="" npt="" eht="" bodyf="" agent=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --title)        title="$2"; shift 2 ;;
@@ -581,6 +583,7 @@ cmd_create() {
             --column)       column="$2"; shift 2 ;;
             --min-approval) minap="$2"; shift 2 ;;
             --parent)       parent="$2"; shift 2 ;;
+            --derived-kind) derivedkind="$2"; shift 2 ;;
             --npt)          npt="$2"; shift 2 ;;
             --eht)          eht="$2"; shift 2 ;;
             --body-file)    bodyf="$2"; shift 2 ;;
@@ -598,11 +601,12 @@ cmd_create() {
         bodytext="$(cat "$bodyf")"
     fi
     local payload
-    payload="$(jq -n --arg t "$title" --arg y "$ttype" --arg c "$column" --arg m "$minap"         --arg p "$parent" --arg n "$npt" --arg e "$eht" --arg b "$bodytext" --arg a "$agent" '
+    payload="$(jq -n --arg t "$title" --arg y "$ttype" --arg c "$column" --arg m "$minap"         --arg p "$parent" --arg dk "$derivedkind" --arg n "$npt" --arg e "$eht" --arg b "$bodytext" --arg a "$agent" '
         {title: $t, taskType: $y}
         + (if $c != "" then {column: $c} else {} end)
         + (if $m != "" then {minApproval: $m} else {} end)
         + (if $p != "" then {parent: $p} else {} end)
+        + (if $dk != "" then {derivedKind: $dk} else {} end)
         + (if $n != "" then {npt: ($n | split(","))} else {} end)
         + (if $e != "" then {eht: ($e | split(","))} else {} end)
         + (if $b != "" then {body: $b} else {} end)

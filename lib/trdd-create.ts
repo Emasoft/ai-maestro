@@ -89,6 +89,14 @@ export interface CreateTrddOpts {
    */
   assignee?: string
   parent?: string
+  /**
+   * TRDD-O1ZW03DG box 1: the platelet invariant is `derived: true` ⟺ this id is
+   * listed in exactly one parent's `npt:`/`eht:`. Optional (not required) because
+   * `trddgrep.mjs new --parent` and this file's own pre-existing tests mint a
+   * `parent-trdd:` with no kind — making it mandatory would break both without
+   * touching either. Requires `parent` to be set; `parent`-less is a caller error.
+   */
+  derivedKind?: 'npt' | 'eht'
   npt?: string[]
   eht?: string[]
   body?: string
@@ -124,6 +132,15 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     }
   }
   if (!TASK_TYPES.has(opts.taskType)) throw new Error(`task-type must be one of: ${[...TASK_TYPES].join(', ')}`)
+  // TRDD-O1ZW03DG box 1: derived-at-birth. `derived-kind` is meaningless without a
+  // parent (a fail-fast caller error, not a silent no-op) and its value is checked
+  // at runtime because non-TS callers (the API route, the CLI) pass a plain string.
+  if (opts.derivedKind !== undefined) {
+    if (!opts.parent) throw new Error('derivedKind requires parent to be set')
+    if (opts.derivedKind !== 'npt' && opts.derivedKind !== 'eht') {
+      throw new Error(`derivedKind must be "npt" or "eht" (got "${String(opts.derivedKind).slice(0, 40)}")`)
+    }
+  }
 
   const minApproval = opts.minApproval ?? 'none'
   if (!(minApproval in AUTHORITY_RANK)) throw new Error(`min-approval-requirement must be one of: ${Object.keys(AUTHORITY_RANK).join(', ')}`)
@@ -191,6 +208,11 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     lines.push('approved: false')
   }
   if (opts.parent) lines.push(`parent-trdd: ${opts.parent}`)
+  // The other half of the platelet invariant — this card is listed in the PARENT's
+  // npt:/eht: — is NOT done here: createTrdd only ever writes the file it mints,
+  // never touches a second file. Confirmed by reading the whole function above: no
+  // parent-file read/write exists anywhere in this module.
+  if (opts.derivedKind) lines.push('derived: true', `derived-kind: ${opts.derivedKind}`)
   if (opts.npt?.length) lines.push(`npt: [${opts.npt.join(', ')}]`)
   if (opts.eht?.length) lines.push(`eht: [${opts.eht.join(', ')}]`)
   lines.push('---', '', `# ${title}`, '')

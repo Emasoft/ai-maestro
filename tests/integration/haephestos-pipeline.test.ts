@@ -17,7 +17,8 @@
  *   - `fs` and `fs/promises` — in-memory fsStore (so we don't touch the real disk)
  *   - `@/services/role-plugin-service` — ensureMarketplace / updateMarketplaceManifest are spies
  *   - `@/lib/file-lock` — withLock passthrough (no real locking)
- *   - `@/lib/route-auth` — enforceAuth bypass (auth isn't what this test is about)
+ *   - `@/lib/route-auth` — enforceSystemOwner bypass (auth isn't what this test is about;
+ *     TRDD-1LFRP6GJ switched the route from enforceAuth to enforceSystemOwner)
  *   - `child_process.execSync` — swallow the `claude plugin marketplace update` call
  *
  * The logic under test (quad-identity extraction/validation, copy orchestration) is the
@@ -120,8 +121,9 @@ vi.mock('@/lib/file-lock', () => ({
 }))
 
 // route-auth — auth is bypassed; this test is about the pipeline, not auth.
+// TRDD-1LFRP6GJ: the route now calls enforceSystemOwner (owner-gated), not enforceAuth.
 vi.mock('@/lib/route-auth', () => ({
-  enforceAuth: vi.fn(() => null),
+  enforceSystemOwner: vi.fn(() => null),
 }))
 
 // child_process — stub execSync (the `claude plugin marketplace update`

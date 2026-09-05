@@ -243,16 +243,21 @@ const COLLECTION_UNREVIEWED: string[] = [
   // authorizing let any agent of any title wipe the owner's `~/agents/haephestos/` tree, reset
   // its banner, forge its heartbeat, respawn its persona and browse its filesystem.
   //
-  // SCOPED BY A CALLER CENSUS, not swept: `element-descriptions` and `publish-plugin` are the
-  // only two routes the persona actually curls (agents/haephestos-creation-helper.md), so they
-  // STAY here, agent-callable and still undecided. `cleanup` looked like a third — the persona
-  // names it — but that is PROSE describing what the wizard does to its directory, not a call,
-  // and reading the mention as a call would have excluded the most destructive route of the six.
-  // Pinned by tests/unit/creation-helper-wizard-system-owner.test.ts, whose last case asserts
-  // those two siblings are NOT owner-gated, so a later sweep of the whole subtree reddens here.
-  'creation-helper/element-descriptions/route.ts',
+  // ── 5 → 3, TRDD-1LFRP6GJ (2026-09-05) ─────────────────────────────────────────────────
+  // `element-descriptions` and `publish-plugin` are gone too — they now call
+  // `enforceSystemOwner(` and join the six above. The coupling that kept them agent-callable
+  // (the comment this replaces) was VOID by its own measurement: the persona's curls to both
+  // carried no credential and 401ed under `middleware.ts` before either route was ever
+  // reached, so they were never actually agent-callable in the first place. RULED
+  // (TRDD-1LFRP6GJ): move the lookups off the API rather than mint a credential —
+  // `element-descriptions` is now a direct PSS binary invocation in the persona's own
+  // instructions (agents/haephestos-creation-helper.md Step 3), and `publish-plugin` is
+  // reached via a file-based request/response poller in
+  // services/creation-helper-service.ts (`pollPublishRequest`), which calls the same
+  // validation/copy logic in-process (`services/haephestos-publish-service.ts`). Pinned by
+  // tests/unit/creation-helper-wizard-system-owner.test.ts, whose last case now asserts the
+  // OPPOSITE of what it used to — that both siblings DO carry the owner gate.
   'creation-helper/kill/route.ts',
-  'creation-helper/publish-plugin/route.ts',
   'creation-helper/session/route.ts',
   // ── 15 → 11, TRDD-CAVCTULL (2026-08-28) ───────────────────────────────────────────────
   // `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults` and `startup` are gone
@@ -260,9 +265,9 @@ const COLLECTION_UNREVIEWED: string[] = [
   // They were never holes — owner-gated all along, carried as debt by a needle that did not
   // know the spelling. `health` STAYS: it takes only `enforceAuth(` (authenticated, not
   // authorized); it mutates nothing (an SSRF-guarded outbound probe), so it is low-risk, but
-  // the invariant this test pins is "authorizes the CALLER", and it does not. The ten
-  // `creation-helper/*` entries are one decision, owned by TRDD-DQVPODKW's open follow-up
-  // (enforceSystemOwner on the wizard-only helpers once Haephestos has a credential).
+  // the invariant this test pins is "authorizes the CALLER", and it does not. The remaining
+  // two `creation-helper/*` entries (`kill`, `session`) are undecided still — not part of
+  // either the DQVPODKW or 1LFRP6GJ scope, which were each bounded by their own caller census.
   'health/route.ts',
 ]
 

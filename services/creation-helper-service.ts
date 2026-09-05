@@ -25,6 +25,8 @@ import { parseNameForDisplay } from '@/types/agent'
 import { getRuntime } from '@/lib/agent-runtime'
 import type { ServiceResult } from '@/types/service'
 import type { AuthContext } from '@/lib/agent-auth'
+import { readJson, saveJsonSafe } from '@/lib/json-io'
+import { publishHaephestosPlugin } from '@/services/haephestos-publish-service'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,6 +112,94 @@ let creationHelperPromise: Promise<ServiceResult<{
   status: string
   created: boolean
 }>> | null = null
+
+// ---------------------------------------------------------------------------
+// Publish-request poller (TRDD-1LFRP6GJ)
+// ---------------------------------------------------------------------------
+//
+// The Haephestos persona has no credential (see the module docstring's cross
+// reference to `publish-plugin/route.ts`, now `enforceSystemOwner`-gated), so
+// it can no longer reach the publish pipeline over HTTP. Its fallback (when
+// the preferred `/aim-publish-plugin` slash command is unavailable) instead
+// writes a REQUEST file; this poller — started/stopped alongside the
+// watchdog, for the life of the Haephestos tmux session — notices it, runs
+// the SAME validation+copy logic the HTTP route uses
+// (`services/haephestos-publish-service.ts::publishHaephestosPlugin`), and
+// writes a RESPONSE file the persona polls for. No credential is ever minted;
+// the poller runs in-process on the trusted server, exactly like the HTTP
+// route did, just without the network hop the persona cannot authenticate.
+const PUBLISH_REQUEST_FILE = join(HAEPHESTOS_WORKDIR, 'publish-request.json')
+const PUBLISH_RESPONSE_FILE = join(HAEPHESTOS_WORKDIR, 'publish-response.json')
+const PUBLISH_POLL_INTERVAL_MS = 2_000
+
+let publishPollTimer: ReturnType<typeof setInterval> | null = null
+// Guards against re-entrancy: setInterval does not wait for its async callback
+// to settle, so a publish that takes longer than PUBLISH_POLL_INTERVAL_MS
+// (real disk copies, marketplace registration) could otherwise be picked up
+// twice by an overlapping tick.
+let publishInFlight = false
+
+/**
+ * Check for `~/agents/haephestos/publish-request.json`; if present, consume
+ * it (delete BEFORE running the publish, so a slow publish can't be picked
+ * up twice and a crash mid-publish doesn't loop forever on the same request)
+ * and write the outcome to `~/agents/haephestos/publish-response.json`.
+ */
+async function pollPublishRequest(): Promise<void> {
+  if (publishInFlight) return
+  const read = await readJson(PUBLISH_REQUEST_FILE)
+  if (!read.ok) return  // 'missing' (nothing to do) or 'unreadable' (wait for a valid write)
+
+  const pluginDir = read.data.pluginDir
+  if (typeof pluginDir !== 'string' || !pluginDir) {
+    // Malformed request — consume it so it doesn't loop, and report why.
+    try { unlinkSync(PUBLISH_REQUEST_FILE) } catch { /* already gone */ }
+    await saveJsonSafe(PUBLISH_RESPONSE_FILE, {
+      error: 'Malformed publish request: "pluginDir" is required',
+      respondedAt: new Date().toISOString(),
+    })
+    return
+  }
+
+  publishInFlight = true
+  try {
+    unlinkSync(PUBLISH_REQUEST_FILE)
+  } catch {
+    // Already consumed by a previous tick — proceed anyway; the outcome
+    // below still overwrites the response file with this run's result.
+  }
+  try {
+    const outcome = await publishHaephestosPlugin(pluginDir)
+    await saveJsonSafe(PUBLISH_RESPONSE_FILE, {
+      ...outcome.body,
+      status: outcome.status,
+      respondedAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error(`${LOG_PREFIX} publish-request poller failed:`, error)
+    await saveJsonSafe(PUBLISH_RESPONSE_FILE, {
+      error: 'internal_error',
+      respondedAt: new Date().toISOString(),
+    })
+  } finally {
+    publishInFlight = false
+  }
+}
+
+function startPublishPoll(): void {
+  stopPublishPoll()
+  publishPollTimer = setInterval(() => {
+    void pollPublishRequest()
+  }, PUBLISH_POLL_INTERVAL_MS)
+}
+
+function stopPublishPoll(): void {
+  if (publishPollTimer) {
+    clearInterval(publishPollTimer)
+    publishPollTimer = null
+  }
+  publishInFlight = false
+}
 
 // ---------------------------------------------------------------------------
 // Watchdog: auto-kill session if browser disconnects
@@ -621,6 +711,9 @@ export function createCreationHelper(): Promise<ServiceResult<{
 
     // Start watchdog — auto-kills session if browser disconnects
     startWatchdog()
+    // Start the publish-request poller — the persona's credential-less
+    // fallback IPC for the publish pipeline (TRDD-1LFRP6GJ)
+    startPublishPoll()
 
     return {
       data: {
@@ -663,6 +756,8 @@ export function createCreationHelper(): Promise<ServiceResult<{
 export async function deleteCreationHelper(): Promise<ServiceResult<{ success: boolean }>> {
   // Stop watchdog timer — session is being intentionally destroyed
   stopWatchdog()
+  // Stop the publish-request poller alongside it (TRDD-1LFRP6GJ)
+  stopPublishPoll()
   // Reset stale response tracking on session destruction
   staleResponseHash = null
   try {

@@ -71,6 +71,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * before the mocked call — so it is stated rather than tested.
  *
  * NEUTER RUN — see the recorded result at the bottom of this file.
+ *
+ * AMENDED (TRDD-1LFRP6GJ, 2026-09-05): the coupling this file describes above — that
+ * `element-descriptions` and `publish-plugin` must stay agent-callable because the persona
+ * curls them — is VOID. Measured first-hand (TRDD-1LFRP6GJ): the persona's curls carried no
+ * credential and 401ed under `middleware.ts` before either route was ever reached, so they
+ * were never actually reachable by the persona at all. RULED: move the lookups off the API
+ * instead of minting a credential — `element-descriptions` is now a direct PSS binary
+ * invocation in the persona's own instructions (agents/haephestos-creation-helper.md Step 3),
+ * and `publish-plugin` is now reached via a file-based request/response poller
+ * (`services/creation-helper-service.ts`'s `pollPublishRequest`, added alongside the existing
+ * heartbeat watchdog) that calls the same `services/haephestos-publish-service.ts::
+ * publishHaephestosPlugin` logic in-process. Both routes now carry `enforceSystemOwner` and
+ * join the ROUTES array below — see the trailing "NOW carry the same owner gate" test, which
+ * replaces the old "deliberately NOT owner-gated" one.
  */
 
 const mockAuthenticate = vi.fn()
@@ -93,6 +107,17 @@ vi.mock('@/services/creation-helper-service', async (orig) => {
   const actual = await orig<typeof import('@/services/creation-helper-service')>()
   return { ...actual, ...svc }
 })
+
+// TRDD-1LFRP6GJ: `publish-plugin` now joins the six owner-gated routes below. Its real
+// validation+copy logic (`services/haephestos-publish-service.ts::publishHaephestosPlugin`)
+// is exercised for real by `tests/integration/haephestos-pipeline.test.ts`; THIS file is
+// about the auth gate only, so the pipeline itself is mocked to a canned success — same
+// reasoning as the `svc` mock above for the other five routes' services.
+const publishMock = vi.fn(async () => ({
+  status: 200,
+  body: { success: true as const, pluginName: 'test-plugin', pluginDir: '/x/test-plugin' },
+}))
+vi.mock('@/services/haephestos-publish-service', () => ({ publishHaephestosPlugin: publishMock }))
 
 // `clear-banner` is NOT in ROUTES below. It reaches no service — it shells out to tmux — so its
 // owner path 500s in this environment, and the only way to give it a positive control here was a
@@ -134,6 +159,14 @@ const ROUTES: { dir: string; method: 'POST' | 'GET'; url: string; body?: unknown
   // `handler is not a function` on all three of its cases.
   { dir: 'file-picker', method: 'POST', url: 'http://localhost/api/agents/creation-helper/file-picker', body: uploadBody() },
   { dir: 'raw-materials', method: 'GET', url: 'http://localhost/api/agents/creation-helper/raw-materials' },
+  // TRDD-1LFRP6GJ: these two join the six above — the persona's credential-less HTTP calls
+  // to them 401ed under middleware.ts anyway (RULED: move the lookups off the API), so they
+  // are no longer "the two agent-callable siblings" the last case below used to exempt.
+  // `names: []` reaches the route's own early `{descriptions: {}}` 200 return (route.ts's
+  // `!Array.isArray(names) || names.length === 0` branch) WITHOUT needing the PSS binary to
+  // be present in this environment — the auth gate is what this file tests, not PSS lookup.
+  { dir: 'element-descriptions', method: 'POST', url: 'http://localhost/api/agents/creation-helper/element-descriptions', body: { names: [] } },
+  { dir: 'publish-plugin', method: 'POST', url: 'http://localhost/api/agents/creation-helper/publish-plugin', body: { pluginDir: '/x/test-plugin' } },
 ]
 
 function req(url: string, method: string, body?: unknown) {
@@ -166,6 +199,7 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
   beforeEach(() => {
     mockAuthenticate.mockReset()
     Object.values(svc).forEach((f) => f.mockClear())
+    publishMock.mockClear()
   })
 
   for (const r of ROUTES) {
@@ -199,15 +233,17 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
     })
   }
 
-  it('the two AGENT-CALLABLE siblings are deliberately NOT owner-gated', async () => {
-    /** Validates the ruling was scoped by a caller census and did not sweep the whole subtree,
-     *  which would break the persona's only two documented API calls */
+  it('the two former AGENT-CALLABLE siblings NOW carry the same owner gate as the six (TRDD-1LFRP6GJ)', async () => {
+    /** Validates the persona-lookup routes joined the owner-gated set once their HTTP-facing
+     *  callers moved off the API (element-descriptions -> direct PSS invocation,
+     *  publish-plugin -> the file-based request/response poller in creation-helper-service.ts)
+     *  — the inverse of the assertion this test used to make before that migration. */
     const { readFileSync } = await import('fs')
     const path = await import('path')
     const root = path.resolve(__dirname, '..', '..')
     for (const dir of ['element-descriptions', 'publish-plugin']) {
       const src = readFileSync(path.join(root, 'app', 'api', 'agents', 'creation-helper', dir, 'route.ts'), 'utf8')
-      expect(src, `${dir} must stay agent-callable — the persona curls it`).not.toMatch(/enforceSystemOwner\(/)
+      expect(src, `${dir} must now be owner-gated — the persona no longer calls it over HTTP`).toMatch(/enforceSystemOwner\(/)
     }
   })
 })

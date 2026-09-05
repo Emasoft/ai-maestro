@@ -127,13 +127,19 @@ Announce the fallback clearly in the chat: "PSS binary is unavailable — I wrot
 
 ### Step 3: Prune and Refine
 
-Examine the generated TOML. For each element (skill, agent, command, hook, mcp, rule), use the element-description API to understand what it does:
+Examine the generated TOML. For each element (skill, agent, command, hook, mcp, rule), query
+the PSS binary directly for a batch description (proposal 25, 2026-09-05 — this session has
+no credential for the server API, so the lookup no longer goes over HTTP; it calls the exact
+same PSS `get-description` command the server route used to shell out to):
 
 ```bash
-curl -s -X POST http://localhost:23000/api/agents/creation-helper/element-descriptions \
-  -H 'Content-Type: application/json' \
-  -d '{"names": ["element-name-1", "element-name-2"]}'
+PSS_BIN=$(find ~/.claude/plugins/cache/emasoft-plugins/perfect-skill-suggester/ -name "pss-darwin-arm64" | sort | tail -1)
+"$PSS_BIN" get-description "element-name-1,element-name-2" --batch --format json
 ```
+
+Comma-separate every element name in one batch call. If `$PSS_BIN` is empty (binary not
+cached — same fallback condition as Step 2), skip the description lookup and prune using the
+element names alone.
 
 Apply these checks IN YOUR HEAD (no extra tool calls needed for the review):
 - Remove obvious conflicts (e.g. React skill for a Python-only agent)
@@ -264,19 +270,34 @@ idempotent retries:
 
 If `/aim-publish-plugin` is not available in this session (older
 `ai-maestro` plugin version, or the plugin was uninstalled), fall back
-to the raw API call:
+to the file-based publish request (proposal 26, 2026-09-05 — this
+session has no credential for the server API, so the fallback no
+longer curls `/api/agents/creation-helper/publish-plugin` directly;
+that route is now system-owner only. Write a request file instead —
+the server polls for it every 2s while this session is alive and runs
+the identical validation/copy pipeline in-process):
 
 ```bash
-curl -s -X POST http://localhost:23000/api/agents/creation-helper/publish-plugin \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg pd "$OUTPUT_DIR" '{pluginDir: $pd}')"
+# Clear any stale response from an earlier attempt FIRST — otherwise the poll below
+# would read the old answer before the server has processed this request.
+rm -f ~/agents/haephestos/publish-response.json
+jq -n --arg pd "$OUTPUT_DIR" '{pluginDir: $pd}' > ~/agents/haephestos/publish-request.json
+
+# The server picks up the request within ~2s and writes the response.
+for i in $(seq 1 30); do
+  [ -f ~/agents/haephestos/publish-response.json ] && break
+  sleep 1
+done
+cat ~/agents/haephestos/publish-response.json 2>/dev/null \
+  || echo '{"error": "timed out waiting for the server to process the publish request"}'
+rm -f ~/agents/haephestos/publish-response.json
 ```
 
 Either path publishes to the local role-plugins marketplace and runs
 `claude plugin marketplace update ai-maestro-local-roles-marketplace` so
 Claude Code picks the new plugin up immediately.
 
-If the API (or the slash command) returns errors, fix the issues and retry.
+If the slash command (or the response JSON) returns errors, fix the issues and retry.
 
 On success, write the completion signal:
 ```bash

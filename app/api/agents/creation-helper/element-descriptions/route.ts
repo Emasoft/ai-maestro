@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 const execFileAsync = promisify(execFile)
 
@@ -51,11 +51,14 @@ function findPssBinary(): string | null {
 // POST /api/agents/creation-helper/element-descriptions
 // Body: { names: string[] }
 // Returns: { descriptions: Record<string, { description: string; type: string; plugin: string | null }> }
+// TRDD-1LFRP6GJ: system-owner only, joining the six routes `85865270` already gated. The
+// persona's own curl to this route carried no credential and 401ed under `middleware.ts`
+// before this route was even reached (its shipped instructions now call the PSS binary
+// directly instead — see agents/haephestos-creation-helper.md Step 3), so tightening this
+// route cannot break a path that was already broken.
 export async function POST(req: NextRequest) {
-  const auth = authenticateFromRequest(req)
-  if (auth.error) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-  }
+  const authErr = enforceSystemOwner(req)
+  if (authErr) return authErr
 
   try {
     const body = await req.json()

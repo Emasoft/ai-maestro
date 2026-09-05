@@ -168,7 +168,7 @@ beforeEach(async () => {
         // maxBuffer: on this dev machine the live process table (many concurrent agent/tmux
         // sessions) can push `ps -eo args` output well past Node's 1 MiB execFileSync default,
         // and macOS's synchronous spawn then fails with ENOBUFS rather than the JS-level
-        // ERR_CHILD_PROCESS_STDIO_MAXBUFFER — measured live (r28, 2 of 6 standalone runs) at
+        // ERR_CHILD_PROCESS_STDIO_MAXBUFFER — measured live (r28, 2 of 9 standalone runs) at
         // this exact call site. 64 MiB is comfortably above anything this table has produced.
         psSnapshot = execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
         let pw = ''

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T04:58:53+0200
-updated: 2026-09-05T05:06:44+0200
+updated: 2026-09-05T05:09:04+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -89,11 +89,26 @@ earlier.** At 05:03 I struck the `tasks/` → `proposals/` citation (`:553`, D4 
 being watchdog machinery rather than a human permission — and in the same edit promoted `:818`
 (D4 **step 5b**) to carry the verdict. Same numbered list, one step down.
 
-**The DEP-overlay applicability question, checked rather than assumed:** the file's header says
-it is *"installed by the ai-maestro server into each registered agent workdir's `.claude/rules/`"*,
-and this repo is the ai-maestro SOURCE tree, not a registered workdir — which would make the
-citation inapplicable outright. But the overlay IS loaded into this project's instruction set, so
-it governs work here. Applicability holds; the scan-set problem is what defeats the citation.
+**The DEP-overlay applicability question — UNRESOLVED, and deliberately left so, because the
+verdict holds under BOTH readings.** An earlier draft settled it with *"the overlay is loaded
+into this project's instruction set, so it governs here"*. That reasoning is unsound and its
+blast radius is wider than this card: **being readable is not being in force**, and by that logic
+every role-plugin persona shipped in this repo would govern this session too. `3-pillars-spec.md:730`
+calls `rules/aimaestro/` the overlays' *"seed/install folder"* — i.e. this repo is where they are
+AUTHORED, and the server installs them elsewhere.
+
+So either:
+
+- the overlay **governs** here → `:818` applies but its scan set excludes `archived/`; or
+- it **does not** → `:818` was never applicable at all.
+
+**Both roads end at the same place**, which is why this need not be settled to decide the card.
+Do NOT cite this card as establishing that a `rules/aimaestro/` overlay binds this repo's corpus.
+
+**Unsearched, and named rather than implied:** `design/specs/*.md`, `docs/GOVERNANCE-RULES.md`,
+the PRRD, and `~/.claude/rules/` beyond the three files listed above. The five searched files are
+the ones that legislate TRDD lifecycle, including both defining the archival protocol — but the
+absence claim is scoped to them.
 
 **A practical objection the repair itself has to answer** (`B`, unflagged until now): the clause's
 remedy is *"move it back to its `pre-block-column:` (or `dev`)"*, and **neither card has a
@@ -152,9 +167,11 @@ from 2026-08-22 are worth the repair. The rules permit it; nobody is required to
       checklist, re-close, re-archive. `trddgrep validate` would reach 0 ERRORs.
       **Accepting** means recording that decision here and closing this card, so the two ERRORs
       become a known-and-accepted floor rather than an unexplained recurring line.
-      Both are legitimate. Note the repair requires two things the rules do not currently
-      authorise (the un-archive, and a `dev` column that would be untrue), so "accept" is the
-      lower-friction answer unless a clean `validate` is worth those.
+      Both are legitimate. The repair requires two things the rules do not authorise: the
+      un-archive, and a `dev` column that would be untrue. That is the whole cost; the benefit is
+      a clean `validate`. **No recommendation is offered here** — an earlier draft appended one,
+      which is a recommendation wearing a description's clothes, in the box that exists precisely
+      to hold an undecided choice.
 - [x] ~~If sanctioned: repair both cards …~~ / ~~If NOT sanctioned …~~ — **STRUCK 05:03.** These
       were drafted as an either/or pair *before* box 1 had an answer. Once it did, one antecedent
       became permanently false, leaving a box that could never be truthfully ticked while the
@@ -176,6 +193,19 @@ have prompted.
 
 ## Approval log
 
+- 2026-09-05T05:09:04+0200 — Two corrections, neither changing the verdict.
+  **(1) Applicability un-settled.** The previous entry claimed the DEP overlay governs this repo
+  "because it is loaded into this project's instruction set". Unsound — readable ≠ in force, and
+  it would license citing any `rules/aimaestro/` file as binding here.
+  `design/specs/3-pillars-spec.md:730` calls that directory the overlays' *"seed/install
+  folder"*: this repo AUTHORS them, the server installs them elsewhere. Marked unresolved; the
+  verdict holds whether the overlay applies (scan set excludes `archived/`) or does not (`:818`
+  never applicable). **(2) Steering removed** from the decision box — *"'accept' is the
+  lower-friction answer"* is a recommendation dressed as a description, and it is the THIRD
+  unearned persuasive framing on this card after the `tasks/`→`proposals/` precedent and
+  "decisive corroboration", both already withdrawn. Costs stated; the choice is the user's.
+  Also named the unsearched file set (`design/specs/`, `docs/GOVERNANCE-RULES.md`, the PRRD,
+  the rest of `~/.claude/rules/`) rather than leaving the absence claim to imply a total search.
 - 2026-09-05T05:06:44+0200 — **THIRD WRONG VERDICT CORRECTED; the answer converges one folder
   away from where it started.** D4's scan set (`:771`) is `design/tasks/` + `design/proposals/` —
   **not `archived/`** — so `:818`'s remedy never reaches these two cards. The rules prescribe the

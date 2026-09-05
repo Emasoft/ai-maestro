@@ -1,8 +1,8 @@
 ---
 name: trdd-conventions
-description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live."
+description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped from 4 of 5 detectors / the filename is the parse key, not the frontmatter."
 ocd: 2026-06-23
-lmd: 2026-08-27
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: reference
@@ -109,6 +109,25 @@ blocker-probe-canary: match:cookie/session   # required with match:
 ```
 
 The blocker STILL holds when the predicate is true. Prefer `not-match:` on a SUCCESS sentinel (fail-closed: no output ⇒ still blocked); use `match:` only on an aggregate FAILURE sentinel every failure branch feeds, and declare the canary (a string HEALTHY output always contains) — else a timeout, a missing script or a drifted emitter all read as "cleared". Take every needle from the EMITTER'S SOURCE (`grep -nE '<needle>' <emitter>` non-zero = the source positive control); a regex tested against a string you typed is degenerate. Enforced by `trddgrep validate`: `BLOCKED-WITHOUT-PROBE` (error when the card was touched on/after 2026-08-27, warn before — `PROBE_GATE_SINCE` in `lib/trdd-doctor.ts`), `BLOCKER-PROBE-BAD-PREDICATE`, `BLOCKER-PROBE-NO-CANARY`. The janitor's `stale-blocker` detector runs the probes (three verdicts; could-not-run is never "cleared"). Why: a blocker stored as a VALUE rots silently (measured 4-in-5 stale); as a PREDICATE it is re-answerable forever. TRDD-CV5KDCB7.
+
+
+^ATOM-XC3R-GAZ4 [desc: "a TRDD whose filename lacks the timestamp prefix is silently dropped from the board count and 4 of 5 detectors — the matcher keys on the FILENAME even when frontmatter carries a valid trdd-id, so the", keywords: the_heartbeat_board_count_disagrees_with_a_direct_grep open_board_count_is_off_by_one my_TRDD_is_missing_from_the_board a_card_is_invisible_to_the_detectors legacy_TRDD_filename_with_no_timestamp_prefix why_is_my_card_not_being_counted the_filename_is_the_parse_key_not_the_frontmatter _TRDD_ID_RE_does_not_match_my_file a_net_difference_of_one_from_two_opposite_mechanisms renaming_a_TRDD_file_breaks_its_citations the_board_count_and_a_grep_answer_different_questions a_card_with_a_valid_trdd-id_still_does_not_appear, trdd: TRDD-UAP7ZEJL, ocd: 2026-09-05, lmd: 2026-09-05]
+**A TRDD filename is the parse key, not its frontmatter.** The janitor's `_TRDD_ID_RE` accepts
+only `TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md` or a 36-char UUID. The pre-2026 legacy shape
+`TRDD-<8hex>-<slug>.md` matches neither, so such a card is **silently dropped** from the board
+count and from 4 of the 5 TRDD detectors. It does not error and it does not warn — it is simply
+absent, which is why the symptom surfaces as an arithmetic disagreement rather than a failure.
+
+Both cards found this way carried a perfectly valid `trdd-id:` in frontmatter, so the id was
+available the whole time; the matcher reads the filename regardless. Fixing it at the data
+(rename to spec shape, uppercasing the id) is a rename PLUS every citing reference — check
+`design/specs/`, `docs/`, and each card's own `**Filename:**` line before renaming.
+
+**The diagnostic lesson is the composition, not the drop.** The observed discrepancy was exactly
+**one**, and a single-cause hypothesis for it would have been wrong: it was TWO mechanisms with
+OPPOSITE signs — the heartbeat DROPS the 2 legacy-named cards and ADDS 1 card from a different
+scope (it is multi-scope; a `design/tasks/*.md` grep is not). −2 + 1 = −1. **A small net
+difference is not evidence of a small single cause**; decompose it before naming one.
 
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned

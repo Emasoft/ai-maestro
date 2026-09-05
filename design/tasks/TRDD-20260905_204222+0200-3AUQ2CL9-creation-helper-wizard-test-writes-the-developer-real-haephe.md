@@ -3,14 +3,14 @@ trdd-id: 3AUQ2CL9
 title: creation-helper wizard test writes the developer real haephestos workdir
 column: todo
 created: 2026-09-05T20:42:22+0200
-updated: 2026-09-05T20:50:14+0200
+updated: 2026-09-05T20:56:23+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
 min-approval-requirement: none
 assignee: ai-maestro-hub-session
 mandate: true
-mandated-by: self
+mandated-by: none
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-09-05T20:42:22+0200

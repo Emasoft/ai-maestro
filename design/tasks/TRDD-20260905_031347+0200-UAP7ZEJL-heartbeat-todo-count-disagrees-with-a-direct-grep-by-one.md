@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:42:43+0200
+updated: 2026-09-05T04:45:25+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -22,7 +22,7 @@ approved: true
 approval-judge: claude-opus-session
 approval-datetime: 2026-09-05T03:13:47+0200
 blocked-by: [D552QXOU]
-blocker-probe: sh -c 'grep -m1 "^column:" design/tasks/TRDD-20260905_044010+0200-D552QXOU-trdd-id-matcher-cannot-parse-legacy-v1-filenames.md || echo column-absent'
+blocker-probe: sh -c 'grep -m1 -h "^column:" design/*/TRDD-*D552QXOU*.md || echo column-PROBE-BROKEN'
 blocker-holds-if: not-match:(published|complete|live|failed|superseded|cancelled|refused)$
 npt: []
 eht: [D552QXOU]
@@ -279,6 +279,28 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:45:25+0200 — **Blocker probe repaired: it would have died exactly when it should
+  have fired.** The first version hard-coded D552QXOU's full `design/tasks/…` path. Three of that
+  card's four acceptance branches end in closure, and a closed card is `git mv`d to
+  `design/archived/` — at which instant the `grep` fails, the `||` fallback fires, the fallback
+  text matches no terminal column, and `not-match` therefore reports **BLOCKER HOLDS**. So
+  UAP7ZEJL would have parked permanently *because its blocker resolved*. Worse than no probe: a
+  missing probe is flagged by `BLOCKED-WITHOUT-PROBE`, while this one reads as a healthy parked
+  card forever.
+
+  **The general shape, worth more than this instance: a probe whose FAILURE MODE is
+  ANTI-CORRELATED with the condition it measures.** Every path breakage — wrong cwd, renamed
+  file, archived card — yields the same fallback and the same "still blocked" verdict, so
+  "probe broken" and "genuinely blocked" are indistinguishable. Fixed by globbing every zone
+  (`design/*/TRDD-*D552QXOU*.md`) so the card is found wherever it lands, and by renaming the
+  fallback `column-PROBE-BROKEN` so a human reading the output can tell the two apart.
+
+  Verified with a REAL archived card rather than a simulation: the same glob shape against an
+  existing `design/archived/` card returns `column: superseded`, which the regex matches — i.e.
+  the archival case CLEARS as intended.
+
+  (Note: the sibling probe on TRDD-2LIS20K1 keys on a `design/tasks/` path the same way. Not
+  touched — another card's frontmatter — but it is the same latent defect.)
 - 2026-09-05T04:42:43+0200 — **`todo` → `blocked`** (`blocked-by: [D552QXOU]`,
   `pre-block-column: todo`). Wiring D552QXOU as an EHT at 04:40 left this card in an
   INCONSISTENT triple: a non-empty `eht:` naming a non-terminal child, an empty `blocked-by:`,

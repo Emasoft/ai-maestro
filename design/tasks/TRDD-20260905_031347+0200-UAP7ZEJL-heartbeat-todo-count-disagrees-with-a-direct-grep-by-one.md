@@ -3,9 +3,10 @@ trdd-id: UAP7ZEJL
 title: The heartbeat todo count and a direct grep disagree by exactly one card
 scope: project
 project-id: ai-maestro
-column: todo
+column: blocked
+pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:40:10+0200
+updated: 2026-09-05T04:42:43+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -20,7 +21,9 @@ mandated-by: self
 approved: true
 approval-judge: claude-opus-session
 approval-datetime: 2026-09-05T03:13:47+0200
-blocked-by: []
+blocked-by: [D552QXOU]
+blocker-probe: sh -c 'grep -m1 "^column:" design/tasks/TRDD-20260905_044010+0200-D552QXOU-trdd-id-matcher-cannot-parse-legacy-v1-filenames.md || echo column-absent'
+blocker-holds-if: not-match:(published|complete|live|failed|superseded|cancelled|refused)$
 npt: []
 eht: [D552QXOU]
 labels: [kanban, board-reporting, measurement]
@@ -276,6 +279,19 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:42:43+0200 — **`todo` → `blocked`** (`blocked-by: [D552QXOU]`,
+  `pre-block-column: todo`). Wiring D552QXOU as an EHT at 04:40 left this card in an
+  INCONSISTENT triple: a non-empty `eht:` naming a non-terminal child, an empty `blocked-by:`,
+  and `column: todo`. The parent-completion rule does not merely gate the eventual transition —
+  it says such a parent **IS** `blocked`, naming its open children. So the commit message's
+  "cannot reach `complete` until this resolves" described a gate the frontmatter did not carry.
+
+  **`trddgrep validate` said "no findings on either card", and that was silence, not
+  confirmation.** D4 step 5b checks `blocked-by` non-empty ⟺ `column: blocked`; it does not
+  check `eht:` against the column, so this state passed a linter whose rule it violated. A clean
+  verdict is clean of the classes the tool tests — which is already a lesson in
+  `.claude/rules/lessons-verification.md` ("0 errors means no rule looked") and was quoted here
+  as evidence anyway.
 - 2026-09-05T04:38:04+0200 — **REMEDY 1 APPLIED (Tier 0).** The fifth review fork found one
   material error and it was mine in the OTHER direction: I had escalated this to `manager` on
   the grounds that `docs/GOVERNANCE-RULES.md` is a governance file. Verified the three doc hits

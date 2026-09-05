@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-09-05T03:21:16+0200
+updated: 2026-09-05T03:24:01+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -64,18 +64,27 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 > three rows come from two instruments and one predates a script rewrite, and because these are
 > TEST artifacts the rate tracks how much testing ran in each window, which is not excluded.
 >
-> **`pillar:reap` classifies `*.sqlite` only** (`scripts/reap-pillar-index.mjs:25`). Two
-> consequences that matter here: it is why row 3's comparable number is 167 rather than 168, and it
-> means any leaked `-wal`/`-shm` would be **invisible to the tool** while still inflating the file
-> count and the 74 MB.
+> **`pillar:reap` classifies `*.sqlite` only** (`scripts/reap-pillar-index.mjs:25`) — which is why
+> row 3's comparable number is 167 rather than 168.
 >
 > ⚠ **These indexes are WAL-mode, and SQLite mints `-shm`/`-wal` on ANY open — read-only
 > included.** They are removed on a CLEAN close; **a crashed process leaves them behind**, which is
-> exactly this directory's subject. The 0/0 above therefore means "no crashed reader at 03:13", not
-> "this cannot happen". A report-only run on 2026-08-28 created 147 of each beside 147 indexes and
-> TRIPLED the inode count of the directory the tool exists to bound; the current script reads every
-> index from a COPY in a scratch dir to avoid precisely that. **Do not reason about this directory
-> from a version of the tool you have not checked.**
+> exactly this directory's subject. **The `-wal 0 / -shm 0` measured above is the EXPECTED
+> at-rest reading, and it has twice been misread — in this very banner — as evidence that WAL does
+> not apply here. It means "no crashed reader at 03:13", never "this cannot happen".** If it does
+> happen, those files are invisible to the tool (`.sqlite`-only, above) while still inflating both
+> the file count and the 74 MB. A report-only run on 2026-08-28 created 147 of each beside 147
+> indexes and TRIPLED the inode count of the directory the tool exists to bound; the current script
+> reads every index from a COPY in a scratch dir to avoid precisely that. **Do not reason about
+> this directory from a version of the tool you have not checked.**
+>
+> **The 1 non-`.sqlite` file is resolved, not an unknown** (read 2026-09-05):
+> `ai-maestro-e916c2513721.sqlite.heal.json` is a heal LEDGER whose partner index EXISTS, so it is
+> not itself orphaned. It records an `"open failed"` on 2026-08-04 caused by the Node ABI mismatch
+> (`NODE_MODULE_VERSION 127` vs `147` — this project's Node-22 constraint). That is a live instance
+> of the classifier's `unreadable` state, and concrete evidence for why that state must never be
+> reaped: the file is intact, only unopenable by the wrong Node. The reap cannot touch this ledger
+> either way; if its partner were ever reaped it would be left dangling.
 >
 > "74 MB on disk" and the card's "66.8 MB reclaimable" measure different things; do not difference
 > them.

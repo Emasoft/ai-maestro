@@ -288,6 +288,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 
 ## Shell
+- A `${var/pat/rep}` written in DOUBLE quotes keeps the backslash of `\'` and `\/` in the REPLACEMENT: my card line gained literal `\'s` and `0\/1\/2`, and `trddgrep edit` printed "edited" — it prints that for an IDENTICAL replacement too. Verify the WRITTEN line (`grep -c '\\'` = 0) and replace a whole line from a file, never via shell substitution.
 - `cmd | tee FILE | head` truncates FILE via SIGPIPE — capture to the file first, then inspect it.
 - MISDIAGNOSING A TRUNCATION IS WORSE THAN THE TRUNCATION — the wrong fix can work by accident and CONFIRM the wrong cause: `… | sort -u | head -6` emitted exactly 6 lines, cutting the alphabetically-last name; I blamed "ANSI noise" and "fixed" it by stripping escapes, which worked only because that rewrite also dropped the `head`. Count output lines against your cap FIRST — a result exactly equal to `head -N` is the tell.
 - A SCRIPTED SECTION-REPLACE SILENTLY DELETES EVERY SECTION INSIDE ITS RANGE — and the follow-up edits aimed at the deleted text then no-op WITHOUT ERROR: slicing a card from `## Problem` to `## Approval log` ate its whole `## Acceptance` block, and three later `.replace()` calls on its checkboxes reported nothing wrong. Counting the boxes returned **0**, which is the only reason I caught it. After any range replacement, COUNT what should still be there.

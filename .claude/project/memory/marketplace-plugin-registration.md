@@ -2,7 +2,7 @@
 name: marketplace-plugin-registration
 description: "how to register / publish a new plugin into the ai-maestro-plugins marketplace / publish.py hard-exits 'not registered in marketplace' at stage 5 / cross-marketplace dependency won't resolve at install / claude plugin install can't find the plugin / marketplace.json entry shape + allowCrossMarketplaceDependenciesOn"
 ocd: 2026-07-08
-lmd: 2026-08-02
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -71,6 +71,7 @@ update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugin
 - [[agent-control-monitor-api]] — cites this page for the dev-browser cross-marketplace
   dependency shape (`allowCrossMarketplaceDependenciesOn`) when a control-API plugin declares a
   foreign-marketplace dependency.
+- [[persistent-state-shaped-by-the-caller-oscillates]]
 
 ## Notes and lessons learned
 

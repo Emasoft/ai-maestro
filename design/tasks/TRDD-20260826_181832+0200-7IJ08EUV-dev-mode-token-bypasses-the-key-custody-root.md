@@ -1,12 +1,12 @@
 ---
 trdd-id: 7IJ08EUV
 title: The dev-mode keychain bypass token is a possessable credential for the root of the whole key hierarchy
-column: planned
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-05T21:40:51+0200
+updated: 2026-09-05T21:47:27+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -73,6 +73,12 @@ That is exactly the failure mode to avoid here.
 2026-09-05T21:18:49+0200 — WORKED by lean-worker. Neuter A: reverted enable-gate check (rec.enabled!==true -> !rec) in verifyDevToken; 1/27 tests reddened (the existing 'refuses a correct token while disabled' test), confirming the gate was ALREADY test-pinned — the card's prior-art note (0/14 in 2026-08) is stale. Neuter B: disabled the new assertDevModeAbsentInProduction() guard added this unit; exactly its 2 new tests reddened. Both restored; git diff on lib/dev-mode-token.ts shows only the intended +27-line addition. Box 5 left unticked: the guard function exists but nothing calls it yet (wiring into server.mjs boot is outside this worker's file scope) — see Findings for the follow-up.
 - 2026-09-05T21:28:23+0200 — box 5 wired: assertDevModeAbsentInProduction() called from server.mjs at line 105-106 (module scope, before hostname/port setup and app.prepare()); node --check rc 0; by ai-maestro-hub-session's worker.
 - 2026-09-05T21:40:50+0200 — boxes 1-4 landed in 8db78d42 (guard + 4 tests; neuter A 1/27, neuter B 2/13, independently re-verified). Box 5 UN-TICKED: the server.mjs wiring (lines 105-106) is written but HELD uncommitted — this host carries an enabled dev-mode login token (last used today), so with NODE_ENV=production the guard throws and the next pm2 restart of the live dashboard would refuse to start until the token is revoked via DELETE /api/auth/dev-token. Landing it is the USER's call (revoke then land / land without restart / drop). By ai-maestro-hub-session.
+- 2026-09-05T21:47:12+0200 — column → todo by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
+- 2026-09-05T21:47:13+0200 — column → verify_assumptions by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
+- 2026-09-05T21:47:15+0200 — column → plan by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
+- 2026-09-05T21:47:17+0200 — column → dispatch by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
+- 2026-09-05T21:47:18+0200 — column → dev by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
+- 2026-09-05T21:47:24+0200 — supersedes the 21:28:23 entry: the server.mjs call exists only in the working tree; no commit carries it and none will until the USER decides on the enabled dev-mode token (revoke via DELETE /api/auth/dev-token, then land; or land without restarting; or drop). Column set to dev: code landed, one box open. By ai-maestro-hub-session.
 
 ## Findings
 

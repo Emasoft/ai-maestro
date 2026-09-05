@@ -96,4 +96,21 @@ had a green guard. Fixed `3e40eaa8`. **The tell was the server's own backup chai
 at 09:44 read `directory`, at 09:46 `local` — same file, two minutes, one boot. When a config
 value oscillates, `grep` every writer of that key before touching the value.
 
+
+^ATOM-17HX-5T02 [desc: "extraKnownMarketplaces has ONE owner now: applyExtraKnownMarketplaceOps — never write that key anywhere else", keywords: extraKnownMarketplaces_single_owner applyExtraKnownMarketplaceOps where_do_I_register_a_marketplace_in_settings.json extraKnownMarketplaces_two_writers_overwrote_each_other marketplace_entry_disappeared_from_settings.json who_writes_extraKnownMarketplaces_now settings.json_marketplace_source_flipped ChangeMarketplace_G03b_add_gate role-plugin-service_registerMarketplaceGlobally plugin-storage-service_ensureCustomClientMarketplace auto-update-service_ensureMarketplaceAutoUpdate consolidated_marketplace_writer single_locked_read-modify-write_settings.json, trdd: TRDD-Y0XEEUXN, ocd: 2026-09-05, lmd: 2026-09-05]
+
+Fixed for good in TRDD-Y0XEEUXN Part 3 (commit `4cabbee7`, 2026-09-05): `extraKnownMarketplaces`
+now has exactly ONE owner, `applyExtraKnownMarketplaceOps(ops)` in `lib/extra-known-marketplaces.ts`.
+It applies a batch of `{name, set|patch|delete}` operations inside a SINGLE locked read-modify-write
+(`applySettingsOps` wrapping one `updateJson` mutator call) — values pass through verbatim, no
+implicit `source` mapping; priors are cloned before mutation and returned so undo restores the exact
+prior; deleting an absent `name` is a silent success. Six former writers were repointed to call it:
+`plugin-storage-service.ts` `ensureCustomClientMarketplace`, `role-plugin-service.ts`
+`registerMarketplaceGlobally` and `migrateDefaultPluginSettings`, `auto-update-service.ts`
+`ensureMarketplaceAutoUpdate`, and `ChangeMarketplace`'s G03b add / G05 remove gates in
+`element-management-service.ts`. **Rule going forward: never write `extraKnownMarketplaces`
+anywhere else — call the owner.** Known residue: the owner currently skips `editSettings`'s
+private container-shape lint (`settings-gate.ts:216-227`); a fail-fast mirror of that check inside
+the owner is still in flight.
+
 ## Notes and lessons learned

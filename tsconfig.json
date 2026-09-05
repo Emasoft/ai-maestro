@@ -33,6 +33,7 @@
     "scripts_dev",
     "docs_dev",
     "builds_dev",
-    "reports_dev"
+    "reports_dev",
+    "reports"
   ]
 }

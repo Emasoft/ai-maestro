@@ -108,8 +108,12 @@ The two dropped files are named `TRDD-<8hex>-<slug>.md` — the `v1-migrated` le
 only `TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md` or a **36-char** UUID, so these match neither
 branch, `extract_uid` returns `None`, and `_board_summary_bit` skips them with `continue`.
 
-**This is not confined to the board count. FOUR of the five TRDD detectors drop these cards,
-plus the board count — the population is enumerated, not sampled.**
+**This is not confined to the board count. FOUR of the five files under
+`janitor/scripts/detectors/` that reference `trdd_common`/`trdd_files` drop these cards, plus
+`dispatch.py::_board_summary_bit`.** The enumerator is stated rather than the bare ratio, because
+"4 of 5 detectors" cannot be checked without re-deriving my grep — and that grep covers
+`detectors/*.py` ONLY. Board-reading code elsewhere (other `dispatch.py` clauses, skills,
+`scripts/`) was **not** enumerated.
 
 Getting here took three tries, each fixing the previous one's quantifier:
 
@@ -126,7 +130,7 @@ Getting here took three tries, each fixing the previous one's quantifier:
 | `trdd-reminder.py:190` | yes — `continue` | **dropped** |
 | `trdd-cross-card-blindspot.py:245` | yes — `_parse_card` returns `None` | **dropped** |
 | `trdd-state-reconciliation.py:481` | yes, **INDIRECTLY** — `trdd_common.parse_trdd_record:764` calls `extract_uid(path.name)` | **excluded from every uid-keyed map** (`column_by_uid`, `scope_by_uid`, `idle_by_uid`); any finding naming them shows `uid = r["uid"] or "?"` |
-| `report-to-trdd-drift.py:260` | **no** — matches report basenames against card CONTENT | **sees them normally** |
+| `report-to-trdd-drift.py:260` | **no** — `_trdd_corpus:222` concatenates every TRDD's full text into ONE string and substring-tests report basenames against it; no uid anywhere | **sees them normally** (VERIFIED 04:33 — this row was committed at 04:31 on an unopened helper, i.e. the same mistake as the paragraph below it, and only survived because the guess was right) |
 
 **The indirect site is the one that matters methodologically.** A `grep` for
 `extract_uid|trdd-id|frontmatter` over the *detector files* finds nothing in
@@ -156,11 +160,37 @@ two.
 **Unmeasured, and it gates option 1:** nobody has confirmed that renaming the two files actually
 makes the detectors see them. It follows from the mechanism, and "it follows" is what three
 corrections in a row have punished. Before or immediately after the rename, re-run the faithful
-predicate and expect 53, not 51.
+predicate and expect +2 (52 → 54 at the 04:33 board).
+
+> **⚠ OPTION 1 IS NOT TIER 0, AND IT IS NOT TWO COMMANDS.** It was described that way here and
+> to the user, on the strength of never having grepped for what references the filenames. It
+> does. Measured 04:33 — the two paths are cited in **four** places beyond the cards themselves:
+>
+> | file | why it matters |
+> |---|---|
+> | `design/specs/governance-spec.md:397` | a spec citing the card by PATH |
+> | `docs/GOVERNANCE-RULES.md:416` | **a governance file** — R6.10's enforcement note |
+> | `docs/COMMUNICATION-GRAPH.md:202` | downstream-sync tracking |
+> | both cards' own `**Filename:**` lines | self-referential, would become false |
+>
+> So the rename is a **6-file change touching a governance doc**, which by the objective floor
+> table (`aimaestro-trdd-approval.md` §D3 — *"SILVER PRRD / persona / governance file"*) is
+> **`min-approval-requirement: manager`**, not `none`. Three test files also contain these
+> strings (`tests/unit/trdd-store.test.ts:125`, `trdd-corpus-invariants.test.ts:210`,
+> `kanban-index.test.ts:109`) but they are FIXTURES written into temp dirs to exercise the
+> legacy-name path deliberately — they do not reference the real cards and must NOT be renamed.
+>
+> This is the same error one more time, on the remedy instead of the diagnosis: a claim
+> ("two `git mv`s") committed on the cheapest available evidence rather than the evidence the
+> claim required. One grep would have caught it, and it was not run until after the option had
+> been put to the user four times.
 
 1. **In-project (this repo):** `git mv` the two files to the current spec shape
-   `TRDD-<timestamp>-<id8>-<slug>.md`, deriving the timestamp from each card's own `created:`.
-   Fixes visibility immediately for every detector; touches only this repo; ids unchanged.
+   `TRDD-<timestamp>-<id8>-<slug>.md`, timestamp from each card's own `created:` —
+   `TRDD-20260424_154516+0200-8E8BE91A-upstream-amp-sync.md` and
+   `TRDD-20260424_040831+0200-80557822-comm-graph-downstream-sync.md` — **and update the four
+   citing references above.** Ids unchanged, `git mv` preserves history. Needs MANAGER approval
+   per the floor above.
 2. **Upstream (ai-maestro-janitor):** widen `_TRDD_ID_RE` to admit the bare-8-hex legacy shape.
    Fixes it for every project with `v1-migrated` cards, but it is **another project's source** —
    per `how-to-fix-issues-of-other-projects.md` that means an issue or a fork+PR, never a
@@ -229,6 +259,24 @@ against the same files, and name the cards the two sets disagree about. Settled 
 - 2026-09-05T03:13:47+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: a read-only measurement discrepancy inside this project's own board tooling.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-05T04:33:40+0200 — Fourth review fork; **acted on its findings and then STOPPED
+  reviewing, per its own closing advice.** It predicted I would verify the census hard and take
+  its neighbour cheaply, and it was right: the `report-to-trdd-drift` row had been committed on
+  an unopened `_trdd_corpus`. Opened it — the row STANDS (it concatenates every TRDD's full text
+  and substring-tests; no uid), so the radius is unchanged at 4/5.
+
+  **The finding that actually changes what happens next:** grepping for what CITES the two
+  filenames — which had never been run — shows remedy option 1 is a **6-file change touching
+  `docs/GOVERNANCE-RULES.md`**, so its floor is `manager`, not `none`. It was described to the
+  user four times as a Tier-0 pair of `git mv`s. Recorded in the remedy section.
+
+  Also: the "4 of 5 detectors" ratio now states its enumerator (`detectors/*.py` only; other
+  board-reading code NOT enumerated), and the process-defect paragraph corrected from "every
+  one" (4 of 6) to the generalisation that covers all six.
+
+  **NOT reviewed further.** Four passes produced four commits of documentation about a bug
+  nobody has fixed; the findings are now smaller than the passes that find them. The card is
+  handed to the user for the remedy decision.
 - 2026-09-05T04:29:55+0200 — Third review fork. Enumerated the FULL detector population (5, not
   2): `trdd-cross-card-blindspot` also drops these cards, and `trdd-state-reconciliation` drops
   them **indirectly** via `trdd_common.parse_trdd_record:764` — a call a name-based grep of the
@@ -240,11 +288,15 @@ against the same files, and name the cards the two sets disagree about. Settled 
   live-heartbeat observation re-scoped to what it proves (reconstruction ≡ instrument on this
   input) rather than to the version, which two proxies still only point at.
 
-  **The process defect, named because it is now three-for-three:** every one of these was a
-  QUANTIFIER error — `EMPTY`, `every detector`, `all 6`, `no individual card` — and each pass
-  verified hard exactly where the last one was caught while accepting its neighbour on the
-  cheapest read. The check is to ask, before committing any claim carrying a quantifier: *what
-  is the population, and did I enumerate it or sample it?*
+  **The process defect.** Four of the six defects across these passes were QUANTIFIER errors
+  (`EMPTY`, `every detector`, `all 6`, `no individual card`); the other two were not — the
+  original `uid`-skip omission was an unfaithful reproduction, and *"the direction is
+  impossible"* was a modal overclaim from an unstated assumption. (An earlier draft of this
+  paragraph said *"every one"*, which is the same unearned quantifier it was written to warn
+  about.) The generalisation that covers all six: **a claim was committed on the strongest
+  evidence that was CHEAP, rather than the evidence the claim required** — and each pass
+  verified hard exactly where the last one was caught while taking its neighbour on the cheapest
+  read. Scrutiny followed the wound, not the risk.
 - 2026-09-05T04:26:12+0200 — Second review fork on the revocation. Acted on all of it:
   `column: dev` → `todo` (`dev` asserts a worker is on it; `assignee: unassigned` and the card
   waits on a human remedy choice, so `dev` was the one affirmatively false statement in the

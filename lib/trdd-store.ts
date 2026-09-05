@@ -1034,7 +1034,68 @@ export function archiveTrdd(
   return withTrddLock(designDir, id, async () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
-  // A refused proposal is terminal in refused/; only proposals/ or tasks/ archive.
+  // A refused proposal is terminal in refused/; only proposals/ or tasks/ archive —
+  // EXCEPT the one terminal-to-terminal edit IND base step 12 explicitly permits:
+  // complete/completed → superseded on a card ALREADY in archived/. Step 12 says a
+  // terminal card's body is frozen except `updated:` and, when superseding,
+  // `superseded-by:` — and every terminal column archives AS ITSELF, so this is a
+  // COLUMN edit with NO zone move, not a second archive. Before this branch nothing
+  // in the store could reach it: `archiveTrdd` refused outright ("already terminal"),
+  // `editTrdd`/`set` refuses a bare `column` edit as "half a transition" (the guard's
+  // FROZEN_ALLOWED_FIELDS omits it on purpose). A checklist-less terminal card could
+  // then never be superseded through the sanctioned write path (TRDD-MUB7NTRF).
+  if (trdd.zone === 'archived' && opts.state === 'superseded') {
+    // `published`/`live`/`failed` are release-pipeline statements — force-superseding
+    // one is NON-EXEMPT (PRRD R-Y) and routes through the approval flow, never a bare
+    // CLI move. (`failed` cards live in tasks/, not archived/, but a drifted corpus
+    // could still carry one here, so the check is column-based, not zone-based.)
+    const RELEASE_PIPELINE_COLUMNS = new Set(['published', 'live', 'failed'])
+    if (RELEASE_PIPELINE_COLUMNS.has(trdd.column ?? '')) {
+      return {
+        ok: false,
+        status: 409,
+        error: `${trdd.id} is "${trdd.column}" — a release-pipeline statement, and force-superseding it is NON-EXEMPT (PRRD R-Y); route this through the approval flow instead of \`move\``,
+      }
+    }
+    if (trdd.column !== 'complete' && trdd.column !== 'completed') {
+      return {
+        ok: false,
+        status: 409,
+        error: `${trdd.id} is "${trdd.column}" in archived/ — an in-place archived → superseded edit only covers a finished (complete/completed) card`,
+      }
+    }
+    if (!opts.supersededBy) {
+      return {
+        ok: false,
+        status: 409,
+        error: `superseding an already-archived card needs --superseded-by naming its replacement`,
+      }
+    }
+    if (!findTrdd(designDir, opts.supersededBy)) {
+      return {
+        ok: false,
+        status: 404,
+        error: `--superseded-by ${JSON.stringify(opts.supersededBy)} does not resolve to a TRDD under ${designDir}`,
+      }
+    }
+    if (!opts.reason || !opts.reason.trim()) {
+      return {
+        ok: false,
+        status: 409,
+        error: `--reason is required — name the checklist gap (or other cause) this in-place supersede is closing`,
+      }
+    }
+    editAt(
+      trdd.filePath,
+      [
+        ['column', 'superseded'],
+        ['updated', opts.iso],
+        ['superseded-by', `[${opts.supersededBy}]`],
+      ],
+      `- ${opts.iso} — SUPERSEDED by ${opts.approver}. ${opts.reason} (in-place archived → superseded, no zone move — IND base step 12).`,
+    )
+    return { ok: true, id: trdd.id, from: 'archived', to: 'archived', column: 'superseded', filePath: trdd.filePath }
+  }
   if (trdd.zone === 'archived' || trdd.zone === 'refused') {
     return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
   }

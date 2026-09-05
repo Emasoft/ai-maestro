@@ -76,6 +76,32 @@ ${extra}---
   return file
 }
 
+/** A card already living in archived/ — for the in-place archived → superseded tests. */
+function writeArchived(id: string, slug: string, column: string, root = designDir): string {
+  const dir = path.join(root, 'archived')
+  fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, `TRDD-20260709_102705+0200-${id}-${slug}.md`)
+  fs.writeFileSync(
+    file,
+    `---
+trdd-id: ${id}
+title: ${slug} title
+column: ${column}
+created: 2026-07-09T10:27:08+0200
+updated: 2026-07-09T10:27:08+0200
+---
+
+# ${id} — body
+
+## Acceptance
+- [x] the one thing this card promised
+
+## Approval log
+`,
+  )
+  return file
+}
+
 beforeEach(() => {
   designDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-store-'))
 })
@@ -353,6 +379,117 @@ describe('trdd-store lifecycle transitions', () => {
     const r = await archiveTrdd(designDir, id, { approver: 'm', state: 'completed', iso: ISO })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.status).toBe(409)
+  })
+
+  // TRDD-MUB7NTRF — the one terminal-to-terminal edit IND base step 12 permits:
+  // complete/completed → superseded on a card ALREADY in archived/, in place, no
+  // zone move, no git mv. Before this, `archiveTrdd` refused outright ("already
+  // terminal") and `set column=...` refused as "half a transition" — leaving a
+  // checklist-less terminal card with no sanctioned way to be superseded.
+  it('archive accepts an in-place complete → superseded edit on a card already in archived/', async () => {
+    writeArchived('OLDD0001', 'old-card', 'complete')
+    writeTask('NEWX0001', 'the-replacement', 'dev')
+    const r = await archiveTrdd(designDir, 'OLDD0001', {
+      approver: 'manager',
+      state: 'superseded',
+      supersededBy: 'TRDD-NEWX0001',
+      reason: 'superseded by the replacement card',
+      iso: ISO,
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.from).toBe('archived')
+      expect(r.to).toBe('archived')
+      expect(r.column).toBe('superseded')
+    }
+    const t = findTrdd(designDir, 'OLDD0001')!
+    expect(t.zone).toBe('archived') // no zone move — stays put per step 12
+    expect(t.column).toBe('superseded')
+    expect(t.frontmatter['superseded-by']).toEqual(['TRDD-NEWX0001'])
+    expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('SUPERSEDED by manager')
+  })
+
+  it('archive accepts the in-place edit with an OPEN (non-terminal) --superseded-by target', async () => {
+    writeArchived('OLDD0002', 'old-card-2', 'completed')
+    writeTask('NEWX0002', 'still-in-dev', 'dev') // open, not terminal — accept box says "open or terminal"
+    const r = await archiveTrdd(designDir, 'OLDD0002', {
+      approver: 'manager',
+      state: 'superseded',
+      supersededBy: 'TRDD-NEWX0002',
+      reason: 'closing the checklist gap',
+      iso: ISO,
+    })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'OLDD0002')!
+    expect(t.column).toBe('superseded')
+  })
+
+  it('archive REFUSES the in-place edit (409) when --superseded-by is missing', async () => {
+    writeArchived('OLDD0003', 'old-card-3', 'complete')
+    const r = await archiveTrdd(designDir, 'OLDD0003', { approver: 'manager', state: 'superseded', reason: 'x', iso: ISO })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/--superseded-by/)
+    }
+    expect(findTrdd(designDir, 'OLDD0003')!.column).toBe('complete') // untouched
+  })
+
+  it('archive REFUSES the in-place edit (404) when --superseded-by does not resolve', async () => {
+    writeArchived('OLDD0004', 'old-card-4', 'complete')
+    const r = await archiveTrdd(designDir, 'OLDD0004', {
+      approver: 'manager',
+      state: 'superseded',
+      supersededBy: 'TRDD-GHOSTX01',
+      reason: 'x',
+      iso: ISO,
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(404)
+      expect(r.error).toMatch(/GHOSTX01/)
+    }
+  })
+
+  it('archive REFUSES the in-place edit (409) with no --reason', async () => {
+    writeArchived('OLDD0005', 'old-card-5', 'complete')
+    writeTask('NEWX0005', 'the-replacement-5', 'dev')
+    const r = await archiveTrdd(designDir, 'OLDD0005', { approver: 'manager', state: 'superseded', supersededBy: 'TRDD-NEWX0005', iso: ISO })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/--reason/)
+    }
+  })
+
+  it.each(['published', 'live', 'failed'])(
+    'archive REFUSES the in-place edit (409) when the archived column is a release-pipeline statement: %s',
+    async (col) => {
+      writeArchived('OLDD0006', `old-card-${col}`, col)
+      writeTask('NEWX0006', `the-replacement-${col}`, 'dev')
+      const r = await archiveTrdd(designDir, 'OLDD0006', {
+        approver: 'manager',
+        state: 'superseded',
+        supersededBy: 'TRDD-NEWX0006',
+        reason: 'x',
+        iso: ISO,
+      })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.status).toBe(409)
+        expect(r.error).toMatch(/NON-EXEMPT/)
+      }
+    },
+  )
+
+  it('archive still refuses a non-superseded state on an already-archived card (409, unchanged behaviour)', async () => {
+    writeArchived('OLDD0007', 'old-card-7', 'complete')
+    const r = await archiveTrdd(designDir, 'OLDD0007', { approver: 'manager', state: 'cancelled', iso: ISO })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/already terminal/)
+    }
   })
 })
 

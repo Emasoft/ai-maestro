@@ -1339,6 +1339,10 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  finished acceptance checklist; a proposal must be approved (→ planned) before it advances.')}
   ${C.d('  Leaving `blocked` also owns `blocked-by`: it clears when every blocker is terminal,')}
   ${C.d('  else the move is REFUSED (409) naming the ids still open — pass --clear-blocker to force it.')}
+  ${C.d('  A card ALREADY in archived/ may take ONE further edit: complete/completed → superseded,')}
+  ${C.d('  in place (no zone move — IND base step 12). Requires --superseded-by (must resolve, open')}
+  ${C.d('  or terminal) and a non-empty --reason. Refused when the archived column is')}
+  ${C.d('  published/live/failed (a release-pipeline statement — NON-EXEMPT, use the approval flow).')}
 
   ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
   ${C.d('  AT LINE N, REPLACE X WITH Y — under the document lock. If X is not at line N the')}

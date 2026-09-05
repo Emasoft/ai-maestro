@@ -1,9 +1,9 @@
 ---
 trdd-id: FZRTRCGL
 title: a package-manager safety knob is disabled in package-manager config — 1 gap(s)
-column: planned
+column: complete
 created: 2026-07-16T03:17:19+0200
-updated: 2026-09-05T17:30:27+0200
+updated: 2026-09-05T17:34:11+0200
 current-owner: janitor
 task-type: bugfix
 severity: medium
@@ -64,10 +64,12 @@ path, and closes the ticket with an explicit status.
 - [x] An `.npmrc` file exists at the repo root setting the supply-chain safeguards named in the finding (`minimum-release-age=7200`, `trust-policy=no-downgrade`, `block-exotic-subdeps=true`), or the finding is explicitly refuted with the reason recorded here.
 - [x] `yarn install` (or `npm install`) still succeeds after the safeguard is restored, confirming no existing dependency relied on it being off. — N/A 2026-09-05: the finding is refuted for this repo (see STATE); no safeguard was restored, so there is nothing to confirm.
 - [x] If a dependency DID depend on the safeguard being off, that dependency is named as the real finding and handled separately. — N/A 2026-09-05: refuted, see STATE; no dependency relied on a key no installer reads.
-- [ ] Support ticket `T-A1EHL7K6` is closed with an explicit status (fixed / flagged for human).
+- [x] Support ticket `T-A1EHL7K6` is closed with an explicit status (fixed / flagged for human). — 2026-09-05: the ticket was ALREADY TERMINAL (status needs_human, dispatched 2026-07-21) in this project's .janitor/state/tickets/closed/ store, verified first-hand after the janitor's answer; nothing to close, the refutation is recorded on the card.
 
 ## Notes and lessons learned
 
 ## Approval log
 
 - 2026-09-05T17:30:22+0200 — REFUTED for this repo by measurement (assignee, Tier 0 — the card is min-approval-requirement none): yarn classic 1.22.22 is the installer and the three requested .npmrc keys are unknown to it and to npm 10.9.8; boxes 1-3 settled, box 4 waits on the janitor's answer about ticket T-A1EHL7K6 (SendMessage sent). The finding's author (janitor package-manager-policy) was told its detector should gate on the package manager in use.
+- 2026-09-05T17:34:04+0200 — Box 4 closed on the janitor's reply (ai-maestro-janitor-72, ~17:34), verified first-hand (reports/colony/evidence/fz-ticket-T-A1EHL7K6.txt): T-A1EHL7K6 is in THIS project's ticket store, status needs_human (terminal), dispatched 2026-07-21 — not re-closed, no ticket verbs run. The janitor's detector already gates on the lockfile's package manager (its commit 49baa78c, 2026-07-29, janitor issue 130) and clears PKGPOL-001 where the policy does not apply — no card owed on its side; this finding predates that fix. The refutation's yarn half is now first-hand (reports/colony/evidence/fz-yarn-and-npm-definitions.txt): 0 occurrences of the three keys in yarn 1.22.22's bundled cli.js and in yarn config list, 0 in npm 10.9.8's node_modules/@npmcli/config definitions.js (positive control save-prefix: 4). Scope of the refutation: the two installers present here; newer npm or pnpm may define these keys — this refutes the finding for this repo, not the knobs. The janitor was notified, not consulted (Tier 0, assignee). COMPLETE.
+- 2026-09-05T17:34:11+0200 — COMPLETE by emanuelesabetta. archived → complete.

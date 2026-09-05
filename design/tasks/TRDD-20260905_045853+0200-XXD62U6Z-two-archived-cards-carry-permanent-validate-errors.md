@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T04:58:53+0200
-updated: 2026-09-05T04:58:53+0200
+updated: 2026-09-05T05:01:17+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -31,9 +31,11 @@ external-refs: [TRDD-UAP7ZEJL]
 
 ## ⏵ STATE — READ THIS FIRST — 2026-09-05
 
-**`trddgrep validate` has reported the same 2 ERRORs on every run for as long as anyone has
-looked, and this card exists so the phrase "2 ERRORs, both pre-existing" stops being a deferral
-nobody has to justify.** It was quoted roughly a dozen times in one session's commit messages.
+**`trddgrep validate` reported the same 2 ERRORs in every run of the 2026-09-05 session (~a
+dozen), and this card exists so the phrase "2 ERRORs, both pre-existing" stops being a deferral
+nobody has to justify.** (An earlier draft said "on every run for as long as anyone has looked" —
+cut, because their history was never examined; both cards are dated 2026-08-22, so the true span
+is at most two weeks and possibly far less. Over-reach in prose, in a card about over-reach.)
 
 | card | column | rule |
 |---|---|---|
@@ -43,7 +45,10 @@ nobody has to justify.** It was quoted roughly a dozen times in one session's co
 Both sit in `design/archived/`. Both post-date the 2026-07-31 grandfather boundary, so the gate
 flags them deliberately rather than by oversight.
 
-## The open question — and it is genuinely open in BOTH directions
+## What was settled at 05:01, and what is still open
+
+**Settled:** the rules-search question (below). **Still open:** the DECISION — whether repairing
+two 2026-08-22 archived cards is worth doing given that no clause sanctions the move.
 
 **A claim was made and retracted in the same session, and neither version was established.**
 
@@ -63,17 +68,39 @@ What IS verified (`lib/trdd-doctor.ts`, read 2026-09-05 04:58):
 
 So the linter's remedy is well-formed and location-agnostic in shape.
 
-**What is NOT verified: whether un-archiving is sanctioned by the folder-lifecycle rules.** The
-IND base (`trdd-design-tasks.md`) describes the flow into `design/archived/` and says every
-terminal column archives AS ITSELF; a grep of that rule for `archived` turns up the folder list
-and the archival direction, and **no clause either permitting or forbidding the reverse move**.
-That is the gap. A tool prescribing a column change is not the same as a rule sanctioning a
-folder move back out of the archive.
+**Whether un-archiving is sanctioned — searched properly at 05:01, and the answer is NUANCED.**
+
+> ⚠ The first draft of this section asserted the absence from `grep -rn 'archived'
+> trdd-design-tasks.md | head -8`, of which **one line was read**. That was one file of at least
+> two: `trdd-design-tasks.md` has exactly **1** line matching `archived`, while
+> `trdd-approval-tiers.md` — which legislates the archival protocol and movement *between*
+> terminal states — has **18**, and was never grepped at all. The needle was also wrong: a
+> permitting clause need never use the word "archived". Re-run with
+> `un-?archiv|restore|move (it )?back|reopen|out of .?design/archived` across BOTH files.
+
+Three hits, and **none addresses moving a card out of `design/archived/`**:
+
+| hit | what it actually governs |
+|---|---|
+| `trdd-design-tasks.md:83` | `pre-block-column:` — restore a **blocked** card when its blocker clears |
+| `trdd-design-tasks.md:128` | `unblock-when:` — `trdd-drift` auto-restores a **blocked** card |
+| `trdd-approval-tiers.md:553` | the D4 watchdog moving an under-classified card **`tasks/` → `proposals/`** |
+
+So the absence claim SURVIVES the widened search — **and the third hit makes the question sharper
+rather than merely open.** The corpus DOES sanction a reverse folder move (`tasks/` →
+`proposals/`, to un-authorize a card), so reverse moves are not categorically forbidden; the
+archive specifically is *unaddressed*. That is a gap in the rules, not a prohibition — which is a
+materially different starting point for whoever decides this than "no clause exists".
+
+A tool prescribing a column change is still not a rule sanctioning a folder move back out of the
+archive. But the precedent for reverse moves exists one folder over.
 
 ## Acceptance
 
-- [ ] Determine whether moving a card out of `design/archived/` is sanctioned — cite the clause,
-      or record that no clause addresses it
+- [x] Determine whether moving a card out of `design/archived/` is sanctioned — **no clause
+      addresses it** (widened search across both governing files, 05:01; see the STATE block).
+      The corpus sanctions ONE reverse move — `tasks/` → `proposals/` at
+      `trdd-approval-tiers.md:553` — so this is an unaddressed gap, not a prohibition
 - [ ] If sanctioned: repair both cards (move to `back`, write the acceptance checklist that
       records what each promised and whether it delivered, re-close, re-archive) and confirm
       `trddgrep validate` reports 0 ERRORs
@@ -93,6 +120,17 @@ direction, which is what both previous attempts produced.
 
 ## Approval log
 
+- 2026-09-05T05:01:17+0200 — Box 1 CLOSED by widened search. This card was filed at 04:58 and a
+  review immediately found its THESIS rested on a partial instrument: `grep -rn 'archived'
+  trdd-design-tasks.md | head -8`, one line read, one file of two — and
+  `trdd-approval-tiers.md` (18 matching lines, the file that actually legislates the archival
+  protocol) was never opened. The needle was wrong too: a permitting clause need never say
+  "archived". Fourth partial-instrument universal of the session, and the first where the
+  conclusion itself was at stake rather than a supporting adjective — a card whose reason for
+  existing is *"this is unresolved"* is worthless the moment it turns out to be resolved
+  somewhere unread. The re-run confirms the absence and adds the `tasks/` → `proposals/`
+  precedent, which makes this a GAP rather than a prohibition. Also cut "for as long as anyone
+  has looked" to the measured span.
 - 2026-09-05T04:58:53+0200 — MANDATE issued by claude-opus-session (min-approval-requirement:
   none). Tier-0: records an open question about this project's own board hygiene and performs no
   repair. The repair itself, if it happens, is a separate decision recorded above.

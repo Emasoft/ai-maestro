@@ -66,6 +66,17 @@ vi.mock('fs', () => ({
   writeFileSync: (...args: unknown[]) => mockFs.writeFileSync(...args),
 }))
 
+// Mock the publish-request poller's file I/O. Since 458ecc52 the "already
+// running" branch arms the 2 s poller, and the reuse test enters that branch —
+// unmocked, one tick would read the developer's REAL
+// ~/agents/haephestos/publish-request.json and, if one existed, publish it
+// against the real marketplace. The `fs` mock above does not cover this:
+// lib/json-io has its own reader. Containment, not behaviour, is the point.
+vi.mock('@/lib/json-io', () => ({
+  readJson: vi.fn().mockResolvedValue({ ok: false, reason: 'missing' }),
+  saveJsonSafe: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Now import the service under test
 import {
   createCreationHelper,

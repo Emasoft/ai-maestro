@@ -4,7 +4,7 @@ title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: blocked
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-09-05T11:34:27+0200
+updated: 2026-09-05T11:37:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,8 +21,9 @@ derived: true
 derived-kind: eht
 implementation-commits: [f2c8fb90]
 blocked-by: [3RIWC3FI]
-blocker-probe: sh -c 'F=$(find design/tasks design/archived -iname "*3RIWC3FI*" | head -1); [ -n "$F" ] && grep -m1 "^column:" "$F" || echo column-absent'
+blocker-probe: sh -c 'F=$(find design/tasks design/archived -iname "TRDD-[0-9]*_[0-9]*-3RIWC3FI-*" | head -1); [ -n "$F" ] && grep -m1 "^column:" "$F" || echo column-absent'
 blocker-holds-if: not-match:complete
+pre-block-column: todo
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
@@ -119,3 +120,4 @@ injection-proof); the verbatim directive is in the Spec below.
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: none). Pre-approved; born approved to author+execute.
 - 2026-09-05T11:33:14+0200 — column → blocked by manager. Machinery landed (770880b1 + f2c8fb90 test gaps); boxes 1-2 need a live AskUserQuestion frame capture, now TRDD- (operator territory). Parked, not stalled.
+- 2026-09-05T11:37:20+0200 — 7f9429a5 parked this card with blocked-by [] after an empty-variable mint parse; 052524f9 repaired it (blocked-by [3RIWC3FI], zone-independent probe) and this edit adds pre-block-column: todo. RELEASE IS MANUAL: nothing in this repo or in janitor 3.4.14 evaluates blocker-probe — the field is lint-checked for presence and grammar only. When 3RIWC3FI closes, the coordinator clears blocked-by by hand until the evaluator card lands.

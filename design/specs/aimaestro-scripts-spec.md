@@ -947,8 +947,8 @@ AID + governance title (the R32 dual-path) and needs none.
 
 Usage:
   aimaestro-trdd.sh create --title <t> --type <task-type> [--column C] [--min-approval <title>]
-      [--parent <id8>] [--npt <id8,id8,...>] [--eht <id8,id8,...>] [--body-file <path>|--body -]
-      [--agent A]
+      [--parent <id8>] [--derived-kind npt|eht] [--npt <id8,id8,...>] [--eht <id8,id8,...>]
+      [--body-file <path>|--body -] [--agent A]
       Server-side minting (TRDD-40DYBI4T): id8 (collision-checked across every scope
       root), timestamps, minimal v2 frontmatter, and ZONE ROUTING per the mandate
       rule — a --min-approval above YOUR verified authority lands the card in

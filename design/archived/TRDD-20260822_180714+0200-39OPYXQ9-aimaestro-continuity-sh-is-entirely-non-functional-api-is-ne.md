@@ -13,7 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T18:07:14+0200
-superseded-by: [TRDD-MS3AD6NX]
+superseded-by: []
 ---
 
 # aimaestro-continuity.sh is entirely non-functional — _api is never defined

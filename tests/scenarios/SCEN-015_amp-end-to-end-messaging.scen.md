@@ -94,7 +94,7 @@ author: AI Maestro Team
 - **Verify:** `tmux list-sessions` shows no scen015-* sessions. Screenshot: SCEN-015/S004-no-orphans.png
 
 #### S005: Verify AMP CLI is installed
-- **Action:** Run `ls ~/.local/bin/amp-*.sh` and check all seven AMP CLI scripts resolve under `~/.local/bin/` (`amp-init`, `amp-inbox`, `amp-read`, `amp-download`, `amp-delete`, and the two scripts an agent later invokes via its own Chat per Rule 0: `amp-send`, `amp-reply`)
+- **Action:** Run `ls ~/.local/bin/amp-*.sh` and check all seven AMP CLI scripts resolve under `~/.local/bin/` (`amp-init`, `amp-inbox`, `amp-read`, `amp-download`, `amp-delete`, and the two scripts each agent is expected to choose on its own after a Chat directive, per Rule 0: `amp-send`, `amp-reply`)
 - **Goal:** All AMP scripts are on PATH
 - **Creates:** nothing (verification)
 - **Modifies:** nothing
@@ -151,8 +151,8 @@ author: AI Maestro Team
 ## Phase 2: Text Message Round-Trip (Alice → Bob → Alice)
 
 #### S012: Alice sends a text message to Bob
-- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section an instruction to send Bob the text message below via its own AMP CLI send script (chat message text quoted under Goal), using its own `--id` (the UUID resolved in S009 — preferred over AMP_DIR since paths are UUID-keyed), and to report the message ID it prints. Wait for Alice to run the command in its own terminal and reply in Chat. Per Rule 0, the runner (the human user) never invokes the AMP send script itself — the agent must invoke it.
-- **Goal:** Chat message text: "Run `amp-send.sh --id <aliceId> scen015-bob \"Hello Bob\" \"How are you?\"` and tell me the message ID it prints." Expected outcome: message delivered to Bob's inbox.
+- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section: "Send scen015-bob an AMP message with subject 'Hello Bob' and body 'How are you?', and tell me the message id it returns." Wait for Alice to run the command in its own terminal and reply in Chat. Per Rule 0, the runner (the human user) never invokes the AMP send script itself, never names it, and never pastes its argv — Alice must choose and invoke it on her own.
+- **Goal:** Alice invokes an AMP send script on her own (e.g. amp-send.sh, using her own agent id) and reports a message id in Chat. Expected outcome: message delivered to Bob's inbox.
 - **Creates:** 1 file in `~/.agent-messaging/agents/<bobId>/messages/inbox/scen015-alice_default_aimaestro_local/`, 1 file in `~/.agent-messaging/agents/<aliceId>/messages/sent/scen015-bob_default_aimaestro_local/`
 - **Modifies:** nothing on disk outside the two inboxes
 - **Verify:** Alice's terminal/chat reply shows exit 0 and the message ID. `find ~/.agent-messaging/agents/<bobId>/messages/inbox/ -type f` shows exactly one new file. Screenshot: SCEN-015/S012-alice-sent.png
@@ -178,9 +178,9 @@ author: AI Maestro Team
 - **Modifies:** inbox metadata (marks as read)
 - **Verify:** Output contains the exact body string "How are you?". Screenshot: SCEN-015/S015-bob-read-message.png
 
-#### S016: Bob replies via amp-reply.sh
-- **Action:** Select agent "scen015-bob" in the sidebar and type into its Chat section an instruction to reply to Alice's message via its own AMP CLI reply script (chat message text quoted under Goal), and to confirm it exited cleanly. Wait for Bob to run the command in its own terminal and report back in Chat. Per Rule 0, the runner does not invoke the AMP reply script itself.
-- **Goal:** Chat message text: "Run `amp-reply.sh --id <bobId> <messageId> \"I'm doing well, thanks Alice!\"` and confirm it exited cleanly." Expected outcome: reply delivered to Alice's inbox with `in_reply_to` set to the original message ID.
+#### S016: Bob replies to Alice's message
+- **Action:** Select agent "scen015-bob" in the sidebar and type into its Chat section: "Reply to Alice's last message with 'I'm doing well, thanks Alice!' and confirm it went through." Wait for Bob to run the command in its own terminal and report back in Chat. Per Rule 0, the runner does not invoke the AMP reply script itself, name it, or paste its argv — Bob must choose and invoke it on his own.
+- **Goal:** Bob invokes an AMP reply script on his own (e.g. amp-reply.sh) and confirms in Chat that it exited cleanly. Expected outcome: reply delivered to Alice's inbox with `in_reply_to` set to the original message ID.
 - **Creates:** 1 file in `~/.agent-messaging/agents/<aliceId>/messages/inbox/scen015-bob_default_aimaestro_local/`, 1 file in `~/.agent-messaging/agents/<bobId>/messages/sent/scen015-alice_default_aimaestro_local/`
 - **Modifies:** nothing outside those inboxes
 - **Verify:** Bob's chat reply confirms exit 0. Screenshot: SCEN-015/S016-bob-replied.png
@@ -204,8 +204,8 @@ author: AI Maestro Team
 - **Verify:** File exists, size is exactly 1024 bytes. Record the checksum. Screenshot: SCEN-015/S018-attachment-created.png
 
 #### S019: Alice sends a message with the attachment
-- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section an instruction to send Bob the attached-file message below via its own AMP CLI send script (chat message text quoted under Goal), and to report the message ID it prints. Wait for Alice to run the command in its own terminal and report the result in Chat. Per Rule 0, the runner does not invoke the AMP send script itself.
-- **Goal:** Chat message text: "Run `amp-send.sh --id <aliceId> scen015-bob \"File for you\" \"Binary payload\" --attach /tmp/scen015-attachment.bin` and tell me the message ID it prints." Expected outcome: message + attachment delivered to Bob.
+- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section: "Send scen015-bob an AMP message with subject 'File for you' and body 'Binary payload', attaching the file /tmp/scen015-attachment.bin, and tell me the message id it returns." Wait for Alice to run the command in its own terminal and report the result in Chat. Per Rule 0, the runner does not invoke the AMP send script itself, name it, or paste its argv — Alice must choose and invoke it on her own.
+- **Goal:** Alice invokes an AMP send script on her own (e.g. amp-send.sh) with the attachment, and reports a message id in Chat. Expected outcome: message and attachment delivered to Bob's inbox.
 - **Creates:** 1 message file in Bob's inbox containing an attachment reference
 - **Modifies:** nothing outside the inboxes
 - **Verify:** Alice's chat reply shows exit 0 and the message ID. Screenshot: SCEN-015/S019-alice-sent-attachment.png

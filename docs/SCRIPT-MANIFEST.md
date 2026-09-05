@@ -44,10 +44,15 @@ verb looks absent, and a plugin that believes the layer lacks what it needs is p
 > `aimaestro-agent-bash` (a differently-named symlink to `aimaestro-agent.sh`). Neither is a
 > bare-name alias of a `.sh` script.
 
-- Source of truth: `scripts/*.sh` (**92** files)
+- Source of truth: `scripts/*.sh` (**96** files)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
 - **Invocation: always with `.sh`.** No bare-name aliases exist or will be added — see the box above.
-- Last reconciled: **2026-08-05** — announced the 7 scripts that were shipping unannounced
+- Last reconciled: **2026-09-05** — +4 (the TRDD-523V1N4I PSS/CPV wrappers → Tier A §2.4);
+  seven count-bearing lines changed — source-of-truth line (92→96), §1 table Tier A (50→54),
+  §1 sum (54+12+30=96), §2 heading (50→54), §2.1 heading (12→14, measured — it had read 12
+  above fourteen entries), §2.4 heading (2→6), and the §2.1 sub-count note (now 14+28+6+6=54,
+  with §2.2/§2.3 marked UNVERIFIED)
+- Previous reconciliation, 2026-08-05: announced the 7 scripts that were shipping unannounced
   (`aimaestro-settings.sh` → Tier A; `aimaestro-check-decoupling.sh`, `install-boot-persistence.sh`,
   `install-pillar-tooling.sh`, `setup-local-marketplaces.sh`, `distribute-tailscale-skill.sh`,
   `simulate-blackout.sh` → Tier C), reconciled four contradictory counts, and added
@@ -76,12 +81,13 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 50 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 54 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
 | **C — operator/dev** (§4, 30 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-50 + 12 + 30 = **92**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+54 + 12 + 30 = **96**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+(2026-09-05: +4 — the PSS/CPV read-surface wrappers of TRDD-523V1N4I, Tier A §2.4.)
 (Before 2026-08-27 this line read `50 + 12 + 28 = 90` while the table one row up said 29 and disk
 held 91 — three counts, no two agreeing, in the file whose own header warns that exact drift
 recurs. `tests/unit/script-manifest-announces-every-script.test.ts` checks the three §-headings
@@ -89,16 +95,23 @@ against disk, so it caught the heading but never this sum: fix both when adding 
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (50 scripts)
+## 2. Tier A — the frozen skill-facing CLI (54 scripts)
 
-### 2.1 `aimaestro-*` — the server surface (12)
+### 2.1 `aimaestro-*` — the server surface (14)
 
-Everything that touches the AI Maestro API goes through one of these twelve. They all
+Everything that touches the AI Maestro API goes through one of these fourteen. Four more
+`aimaestro-*` scripts exist but are NOT server-surface — the PSS/CPV read wrappers of
+TRDD-523V1N4I sit in §2.4 because they exec external tools and never call the API. They all
 accept `help`, and every one that talks to the server reads `AID_AUTH` /
 `AIMAESTRO_SUDO_TOKEN` / `AIMAESTRO_API_BASE` (§6).
 
-> **Sub-counts reconcile: 12 + 28 + 6 + 2 = 48** (§2.1 + §2.2 + §2.3 + §2.4), matching the Tier-A
-> total in §1. Measured with `grep -c '^#### \`aimaestro-'` per section, not asserted.
+> **Sub-counts sum: 14 + 28 + 6 + 6 = 54** (§2.1 + §2.2 + §2.3 + §2.4), matching the Tier-A
+> total in §1. (§2.1 measured 2026-09-05 with `awk 'NR>=94 && NR<443 && /^#### \`aimaestro-/'`:
+> 14 — this line and the §2.1 subheading said 12 for weeks while fourteen entries sat below
+> them, the same drift the next paragraph describes, both corrected the same day; §2.4 counted by
+> hand from its table: 6; §2.2's 28 and §2.3's 6 are the headings as found, UNVERIFIED — their
+> entries are not `####`-shaped, so that awk sees none of them, and the sum matching 54 is
+> arithmetic on the headings, not evidence that those sections hold 28 and 6 entries.)
 >
 > This note previously recorded two things that are now resolved, kept here because the *pattern*
 > keeps recurring: the subheading once read `(8)` while NINE entries sat below it, and
@@ -501,12 +514,16 @@ never bends to them.
 | `aid-token.sh` | `--auth <url> [--scope "…"] [--json] [--no-cache] [--quiet]` — RS256 JWT from a 23blocks auth server |
 | `aid-register.sh` | `--auth <url> --token <jwt> --role-id <id> [--api-key K] [--name N] [--description D] [--lifetime S]` |
 
-### 2.4 Other frozen skill-facing CLI (2)
+### 2.4 Other frozen skill-facing CLI (6)
 
 | Script | Signature |
 |---|---|
 | `mcp-discover.sh` | `<config-path> <server-name> [opts]` \| `--plugin <plugin-name> <server-name> [opts]`; `--format json\|text\|llm` `--raw` `--method <jsonrpc-method>` `--tool-name <name>` — backs the `mcp-discovery` skill |
 | `aimaestro-settings.sh` | `get <path>` · `set <path> --key <dot.path>\|--key-json <arr> --value <v> [--no-create]` · `delete <path> --key\|--key-json [--no-create]` · `edit <path> --ops '<json array>'` — the gated `settings.json` / `settings.local.json` editor |
+| `aimaestro-cpv-pre-install-scan.sh` | `<path\|url>` — wraps CPV's `cpv_pre_install_scan.py --json` (newest cached build, resolved at run time); JSON on stdout, the tool's own exit 0 clean / 1 do-not-install / 2 could-not-run passed through; 127 = the wrapper could not locate the tool. REPORT-ONLY — never stamps the R27 install path (TRDD-523V1N4I, stamping is TRDD-Y3AGECQE) |
+| `aimaestro-cpv-validate-plugin.sh` | `<plugin-dir>` — wraps CPV's `validate_plugin.py --json` via its own `remote_validation.py plugin` launcher (a direct call refuses); exit 0/1/2/3 by severity passed through; 127 = tool not located |
+| `aimaestro-pss-profile-fit.sh` | `<member-agent.md> [--top N] [--output <dir>]` — the `pss-setup-agent --fast` path with the two companion validators chained; writes the `.agent.toml` in a private temp dir, prints one JSON. Composite exit (the binary exits 0 even when it fails): 0 clean · 1 unverifiable elements · 2 no toml produced · 127 tool or file not located |
+| `aimaestro-pss-reindex-confirm.sh` | `[--limit N] [--changes-limit N]` — `pss scan-log` + `pss changes-in-batch <scan_id>` (best-effort stamp file first; PSS 3.16.0 ships none, so the exec path is what answers today); prints which source answered; exit 0 / 127 |
 
 **`aimaestro-settings.sh` is the ONLY sanctioned way to mutate a `settings.json`.** It is
 Tier A despite not calling the HTTP API — deliberately so: it invokes

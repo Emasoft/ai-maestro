@@ -2,8 +2,8 @@
   "v": 1,
   "note": "FROZEN-CLI manifest. verbs/flags are the contract --check diffs; usage is human text, never compared. Regenerate: node scripts/build-script-manifest.mjs",
   "counts": {
-    "walked": 60,
-    "skillFacing": 50,
+    "walked": 64,
+    "skillFacing": 54,
     "excluded": 10
   },
   "scripts": {
@@ -249,6 +249,24 @@
         "#",
         "# ============================================================================="
       ]
+    },
+    "aimaestro-cpv-pre-install-scan.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "-h"
+      ],
+      "usage": []
+    },
+    "aimaestro-cpv-validate-plugin.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "-h"
+      ],
+      "usage": []
     },
     "aimaestro-governance.sh": {
       "family": "aimaestro",
@@ -562,6 +580,28 @@
         "#",
         "# ============================================================================="
       ]
+    },
+    "aimaestro-pss-profile-fit.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--output",
+        "--top",
+        "-h"
+      ],
+      "usage": []
+    },
+    "aimaestro-pss-reindex-confirm.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [
+        "--changes-limit",
+        "--help",
+        "--limit",
+        "-h"
+      ],
+      "usage": []
     },
     "aimaestro-session.sh": {
       "family": "aimaestro",

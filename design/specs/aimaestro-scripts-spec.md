@@ -166,6 +166,91 @@ Usage:
 
 ---
 
+## aimaestro-cpv-pre-install-scan.sh
+
+```text
+Thin wrapper around CPV's pre-install security scanner (surface 1 of TRDD-523V1N4I).
+
+WHAT THIS WRAPS: `cpv_pre_install_scan.py <path|url> --json` from the newest
+claude-plugins-validation (CPV) build in the plugin cache. Read the source
+(scripts/cpv_pre_install_scan.py::main, v5.17.0) before trusting this comment —
+it is what was actually verified, not the (stale) exit-code claims recorded on
+the TRDD card itself.
+
+WHY A WRAPPER: per the plugin-abstraction rule, nothing in the ai-maestro
+script layer may hardcode a plugin-cache path or a plugin version — this
+script resolves the NEWEST cached CPV build at run time (`sort -V | tail -1`,
+never `find | head -1`, which returns the alphabetically-first version and
+was the exact trap the TRDD's own re-verification note walked into).
+
+R27 NOTE (design decision, 2026-09-05): this wrapper does NOT stamp a verdict
+into the R27 install path. It only REPORTS. Stamping a security verdict into
+the server's install path changes enforcement posture and is its own,
+separately-approved card — see TRDD-523V1N4I "Design decisions".
+
+── EXIT CODES ──────────────────────────────────────────────────────────────
+  The wrapped tool's own contract (verified against v5.17.0 source):
+    0 = clean (safe to install)
+    1 = DO NOT INSTALL (CRITICAL or MAJOR findings)
+    2 = scan error (fetch/stage failure, or the internal validate_plugin.py
+        sub-invocation produced no JSON — e.g. a missing dependency)
+  This wrapper preserves that exit code UNCHANGED.
+  127 = WRAPPER could not locate the tool at all (no cached CPV build found,
+        its cpv_pre_install_scan.py script missing, or `uv` not on PATH).
+        This is the wrapper's OWN code — it never collides with CPV's 0/1/2.
+
+stdout: the wrapped tool's JSON, byte-for-byte, on success. On a 127 (could
+not locate the tool), a one-line JSON error object instead.
+```
+
+---
+
+## aimaestro-cpv-validate-plugin.sh
+
+```text
+Thin wrapper around CPV's installed-artifact health check (surface 2 of TRDD-523V1N4I).
+
+WHAT THIS WRAPS: `validate_plugin.py <cache-dir> --json` from the newest
+claude-plugins-validation (CPV) build — but invoked through CPV's OWN
+canonical remote launcher, `remote_validation.py`. Verified live (v5.17.0):
+running validate_plugin.py directly (not via CLAUDE_PLUGIN_ROOT, not as a
+slash command) refuses with "being run from a remote location without the
+environment isolation launcher" and tells the caller to use
+remote_validation.py instead — this wrapper follows that instruction rather
+than fighting it.
+
+`remote_validation.py plugin <target> --json` forwards unknown flags
+(`parse_known_args`) straight to validate_plugin.py's own argv, so `--json`
+reaches the real validator unchanged.
+
+CPV's own caveat (recorded on the TRDD card, still true): a finding here
+means the INSTALLED CACHE COPY is broken — not necessarily the plugin's
+source repo.
+
+── EXIT CODES ──────────────────────────────────────────────────────────────
+  The wrapped tool's own contract (verified against v5.17.0 source,
+  cpv_validation_common.py EXIT_* constants, non-strict mode — the mode this
+  wrapper always uses, matching the TRDD's documented four-value contract):
+    0 = OK (no CRITICAL/MAJOR/MINOR findings)
+    1 = CRITICAL findings present
+    2 = MAJOR findings present
+    3 = MINOR findings present
+  NOTE (verified, not fixed here — preserving semantics means preserving
+  this ambiguity too): validate_plugin.py ALSO returns bare `1` from several
+  early usage/path-not-found branches that never reach the report, so an
+  exit-1 with EMPTY/absent JSON on stdout is a usage error, not a CRITICAL
+  finding. Callers that care about the distinction must check for JSON on
+  stdout, not exit code 1 alone. This is a property of the wrapped tool.
+  127 = WRAPPER could not locate the tool at all (no cached CPV build found,
+        remote_validation.py missing, or `uv` not on PATH). This is the
+        wrapper's OWN code — it never collides with CPV's 0-3.
+
+stdout: the wrapped tool's JSON, byte-for-byte, on success. On a 127 (could
+not locate the tool), a one-line JSON error object instead.
+```
+
+---
+
 ## aimaestro-governance.sh  ·  aimaestro-governance.sh v1.0.0
 
 Verbs: login · logout · invalidate-password · whoami|config|status · requests · request · approve · reject · transfer
@@ -477,6 +562,98 @@ Usage:
 
 `--subject` is the agent whose enclave HOLDS the token (the empowered agent),
 not the issuer.
+```
+
+---
+
+## aimaestro-pss-profile-fit.sh
+
+```text
+Thin wrapper around Perfect Skill Suggester's fast-mode agent profiling
+(surface 3 of TRDD-523V1N4I).
+
+WHAT THIS WRAPS: the `/pss-setup-agent <agent.md> --fast` command's own
+fast-mode pipeline, reproduced directly against the Rust binary (verified
+against v3.16.0, commands/pss-setup-agent/execution.md steps 6 and 8):
+  1. "${BINARY}" --agent "${AGENT_PATH}" --format json --top <N>
+     (writes <name>.agent.toml to the CURRENT DIRECTORY and prints the
+     written path on stdout — it is NOT raw JSON despite the TRDD card's
+     original description; this wrapper isolates the write in a private
+     tmp dir so it cannot pollute the caller's cwd)
+  2. pss_validate_agent_toml.py <toml> --check-index --verbose  (schema check)
+  3. pss_verify_profile.py <toml> --agent-def <agent.md> --json (anti-hallucination:
+     confirms every recommended element name actually exists in the index)
+
+VERIFIED BEHAVIOUR WORTH RECORDING: the Rust binary's own exit code is NOT a
+reliable failure signal. `--agent <bad-path>` still exits 0 and prints an
+unrelated hook-stub JSON on stdout (`{"hookSpecificOutput":...}`) while the
+real error goes to stderr and NO .agent.toml is written. So this wrapper
+cannot "pass through the binary's exit code" for that failure mode — there
+is nothing there to pass through. Instead it composes ONE exit code from
+the whole pipeline, documented below.
+
+── EXIT CODES (this wrapper's OWN composition — see rationale above) ──────
+  0   binary produced a .agent.toml AND pss_verify_profile.py found no
+      unverifiable element names (its own exit 0)
+  1   binary produced a .agent.toml but pss_verify_profile.py found
+      unverifiable element names (its own exit 1 — the anti-hallucination
+      gate failed; this is the composite's PRIMARY failure signal)
+  2   binary ran (exit 0) but did NOT produce a .agent.toml at the path it
+      reported — a genuine could-not-complete for the PRIMARY step, kept
+      distinct from the wrapper's own 127 because the tool DID run
+  127 wrapper could not locate the tool at all (no cached PSS build, no
+      binary for this platform, the agent-def file does not exist, or
+      `uv` is missing for the verify step)
+
+stdout: one JSON object with every stage's exit code and output —
+never just the last tool's raw JSON, because three tools ran.
+```
+
+---
+
+## aimaestro-pss-reindex-confirm.sh
+
+```text
+Thin wrapper that CONFIRMS a Perfect Skill Suggester reindex actually ran
+(surface 4 of TRDD-523V1N4I) — closes the "sent, not confirmed" gap that
+/amcos-reindex-skills documents about itself (it is fire-and-forget: it
+reports the reindex REQUEST was sent, never the reindex OUTCOME).
+
+WHAT THIS WRAPS: `pss scan-log --format json` + `pss changes-in-batch
+<scan_id> --format json` from the newest cached PSS build (verified live
+against v3.16.0's Rust binary --help).
+
+THE "FLAT STAMP FILE" — RE-VERIFIED, NOT FOUND (report this honestly):
+the design decision on TRDD-523V1N4I says this wrapper should also read
+"PSS's flat stamp file when present" because it is supposedly cheaper than
+exec'ing the binary. A repo-wide grep of PSS v3.16.0 for a completion-stamp
+file (reindex_complete / last_reindex / stamp_file / etc.) found no such
+artifact — the only place a "last reindex" timestamp is recorded is inside
+the CozoDB itself (scan_runs table, read via `pss scan-log` / `pss stats`).
+This wrapper still CHECKS the two candidate paths below (best-effort, "when
+present" per the design decision), and falls back to the exec path when
+neither exists — which, as of this build, is always. The JSON output names
+which source actually answered, so a future PSS release that adds the file
+is picked up automatically with no wrapper change.
+
+VERIFIED BEHAVIOUR WORTH RECORDING: neither `pss scan-log` nor `pss
+changes-in-batch` documents a distinct failure exit code. A NONEXISTENT
+scan_id returns exit 0 and an EMPTY JSON array `[]` — indistinguishable
+from "this scan really had zero events". This wrapper preserves that
+ambiguity (it is the wrapped tool's own contract) rather than inventing a
+distinction the tool does not make.
+
+── EXIT CODES ──────────────────────────────────────────────────────────────
+  0   `pss scan-log` (and, when a scan_id was resolved, `pss
+      changes-in-batch`) ran successfully — their own exit code, verified
+      always 0 for both subcommands regardless of whether any rows matched
+  127 wrapper could not locate the tool at all (no cached PSS build, no
+      binary for this platform)
+  Any other value: passed through unchanged from the PSS binary itself,
+  should the binary ever add a distinct failure code for these subcommands.
+
+stdout: one JSON object combining the stamp-file check (if any), the recent
+scan-log rows, and (when a scan_id is known) the batch's changed elements.
 ```
 
 ---

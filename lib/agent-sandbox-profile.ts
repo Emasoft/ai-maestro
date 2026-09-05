@@ -31,7 +31,10 @@
  *
  * AND IT IS A DENY-LIST, NOT A BOUNDARY. A container denies by construction; this permits by
  * construction and denies what someone enumerated. The enumeration grew by six entries in the
- * session that produced it. TRDD-6PIXX1AY owns keeping it honest.
+ * session that produced it. TRDD-6PIXX1AY owns keeping it honest: the positively-stated
+ * boundary and the per-channel inventory live in `lib/agent-sandbox-channel-inventory.ts`,
+ * checked non-vacuously by `tests/security/sandbox-channel-inventory.test.ts` — every deny
+ * rule below must have an entry there, and the test suite reddens if it does not.
  */
 import { homedir } from 'os'
 import path from 'path'

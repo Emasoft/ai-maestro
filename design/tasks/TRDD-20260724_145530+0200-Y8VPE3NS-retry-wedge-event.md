@@ -2,11 +2,11 @@
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
 column: todo
-review-after: 2026-09-02
+review-after: 2026-10-05
 blocked-by: []
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T06:03:52+0200
+updated: 2026-09-05T18:38:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -67,7 +67,8 @@ only; scrollback would let an hour-old banner re-trigger forever), which needs n
    observe: (a) does the transcript append during a retry; (b) does ESC land on
    `on-stop-failure` or on a plain `Stop` — if plain `Stop`, call `ensure-resume` after the ESC.
 
-NEXT ACTION: build the poll site (sibling TRDD under E0), then observe one real wedge.
+NEXT ACTION: the poll site landed 2026-07-25 as 73c9b27c (leg 3 of lib/fleet-continuity.ts, live and scanning); the ONLY remaining action is to observe one real retry-wedge — box 6 ticks on that observation; re-parked to 2026-10-05.
+- 2026-09-05T18:38:37+0200 — HOUSEKEEPING: review-after 2026-09-02 → 2026-10-05 (snooze, not a mute; the wedge is a natural event, no card blocks this one, so unblock-when does not apply); the NEXT ACTION line corrected — the poll site is landed, observing one real wedge is all that remains.
 
 ## Spec
 

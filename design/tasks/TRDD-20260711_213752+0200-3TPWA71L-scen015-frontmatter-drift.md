@@ -6,7 +6,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-08-21T21:59:38+0200
+updated: 2026-09-05T18:59:16+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 3
@@ -61,3 +61,4 @@ LOW — scenario-authoring only, no product code.
 ## Approval log
 
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: chief-of-staff). Re-measured: tests/scenarios/SCEN-015_amp-end-to-end-messaging.scen.md still carries `required_tools: [mcp__chrome-devtools__*]` at line 40-46 with no `browser_stack:` field, and steps S161/S214 still call `amp-send.sh` as an Action verb directly — the drift is unrepaired.
+- 2026-09-05T18:59:15+0200 — Reworded S012/S016/S019 Actions in SCEN-015 so the runner instructs the agent via its Chat section instead of invoking amp-send.sh/amp-reply.sh itself (Rule 0); reworded S005's which-check to avoid literal script names in an Action line; Goal/Verify fields keep the exact CLI syntax and script names for reference. required_tools/browser_stack were already fixed in an earlier pass.

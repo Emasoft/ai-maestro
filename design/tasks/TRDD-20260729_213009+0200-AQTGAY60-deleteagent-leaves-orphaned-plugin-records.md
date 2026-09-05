@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: human_review
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-09-05T02:36:39+0200
+updated: 2026-09-05T02:46:47+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -307,14 +307,19 @@ neuter then reddened exactly that one test.
 > did not vanish; they changed SHAPE, from `if`-nesting to an early return. **The recipes transfer,
 > and N1 is now easier than the original** (a smaller, more surgical mutation):
 >
-> | old recipe | today's equivalent |
-> |---|---|
-> | **N1** move G09b out of the folder-deleted branch | neuter `G08c`'s FIRST early-return guard (`hard && options?.deleteFolder`) |
-> | **N2** delete the gate | early-`return` from `G08c`'s `run` |
+> | recipe | today's equivalent | run? |
+> |---|---|---|
+> | **N1** move G09b out of the folder-deleted branch | neuter `G08c`'s FIRST early-return guard (`hard && options?.deleteFolder`) | ✅ |
+> | **N1b** — *the half the old N1 also covered* | neuter the SECOND guard (`startsWith(agentsRoot)`) | ✅ |
+> | **N2** delete the gate | early-`return` from `G08c`'s `run` | ✅ |
+> | **N-undo** — new, has no old counterpart | replace `undo:` with an inert `async () => {}` | ✅ |
 >
-> Both were RUN on 2026-09-05 — results in box 4. Saying a recipe was unperformable while box 4
-> was un-ticked *for want of that exact recipe* left the card arguing against its own open work,
-> which is why this correction matters more than its size suggests.
+> ⚠ **The first version of this table had TWO rows and presented the transfer as complete.** The old
+> N1 moved the gate out of a branch with **two** nestings — `hard && deleteFolder` AND G09's
+> `startsWith(agentsRoot)` check — so today's single-guard N1 is only its first half. That is part
+> of why it is "easier", and it left the second guard unpinned until N1b was added and run.
+> Results in box 4. Saying a recipe was unperformable while box 4 was un-ticked *for want of that
+> exact recipe* left the card arguing against its own open work.
 >
 > **Kept VERBATIM as the historical record of why the harness was built this way — do NOT "finish
 > the job" by de-naming `G09b` in the block below.** That is deliberate, and it is the opposite of
@@ -396,10 +401,15 @@ neuter then reddened exactly that one test.
       is met BEHAVIOURALLY, not just structurally: the compensation's body was read (a per-key CLI
       re-install that throws rather than under-report), so this tick does not rest on a symbol
       merely existing, which was the error that put the box here. **And it is INVOKED, not merely
-      registered** — the distinction matters, because reading a body proves only what it WOULD do.
-      The gate test *"FAILS the whole delete when the CLI refuses, and re-installs what it already
-      took"* asserts the runner actually calls it, and that test is one of the 6 that redden under
-      N2 (box 4), so it is itself pinned
+      registered — PROVEN by the N-undo neuter (box 4), which is the third and finally
+      discriminating attempt at this box.** The distinction matters because reading a body proves
+      only what it WOULD do. Replacing `undo:` with an inert `async () => {}` reddens **exactly
+      one** test — *"FAILS the whole delete when the CLI refuses, and re-installs what it already
+      took"* — so the runner demonstrably calls it. ⚠ The previous version of this box cited that
+      same test reddening under **N2**, which proved nothing: N2 deletes the gate, so nothing is
+      uninstalled and there is nothing to roll back — it reddens for the same reason all the others
+      do. Three closures of this box (field assigned → body read → blunt neuter) each felt like an
+      upgrade and none discriminated
 - [x] A soft delete provably does NOT remove them — DRIVEN, not merely true by construction.
       ⚠ The original wording cited a `G09b:` op line that is no longer emitted (the gate pushes
       `G08c:`, 6 sites). The behaviour survived the rename and gained a case: the current file
@@ -413,13 +423,35 @@ neuter then reddened exactly that one test.
         **exactly 2 redden** — *"never uninstalls on a soft delete"* and *"never uninstalls on a
         hard delete that did not ask for the folder"*. The adopted-workdir case stays GREEN,
         because it is pinned by the SECOND guard. So N1 discriminates the placement guard alone.
-      - **N2** — early-`return` from `G08c`'s `run`: **6 of 8 redden.**
-      - ⚠ **N1 and N2 are NOT clean complements, and the old card claimed they were.** N2 reddens
-        the soft-delete and adopted-workdir cases too — because those tests assert the gate RAN AND
-        CORRECTLY SKIPPED (they check for the `G08c: Folder preserved…` / `Folder outside ~/agents/`
-        ops line), not merely that no uninstall happened. That is a BETTER test design than a bare
-        negative — it distinguishes "skipped on purpose" from "never executed" — but it means the
-        two neuters overlap, and recording them as exact complements would be false.
+      - **N1b** — neuter the SECOND guard (`startsWith(agentsRoot)`): **exactly 1 reddens** — the
+        adopted-workdir case. Added after review pointed out the old N1 covered BOTH nestings, so
+        a single-guard N1 left this one unpinned.
+      - **N-undo** — replace `undo:` with an inert `async () => {}`: **exactly 1 reddens** — *"FAILS
+        the whole delete when the CLI refuses, and re-installs what it already took"*. **This is
+        the neuter that proves the compensation is INVOKED, not merely registered**, and box 2 had
+        been closed three times without it (field assigned → body read → reddens under a blunt
+        neuter, none of which discriminate).
+      - ⚠ **Deleting `undo:` outright is NOT the discriminating test — it reddens 7 of 8**, because
+        `lib/gate-transaction.ts:95-97` REFUSES to start a sequence containing a mutating gate with
+        no `undo`. So the whole delete fails at construction. That refusal is a stronger structural
+        guarantee than any test, and it is why the neuter had to be *inert-but-present*.
+      - **N2** — early-`return` from `G08c`'s `run`: **7 of 8 redden** (was 6 before the test fix
+        below).
+      - ⚠ **N1 and N2 are NOT clean complements, and the old card claimed they were.** The skip-cases
+        redden under N2 because they assert the gate RAN AND CORRECTLY SKIPPED — but the mechanism
+        is per-test, and reading the bodies (rather than inferring from names) found a REAL GAP:
+
+        | skip test | ops line it asserted | saw gate absence? |
+        |---|---|---|
+        | soft delete | `G08c: Folder preserved…` | yes |
+        | **hard, no folder** | **`G09: Hard-delete but no folder…`** — a **G09** line | **NO** |
+        | adopted workdir | `/^G08c: Folder outside ~\/agents\//` | yes |
+
+        The middle one asserted only a **G09** ops line, so it passed with `G08c` entirely deleted —
+        the bare-negative shape this file's other cases avoid, and which this project's own lessons
+        file calls worthless. **Fixed**: it now also asserts the `G08c: Folder preserved…` line, and
+        re-running N2 moved the count 6 → 7 with that test newly reddening, which is the proof the
+        added assertion pins something.
       - Source verified restored afterwards: `git diff services/element-management-service.ts`
         EMPTY, and the file re-runs 8/8 green.
       ⚠ **the path this box previously cited,

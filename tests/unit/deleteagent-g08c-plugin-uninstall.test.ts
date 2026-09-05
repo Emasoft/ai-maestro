@@ -281,6 +281,13 @@ describe('DeleteAgent G08c — the guards that moved WITH the gate', () => {
     expect(cli.uninstalls).toEqual([])
     expect(readInstalledPlugins(H.FAKE_HOME)[CORE]).toEqual([localRecord(kept)])
     expect(result.operations).toContain('G09: Hard-delete but no folder deletion requested')
+    // ASSERT G08c ITSELF RAN AND SKIPPED ON PURPOSE — added 2026-09-05 (TRDD-AQTGAY60).
+    // Without this line every assertion above is satisfied by the gate simply NOT EXISTING:
+    // measured, this was the ONE test in the file that stayed GREEN when G08c's `run` was
+    // stubbed out, because the only ops line it checked was G09's. Its two siblings already
+    // assert a G08c line and reddened. A skip-case must distinguish "skipped deliberately"
+    // from "never executed", or it is the bare negative this file's other cases avoid.
+    expect(result.operations).toContain('G08c: Folder preserved — local plugin records stay true, nothing to uninstall')
   })
 
   it('never uninstalls from an ADOPTED workdir outside ~/agents, whose folder G09 refuses to delete', async () => {

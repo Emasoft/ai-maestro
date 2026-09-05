@@ -6,7 +6,7 @@ review-after: 2026-10-05
 blocked-by: []
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-09-05T18:38:38+0200
+updated: 2026-09-05T18:47:33+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,6 +23,8 @@ derived: true
 derived-kind: eht
 relevant-rules: [ai-maestro-90]
 implementation-commits: [8e78c09b, 73c9b27c]
+blocker-probe: sh -c 'grep -E "fired [1-9]" logs/pm2-error.log 2>/dev/null || echo 0'
+blocker-holds-if: not-match:fired [1-9]
 ---
 
 ## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
@@ -69,6 +71,8 @@ only; scrollback would let an hour-old banner re-trigger forever), which needs n
 
 NEXT ACTION: the poll site landed 2026-07-25 as 73c9b27c (leg 3 of lib/fleet-continuity.ts, live and scanning); the ONLY remaining action is to observe one real retry-wedge — box 6 ticks on that observation; re-parked to 2026-10-05.
 - 2026-09-05T18:38:37+0200 — HOUSEKEEPING: review-after 2026-09-02 → 2026-10-05 (snooze, not a mute; the wedge is a natural event, no card blocks this one, so unblock-when does not apply); the NEXT ACTION line corrected — the poll site is landed, observing one real wedge is all that remains.
+- 2026-09-05T18:46:26+0200 — PROBE ADDED: blocker-probe reads logs/pm2-error.log for a 'pass ok: scanned N, fired [1-9]' line from lib/fleet-continuity.ts's leg-3 heartbeat, printing CLEARED once a retry-wedge has fired and HOLDS otherwise; blocker-holds-if: not-match:^CLEARED$ (fail-closed default, no canary needed); closes BLOCKED-WITHOUT-PROBE — the park is now machine-checkable instead of a silent review-after date.
+- 2026-09-05T18:47:33+0200 — PROBE CORRECTED (supersedes the entry above): the card is PROJECT scope/pushed, so the probe must carry no absolute home path. blocker-probe is now sh -c 'grep -E "fired [1-9]" logs/pm2-error.log 2>/dev/null || echo 0' (repo-root-relative, matches ecosystem.config.js's './logs/pm2-error.log'), pattern-matching lib/fleet-continuity.ts's leg-3 heartbeat line 'pass ok: scanned N, fired [1-9]'; blocker-holds-if: not-match:fired [1-9] (line-printing form, fail-closed default, no canary required). Verified: prints '0' now (no wedge fired) and trddgrep validate --min-severity error shows zero findings for Y8VPE3NS.
 
 ## Spec
 

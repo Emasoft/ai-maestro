@@ -749,6 +749,45 @@ function blockedByRefs(v: unknown): string[] {
   return []
 }
 
+/**
+ * Local YYYY-MM-DD from an ISO-ish string or a `Date`; `''` if unparseable.
+ * Re-derived from `trdd-doctor.ts`'s `frontmatterDay` (not imported — the doctor
+ * imports FROM this module, so importing back would create a store→doctor→store
+ * cycle; same reason `normalizeBlockerRef` above is re-derived rather than shared).
+ */
+function frontmatterDayLocal(v: unknown): string {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
+  return String(v ?? '').trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
+}
+
+/**
+ * Does this card carry a park justification the doctor's own "parked" predicate
+ * recognizes (TRDD-CV5KDCB7 in trdd-doctor.ts), OTHER than a non-empty `blocked-by`
+ * (checked separately by the caller) and `column === 'blocked'` (trivial here — this
+ * IS the gate deciding whether `blocked` is earned)? A future `review-after:`, or a
+ * `hub-blocked`/`fleet-ask` label. TRDD-1G8FBSKZ: the entry gate must accept every
+ * park form the doctor accepts, or a legitimately-parked card (e.g. snoozed via
+ * `review-after:` alone) would be refused entry by a rule stricter than the one that
+ * later audits it.
+ */
+function hasOtherParkForm(fm: Record<string, unknown>): boolean {
+  // NOT `asList`: that is the REFERENCE-field parser and drops every non-id token, so
+  // `labels: [governance, fleet-ask]` reads as [] through it (mirrors trdd-doctor.ts).
+  const rawLabels = fm['labels']
+  const labels = (Array.isArray(rawLabels)
+    ? rawLabels.map(String)
+    : String(rawLabels ?? '').replace(/^\s*\[|\]\s*$/g, '').split(','))
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean)
+  const reviewAfter = frontmatterDayLocal(fm['review-after'])
+  // LOCAL calendar day, matching trdd-doctor.ts's PARKED predicate exactly — using the
+  // UTC day here would make a just-expired park read as still parked for the hours the
+  // two days disagree.
+  const now = new Date()
+  const todayDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return (reviewAfter !== '' && reviewAfter > todayDay) || labels.includes('hub-blocked') || labels.includes('fleet-ask')
+}
+
 /** ADVANCE an in-flight TRDD's column within tasks/ (no folder move); bumps `updated`. */
 export function advanceColumn(
   designDir: string,
@@ -807,6 +846,35 @@ export function advanceColumn(
       status: 409,
     }
   }
+  // TRDD-1G8FBSKZ: entering `blocked` must be EARNED — 3P-KAN-06 makes `blocked-by`
+  // non-empty <=> `column: blocked`, and the move-in side enforced nothing, so a
+  // card could park with `blocked-by: []` and no restore point (measured: committed
+  // that way after an empty-variable parse, then flagged BLOCKED-NO-RESTORE-POINT by
+  // the doctor). Sibling of the ISGUYYLN block above, which owns the EXIT side of
+  // this same invariant on this same function.
+  let setPreBlockColumn = ''
+  if (column === 'blocked') {
+    const enteringRefs = blockedByRefs(trdd.frontmatter?.['blocked-by'])
+    if (enteringRefs.length === 0 && !hasOtherParkForm(trdd.frontmatter ?? {})) {
+      return {
+        ok: false,
+        error:
+          '3P-KAN-06: cannot move into blocked — `blocked-by` is empty and no other park form ' +
+          '(a future `review-after:`, or a `hub-blocked`/`fleet-ask` label) is present. ' +
+          'Set `blocked-by` (or one of those) first, then move.',
+        status: 409,
+      }
+    }
+    // A card already blocked (re-parking after an edit) keeps its existing restore
+    // point — never overwrite a non-empty `pre-block-column` with the column it is
+    // ALREADY in (`blocked`), which would erase the real place to put it back.
+    if (trdd.column !== 'blocked') {
+      const existing = String(trdd.frontmatter?.['pre-block-column'] ?? '').trim()
+      if (existing === '') {
+        setPreBlockColumn = trdd.column
+      }
+    }
+  }
   let content = fs.readFileSync(trdd.filePath, 'utf-8')
   // The same on-touch migration `editAt` runs — advanceColumn writes its own frontmatter
   // rather than going through it, and a migration that fires on three of the four
@@ -814,6 +882,9 @@ export function advanceColumn(
   content = migrateLegacyApprovalTier(content).content
   content = setFrontmatterField(content, 'column', column)
   content = setFrontmatterField(content, 'updated', opts.iso)
+  if (setPreBlockColumn) {
+    content = setFrontmatterField(content, 'pre-block-column', setPreBlockColumn)
+  }
   let clearNote = ''
   if (clearBlockedBy) {
     content = setFrontmatterField(content, 'blocked-by', '[]')

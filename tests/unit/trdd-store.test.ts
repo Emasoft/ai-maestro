@@ -352,6 +352,56 @@ describe('trdd-store lifecycle transitions', () => {
     expect(t.frontmatter['blocked-by']).toEqual(['TRDD-OPEN0001'])
   })
 
+  // TRDD-1G8FBSKZ: moving INTO `blocked` used to enforce nothing — a card could park
+  // with `blocked-by: []` and no `pre-block-column`, violating 3P-KAN-06 and leaving
+  // the doctor's BLOCKED-NO-RESTORE-POINT with no restore point to point at. Sibling
+  // of the ISGUYYLN block above, which owns the EXIT side of the same invariant.
+  it('advanceColumn into blocked REFUSES (409) with empty blocked-by and no other park form, and writes nothing', async () => {
+    const f = writeTask('ENTR0001', 'entering-blocked-unjustified', 'dev', designDir)
+    const before = fs.readFileSync(f, 'utf-8')
+    const r = await advanceColumn(designDir, 'ENTR0001', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toContain('3P-KAN-06')
+    }
+    expect(fs.readFileSync(f, 'utf-8')).toBe(before)
+    const t = findTrdd(designDir, 'ENTR0001')!
+    expect(t.column).toBe('dev')
+  })
+
+  it('advanceColumn into blocked with a non-empty blocked-by succeeds and writes pre-block-column = the column left', async () => {
+    writeTask('ENTR0002', 'entering-blocked-justified', 'dev', designDir, 'blocked-by: [TRDD-OPEN0005]\n')
+    const r = await advanceColumn(designDir, 'ENTR0002', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ENTR0002')!
+    expect(t.column).toBe('blocked')
+    expect(t.frontmatter['pre-block-column']).toBe('dev')
+  })
+
+  it('advanceColumn into blocked with a future review-after (no blocked-by) is accepted as a valid park form', async () => {
+    writeTask('ENTR0003', 'entering-blocked-review-after', 'testing', designDir, 'review-after: 2099-01-01\n')
+    const r = await advanceColumn(designDir, 'ENTR0003', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ENTR0003')!
+    expect(t.column).toBe('blocked')
+    expect(t.frontmatter['pre-block-column']).toBe('testing')
+  })
+
+  it('advanceColumn into blocked keeps an existing non-empty pre-block-column (re-park never overwrites the real restore point)', async () => {
+    writeTask(
+      'ENTR0004',
+      're-entering-blocked',
+      'dev',
+      designDir,
+      'blocked-by: [TRDD-OPEN0006]\npre-block-column: testing\n',
+    )
+    const r = await advanceColumn(designDir, 'ENTR0004', 'blocked', { iso: ISO, approver: 'orch' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ENTR0004')!
+    expect(t.frontmatter['pre-block-column']).toBe('testing')
+  })
+
   // TRDD-XCQ9TDSK: `archiveTrdd` used to skip the leaving-`blocked` invariant that
   // TRDD-ISGUYYLN put into `advanceColumn` — a blocked card archiving straight to a
   // terminal (archived/) column left `blocked-by:` populated on a now-frozen card,

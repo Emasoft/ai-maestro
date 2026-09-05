@@ -47,6 +47,7 @@ import {
   describeRefreshCoverage,
   runAbsorbedDutyTick,
   runAbsorbedDutyTickNow,
+  runAbsorbedDutyPoll,
   startAbsorbedDutyScheduler,
   stopAbsorbedDutyScheduler,
   isAbsorbedDutySchedulerRunning,
@@ -56,6 +57,7 @@ import {
 // janitor self-update, which IS still per-name.
 import { MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { readChoreStamp } from '@/lib/janitor-chore-stamp'
+import { workRequestPath } from '@/lib/janitor-work-request'
 
 const JANITOR = 'ai-maestro-janitor'
 
@@ -398,6 +400,49 @@ describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07), car
  * seeded-diff neuter (make `stale` always `[]`): only the partial half reds, which is what proves
  * that half is the one carrying the claim.
  */
+
+describe('runAbsorbedDutyPoll — a work-request flag skips the wait for the next overdue tick (ai-maestro#156)', () => {
+  let tmpHome: string
+  let prevHome: string | undefined
+
+  beforeEach(() => {
+    prevHome = process.env.HOME
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-work-request-poll-'))
+    process.env.HOME = tmpHome
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.HOME
+    else process.env.HOME = prevHome
+    fs.rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  const freshLoadSettingsFn = async () => ({ lastAbsorbedRunAt: new Date().toISOString() }) as any
+
+  it('does NOT run the tick early when no flag is present and the lane is not overdue', async () => {
+    const tick = vi.fn(async () => undefined)
+    const ran = await runAbsorbedDutyPoll({ loadSettingsFn: freshLoadSettingsFn, tick })
+    expect(ran).toBe(false)
+    expect(tick).not.toHaveBeenCalled()
+  })
+
+  it('runs the tick immediately when version-update-requested.flag is present, even though the lane is not overdue', async () => {
+    const flagPath = workRequestPath('version-update-requested.flag')
+    fs.mkdirSync(path.dirname(flagPath), { recursive: true })
+    fs.writeFileSync(flagPath, '')
+
+    const tick = vi.fn(async () => undefined)
+    const ran = await runAbsorbedDutyPoll({ loadSettingsFn: freshLoadSettingsFn, tick })
+    expect(ran).toBe(true)
+    expect(tick).toHaveBeenCalledTimes(1)
+
+    // NEUTER RUN (2026-09-05): commenting out the `requested ||` clause (leaving only the
+    // pre-existing `absorbedDutyIsOverdue` check) reds exactly this test — "not overdue" was
+    // engineered to be the ONLY reason `runAbsorbedDutyPoll` would otherwise return false, so
+    // the flag-present branch is what the assertion above pins. Restored after confirming red.
+  })
+})
+
 describe('describeRefreshCoverage (TRDD-FXPV7L4D)', () => {
   const m = (o: Record<string, string>) => new Map(Object.entries(o))
 

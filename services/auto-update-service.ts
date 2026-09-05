@@ -45,7 +45,7 @@
  * performed by the server itself, not on behalf of any specific agent.
  */
 
-import { promises as fs } from 'fs'
+import { promises as fs, existsSync } from 'fs'
 import path from 'path'
 import os from 'os'
 
@@ -66,7 +66,7 @@ import { isDependencyPlugin } from '@/lib/dependency-plugins'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
 import { stampChoreRun, declareChoreBounds } from '@/lib/janitor-chore-stamp'
-import { consumeWorkRequest } from '@/lib/janitor-work-request'
+import { consumeWorkRequest, workRequestPath } from '@/lib/janitor-work-request'
 import { readSettings, editSettings, type SettingsOp } from '@/lib/settings-gate'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
@@ -286,7 +286,12 @@ export async function runAbsorbedDutyPoll(deps: {
 } = {}): Promise<boolean> {
   const load = deps.loadSettingsFn ?? loadSettings
   const s = await load()
-  if (!absorbedDutyIsOverdue(s.lastAbsorbedRunAt, deps.nowMs ?? Date.now())) return false
+  // ai-maestro#156: a work-request flag is a "please run soon", not "wait for the next
+  // scheduled tick" — peek (never consume; consumeWorkRequest runs clear-before-run inside
+  // the tick itself) so a request raised right after a tick doesn't sit for a full
+  // ABSORBED_DUTY_INTERVAL_MS. Worst-case latency becomes one ABSORBED_DUTY_POLL_MS instead.
+  const requested = existsSync(workRequestPath('version-update-requested.flag'))
+  if (!requested && !absorbedDutyIsOverdue(s.lastAbsorbedRunAt, deps.nowMs ?? Date.now())) return false
   await (deps.tick ?? runAbsorbedDutyTickSafely)()
   return true
 }

@@ -1,11 +1,11 @@
 ---
 trdd-id: E5AAE555
 title: Haephestos ephemeral-session hardening
-column: todo
+column: blocked
 created: 2026-04-20T07:00:21+0200
-updated: 2026-09-05T18:45:13+0200
-current-owner: main
-assignee: main
+updated: 2026-09-05T20:49:45+0200
+current-owner: ai-maestro-hub-session
+assignee: ai-maestro-hub-session
 priority: 3
 severity: MEDIUM
 effort: M
@@ -15,10 +15,13 @@ scope: project
 min-approval-requirement: none
 parent-trdd: null
 npt: []
-eht: []
-blocked-by: []
-implementation-commits: [a6da60bc, 9f46fb91]
+eht: [66KNYSXY]
+blocked-by: [66KNYSXY]
+implementation-commits: [a6da60bc, 9f46fb91, 3f41f718]
 created-by: main
+pre-block-column: dev
+blocker-probe: sh -c 'for id in 66KNYSXY; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: not-match:^ALL-TERMINAL$
 ---
 
 # TRDD-e5aae555-1090-4fbf-ab4b-1ac99f82486c — Haephestos ephemeral-session hardening
@@ -233,11 +236,19 @@ Estimated LOC: ~200 added + ~20 modified.
 
 **FLAG (see report): most of §3's ADD list is already implemented** — `app/api/system/client-availability/route.ts`, `hooks/useClientAvailability.ts`, and the `AgentList.tsx` gate (`claudeProbe`/`handleHaephestosClick`) all exist, and the persona doc already carries "ephemeral"/"fresh"/no-`--continue" language. The two regression tests (§3.3/§3.4) do not exist under those names — `tests/integration/haephestos-pipeline.test.ts` exists but asserts neither the launch-args invariant nor the cleanup-purge invariant.
 
-- [ ] `tests/haephestos-launch.test.ts` (or equivalent) asserts the launch args never include `--continue` and do include `--agent haephestos-creation-helper`
-- [ ] `tests/haephestos-cleanup.test.ts` (or equivalent) pre-seeds `~/agents/haephestos/fakeartifact.txt`, calls the cleanup route, and asserts the folder exists and is empty afterward
-- [ ] `implementation-commits:` in frontmatter is populated with the landing commit SHAs for the already-shipped client-availability endpoint/hook/gate (currently empty despite apparent implementation)
+- [x] `tests/haephestos-launch.test.ts` (or equivalent) asserts the launch args never include `--continue` and do include `--agent haephestos-creation-helper`
+- [x] `tests/haephestos-cleanup.test.ts` (or equivalent) pre-seeds `~/agents/haephestos/fakeartifact.txt`, calls the cleanup route, and asserts the folder exists and is empty afterward
+- [x] `implementation-commits:` in frontmatter is populated with the landing commit SHAs for the already-shipped client-availability endpoint/hook/gate (currently empty despite apparent implementation)
 - [ ] E2E smoke on a machine WITHOUT Claude confirms the HELPERS section hides the Haephestos card entirely
 
 ## 11. Tracked in session todo list
 
 Todo item `#209`. UUID `e5aae555-1090-4fbf-ab4b-1ac99f82486c` links back.
+
+## Approval log
+
+- 2026-09-05T20:48:57+0200 — column → dev by ai-maestro-hub-session. assigned to the hub session; tests landed 3f41f718
+- 2026-09-05T20:49:05+0200 — column → blocked by ai-maestro-hub-session. 3 of 4 boxes ticked; the E2E smoke box is carried by TRDD-66KNYSXY
+- 2026-09-05T20:49:43+0200 — takeover: `main` named no live session; assignee/current-owner → ai-maestro-hub-session
+- 2026-09-05T20:49:44+0200 — landing: 3f41f718 (two regression tests + pure launch-arg builder), verifier report 20260905_200653; boxes 1,2,3 ticked; the E2E box → TRDD-66KNYSXY
+- 2026-09-05T20:49:44+0200 — correction: 3f41f718's commit message INFERRED two suite files as writers of the real ~/agents/haephestos rewrite; the MEASURED writer is tests/unit/creation-helper-wizard-system-owner.test.ts line 188 (1-byte 'raw.txt' upload through file-picker, which pins homedir() at module load) — recorded on a separate Tier-0 card, not an EHT of this one

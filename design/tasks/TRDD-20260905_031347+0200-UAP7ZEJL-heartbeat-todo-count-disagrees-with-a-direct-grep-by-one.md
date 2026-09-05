@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:57:06+0200
+updated: 2026-09-05T04:58:53+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -308,7 +308,7 @@ against the same files, and name the cards the two sets disagree about. Settled 
   | measured | reach |
   |---|---|
   | `probe` assigned at `trdd-doctor.ts:1044`; its uses in **:1044-1090** are `probe === ''` emptiness tests | a 47-line WINDOW — a use in the same block below :1090 would be outside it |
-  | the file contains **no exec of any kind** beyond `execFileSync('git', …)` at :1391 | the WHOLE file, scope-independent |
+  | the file contains **no exec matching `execFileSync\|execSync\|spawnSync\|spawn(`** beyond `execFileSync('git', …)` at :1391 | the WHOLE file, but only that NEEDLE |
 
   The second is what carries the conclusion: a later `execFileSync(probe)` anywhere in the file
   would have been caught regardless of where `probe`'s block ends. An earlier draft of this
@@ -316,9 +316,15 @@ against the same files, and name the cards the two sets disagree about. Settled 
   which is the same window defect as the ±3-line guard check further up this card, at 47 lines
   instead of 3. Corrected to what was measured.
 
-  Residual gap, stated rather than searched away: the exec grep is VERB-based, so a helper module
-  (`runProbe(probe)` imported from elsewhere) would name no exec verb here. Narrow, because the
-  whole-tree field-name grep found only this file and its test.
+  Residual gaps, stated rather than searched away — the exec grep is a FIVE-VERB NEEDLE, not a
+  semantic check, so it misses **in-file**: `cp.exec(…)`/`cp.execFile(…)` via a namespace import,
+  `execa(…)`, `Bun.spawn`, `await import('child_process')`, `new Function`, `eval`; and
+  **out-of-file**: a helper module (`runProbe(probe)`) that names no exec verb here. An earlier
+  draft said *"no exec of ANY kind"* and recorded only the helper gap — a universal from a
+  literal needle, with the omission of the in-file alternatives making it read as though they had
+  been ruled out. That is the third universal-from-a-partial-instrument on this card, each one
+  committed inside the paragraph fixing the last. Narrow in practice, because the whole-tree
+  field-name grep found only this file and its test.
 
   **A mutual-coverage argument was here and is WITHDRAWN, because it was false.** It said: the
   authoring card cannot see the future, the grep cannot see a generic consumer, so a live

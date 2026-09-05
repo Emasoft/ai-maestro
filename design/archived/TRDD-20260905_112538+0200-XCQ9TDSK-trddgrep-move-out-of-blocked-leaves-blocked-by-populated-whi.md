@@ -1,9 +1,9 @@
 ---
 trdd-id: XCQ9TDSK
 title: trddgrep move out of blocked leaves blocked-by populated, which the 3-pillars spec calls drift
-column: todo
+column: complete
 created: 2026-09-05T11:25:38+0200
-updated: 2026-09-05T11:26:07+0200
+updated: 2026-09-05T11:38:31+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: bugfix
@@ -14,6 +14,7 @@ mandated-by: none
 approved: true
 approval-judge: emanuelesabetta
 approval-datetime: 2026-09-05T11:25:38+0200
+implementation-commits: [d27978d9]
 ---
 
 # trddgrep move out of blocked leaves blocked-by populated, which the 3-pillars spec calls drift
@@ -22,11 +23,12 @@ approval-datetime: 2026-09-05T11:25:38+0200
 
 ## Acceptance
 
-- [ ] `trddgrep move` out of `blocked` into ANY column (terminal or working) clears `blocked-by:` and names the cleared blockers in the appended approval-log line
-- [ ] a test pins blocked→complete on a fixture card: blocked-by empty afterwards, and a neuter that skips the clear reddens exactly that test
-- [ ] `trddgrep validate` on a fresh blocked→complete move raises no GRAPH-DANGLING-BLOCKER
+- [x] `trddgrep move` out of `blocked` into ANY column (terminal or working) clears `blocked-by:` and names the cleared blockers in the appended approval-log line
+- [x] a test pins blocked→complete on a fixture card: blocked-by empty afterwards, and a neuter that skips the clear reddens exactly that test
+- [x] `trddgrep validate` on a fresh blocked→complete move raises no GRAPH-DANGLING-BLOCKER
 
 ## Approval log
 
 - 2026-09-05T11:25:38+0200 — MANDATE issued by emanuelesabetta (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-05T11:26:07+0200 — column → todo by manager. Tier 0 self-mandate (min-approval-requirement: none): bounded tool fix against a spec clause the tool already violates (3P-KAN-06 corollary, 3-pillars-spec.md:297). Ready once MUB7NTRF lands in the same move-verb source. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'.
+- 2026-09-05T11:38:31+0200 — COMPLETE by manager. Landed in d27978d9. archiveTrdd now carries the leaving-blocked block (refuse-while-open / clear / note) copied from advanceColumn per ISGUYYLN. Verified first-hand: 51/51, tsc 0; worker neuter reddened exactly the 3 new tests; temp-dir PATH run produced blocked-by [] in archived/. Box 3: the live corpus validate is at its 5-WARN floor with no GRAPH-DANGLING-BLOCKER, and the fixture move showed the state that rule checks cannot recur. Sibling 1G8FBSKZ (entry path) is open. Authorization: USER /goal 2026-09-05 'complete all TRDD and pending tasks'..

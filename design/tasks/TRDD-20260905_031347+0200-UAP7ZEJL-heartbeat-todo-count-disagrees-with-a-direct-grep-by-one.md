@@ -6,7 +6,7 @@ project-id: ai-maestro
 column: blocked
 pre-block-column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:50:50+0200
+updated: 2026-09-05T04:52:46+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -267,6 +267,11 @@ against the same files, and name the cards the two sets disagree about. Settled 
       **The MATCHER is still unfixed** — `_TRDD_ID_RE` cannot parse the legacy shape, so a
       future `v1-migrated` card named that way would be invisible again. Now tracked as its own
       card, **TRDD-D552QXOU**, so the decision survives this conversation.
+      **⚠ READ THE COLUMN, NOT THE CHECKLIST.** All four boxes are checked and this card is
+      `blocked`, which is coherent (the completion gate is one-directional — a fully-checked card
+      in a non-terminal column is simply not-yet-advanced) but reads as *done* to anyone who hits
+      the checklist first. **The remaining work is entirely D552QXOU's**: this card cannot close
+      until that child reaches a terminal column.
 - [x] What each counting command actually counts is recorded in this card, so audits stop
       quoting one number as "the board" — recorded in the STATE block.
       (Re-worded 04:26: the original box read *"If the heartbeat is correct and the grep naive,
@@ -290,11 +295,21 @@ against the same files, and name the cards the two sets disagree about. Settled 
   |---|---|
   | `ai-maestro/lib/`, `scripts/`, `app/` | only `trdd-doctor.ts:1044-1074`, which READS the two fields to check presence + `BLOCKER_HOLDS_IF_RE:292`; its sole `execFileSync:1391` runs `git log` |
   | `ai-maestro/tests/` | `trdd-doctor-blocker-probe.test.ts` — exercises the doctor's VALIDATION gate, never runs a probe |
-  | the janitor plugin 3.4.14, whole tree | 2 TRDD cards that USE the field as data; no code |
+  | the janitor plugin 3.4.14, whole tree | 2 TRDD cards that USE the field as data; **no code matching `blocker-probe\|blocker_probe\|blockerProbe\|blockerHoldsIf\|BLOCKER_PROBE`** (both spellings re-checked 04:52, 0 hits under `scripts/`) |
 
-  **Decisive corroboration, from the janitor card that introduced the field** (`TRDD-6054NY8H`,
-  line 278): *"no detector, lint, or schema in this repo parses `blocker-probe*` yet. These
-  three lines are inert documentation today. That is deliberate — the detector ships DISABLED."*
+  **A literal-string search still cannot see a GENERIC consumer** — a loop over
+  `Object.entries(fm)` dispatching on a key from a schema would never spell the field. So the
+  third row is scoped to its needle rather than claiming a bare absence. What closes that gap is
+  a second, independent line of evidence:
+
+  **Corroboration from the card that INTRODUCED the field** (`TRDD-6054NY8H`, line 278):
+  *"no detector, lint, or schema in this repo parses `blocker-probe*` yet. These three lines are
+  inert documentation today. That is deliberate — the detector ships DISABLED."* This is not a
+  proxy read: it is not a document describing someone else's code, it is the authoring card
+  declaring its own field's adoption state — primary, not secondary. Its weakness is the word
+  *"yet"* (dated 2026-08-21), and that is exactly what the grep covers: a detector that had since
+  shipped enabled would have to NAME the field to parse it. The card cannot see the future; the
+  grep cannot see a generic consumer; a live executor would have to be visible to at least one.
 
   So `BLOCKED-WITHOUT-PROBE` gates the DECLARATION of a re-answerable predicate, not its
   evaluation — the blocker is re-answerable *by a human who runs it*, which is exactly what I did
@@ -334,6 +349,11 @@ against the same files, and name the cards the two sets disagree about. Settled 
   "probe broken" and "genuinely blocked" are indistinguishable. Fixed by globbing every zone
   (`design/*/TRDD-*D552QXOU*.md`) so the card is found wherever it lands, and by renaming the
   fallback `column-PROBE-BROKEN` so a human reading the output can tell the two apart.
+  **⚠ STRUCK 04:52 — the fallback half of this sentence was FALSE when written.** In the probe
+  form this entry describes, the sentinel was unreachable; it took the `| grep .` added at 04:48
+  (see that entry). Corrected in place rather than left to a later entry, because an entry that
+  reads as current and is not is the exact defect this card is about — and it had already been
+  deferred twice as "non-material".
 
   Verified with a REAL archived card rather than a simulation: the same glob shape against an
   existing `design/archived/` card returns `column: superseded`, which the regex matches — i.e.

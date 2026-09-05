@@ -3,7 +3,7 @@ trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
 column: dev
 created: 2026-07-07T21:56:19+0200
-updated: 2026-09-05T16:52:06+0200
+updated: 2026-09-05T16:59:10+0200
 current-owner: governance-rules-session
 assignee: governance-rules-session
 created-by: code-review
@@ -18,7 +18,7 @@ npt: []
 eht: []
 relevant-rules: []
 external-refs: ["reports/code-review/20260707_175225+0200-finder-CLEAN.json"]
-implementation-commits: [4cabbee7]
+implementation-commits: [9145068a, 9ef021a5, 5c2a2209, 4cabbee7]
 ---
 
 # TRDD-Y0XEEUXN — Give the marketplace-storage layer one owner for manifest read + settings registration
@@ -363,3 +363,4 @@ exercised.
 - 2026-08-20T22:20:37+0200 — classified min-approval-requirement: none (was UNSET) and re-filed design/proposals/ → design/tasks/ as column: planned. Floor is none: deduplicating ~85 near-byte-identical marketplace-storage helpers and giving the settings.json registration one owner is an in-scope, reversible refactor of this project's own source, with zero D3 floor signals. A Tier-0 task does not belong in the proposals folder. Nothing was approved here; a Tier-0 card has no approver.
 - 2026-09-05T15:09:57+0200 — column → dev by governance-rules-session. pulled from the Tier-0 pool after 523V1N4I closed; the previous owner session (ai-maestro-hub-session) is not alive in ListAgents at 15:10; first step is the Part-3 costing the STATE block says is missing (caller census for the three direct writers + auto-update's editSettings write + the known_marketplaces.json second store), read-only, by a lean-worker
 - 2026-09-05T16:52:04+0200 — Part 3 landed as 4cabbee7 (Tier 0, self-mandate: in-scope refactor, no baseline/governance/release surface). Verified first-hand: seam file 10/10 re-run by the coordinator; two independent neuters by the verifier. Full suite NOT run (host loaded) — owed on TRDD-523V1N4I's Approval log.
+- 2026-09-05T16:59:01+0200 — CORRECTIONS FORWARD to the 16:52 lines: (1) the STATE bullet said Part 2's commits are cited in the bullets above — they were not on the card; git log --grep recovers the code commits 9145068a (one manifest reader), 9ef021a5 (stamp moved into the add transaction), 5c2a2209 (409 string contract; unreachable undo branch dropped), now all four are in implementation-commits; (2) the Approval-log line said 'verified first-hand: … two independent neuters by the verifier' — the neuters are the verifier's report (second-hand); the coordinator's first-hand verification was the 10/10 seam re-run and the key-literal/verb greps. Also: the PROJECT memory atom ATOM-17HX-5T02 records the one-owner design and, dated, the container-shape lint gap — supersede that sentence when the row-2 residue lands.

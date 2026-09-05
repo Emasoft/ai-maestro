@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -234,6 +234,38 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
       expect(Array.isArray(l.capabilities)).toBe(true)
     } finally {
       stop()
+    }
+  })
+
+  // TRDD-OUAQARPL: attribute a stale liveness file to a LATE WRITER (event loop descheduled)
+  // vs a misjudging reader. The gap check uses its own injected `now` seam (never the fake-timer
+  // Date) so the test can simulate a stall deterministically without fighting sinon's "catch up
+  // overdue timers at their originally-scheduled time" behaviour.
+  it('logs a late-beat warning only once a gap exceeds 2x the interval — silent on normal beats', () => {
+    vi.useFakeTimers()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let simulatedNowMs = 0
+    try {
+      const stop = startServerLiveness({ intervalMs: 1000, now: () => simulatedNowMs })
+      try {
+        simulatedNowMs = 1000
+        vi.advanceTimersByTime(1000) // normal beat — gap 1000ms
+        expect(warnSpy).not.toHaveBeenCalled()
+
+        simulatedNowMs = 2000
+        vi.advanceTimersByTime(1000) // normal beat — gap 1000ms
+        expect(warnSpy).not.toHaveBeenCalled()
+
+        simulatedNowMs = 7000 // event loop stalled 5s before this beat could run
+        vi.advanceTimersByTime(1000)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        expect(warnSpy.mock.calls[0]?.[0]).toContain('late beat')
+      } finally {
+        stop()
+      }
+    } finally {
+      warnSpy.mockRestore()
+      vi.useRealTimers()
     }
   })
 })

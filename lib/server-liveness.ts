@@ -224,6 +224,8 @@ export function writeServerLiveness(deps: WriteServerLivenessDeps = {}): void {
 export interface StartServerLivenessOptions {
   /** Beat interval in ms. Default 30000 — a third of the 90 s staleness consumers apply. */
   intervalMs?: number
+  /** Injected clock seam for the late-beat gap check below — real `Date.now` by default. */
+  now?: () => number
 }
 
 /**
@@ -235,8 +237,20 @@ export interface StartServerLivenessOptions {
  */
 export function startServerLiveness(opts: StartServerLivenessOptions = {}): () => void {
   const intervalMs = opts.intervalMs ?? 30_000
+  const now = opts.now ?? Date.now
   writeServerLiveness()
+  // TRDD-OUAQARPL: a late beat (event loop descheduled under load — e.g. a loadavg spike) and a
+  // downstream reader simply misjudging staleness are indistinguishable without a signal on OUR
+  // side too. Log ONLY the transition (a gap wider than 2x the interval), never every beat, so
+  // this stays silent under normal load and only speaks when the writer itself was actually late.
+  let lastBeatMs = now()
   const timer = setInterval(() => {
+    const nowMs = now()
+    const gapMs = nowMs - lastBeatMs
+    if (gapMs > intervalMs * 2) {
+      console.warn(`[server-liveness] late beat: gap ${gapMs}ms exceeds 2x interval ${intervalMs}ms`)
+    }
+    lastBeatMs = nowMs
     writeServerLiveness()
   }, intervalMs)
   timer.unref()

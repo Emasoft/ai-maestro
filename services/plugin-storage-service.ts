@@ -826,9 +826,15 @@ const USER_GLOBAL_SETTINGS = path.join(homedir(), '.claude', 'settings.json')
 // four: no `existsSync` (so ENOENT and a parse failure were collapsed by construction) and a DIRECT
 // `writeFile` — non-atomic, on the user's global `~/.claude/settings.json`.
 // `saveJsonSafe` is deliberately NOT imported (TRDD-RYFP030K): the one settings write in this
-// module is a read-modify-write and goes through `updateJson`, which holds the shared lock across
-// both halves. The remaining `loadJsonSafe` calls read a marketplace MANIFEST, not settings.
-import { loadJsonSafe, updateJson } from '@/lib/json-io'
+// module is a read-modify-write and goes through `applyExtraKnownMarketplaceOps`, which holds
+// the shared lock across both halves. The remaining `loadJsonSafe` calls read a marketplace
+// MANIFEST, not settings.
+import { loadJsonSafe } from '@/lib/json-io'
+// TRDD-Y0XEEUXN Part 3 — the ONE owner of every `extraKnownMarketplaces` read-modify-write
+// (see lib/extra-known-marketplaces.ts's module doc). This file used to hand-roll its own
+// `updateJson(USER_GLOBAL_SETTINGS, ...)` for the one write below; that shape is now this
+// module's, unchanged in what it writes.
+import { applyExtraKnownMarketplaceOps } from '@/lib/extra-known-marketplaces'
 
 /**
  * Load the current set of plugin entries from a per-client marketplace
@@ -890,10 +896,12 @@ export async function readClientMarketplacePlugins(
  * registered. The intent here is "fix the source.path entry if it's stale",
  * which mirrors role-plugin-service.ts:registerMarketplaceGlobally.
  *
- * Authority: implicit system-owner — function is private and called only
- * from `convertAndStorePlugin()` / `emitForClient()` during conversion.
+ * Authority: implicit system-owner — function has no production caller outside
+ * `convertAndStorePlugin()` / `emitForClient()` during conversion. Exported for
+ * TESTS ONLY (TRDD-Y0XEEUXN Part 3 seam test); it is not part of this module's
+ * public API.
  */
-async function ensureCustomClientMarketplace(targetClient: string): Promise<void> {
+export async function ensureCustomClientMarketplace(targetClient: string): Promise<void> {
   const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
   await mkdir(marketplaceDir, { recursive: true })
 
@@ -928,16 +936,15 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
     // an update against role-plugin-service (which registers a DIFFERENT marketplace into the SAME
     // `extraKnownMarketplaces` object) or against the marketplaces API route.
     //
-    // The explicit `mkdir` is gone: `updateJson`'s lock acquisition already does
+    // The explicit `mkdir` is gone: the owner's `updateJson` call underneath does
     // `mkdir(dirname(path), {recursive:true})`, because it cannot create the lockdir otherwise.
     // The "skip if already correct" early return is gone too — `updateJson` compares the serialized
     // result to the bytes it read and reports `changed: false` without writing or backing up.
     const marketplaceName = `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`
-    await updateJson(USER_GLOBAL_SETTINGS, s => {
-      const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
-      ekm[marketplaceName] = { source: { source: 'directory', path: marketplaceDir } }
-      s.extraKnownMarketplaces = ekm
-    }, { createIfMissing: true })
+    await applyExtraKnownMarketplaceOps(
+      [{ name: marketplaceName, set: { source: { source: 'directory', path: marketplaceDir } } }],
+      USER_GLOBAL_SETTINGS,
+    )
   }
 }
 

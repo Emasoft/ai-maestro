@@ -67,7 +67,13 @@ import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
 import { stampChoreRun, declareChoreBounds } from '@/lib/janitor-chore-stamp'
 import { consumeWorkRequest, workRequestPath } from '@/lib/janitor-work-request'
-import { readSettings, editSettings, type SettingsOp } from '@/lib/settings-gate'
+import { readSettings } from '@/lib/settings-gate'
+// TRDD-Y0XEEUXN Part 3 — the ONE owner of every `extraKnownMarketplaces` read-modify-write
+// (see lib/extra-known-marketplaces.ts's module doc). This function used to build its own
+// `SettingsOp[]` and apply them via `editSettings`; the owner's batch grammar (per-field
+// `patch`, whole-entry `set`) carries the SAME two op kinds documented at safety property 4
+// below, still landing in ONE locked write.
+import { applyExtraKnownMarketplaceOps, type ExtraKnownMarketplaceOp } from '@/lib/extra-known-marketplaces'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
@@ -518,7 +524,7 @@ export async function ensureMarketplaceAutoUpdate(
     return entry(target, 'skipped', 'settings.json declares no extraKnownMarketplaces object')
   }
 
-  const ops: SettingsOp[] = []
+  const ops: ExtraKnownMarketplaceOp[] = []
   const malformed: string[] = []
   for (const [name, value] of Object.entries(extra as Record<string, unknown>)) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -526,7 +532,7 @@ export async function ensureMarketplaceAutoUpdate(
       continue
     }
     if ((value as Record<string, unknown>).autoUpdate === true) continue
-    ops.push({ op: 'set', keyPath: ['extraKnownMarketplaces', name, 'autoUpdate'], value: true })
+    ops.push({ name, patch: { autoUpdate: true } })
   }
   const flips = ops.length
 
@@ -544,7 +550,7 @@ export async function ensureMarketplaceAutoUpdate(
   for (const [name, source] of undeclared) {
     if (name in (extra as Record<string, unknown>)) continue // declared: handled above
     if (source === null) { sourceless++; continue }
-    ops.push({ op: 'set', keyPath: ['extraKnownMarketplaces', name], value: { source, autoUpdate: true } })
+    ops.push({ name, set: { source, autoUpdate: true } })
   }
   const adds = ops.length - flips
 
@@ -555,7 +561,7 @@ export async function ensureMarketplaceAutoUpdate(
   if (ops.length === 0) return entry(target, 'already-current', `Every declared marketplace already auto-updates${note}`)
 
   try {
-    await editSettings(settingsPath, ops)
+    await applyExtraKnownMarketplaceOps(ops, settingsPath)
     const what = [
       flips > 0 ? `enabled auto-update on ${flips} declared marketplace(s)` : '',
       adds > 0 ? `declared ${adds} previously-undeclared marketplace(s) with auto-update on` : '',

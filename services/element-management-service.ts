@@ -371,6 +371,11 @@ export { readJson, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
 // `restoreRawSnapshot`. Re-adding it to this import is the signal that a call site has regressed
 // to a two-call read-then-write, which is the lost-update shape this module exists to remove.
 import { readJson, loadJsonSafe, withJsonLock, updateJson, restoreRawSnapshot } from '@/lib/json-io'
+// TRDD-Y0XEEUXN Part 3 — the ONE owner of every `extraKnownMarketplaces` read-modify-write
+// (see lib/extra-known-marketplaces.ts's module doc). `ChangeMarketplace`'s G03b (add) and G05
+// (remove) below used to hand-roll their own `updateJson(SETTINGS_JSON, ...)` for this one key;
+// that shape is now this module's, unchanged in what it writes.
+import { applyExtraKnownMarketplaceOps } from '@/lib/extra-known-marketplaces'
 
 // ── Settings mutex ────────────────────────────────────────────
 //
@@ -5521,7 +5526,7 @@ export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<
       return result
     }
 
-    // 30 min, not the 900 s this shipped with. MEASURED 2026-08-06 (TRDD-PE54D95Q): the argless
+    // Not the 900 s this shipped with. MEASURED 2026-08-06 (TRDD-PE54D95Q): the argless
     // refresh of 275 marketplaces takes **1082 s** and EXITS 0 — so the old cap killed a run that
     // was 182 s from succeeding, and discarded all 275 results, every cycle. The batch is
     // all-or-nothing, which is the cost of collapsing the old per-name loop into one call.
@@ -5531,8 +5536,13 @@ export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<
     // burns most of a minute. Pruning those is the real fix and is NOT ours to make: that list is
     // user-owned config. This cap only stops us from throwing away a refresh that worked.
     //
-    // Sized from the measurement, not guessed: 1800 s is ~66 % headroom over 1082 s, and still far
-    // below the 3 h cadence, so a slow run can never overlap the next one.
+    // RECONCILED 2026-09-05 (TRDD-Y0XEEUXN Part 3): this comment used to say "1800 s is ~66 %
+    // headroom over 1082 s, and still far below the 3 h cadence" — stale relative to BOTH the
+    // live `MARKETPLACE_REFRESH_TIMEOUT_MS` (3,600,000 ms = 60 min, defined 5 lines above the
+    // function with its own doc comment) and the absorbed lane's cadence (4 h, not 3 h — same
+    // stale-comment-vs-constant pattern this card's STATE block already found on the "3h -> 4h"
+    // comment in auto-update-service.ts). See that doc comment above for the current, correct
+    // sizing rationale (60 min ≈ 2.1× the warm measurement, still 4× below the 4 h cadence).
     await execFileAsync('claude', ['plugin', 'marketplace', 'update'], { timeout: MARKETPLACE_REFRESH_TIMEOUT_MS })
     ops.push('G03: Refreshed EVERY registered marketplace (one argless invocation)')
     result.success = true
@@ -5770,6 +5780,10 @@ export async function ChangeMarketplace(desired: {
         registered: boolean
         /** Set only once the settings entry was really written. */
         ekmWritten: boolean
+        /** The entry's value BEFORE G03b wrote it (`undefined` if it was absent) — captured by
+         *  the owner (lib/extra-known-marketplaces.ts) inside the SAME locked write, so restoring
+         *  it in `undo` costs no second read. TRDD-Y0XEEUXN DECISION REFINED (3). */
+        ekmPrior?: unknown
       }
       const ac: AddCtx = { registered: false, ekmWritten: false }
 
@@ -5813,11 +5827,11 @@ export async function ChangeMarketplace(desired: {
               const entry = 'repo' in source
                 ? { source: { source: 'github', repo: source.repo } }
                 : { source: { source: 'directory', path: source.path } }
-              await updateJson(SETTINGS_JSON, settings => {
-                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-                ekm[desired.name] = entry
-                settings.extraKnownMarketplaces = ekm
-              }, { createIfMissing: true })
+              const priors = await applyExtraKnownMarketplaceOps(
+                [{ name: desired.name, set: entry }],
+                SETTINGS_JSON,
+              )
+              c.ekmPrior = priors[desired.name]
               c.ekmWritten = true
               ops.push(`G03b: Recorded in extraKnownMarketplaces`)
             },
@@ -5826,20 +5840,27 @@ export async function ChangeMarketplace(desired: {
               // THIS UNDO IS REQUIRED AND CURRENTLY UNREACHABLE, and both halves are deliberate.
               // REQUIRED: `runGateSequence` refuses to start a sequence containing a mutating
               // gate with no `undo`, so G03b must declare one. UNREACHABLE: `ekmWritten` is set
-              // only after `updateJson` RESOLVES, so a throw leaves this a no-op, and G03b is the
-              // last gate, so nothing can abort into it afterwards. The only live path would be a
-              // commit followed by a throw, which no seam here can produce — MEASURED: neutering
-              // this whole body reds zero tests, so do not read the suite as covering it.
-              // A first draft snapshotted the key's prior value to "restore" it; that was dead
-              // code shaped like a safety property, the exact thing this module's docs warn
-              // about. Deleting the key is all the reachable behaviour needs. If a gate is ever
-              // appended AFTER G03b this becomes live — reinstate the snapshot then, with a test
-              // that drives it, rather than carrying an unexercised branch until that day.
-              await updateJson(SETTINGS_JSON, settings => {
-                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-                delete ekm[desired.name]
-                settings.extraKnownMarketplaces = ekm
-              }, { createIfMissing: true })
+              // only after the owner's write RESOLVES, so a throw leaves this a no-op, and G03b
+              // is the last gate, so nothing can abort into it afterwards. The only live path
+              // would be a commit followed by a throw, which no seam here can produce — MEASURED:
+              // neutering this whole body reds zero tests, so do not read the suite as covering it.
+              // An EARLIER draft snapshotted the key's prior value with a SEPARATE read to
+              // "restore" it; that was dead code shaped like a safety property (a second,
+              // non-atomic read that could disagree with what G03b actually wrote), the exact
+              // thing this module's docs warn about — hence the "just delete the key" it was
+              // simplified to. TRDD-Y0XEEUXN Part 3 changes the tradeoff: the owner
+              // (lib/extra-known-marketplaces.ts) now returns the prior value from INSIDE the
+              // SAME locked write G03b already performs, so restoring it costs no second read —
+              // and it is more correct than an unconditional delete for the (equally
+              // unreachable) case where `desired.name` already had a DIFFERENT entry before
+              // G03b ran (e.g. a name collision with a marketplace registered by one of the
+              // other five owners this module now shares a key with).
+              await applyExtraKnownMarketplaceOps(
+                [c.ekmPrior === undefined
+                  ? { name: desired.name, delete: true }
+                  : { name: desired.name, set: c.ekmPrior }],
+                SETTINGS_JSON,
+              )
             },
           },
         ],
@@ -5875,6 +5896,12 @@ export async function ChangeMarketplace(desired: {
         cacheDropped: boolean
         /** Set only once the settings entry was really deleted. */
         ekmRemoved: boolean
+        /** The entry's value BEFORE G05 deleted it — captured by the owner
+         *  (lib/extra-known-marketplaces.ts) inside the SAME locked write G05 performs, so its
+         *  own `undo` can restore it without a second, non-atomic read. TRDD-Y0XEEUXN DECISION
+         *  REFINED (3). Distinct from the pre-transaction `ekmEntry` snapshot below, which G03's
+         *  undo needs available BEFORE G05 ever runs. */
+        ekmPrior?: unknown
       }
       const rc: RemoveCtx = { uninstalled: [], deregistered: false, cacheDropped: false, ekmRemoved: false }
       const cacheDir = join(HOME, '.claude', 'plugins', 'marketplaces', desired.name)
@@ -6021,23 +6048,21 @@ export async function ChangeMarketplace(desired: {
             run: async (c) => {
               // The `existsSync` REPLACES what `loadJsonSafe` used to absorb. It answered `{}` for a
               // missing ~/.claude/settings.json, so this gate quietly found nothing to remove and
-              // succeeded; `updateJson` refuses a missing target instead (and must — passing
-              // `createIfMissing` here would CREATE the human user's global config as a side effect
-              // of removing a marketplace). No file means no registration to remove: nothing to do.
+              // succeeded; the owner's `updateJson` call refuses a missing target instead (and
+              // must — passing `createIfMissing` here would CREATE the human user's global config
+              // as a side effect of removing a marketplace). No file means no registration to
+              // remove: nothing to do.
               if (!existsSync(SETTINGS_JSON)) return
-              let removed = false
-              await updateJson(SETTINGS_JSON, settings => {
-                removed = false
-                const ekm = settings.extraKnownMarketplaces as Record<string, unknown> | undefined
-                if (ekm && ekm[desired.name] !== undefined) {
-                  delete ekm[desired.name]
-                  settings.extraKnownMarketplaces = ekm
-                  removed = true
-                }
-              })
-              // Flag + log set AFTER the commit: a retried mutator would otherwise arm the undo (and
-              // emit the ops line) on behalf of an attempt that never landed.
-              if (removed) {
+              const priors = await applyExtraKnownMarketplaceOps(
+                [{ name: desired.name, delete: true }],
+                SETTINGS_JSON,
+                { createIfMissing: false },
+              )
+              c.ekmPrior = priors[desired.name]
+              // Flag + log set AFTER the commit, from what was actually THERE before the delete —
+              // a name absent to begin with is not a removal, exactly the check the hand-rolled
+              // `ekm[desired.name] !== undefined` made before this call went through the owner.
+              if (c.ekmPrior !== undefined) {
                 c.ekmRemoved = true
                 ops.push(`G05: Removed from extraKnownMarketplaces`)
               }
@@ -6048,11 +6073,14 @@ export async function ChangeMarketplace(desired: {
               // so the file existed and we edited it. If it has vanished since, re-creating it
               // carrying the entry we removed is the honest restore — refusing would leave the
               // marketplace deregistered by a pipeline that reported a clean rollback.
-              await updateJson(SETTINGS_JSON, settings => {
-                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-                ekm[desired.name] = ekmEntry
-                settings.extraKnownMarketplaces = ekm
-              }, { createIfMissing: true })
+              //
+              // Restores `c.ekmPrior` — captured by the owner INSIDE `run`'s own locked write —
+              // rather than the pre-transaction `ekmEntry` snapshot above (which predates G02b's
+              // and G03's mutations and could, in principle, have gone stale by the time G05 ran).
+              await applyExtraKnownMarketplaceOps(
+                [{ name: desired.name, set: c.ekmPrior }],
+                SETTINGS_JSON,
+              )
             },
           },
         ],

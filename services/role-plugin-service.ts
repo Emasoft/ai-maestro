@@ -339,11 +339,16 @@ export interface RolePlugin {
 // writes the user's global config twice). That is how the corrupt file the shared guard refuses got
 // created; the two halves composed into a loop, one producing the damage the other completed.
 // `saveJsonSafe` is deliberately NOT imported (TRDD-RYFP030K): every settings write in this module
-// is a read-modify-write, and all three now go through `updateJson`, which holds the shared lock
-// across the read AND the write. `saveJsonSafe` is retained in json-io for R51 COMPENSATIONS only —
-// an undo writes a snapshot taken before the forward path ran and must NOT get a staleness
-// baseline, because the file legitimately changed in between.
+// is a read-modify-write, and `updateJson` holds the shared lock across the read AND the write
+// (the `enabledPlugins` migration below still calls it directly). `saveJsonSafe` is retained in
+// json-io for R51 COMPENSATIONS only — an undo writes a snapshot taken before the forward path
+// ran and must NOT get a staleness baseline, because the file legitimately changed in between.
 import { loadJsonSafe, updateJson } from '@/lib/json-io'
+// TRDD-Y0XEEUXN Part 3 — the ONE owner of every `extraKnownMarketplaces` read-modify-write
+// (see lib/extra-known-marketplaces.ts's module doc). Both `extraKnownMarketplaces` writers in
+// this file used to hand-roll their own `updateJson(USER_GLOBAL_SETTINGS, ...)`; that shape is
+// now this module's, unchanged in what it writes.
+import { applyExtraKnownMarketplaceOps } from '@/lib/extra-known-marketplaces'
 
 // ── TOML parsing ───────────────────────────────────────────
 
@@ -700,25 +705,28 @@ export async function ensureMarketplace(): Promise<void> {
  * would re-issue `claude plugin marketplace add`, which CAN refuse if
  * the path is already registered (idempotency path varies across CLI
  * versions). Hand-patching settings.json is the safer recovery here.
+ *
+ * Exported for TESTS ONLY (TRDD-Y0XEEUXN Part 3 seam test); it is not part of this
+ * module's public API and has no production caller outside `ensureMarketplace()`.
  */
-async function registerMarketplaceGlobally(): Promise<void> {
-  // ONE locked read-modify-write (TRDD-RYFP030K). This writes the human user's own
-  // ~/.claude/settings.json, and it used to be a bare load → mutate → save with no lock at all: two
-  // of these, or one of these against element-management-service, could interleave and lose an
-  // update. `updateJson` runs the mutator inside the shared lockdir and re-checks the bytes before
-  // committing.
+export async function registerMarketplaceGlobally(): Promise<void> {
+  // ONE locked read-modify-write (TRDD-RYFP030K) via the ONE `extraKnownMarketplaces` owner
+  // (TRDD-Y0XEEUXN Part 3). This writes the human user's own ~/.claude/settings.json, and it
+  // used to be a bare load → mutate → save with no lock at all: two of these, or one of these
+  // against element-management-service, could interleave and lose an update.
   //
-  // The "skip if already canonical" early return is GONE, and deliberately: `updateJson` compares
-  // the serialized result against the bytes it read and reports `changed: false` without writing or
-  // taking a backup, so the optimisation is now structural rather than hand-maintained — and unlike
-  // the hand-written version it cannot drift out of agreement with what is actually on disk.
-  await updateJson(USER_GLOBAL_SETTINGS, s => {
-    const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
-    // Always assert the correct absolute path — this repairs a stale or corrupted entry left by an
-    // older release, which is the whole reason this helper exists.
-    ekm[LOCAL_MARKETPLACE_NAME] = { source: { source: 'directory', path: ROLE_PLUGINS_DIR } }
-    s.extraKnownMarketplaces = ekm
-  }, { createIfMissing: true })
+  // The "skip if already canonical" early return stays gone, and deliberately: the owner's
+  // `updateJson` call compares the serialized result against the bytes it read and reports
+  // `changed: false` without writing or taking a backup, so the optimisation is structural
+  // rather than hand-maintained — and unlike a hand-written version it cannot drift out of
+  // agreement with what is actually on disk.
+  //
+  // Always assert the correct absolute path — this repairs a stale or corrupted entry left by an
+  // older release, which is the whole reason this helper exists.
+  await applyExtraKnownMarketplaceOps(
+    [{ name: LOCAL_MARKETPLACE_NAME, set: { source: { source: 'directory', path: ROLE_PLUGINS_DIR } } }],
+    USER_GLOBAL_SETTINGS,
+  )
 }
 
 export async function updateMarketplaceManifest(
@@ -1061,8 +1069,12 @@ export async function syncDefaultRolePlugins(_force = false): Promise<SyncDefaul
  * and BOTH now enforce system-owner, which is what makes the implicit authority
  * this function exercises (isSystemOwner passed into DeleteMarketplace, global +
  * per-agent settings rewrites) legitimate rather than reachable by any agent.
+ *
+ * Exported for TESTS ONLY (TRDD-Y0XEEUXN Part 3 seam test — its production entry point,
+ * `syncDefaultRolePlugins`, spawns the `claude` CLI directly and cannot run in this repo's
+ * test suite); it is not part of this module's public API.
  */
-async function migrateDefaultPluginSettings(): Promise<void> {
+export async function migrateDefaultPluginSettings(): Promise<void> {
   // Step 1: Remove deprecated 23blocks-OS marketplace (replaced by
   // Emasoft/ai-maestro-plugins). R21.4 — dispatch through the
   // DeleteMarketplace AIO instead of `execSync('claude plugin marketplace
@@ -1095,11 +1107,14 @@ async function migrateDefaultPluginSettings(): Promise<void> {
     // `changed` comes from the gate rather than a hand-kept flag: it is true only if the serialized
     // result actually differed from the bytes on disk, so the log line cannot claim a cleanup that
     // did not happen (the old `cleaned` flag was set by the delete, before anything was written).
-    const { changed } = await updateJson(USER_GLOBAL_SETTINGS, s => {
-      const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
-      for (const name of deprecatedNames) delete ekm[name]
-      s.extraKnownMarketplaces = ekm
-    }, { createIfMissing: true })
+    // `changed` is now derived from the owner's returned PRIOR values rather than the gate's own
+    // `changed` flag — a name that was already absent has `prior === undefined` and contributes
+    // nothing to `changed`, exactly the "no-op delete is not a change" semantics the old flag gave.
+    const priors = await applyExtraKnownMarketplaceOps(
+      deprecatedNames.map(name => ({ name, delete: true as const })),
+      USER_GLOBAL_SETTINGS,
+    )
+    const changed = deprecatedNames.some(name => priors[name] !== undefined)
     if (changed) console.log('[role-plugins] Cleaned deprecated marketplace names from global settings')
   } catch { /* ignore */ }
 

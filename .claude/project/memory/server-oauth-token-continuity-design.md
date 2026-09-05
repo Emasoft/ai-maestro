@@ -2,7 +2,7 @@
 name: server-oauth-token-continuity-design
 description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes / did a guard land in front of the bookkeeping instead of the mutation / keychain says one account and state.json says another / split-brain after a rotation / the live-identity beacon disagrees with the state index / evidence answers only the question you point it at / I wrote a claim into memory that the source I had just read disproves / host state leaked into a pushed project memory page / does our side ever re-mint or write the shared cookie store / a grep returned nothing so I concluded the path is never referenced / my needle was a joined path in a codebase that joins by segment / --include=*.ts skipped the .mjs runtime half / my needle omitted the very segment whose absence I asserted / a cap on a command that settles a NEGATIVE is me choosing the absence / what is actually joined onto the rotator root / is the cookie store in a different tree or one segment away / the canonical rotator root's profiles entry is a symlink / do the two rotator roots share state.json / I answered a filesystem question by grepping source text"
 ocd: 2026-07-16
-lmd: 2026-08-27
+lmd: 2026-09-05
 metadata:
   node_type: memory
   type: project
@@ -293,6 +293,11 @@ the stale one). Only `profiles` is shared, and only by that symlink.
 
 And separately: a reauth run CAN mutate the owner's REAL browser cookie stores as a side effect of
 driving them. Different store, different tree, not previously written down. [^4] [^5]
+
+
+^ATOM-KH9D-0R9Q [desc: "surveyAlternates now reads the live account too, so a dead-refresh live account reports reauth-needed not stuck", keywords: surveyAlternates live_account_excluded stuck_all-maxed reauth-needed keepaliveRefresh_exclusion read_vs_write_distinction rotator_says_wait_but_should_re-login dead_refresh_token expired_access_token TRDD-10J18FZX oauth_rotator_status_file, trdd: TRDD-10J18FZX, ocd: 2026-09-05, lmd: 2026-09-05]
+
+surveyAlternates no longer skips the live/currently-active account when surveying alternates — it only READS accounts, never writes, so including the live one is safe. This means a live account whose refresh token is dead AND whose access token is expired now correctly surfaces as reauth-needed instead of being masked by an aggregate stuck: all-maxed verdict (which told the user to just wait for a rate-limit window, when the real fix was to re-login). keepaliveRefresh's own exclusion of the live account is untouched, because keepaliveRefresh WRITES (rotates), and writing to the live account while it is in active use is what that exclusion protects against. Landed under TRDD-10J18FZX, commit 5f7662d4.
 
 ## See also
 

@@ -161,6 +161,26 @@ each citing card in the same commit. [^10]
 
 A successor card minted "for" another carries the original id in its SLUG (`TRDD-20260905_102504+0200-MS3AD6NX-successor-of-39opyxq9-…`). `find design -iname "*39OPYXQ9*"`, `-iname "TRDD-*_*-39OPYXQ9-*"` and even `-iname "TRDD-[0-9]*_[0-9]*-39OPYXQ9-*"` ALL match it (`-iname` is case-insensitive and in a glob `[0-9]*` is ONE digit followed by anything), and `| head -1` returns whichever sorts first — measured 2026-09-05 three times: b2dd5269 staged the successor instead of the real card (the real edit stayed in the tree until 339cad77), a later measurement read the real card as "complete, no superseded-by", and the first U6AS2YWB blocker-probe carried the same hole. The only glob a slug mention cannot satisfy pins the id right after an exact-length timestamp: `TRDD-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9][+-][0-9][0-9][0-9][0-9]-<ID>-*` (spelled out; find has no `{8}`). Safer still: read `trdd-id:` from the candidate file and compare, or use `trddgrep show <id>`, which resolves by frontmatter. Never parse an id out of trddgrep's ANSI-coloured stdout either (`grep -oE "created [A-Z0-9]{8}"` matched nothing and left `$ID` empty — 7f9429a5).
 
+
+^ATOM-2DJR-T0T3 [desc: "trdd-create.ts always appends its own Approval log — never include one in the body you pass it, or you get two", keywords: trddgrep_new lib/trdd-create.ts duplicate_Approval_log_heading two_approval_log_sections_on_a_card aimaestro-trdd.sh_create mandate_line_auto-appended card_mint_duplicates_heading do_not_pass_approval_log_to_create why_does_my_card_have_two_approval_logs TRDD-10J18FZX TRDD-66KNYSXY, ocd: 2026-09-05, lmd: 2026-09-05]
+
+lib/trdd-create.ts (used by trddgrep new / aimaestro-trdd.sh create) ALWAYS appends its own ## Approval log heading plus a MANDATE line when minting a card. If the body you pass to it already contains an Approval log section, the resulting card carries TWO ## Approval log headings (observed on TRDD-10J18FZX and TRDD-66KNYSXY). Never include an Approval log in the body handed to a create verb — let the library write it.
+
+
+^ATOM-O6YG-HTF5 [desc: "an owner-authenticated create mints created-by/mandated-by/approval-judge as user even with no real user approval", keywords: created-by_user mandated-by_user approval-judge_user owner-authenticated_create cached_CLI_session_no_AID_AUTH card_says_user_approved_but_nobody_did trddgrep_new_--author hub_session_mint USER_never_approved_this_card mandate_stamped_by_mistake, ocd: 2026-09-05, lmd: 2026-09-05]
+
+An owner-authenticated TRDD create (a cached CLI session with no AID_AUTH resolved) stamps created-by, mandated-by and approval-judge as user. A hub-session mint therefore reads as if the human USER personally approved/mandated the card, when it was really an authenticated session acting on the owner's behalf. Correct the stamps at mint time, or mint with trddgrep new --author <session-name> instead of the default.
+
+
+^ATOM-2M4I-0CC0 [desc: "mandated-by is the authority-rank enum (none/orchestrator/chief-of-staff/manager/user) — self is not a value", keywords: mandated-by_values authority_rank_vocabulary none_orchestrator_chief-of-staff_manager_user mandated-by_self_does_not_exist valid_mandated-by_enum what_values_can_mandated-by_hold grep_mandated-by_self_returns_nothing TRDD_field_vocabulary mandate_authority_ladder self-mandate_field_spelling, ocd: 2026-09-05, lmd: 2026-09-05]
+
+mandated-by holds the AUTHORITY RANK vocabulary only: none, orchestrator, chief-of-staff, manager, user. self is NOT a value the create library ever writes — do not expect or grep for mandated-by: self.
+
+
+^ATOM-M30Y-EHM4 [desc: "git diff --cached --name-only shows only the new path of a staged rename — pass --no-renames for both", keywords: git_diff_cached_name-only_rename commit_gate_refused_index_differs_on_rename staged_rename_shows_only_new_path git_diff_--no-renames rename_hides_old_path_from_diff gate_expects_both_old_and_new_path git_mv_missing_old_path_in_diff pre-commit_hook_rename_false_positive why_does_my_rename_gate_fail git_status_shows_R_for_rename, ocd: 2026-09-05, lmd: 2026-09-05]
+
+git diff --cached --name-only lists ONLY the NEW path of a staged rename, not the old one. A gate or script that expects both the old and new path (e.g. to check a rename left no dangling reference) must pass --no-renames to see both paths as separate add/delete entries.
+
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned
   there as `3P-TRDD-09` (status is not column), `3P-TRDD-10` (one state claim) and `3P-TRDD-11`

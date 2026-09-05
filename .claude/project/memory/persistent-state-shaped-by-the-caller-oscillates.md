@@ -1,6 +1,6 @@
 ---
 name: persistent-state-shaped-by-the-caller-oscillates
-description: "two tools keep overwriting each other's config and both report success / a setting flips back after the other one runs / branch protection differs across repos and I cannot tell which shape is right / the ruleset changed and nobody changed it / my conformance check passes here and fails on the same repo elsewhere"
+description: "two tools keep overwriting each other's config and both report success / a setting flips back after the other one runs / branch protection differs across repos and I cannot tell which shape is right / the ruleset changed and nobody changed it / my conformance check passes here and fails on the same repo elsewhere AND: Claude Code refused settings.json with Invalid input on extraKnownMarketplaces source.source after a server restart / marketplace source local vs directory / the server keeps re-breaking settings.json on boot / which value does Claude Code accept for a path marketplace."
 ocd: 2026-08-21
 lmd: 2026-09-05
 metadata:

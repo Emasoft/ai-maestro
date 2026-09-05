@@ -3,7 +3,7 @@ trdd-id: O1ZW03DG
 title: create with parent does not write the derived half of the platelet invariant
 column: complete
 created: 2026-08-25T18:24:00+0200
-updated: 2026-09-05T18:24:16+0200
+updated: 2026-09-05T18:27:21+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -49,3 +49,4 @@ is detectable.
 - 2026-09-05T18:24:14+0200 — FORWARD CORRECTIONS of the two earlier lines: the backburner → dev authority is the mandate rule (rules/aimaestro/aimaestro-trdd-approval.md:259 — an assigned mandate may sit straight at dispatch/dev), not the mono-agent self-assignment line, and 'the skipped columns are vacuous' was an unbacked claim. The invariant's other half: createTrdd never writes the PARENT file, so a --derived-kind mint whose parent does not yet list it raises GRAPH-UNCLAIMED (lib/trdd-graph.ts:268-277 via trdd-doctor.ts:1308-1311, ERROR) until the parent's npt/eht names it — the caller's two-step, lint-enforced; not widened here by design.
 - 2026-09-05T18:24:14+0200 — dev → complete by ai-maestro-hub-session (assignee; min-approval none, mandated by user): both boxes ticked, validate clean; the testing and ai_review stations were performed in substance (two acceptance runs, an independent verifier) and the jump is declared here as for FZRTRCGL; the card archives as itself.
 - 2026-09-05T18:24:16+0200 — COMPLETE by emanuelesabetta. archived → complete.
+- 2026-09-05T18:27:20+0200 — FORWARD CORRECTION of the dev → complete line above: the move is not 'as for FZRTRCGL' (a no-code planned → complete jump; the wrong analogy for a card receiving code); it is three mono-agent self-assignments — dev → testing → ai_review → complete, each with its content: two coordinator acceptance runs (9/9 before and after the verifier) and the independent verifier — collapsed into one tool-permitted move on the mandate rule (rules/aimaestro/aimaestro-trdd-approval.md:259) and the universal-kanban mono-agent rule. WARN tier after the close: the five floor rows only, 0 naming this card (reports/colony/evidence/o1-warn-after-close.txt). Box 2's tick rests on the rule's existence (lib/trdd-doctor.ts:1155) and one assertion (tests/unit/trdd-doctor.test.ts:582); the eht-specific fixture the box names was not located.

@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:38:04+0200
+updated: 2026-09-05T04:40:10+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -22,7 +22,7 @@ approval-judge: claude-opus-session
 approval-datetime: 2026-09-05T03:13:47+0200
 blocked-by: []
 npt: []
-eht: []
+eht: [D552QXOU]
 labels: [kanban, board-reporting, measurement]
 ---
 
@@ -257,10 +257,13 @@ against the same files, and name the cards the two sets disagree about. Settled 
       renamed to the spec shape, the four citing references updated in the same commit, and the
       board re-measured — the faithful predicate went **52 → 54 exactly as predicted**, with
       **0 unparseable filenames remaining in ANY zone** (proposals/tasks/archived/refused all
-      clear). The two cards are now visible to the board count and to all 5 detectors.
+      clear). **Precisely:** `extract_uid` now parses both filenames — which is the exact
+      condition all four detectors and the board count gate on. The commit message for
+      `f6f4664e` says "visible to all 5 detectors"; that is an inference from the measured
+      condition, not a separate measurement, and the careful sentence is this one.
       **The MATCHER is still unfixed** — `_TRDD_ID_RE` cannot parse the legacy shape, so a
-      future `v1-migrated` card named that way would be invisible again. That is remedy
-      option 2, upstream, and it is NOT covered by this box.
+      future `v1-migrated` card named that way would be invisible again. Now tracked as its own
+      card, **TRDD-D552QXOU**, so the decision survives this conversation.
 - [x] What each counting command actually counts is recorded in this card, so audits stop
       quoting one number as "the board" — recorded in the STATE block.
       (Re-worded 04:26: the original box read *"If the heartbeat is correct and the grep naive,

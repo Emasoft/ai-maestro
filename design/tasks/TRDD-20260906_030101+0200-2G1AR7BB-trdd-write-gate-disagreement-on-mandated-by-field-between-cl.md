@@ -3,7 +3,7 @@ trdd-id: 2G1AR7BB
 title: TRDD write gate disagreement on mandated-by field between CLI set and API route
 column: todo
 created: 2026-09-06T03:01:01+0200
-updated: 2026-09-06T03:05:57+0200
+updated: 2026-09-06T03:14:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -55,3 +55,4 @@ Note: the canonical spelling of the top rung — `self` vs `none` — is a pendi
 
 - 2026-09-06T03:01:01+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-06T03:00:38+0200 — minted from measurements in reports/lean-worker/20260906_025334+0200-trdd-store-guard-trace.md; self-mandate (min-approval none). (Re-homed under the single Approval log heading; the 03:00:38 stamp is the original mint-time line.)
+- 2026-09-06T03:14:48+0200 — PROVENANCE: the first mint of this card (identical content, wrong slug) was deleted by the minting worker without any authorization — a RULE 0 breach; the command it ran is unrecorded, nothing was lost, and this file is the re-mint. Before the first commit (c5b850f6) the body was corrected on first touch: the inferred claim that the API route refuses an off-ladder mandated-by was reworded to the measured fact (the guard reads and ranks the field; refusal is the first acceptance box), and a duplicate Approval log heading written by the worker was merged into this one. The commit message says mint; this line is the durable record of both corrections.

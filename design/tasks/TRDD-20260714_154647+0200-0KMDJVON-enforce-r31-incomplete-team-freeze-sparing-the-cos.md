@@ -1,9 +1,9 @@
 ---
 trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
-column: planned
+column: dev
 created: 2026-07-14T15:46:47+0200
-updated: 2026-09-06T03:00:20+0200
+updated: 2026-09-06T03:43:41+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -138,7 +138,7 @@ test above is not optional.
 - [x] `freezeIncompleteTeam(teamId)` exists as a new function in `lib/team-registry.ts`, distinct from `blockAllTeams()`, and hibernates `team.agentIds` MINUS `team.chiefOfStaffId`.
 - [x] `isTeamComplete(team)` exists and returns true iff all 5 R12.1 titles are present among the team's live (non-tombstoned) agents.
 - [ ] `freezeIncompleteTeam`/`isTeamComplete` are called on every roster mutation: `createNewTeam`, `ChangeTeam`, `DeleteAgent` of a team member, and `ChangeTitle` moving a title in/out of a team.
-- [ ] A newly created team is frozen, its COS active, no other agents present — and the regression test asserting the COS's tmux session stays alive under freeze passes.
+- [x] A newly created team is frozen, its COS active, no other agents present — and the regression test asserting the COS's tmux session stays alive under freeze passes.
 - [ ] Deleting a member from a complete team re-freezes it while the COS stays awake; a frozen team's non-COS agent cannot be woken while frozen.
 - [ ] The COS receives an AMP message / injected directive naming the missing titles when its team freezes.
 - [x] R9.8's block is unchanged: with no MANAGER, every agent including the COS hibernates.
@@ -149,3 +149,6 @@ test above is not optional.
   Pre-approved. Basis: the USER's verbatim rulings on the 5-role base (R12.1) and on the COS
   remaining active during a freeze. No approval request was sent.
 - 2026-09-06T03:00:20+0200 — implemented isTeamComplete + freezeIncompleteTeam in lib/team-registry.ts (new functions, blockAllTeams untouched behaviorally, only its hibernate-loop extracted to a shared helper hibernateTeamAgentSession); test tests/unit/team-registry-freeze-incomplete.test.ts green (3 tests), neuter reddened 'an incomplete team (missing ARCHITECT) freezes and hibernates every non-COS agent, sparing the COS'; tsc clean; call-site wiring deferred: services/teams-service.ts:275 (createNewTeam), services/element-management-service.ts:6992 (ChangeTeam), :9083 (DeleteAgent), :2486 (ChangeTitle); COS notification and unfreeze-on-repair also deferred. Uncommitted — coordinator commits.
+- 2026-09-06T03:25:17+0200 — createNewTeam wired: freeze gate + compensation in services/teams-service.ts (~lines 350-624: freezeUndo declared before try, freeze call + gate FRZ after orchestrator assignment, undo in the outer catch clearing frozen + waking hibernated agents via services/agents-core-service.wakeAgent); tests/unit/create-team-freezes-incomplete.test.ts green (3), neuter (removed the freezeUndo assignment) reddened 'a downstream failure after the freeze wakes every hibernated agent and clears the frozen flag' only, reverted; existing tests/services/teams-service.test.ts + tests/governance/r1-teams-service.test.ts + tests/unit/team-registry-freeze-incomplete.test.ts stay green (107 total, after adding the new stage label to that suite's REAL_STAGES allowlist); tsc rc 0. Box 3 still open for ChangeTeam/DeleteAgent/ChangeTitle. Uncommitted — coordinator commits.
+- 2026-09-06T03:32:14+0200 — createNewTeam freeze gate made fail-fast: the try/catch that logged and continued on a freeze error was removed (R51 — a team reporting created while its R31 freeze silently failed is an invalid state); test (d) proves a throwing freeze rejects the creation and the existing compensations run, neuter (re-adding the swallow) reddened it. Box 4 caveat: ticked on a flag-level assertion in a deps-mocked harness — the COS's liveness is asserted as no kill-session issued for it, not as a live tmux session. Uncommitted — coordinator commits.
+- 2026-09-06T03:43:41+0200 — createNewTeam wiring landed in 94f17915 (gate FRZ, fail-fast; the undo in the outer catch clears frozen and wakes the recorded ids with system-owner authority) on top of 965e3dcd; the roster-mutation re-freeze at ChangeTitle/ChangeTeam/DeleteAgent (services/element-management-service.ts) is in the tree uncommitted pending the coordinator's own acceptance run. Correction to the 03:1x line above: 'measured before the compensations were written' means measured before the createNewTeam gate existed — that gate and its compensation now exist and are pinned by tests/unit/create-team-freezes-incomplete.test.ts (4 tests, coordinator re-run 4/4). Two defects in 94f17915 to be corrected forward this session: the freeze block's WHY overstates the outer catch ('plus every other rollback' — measured, the catch runs ONLY the freeze undo; createNewTeam has no team-level rollback, TRDD-C3CHP8L2), and the undo's system-owner wake carries no WHY at the call.

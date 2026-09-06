@@ -2,7 +2,7 @@
 name: janitor-chore-absorbability
 description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all / is cache-prune absorbed now or does the table still say no / is there a per-chore handover now or does the daemon still exit wholesale / which chores does the janitor still run while the server is up / is the absorbability table out of date / is memory-guard absorbed or armed / why does the liveness beat not claim memory-guard / detect-only memory guard would kill / AIM_MEMORY_GUARD claim follows arming activeAbsorbedChores CONDITIONAL_CHORES / is rules-cleanup absorbed or does the row still say no / orphaned janitor rules never removed — fixed / AIM_RULES_CLEANUP dark-shipped lib rules-cleanup / is fleet-stop absorbed or does the row still say no / who delivers janitor-disarm on the kill-switch / AIM_FLEET_STOP AND: the janitor still runs a chore the server absorbed / a chore runs on both sides / which capability tokens does the janitor honour - a token it does not know claims nothing, publish the exact chore name / why are three chores deliberately not published."
 ocd: 2026-08-05
-lmd: 2026-09-05
+lmd: 2026-09-06
 metadata:
   node_type: memory
   type: project
@@ -246,6 +246,29 @@ exports a liveness check (`cache-prune`, `fleet-plugins-update`, `github-config-
 ^ATOM-RRSS-UUXB [desc: "cache-prune runs its FIRST beat immediately at scheduler start (void beat before setInterval) and logs a run line ONLY when it removed something — a silent attempt still writes the stamp, so 'schedule", keywords: cache-prune_has_no_run_line_in_the_log cache-prune_scheduled_but_never_ran is_cache-prune_pending_until_the_6h_tick cache-prune_stamp_one_second_after_scheduler_started silent_cache-prune_run first_beat_immediately_at_start void_beat_before_setInterval cache-prune_removed_N_stale_version_dirs_log_line does_cache-prune_log_every_run scheduler_started_is_not_a_run_line attempt-completion_stamp_semantics, trdd: TRDD-X9VLHBFZ, ocd: 2026-09-05, lmd: 2026-09-05]
 
 `startCachePruneScheduler` (lib/cache-prune.ts:404-418) calls `void beat(log)` BEFORE arming `setInterval`, deliberately ("a bare interval would starve under a restart loop shorter than 6 h"), so the first prune runs at boot, not at the first 6 h tick. The run logs `[cache-prune] removed N stale version dir(s) …` ONLY when it removed something (last such line in pm2 out: 2026-08-29); a run that finds nothing to remove logs nothing but still stamps `cache-prune.last-run.ts`, per lib/janitor-chore-stamp.ts's attempt-completion contract (:26). Measured 2026-09-05: "[Startup] cache-prune scheduler started" at 10:10:54 and the control-dir stamp at 10:10:55 — the boot beat ran and removed nothing. Cost of reading it wrong: three successive messages to the janitor on one fact ("executes" → "pending" → "ran") because each was sent on the evidence for the previous claim. Measure the artifact the claim is about (the stamp, the scheduler body), not a neighbour of it (a log filter), BEFORE the sentence leaves the session.
+
+
+^ATOM-RCG7-K54M [desc: "the liveness writer warns only on a late beat (gap>2x interval); silence never proves the reader saw it fresh", keywords: chore_ownership_flapped oauth-rotator-tick_ran_on_the_janitor_while_the_server_was_alive server-liveness_stale late_beat server-liveness_late_beat_warning gap_exceeds_2x_interval laptop_sleep_clock_jump 61_to_89_second_gap_invisible_to_reader absence_of_a_warn_does_not_mean_healthy janitor_daemon_treats_liveness_stale_at_90s startServerLiveness_injected_clock_for_tests pm2_error_log_late_beat_line, ocd: 2026-09-06, lmd: 2026-09-06]
+
+`lib/server-liveness.ts` (commit aa961973) now logs ONE `console.warn` — `[server-liveness]
+late beat: gap <ms>ms exceeds 2x interval <ms>ms` (stderr → pm2 error log) — only on the
+TRANSITION where the gap since the previous 30s beat exceeds 2x the interval (60s); it stays
+silent on every normal beat. `startServerLiveness()` also now accepts an injected `now` clock
+so this is testable without real sleeps.
+
+This pairs with, and does not replace, the janitor daemon's own read of
+`~/.aimaestro/server-liveness.json`: the janitor polls it and calls it STALE at 90s. Our warn's
+60s floor is stricter, so a late-beat line means the writer's wall-clock gap exceeded 60s — a
+real stall OR a clock jump (laptop sleep) — and you disambiguate the two by cross-checking the
+janitor's own daemon.log timestamps for a matching gap.
+
+Two asymmetries to keep straight, not "the warn fully covers the reader's stale check":
+- A 61-89s gap logs a warn here and NEVER trips the reader's 90s stale threshold — informational
+  only, not an incident.
+- The ABSENCE of a warn line does NOT exonerate the writer: a sub-60s internal gap between our
+  own beats can still coincide with the reader's OWN poll timing (it polls independently, every
+  60s) to make the file look stale to the reader even though our writer never logged anything.
+  "No late-beat warning" is not proof the liveness file was fresh when the janitor checked it.
 
 ## Notes and lessons learned
 

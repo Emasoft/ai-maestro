@@ -1,8 +1,8 @@
 ---
 name: testing-and-scenarios
-description: "how do I run a UI scenario test / why is there no slash command to run one scenario / scenario-runner does not appear in autocomplete / the run-scenario-test skill does not exist / how many scenarios exist SCEN-NNN / AMP routing test scripts / cross-host mesh test / manual tmux testing workflow / where do scenario rules live SCENARIOS_TESTS_RULES.md symlink"
+description: "how do I run a UI scenario test / why is there no slash command to run one scenario / scenario-runner does not appear in autocomplete / the run-scenario-test skill does not exist / how many scenarios exist SCEN-NNN / AMP routing test scripts / cross-host mesh test / manual tmux testing workflow / where do scenario rules live SCENARIOS_TESTS_RULES.md symlink / a unit test file goes red only when run in the full suite ENOBUFS / sudo gate pty test flaky / execFileSync ps maxBuffer overflow / is this a real regression or a subprocess buffer limit"
 ocd: 2026-08-02
-lmd: 2026-08-04
+lmd: 2026-09-06
 metadata:
   node_type: memory
   type: reference
@@ -96,6 +96,22 @@ its own TRDD-proposal file in `design/proposals/` (Rule 11 — `column: proposal
 **Prerequisites:** AI Maestro server running, Chrome browser open with DevTools accessible,
 governance password set. Any per-scenario prereqs (`which codex`, fake GitHub repos, etc.) are
 listed in the scenario's frontmatter.
+
+
+^ATOM-D0E5-ZOS8 [desc: "a unit test file reddening under load is often ENOBUFS from execFileSync ps, not a regression — raise maxBuffer", keywords: sudo_gate_pty_test_fails_ENOBUFS ps_-eo_args_maxBuffer flaky_maestro-sudo-gate-pty execFileSync_default_buffer_1MiB_overflow many_agent_sessions_grow_the_process_table test_triage_undercounted_failures standalone_file_run_shows_only_ENOBUFS 31_tests_in_the_file_not_16 false_regression_from_subprocess_buffer raising_maxBuffer_to_64MB_fixes_it red_CI_run_from_a_full_process_table, ocd: 2026-09-06, lmd: 2026-09-06]
+
+`tests/unit/maestro-sudo-gate-pty.test.ts` (commit c26cb1e5) called
+`execFileSync('ps', ['-eo','args'])` with Node's DEFAULT `maxBuffer` (1 MiB). Once the real
+process table grew (many agent sessions open on the same host), the `ps` output overflowed that
+buffer, the call threw ENOBUFS, and every test downstream of it reddened — none of those were
+real regressions, they were the test's own instrument failing on a big process table. Fixed by
+raising `maxBuffer: 64 * 1024 * 1024` on that `execFileSync` call.
+
+A triage that reported "8 of 16 tests red when run alone" undercounted the file: it actually
+holds 31 tests, and 9 STANDALONE runs of the file showed only the ENOBUFS failure, nothing else.
+Before trusting a partial-file test count from a triage report, run the WHOLE file alone and
+count the ENOBUFS failures separately from genuine assertion failures — they look identical in a
+red CI run but have completely different fixes.
 
 ## See also
 

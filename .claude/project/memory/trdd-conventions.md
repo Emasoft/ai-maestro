@@ -2,7 +2,7 @@
 name: trdd-conventions
 description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped by every consumer that enumerates the corpus by filename / the filename is the parse key, not the frontmatter / my decomposition of the difference sums correctly but I only measured one term / is my arithmetic explanation actually measured / writing a headcount into a memory page that no test checks / state the mechanism instead of a headcount. AND: my batch logged FAIL edit but the deprecated field was already gone — trddgrep set removes approval-tier itself / a GRAPH-DANGLING-BLOCKER appeared right after I closed a root card — move clears blocked-by only on the card it moves, never on the cards that cite it."
 ocd: 2026-06-23
-lmd: 2026-09-05
+lmd: 2026-09-06
 metadata:
   node_type: memory
   type: reference
@@ -180,6 +180,21 @@ mandated-by holds the AUTHORITY RANK vocabulary only: none, orchestrator, chief-
 ^ATOM-M30Y-EHM4 [desc: "git diff --cached --name-only shows only the new path of a staged rename — pass --no-renames for both", keywords: git_diff_cached_name-only_rename commit_gate_refused_index_differs_on_rename staged_rename_shows_only_new_path git_diff_--no-renames rename_hides_old_path_from_diff gate_expects_both_old_and_new_path git_mv_missing_old_path_in_diff pre-commit_hook_rename_false_positive why_does_my_rename_gate_fail git_status_shows_R_for_rename, ocd: 2026-09-05, lmd: 2026-09-05]
 
 git diff --cached --name-only lists ONLY the NEW path of a staged rename, not the old one. A gate or script that expects both the old and new path (e.g. to check a rename left no dangling reference) must pass --no-renames to see both paths as separate add/delete entries.
+
+
+^ATOM-6XLD-BMIO [desc: "trddgrep append writes no dash/timestamp itself and bumps updated; rule 12 freeze binds only after the terminal move", keywords: approval_log_line_has_no_dash bare_line_in_approval_log updated_bumped_by_append can_I_edit_a_non-terminal_card trddgrep_append_does_not_prepend_anything caller_supplies_the_whole_approval_log_line no_--no-bump_flag_on_append rule_12_freeze_applies_only_after_terminal_transition live_auditing_card_body_edit_allowed editing_a_TRDD_approval_log_on_a_non-terminal_column append_verb_ISO_timestamp_missing, trdd: TRDD-OUAQARPL, ocd: 2026-09-06, lmd: 2026-09-06]
+`trddgrep append <id> "## Approval log" "<text>"` (measured 2026-09-05 on TRDD-OUAQARPL, commits
+cc37b395/22e9ddb1/7b58646a) prepends NOTHING — the caller supplies the WHOLE line, including the
+`- ` list marker and the ISO timestamp: `- $(date +%Y-%m-%dT%H:%M:%S%z) — <text>`. A brief that
+says "append the reason after whatever prefix the verb adds" is wrong; skip the dash/stamp and
+you get a bare paragraph line with no bullet and no date. The verb also BUMPS `updated:` by
+default (there is no separate `--no-bump` flag documented for `append` — pass the full record
+you want, once).
+
+Separately: rule 12 (terminal columns are frozen) only applies AFTER the transition that made a
+column terminal. On a NON-terminal card — e.g. `column: live_auditing` — `trddgrep edit`/`append`
+on the body is legal; the freeze is not a blanket "approval logs are append-only forever", it is
+conditioned on the card's CURRENT column.
 
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned

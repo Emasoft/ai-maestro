@@ -118,7 +118,7 @@ const attested = (role: string, signature = 'GOOD') => ({
 }) as never
 
 const route = (attestation?: unknown) =>
-  routeMessage(body, null, 'peer-host', null, null, null, attestation as never)
+  routeMessage(body, null, 'peer-host', null, null, attestation as never)
 
 /**
  * `routeMessage` has seven other 403 exits BEFORE the graph (signature, tenant,

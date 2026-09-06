@@ -137,7 +137,7 @@ beforeEach(() => {
 
 describe('routeMessage — X-Forwarded-From requires a verified attestation to authenticate (TRDD-3VFT513C)', () => {
   it('a request authenticating solely via X-Forwarded-From + a known host id is refused (no attestation header at all)', async () => {
-    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'peer-host', null, null, null, undefined)
+    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'peer-host', null, null, undefined)
 
     expect(res.status).toBe(401)
     expect((res.data as { error?: string }).error).toBe('unauthorized')
@@ -145,7 +145,7 @@ describe('routeMessage — X-Forwarded-From requires a verified attestation to a
   })
 
   it('a request with an attestation this host cannot verify (forged signature) is refused', async () => {
-    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'peer-host', null, null, null, attested('member', 'FORGED'))
+    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'peer-host', null, null, attested('member', 'FORGED'))
 
     expect(res.status).toBe(401)
     expect((res.data as { error?: string }).error).toBe('unauthorized')
@@ -155,7 +155,7 @@ describe('routeMessage — X-Forwarded-From requires a verified attestation to a
   it('a request from a host with NO public key on file is refused even with an attestation header present', async () => {
     // 'unknown-host' does not resolve via getHostById at all, so this exercises
     // the `forwardingHost` branch of the guard, not just the publicKeyHex half.
-    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'unknown-host', null, null, null, attested('manager'))
+    const res = await routeMessage({ to: 'bob@default.aimaestro.local' } as never, null, 'unknown-host', null, null, attested('manager'))
 
     expect(res.status).toBe(401)
     expect((res.data as { error?: string }).error).toBe('unauthorized')
@@ -165,7 +165,7 @@ describe('routeMessage — X-Forwarded-From requires a verified attestation to a
   it('positive control: a correctly-attested mesh peer still authenticates and routes end-to-end', async () => {
     AGENTS['id-bob'] = { id: 'id-bob', name: 'bob', alias: 'bob', governanceTitle: 'member' }
     try {
-      const res = await routeMessage(validBody, null, 'peer-host', null, null, null, attested('chief-of-staff'))
+      const res = await routeMessage(validBody, null, 'peer-host', null, null, attested('chief-of-staff'))
 
       expect(res.status).toBe(200)
       expect(deliver).toHaveBeenCalledTimes(1)

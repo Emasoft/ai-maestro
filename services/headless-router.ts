@@ -1974,7 +1974,6 @@ const routes: Route[] = [
       getHeader(req, 'Authorization'),
       getHeader(req, 'X-Forwarded-From'),
       getHeader(req, 'X-AMP-Envelope-Id'),
-      getHeader(req, 'X-AMP-Signature'),
       getHeader(req, 'Content-Length'),
       // Layer 2: pass attestation headers for mesh-forwarded role verification
       {
@@ -4616,8 +4615,10 @@ function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean
  *     This exemption stays correct because it only skips the STRUCTURAL
  *     bearer/cookie shape check for a path that never carries either — the
  *     SEMANTIC check now happens, for real, inside `routeMessage` itself.
- *     `X-AMP-Signature` (`signatureHeader`) remains threaded through and
- *     unread — tracked separately, not required for this fix.
+ *     `X-AMP-Signature` was previously accepted and never read by
+ *     `routeMessage` (`signatureHeader`); that dead parameter has been
+ *     removed (TRDD-3VFT513C) rather than wired up, since the attestation
+ *     check above already supplies the cryptographic proof this path needs.
  *  3. It FAILS CLOSED. `authenticateAgent` ends in a deliberate
  *     `throw new Error('Unreachable: ...')`; an exception escaping into the gate
  *     must not become a 500 that reveals the request reached routing, nor a

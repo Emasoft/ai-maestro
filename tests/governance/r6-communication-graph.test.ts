@@ -914,7 +914,7 @@ describe('R6.7 / R6.8 / R6.9 — enforcement wired into POST /api/v1/route', () 
   it('R6.8 — a FORBIDDEN route (manager -> member) is refused with HTTP 403 title_communication_forbidden', async () => {
     authAs('id-mgr', 'mgr')
     mockDeliverCalls.length = 0
-    const res = await routeMessage(signedBody({ fromAddress: 'mgr@default.local', to: 'mem' }), 'Bearer k', null, null, null, null)
+    const res = await routeMessage(signedBody({ fromAddress: 'mgr@default.local', to: 'mem' }), 'Bearer k', null, null, null)
     expect(res.status).toBe(403)
     expect((res.data as any).error).toBe('title_communication_forbidden')
     // The message was NOT delivered — the guard ran BEFORE delivery.
@@ -923,7 +923,7 @@ describe('R6.7 / R6.8 / R6.9 — enforcement wired into POST /api/v1/route', () 
 
   it('R6.7 — the 403 body carries the ROUTING SUGGESTION appended to the reason', async () => {
     authAs('id-mgr', 'mgr')
-    const res = await routeMessage(signedBody({ fromAddress: 'mgr@default.local', to: 'mem' }), 'Bearer k', null, null, null, null)
+    const res = await routeMessage(signedBody({ fromAddress: 'mgr@default.local', to: 'mem' }), 'Bearer k', null, null, null)
     const msg = (res.data as any).message as string
     expect(msg).toContain('MANAGER cannot send messages to MEMBER')
     expect(msg).toContain('Route through chief-of-staff (COS is the sole team gateway)')
@@ -938,7 +938,7 @@ describe('R6.7 / R6.8 / R6.9 — enforcement wired into POST /api/v1/route', () 
     // Without this, a guard that refused EVERYTHING would pass the tests above.
     authAs('id-cos', 'cos')
     mockDeliverCalls.length = 0
-    const res = await routeMessage(signedBody({ fromAddress: 'cos@default.local', to: 'mem' }), 'Bearer k', null, null, null, null)
+    const res = await routeMessage(signedBody({ fromAddress: 'cos@default.local', to: 'mem' }), 'Bearer k', null, null, null)
     expect(res.status).toBe(200)
     expect((res.data as any).status).toBe('delivered')
     expect(mockDeliverCalls.length).toBe(1)
@@ -948,11 +948,11 @@ describe('R6.7 / R6.8 / R6.9 — enforcement wired into POST /api/v1/route', () 
     // orchestrator -> member : allowed.  member -> orchestrator : allowed.
     // member -> manager      : denied with the COS suggestion.
     authAs('id-orch', 'orch')
-    const ok = await routeMessage(signedBody({ fromAddress: 'orch@default.local', to: 'mem' }), 'Bearer k', null, null, null, null)
+    const ok = await routeMessage(signedBody({ fromAddress: 'orch@default.local', to: 'mem' }), 'Bearer k', null, null, null)
     expect(ok.status).toBe(200)
 
     authAs('id-mem', 'mem')
-    const denied = await routeMessage(signedBody({ fromAddress: 'mem@default.local', to: 'mgr' }), 'Bearer k', null, null, null, null)
+    const denied = await routeMessage(signedBody({ fromAddress: 'mem@default.local', to: 'mgr' }), 'Bearer k', null, null, null)
     expect(denied.status).toBe(403)
     expect((denied.data as any).error).toBe('title_communication_forbidden')
     expect((denied.data as any).message).toContain('Route through chief-of-staff')
@@ -960,7 +960,7 @@ describe('R6.7 / R6.8 / R6.9 — enforcement wired into POST /api/v1/route', () 
 
   it('R6.9 — an unauthenticated caller (no AMP identity, as a subagent has) is refused 401 before any routing', async () => {
     mockDeliverCalls.length = 0
-    const res = await routeMessage(signedBody({ fromAddress: 'mem@default.local', to: 'cos' }), null, null, null, null, null)
+    const res = await routeMessage(signedBody({ fromAddress: 'mem@default.local', to: 'cos' }), null, null, null, null)
     expect(res.status).toBe(401)
     expect((res.data as any).error).toBe('unauthorized')
     expect(mockDeliverCalls.length).toBe(0)

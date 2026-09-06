@@ -16,7 +16,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteR
     const authHeader = request.headers.get('Authorization')
     const forwardedFrom = request.headers.get('X-Forwarded-From')
     const envelopeIdHeader = request.headers.get('X-AMP-Envelope-Id')
-    const signatureHeader = request.headers.get('X-AMP-Signature')
     const contentLength = request.headers.get('Content-Length')
 
     // API-MIN-04 fix: rate-limit AMP routing per sender. Without this, a
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteR
       return NextResponse.json({ error: 'invalid_request', message: 'Invalid JSON body' } as AMPError, { status: 400 })
     }
 
-    const result = await routeMessage(body, authHeader, forwardedFrom, envelopeIdHeader, signatureHeader, contentLength, {
+    const result = await routeMessage(body, authHeader, forwardedFrom, envelopeIdHeader, contentLength, {
       senderRole: request.headers.get('X-AMP-Sender-Role'),
       senderAgentId: request.headers.get('X-AMP-Sender-Agent-Id'),
       senderRoleAttestation: request.headers.get('X-AMP-Sender-Role-Attestation'),

@@ -756,7 +756,6 @@ export async function routeMessage(
   authHeader: string | null,
   forwardedFrom: string | null,
   envelopeIdHeader: string | null,
-  signatureHeader: string | null,
   contentLength: string | null,
   attestationHeaders?: MeshAttestationHeaders
 ): Promise<ServiceResult<AMPRouteResponse | AMPError>> {

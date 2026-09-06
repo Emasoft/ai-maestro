@@ -3,7 +3,7 @@ trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
 column: todo
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-06T02:23:03+0200
+updated: 2026-09-06T02:30:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -35,3 +35,4 @@ In lib/trdd-create.ts: when the repo's design/requirements/PRRD.md carries a `pr
 ## Approval log
 
 - 2026-09-06T02:23:03+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-06T02:30:11+0200 — Review notes on the corrected body (four precisions, none a box). (1) "routes it to the MANAGER queue by this sentence" over-states: a sentence on a Tier-0 card in design/tasks sits in no queue any approver drains — the mandated-by spelling question is NOT routed by this card; the USER, who holds the MANAGER role in this hub session, is told directly in the session reply, and a proposal in design/proposals with min-approval-requirement manager is the formal route if the USER wants one. (2) Provenance of the tool's behaviour: lib/trdd-create.ts writes mandated-by as the author's authority rank since commit 744cc331 (2026-08-20, TRDD-40DYBI4T, server-side minting); that shows what the tool does, not which spelling was intended — the intent question is exactly the ruling requested, so "the overlay is the outlier" is withdrawn as a judgment. (3) Exit condition for the WARN: promoting the validate rule to ERROR becomes admissible only when validate reports zero project-zone cards lacking project-id; until then it stays WARN, so the nag has a closure path. (4) The 104 split into two repair classes — 26 cards that say scope: project and lack only project-id, and 78 that carry neither field, where the path rule (under design/ of a project repo) makes them project-scope and the repair is two fields; "project-zone" in the acceptance means "path under a project's design/ regardless of the scope field", so both classes are in scope. By ai-maestro-hub-session.

@@ -513,7 +513,9 @@ export async function createNewTeam(
     // R51/fail-fast forbids (swallowing this into a console.warn would let the
     // caller believe an unenforced team is compliant). So this call is bare
     // inside the outer try: a throw here propagates to the outer catch, which
-    // runs the freeze-undo compensation below plus every other rollback, and
+    // runs ONLY the freeze-undo compensation below — createNewTeam has no
+    // team-level rollback (TRDD-C3CHP8L2), so a throw after the team record
+    // and its COS are persisted leaves both behind under a 500 — and
     // the caller sees team creation fail rather than a silently-unfrozen team.
     stage('Enforcing R31 incomplete-team freeze')
     const { freezeIncompleteTeam } = await import('@/lib/team-registry')
@@ -608,6 +610,11 @@ export async function createNewTeam(
       for (const agentId of freezeUndo.hibernated) {
         try {
           const { wakeAgent } = await import('@/services/agents-core-service')
+          // The freeze killed these sessions through tmux with no RBAC gate,
+          // so the undo reverses the pipeline's OWN kill with system-owner
+          // authority for symmetry (R51: a compensation carries the authority
+          // of the step it reverses) — a wake under the caller's authContext
+          // could be refused (403) and strand the members under a failed create.
           await wakeAgent(agentId, { authContext: { isSystemOwner: true }, continueConversation: false })
         } catch (wakeErr) {
           console.warn(`[teams] Failed to wake agent ${agentId} during freeze-undo:`, wakeErr instanceof Error ? wakeErr.message : wakeErr)

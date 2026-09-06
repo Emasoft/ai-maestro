@@ -41,6 +41,11 @@ const H = vi.hoisted(() => {
     /** Flipped on to force DeleteAgent's G08 (registry delete) to fail — the injection point
      *  for the "a later gate failing after the freeze" case (c). */
     failRegistryDelete: false,
+    /** TRDD-0KMDJVON Proposed change #4: when set, simulates a late clobber landing right after
+     *  `unfreezeTeamIfComplete` succeeds — exactly the "concurrent writer" case G22's own comment
+     *  already documents — so the final-title invariant check disagrees and the whole transaction
+     *  (including the repair unfreeze) unwinds. */
+    corruptAfterUnfreeze: null as { id: string; title: string } | null,
   }
 })
 
@@ -68,6 +73,17 @@ vi.mock('@/lib/team-registry', async (importOriginal) => {
     freezeIncompleteTeam: vi.fn((...args: Parameters<typeof actual.freezeIncompleteTeam>) =>
       actual.freezeIncompleteTeam(...args)
     ),
+    // Wraps the real repair-unfreeze so the "later gate failing after the unfreeze" test can
+    // inject its clobber right after a real, successful unfreeze — never instead of one.
+    unfreezeTeamIfComplete: vi.fn(async (...args: Parameters<typeof actual.unfreezeTeamIfComplete>) => {
+      const result = await actual.unfreezeTeamIfComplete(...args)
+      if (result.unfrozen && H.corruptAfterUnfreeze) {
+        const { id, title } = H.corruptAfterUnfreeze
+        const existing = H.registry.get(id)
+        if (existing) H.registry.set(id, { ...existing, governanceTitle: title })
+      }
+      return result
+    }),
   }
 })
 
@@ -167,6 +183,7 @@ beforeEach(() => {
   H.killedSessionNames = []
   H.wokenIds = []
   H.failRegistryDelete = false
+  H.corruptAfterUnfreeze = null
 })
 
 afterAll(() => {
@@ -268,5 +285,94 @@ describe('roster mutations re-evaluate R31 team completeness (TRDD-0KMDJVON)', (
     const onDisk = loadTeams().find(t => t.id === TEAM_ID) as Team
     expect(onDisk.agentIds).toContain(MEMBER_ID)
     expect(getAgent(MEMBER_ID)).not.toBeNull()
+  })
+
+  it('a frozen incomplete team is unfrozen, nobody woken, when ChangeTitle supplies its missing title', async () => {
+    const TEAM_ID = 'team-repair-title'
+    const EXTRA_ID = 'agent-extra'
+    const EXTRA_NAME = 'extra-agent'
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: COS_ID, name: COS_NAME, governanceTitle: 'chief-of-staff' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: ARCH_ID, name: ARCH_NAME, governanceTitle: 'architect' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: ORCH_ID, name: ORCH_NAME, governanceTitle: 'orchestrator' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: INT_ID, name: INT_NAME, governanceTitle: 'integrator' })
+    // Holds a title OUTSIDE the R12.1 set — the team is missing 'member' until this agent is
+    // retitled to it, which is the mutation this test drives.
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: EXTRA_ID, name: EXTRA_NAME, governanceTitle: 'autonomous' })
+
+    const team: Team = {
+      id: TEAM_ID,
+      name: 'R31 Repair Team',
+      type: 'closed',
+      agentIds: [COS_ID, ARCH_ID, ORCH_ID, INT_ID, EXTRA_ID],
+      chiefOfStaffId: COS_ID,
+      orchestratorId: ORCH_ID,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      frozen: true, // already frozen for incompleteness at seed time — the repair case
+    } as Team
+    const { saveTeams } = await import('@/lib/team-registry')
+    saveTeams([team])
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const { loadTeams } = await import('@/lib/team-registry')
+
+    const result = await ChangeTitle(EXTRA_ID, 'member', { authContext: OWNER_CTX, skipPluginSync: true })
+
+    expect(result.success).toBe(true)
+    expect(result.operations).toContain(
+      'G23: Team "R31 Repair Team" was frozen and is now complete — unfrozen (repair)',
+    )
+    // unfreezeTeamIfComplete deliberately wakes nobody — agents stay hibernated until woken
+    // through the normal wake path.
+    expect(H.wokenIds).toEqual([])
+
+    const onDisk = loadTeams().find(t => t.id === TEAM_ID) as Team
+    expect(onDisk.frozen).toBe(false)
+  })
+
+  it('a later gate failing after the unfreeze re-freezes the team (flag only)', async () => {
+    const TEAM_ID = 'team-repair-rollback'
+    const EXTRA_ID = 'agent-extra2'
+    const EXTRA_NAME = 'extra2-agent'
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: COS_ID, name: COS_NAME, governanceTitle: 'chief-of-staff' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: ARCH_ID, name: ARCH_NAME, governanceTitle: 'architect' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: ORCH_ID, name: ORCH_NAME, governanceTitle: 'orchestrator' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: INT_ID, name: INT_NAME, governanceTitle: 'integrator' })
+    seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, { id: EXTRA_ID, name: EXTRA_NAME, governanceTitle: 'autonomous' })
+
+    const team: Team = {
+      id: TEAM_ID,
+      name: 'R31 Repair Rollback Team',
+      type: 'closed',
+      agentIds: [COS_ID, ARCH_ID, ORCH_ID, INT_ID, EXTRA_ID],
+      chiefOfStaffId: COS_ID,
+      orchestratorId: ORCH_ID,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      frozen: true,
+    } as Team
+    const { saveTeams } = await import('@/lib/team-registry')
+    saveTeams([team])
+
+    // Simulate a late clobber landing right after the repair unfreeze succeeds — exactly the
+    // "concurrent writer" case the final invariants check's own comment already documents — so
+    // the whole ChangeTitle transaction unwinds, including G23's unfreeze.
+    H.corruptAfterUnfreeze = { id: EXTRA_ID, title: 'autonomous' }
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const { loadTeams } = await import('@/lib/team-registry')
+
+    const result = await ChangeTitle(EXTRA_ID, 'member', { authContext: OWNER_CTX, skipPluginSync: true })
+
+    expect(result.success).toBe(false)
+    expect(result.operations).toContain(
+      'G23: Team "R31 Repair Rollback Team" was frozen and is now complete — unfrozen (repair)',
+    )
+    // The repair unfreeze woke nobody, and the rollback that follows re-freezes by flag only —
+    // no wake call happens on either side of this transaction.
+    expect(H.wokenIds).toEqual([])
+
+    const onDisk = loadTeams().find(t => t.id === TEAM_ID) as Team
+    expect(onDisk.frozen).toBe(true)
   })
 })

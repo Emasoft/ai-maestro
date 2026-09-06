@@ -2942,8 +2942,10 @@ export async function ChangeTitle(
        */
       g14eEmitDue?: boolean
       /** G23 (TRDD-0KMDJVON, R31): the team re-evaluated after the title write, whether it was
-       *  ALREADY frozen before this gate ran, and exactly which agent ids it hibernated. */
-      g23?: { teamId: string; wasFrozenBefore: boolean; hibernated: string[] }
+       *  ALREADY frozen before this gate ran, and exactly which agent ids it hibernated.
+       *  `unfroze` (Proposed change #4): true only when this write COMPLETED an already-frozen
+       *  team — a repair, distinct from `wasFrozenBefore`, which is for the freeze-undo case. */
+      g23?: { teamId: string; wasFrozenBefore: boolean; hibernated: string[]; unfroze: boolean }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -4392,12 +4394,33 @@ export async function ChangeTitle(
             ops.push(`G23: Team "${team.name}" has no live COS — R31 freeze deferred (TRDD-0KMDJVON edge case)`)
             return
           }
-          ctx.g23 = { teamId: team.id, wasFrozenBefore: !!team.frozen, hibernated: [] }
+          ctx.g23 = { teamId: team.id, wasFrozenBefore: !!team.frozen, hibernated: [], unfroze: false }
           const { frozen, hibernated } = await freezeIncompleteTeam(team.id)
           ctx.g23.hibernated = hibernated
           ops.push(frozen
             ? `G23: Team "${team.name}" is now incomplete — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
             : `G23: Team "${team.name}" still complete — no freeze`)
+          // TRDD-0KMDJVON Proposed change #4: `freezeIncompleteTeam` never clears a freeze a
+          // PRIOR mutation left in place. A title change is one of only two mutations that can
+          // COMPLETE a team (the other is ChangeTeam's G07b), so check for the repair case here:
+          // the team was already frozen (`team.frozen`, read before this gate ran) and this write
+          // did NOT freeze it again (`!frozen`) means the missing title just arrived.
+          // `unfreezeTeamIfComplete` re-verifies both facts and wakes nobody (same contract as
+          // `unblockAllTeams` — agents stay hibernated until woken through the normal path).
+          // Imported lazily, INSIDE this guard rather than alongside `freezeIncompleteTeam` above:
+          // several existing tests replace `@/lib/team-registry` wholesale with a mock that omits
+          // this export (only `loadTeams`/`freezeIncompleteTeam` are needed for their scenarios),
+          // and destructuring a name absent from such a mock throws at the destructure site — see
+          // the sibling comment on `freezeIncompleteTeam`'s own import. Those fixtures never seed
+          // a `team.frozen: true`, so this guard is never true for them and the import never runs.
+          if (!frozen && team.frozen) {
+            const { unfreezeTeamIfComplete } = await import('@/lib/team-registry')
+            const { unfrozen } = await unfreezeTeamIfComplete(team.id)
+            ctx.g23.unfroze = unfrozen
+            if (unfrozen) {
+              ops.push(`G23: Team "${team.name}" was frozen and is now complete — unfrozen (repair)`)
+            }
+          }
         },
         // Wakes exactly what THIS gate hibernated and restores `frozen` only where THIS gate
         // flipped it — same shape as G10's undo above (independent attempts, every failure named,
@@ -4443,6 +4466,26 @@ export async function ChangeTitle(
               })
             } catch (err) {
               problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          // Mirror-image of the block above: this gate's title write REPAIRED an already-frozen
+          // team (led.unfroze), so undoing the write must re-freeze it — flag only, since the
+          // unfreeze itself woke nobody, so there is nothing to re-hibernate.
+          if (led.unfroze) {
+            try {
+              const { loadTeams: loadTeamsG23Refreeze, saveTeams: saveTeamsG23Refreeze } = await import('@/lib/team-registry')
+              const { withLock: withLockG23Refreeze } = await import('@/lib/file-lock')
+              await withLockG23Refreeze('teams', () => {
+                const teams = loadTeamsG23Refreeze()
+                const idx = teams.findIndex(t => t.id === led.teamId)
+                if (idx !== -1 && !teams[idx].frozen) {
+                  teams[idx].frozen = true
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG23Refreeze(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen re-set (${err instanceof Error ? err.message : err})`)
             }
           }
           ctx.g23 = undefined
@@ -7202,6 +7245,12 @@ export async function ChangeTeam(
       freezeTeamId: string | null
       freezeWasFrozenBefore: boolean
       freezeHibernated: string[]
+      /** TRDD-0KMDJVON (Proposed change #4, R31 repair half): true only when G07b's join
+       *  COMPLETED a team that was already frozen for incompleteness — a repair, not a fresh
+       *  freeze — so its undo must re-freeze (flag only) rather than fall into the
+       *  wasFrozenBefore branch above, which is for the opposite case. G04e never sets this:
+       *  removing an agent cannot complete a team. */
+      freezeUnfroze: boolean
     }
     const tc: TeamCtx = {
       membershipMoved: null,
@@ -7212,6 +7261,7 @@ export async function ChangeTeam(
       freezeTeamId: null,
       freezeWasFrozenBefore: false,
       freezeHibernated: [],
+      freezeUnfroze: false,
       restartNeeded: false,
     }
 
@@ -7506,6 +7556,27 @@ export async function ChangeTeam(
           ops.push(frozen
             ? `G07b: Team "${targetTeam.name}" still incomplete after join — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
             : `G07b: Team "${targetTeam.name}" complete after join — no freeze`)
+          // TRDD-0KMDJVON Proposed change #4: `freezeIncompleteTeam` is a one-way door — it never
+          // clears a freeze a PRIOR mutation left in place. This join is one of only two mutations
+          // that can COMPLETE a team (the other is ChangeTitle's G23), so it is the natural place
+          // to check for the repair case: team was already frozen (`team.frozen`, read before this
+          // gate ran) and did NOT get re-frozen just now (`!frozen`) means the roster is complete.
+          // `unfreezeTeamIfComplete` re-verifies both facts itself and wakes nobody (same contract
+          // as `unblockAllTeams` — hibernated agents stay asleep until woken through the normal
+          // path), so this is a cheap, idempotent repair with no side effect beyond the flag.
+          // Imported lazily, INSIDE this guard rather than alongside `freezeIncompleteTeam` above —
+          // same reason as ChangeTitle's G23: several existing tests replace `@/lib/team-registry`
+          // wholesale with a mock that omits this export, and destructuring an absent name throws
+          // at the destructure site. Those fixtures never seed `team.frozen: true`, so this guard
+          // is never true for them and the import never runs.
+          if (!frozen && team.frozen) {
+            const { unfreezeTeamIfComplete } = await import('@/lib/team-registry')
+            const { unfrozen } = await unfreezeTeamIfComplete(targetTeamId)
+            c.freezeUnfroze = unfrozen
+            if (unfrozen) {
+              ops.push(`G07b: Team "${targetTeam.name}" was frozen and is now complete — unfrozen (repair)`)
+            }
+          }
         },
         undo: async (c: TeamCtx) => {
           if (!c.freezeTeamId) return
@@ -7548,6 +7619,27 @@ export async function ChangeTeam(
             } catch (err) {
               problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
             }
+          }
+          // Mirror-image of the block above: this gate's join REPAIRED an already-frozen team
+          // (c.freezeUnfroze), so undoing the join must re-freeze it — flag only, since the
+          // unfreeze itself woke nobody, so there is nothing to re-hibernate.
+          if (c.freezeUnfroze) {
+            try {
+              const { loadTeams: loadTeamsG07bRefreeze, saveTeams: saveTeamsG07bRefreeze } = await import('@/lib/team-registry')
+              const { withLock: withLockG07bRefreeze } = await import('@/lib/file-lock')
+              await withLockG07bRefreeze('teams', () => {
+                const teams = loadTeamsG07bRefreeze()
+                const idx = teams.findIndex(t => t.id === c.freezeTeamId)
+                if (idx !== -1 && !teams[idx].frozen) {
+                  teams[idx].frozen = true
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG07bRefreeze(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen re-set (${err instanceof Error ? err.message : err})`)
+            }
+            c.freezeUnfroze = false
           }
           c.freezeTeamId = null
           c.freezeHibernated = []
@@ -7865,7 +7957,7 @@ export async function ChangeAvatar(
 
     // ── G01: Validate file exists ─────────────────────────────
     // Avatar paths can be: web-relative (/avatars/women_01.jpg → public/avatars/...),
-    // home-relative (~/path), or absolute (/Users/.../path)
+    // home-relative (~/path), or absolute (/abs/path)
     let resolved: string
     if (avatarPath.startsWith('/avatars/')) {
       // Web-relative URL served from public/ directory

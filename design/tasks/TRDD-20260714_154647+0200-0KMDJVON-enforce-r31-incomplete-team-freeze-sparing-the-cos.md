@@ -3,7 +3,7 @@ trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 column: planned
 created: 2026-07-14T15:46:47+0200
-updated: 2026-08-16T16:49:08+0200
+updated: 2026-09-06T03:00:20+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -135,16 +135,17 @@ test above is not optional.
 
 ## Acceptance
 
-- [ ] `freezeIncompleteTeam(teamId)` exists as a new function in `lib/team-registry.ts`, distinct from `blockAllTeams()`, and hibernates `team.agentIds` MINUS `team.chiefOfStaffId`.
-- [ ] `isTeamComplete(team)` exists and returns true iff all 5 R12.1 titles are present among the team's live (non-tombstoned) agents.
+- [x] `freezeIncompleteTeam(teamId)` exists as a new function in `lib/team-registry.ts`, distinct from `blockAllTeams()`, and hibernates `team.agentIds` MINUS `team.chiefOfStaffId`.
+- [x] `isTeamComplete(team)` exists and returns true iff all 5 R12.1 titles are present among the team's live (non-tombstoned) agents.
 - [ ] `freezeIncompleteTeam`/`isTeamComplete` are called on every roster mutation: `createNewTeam`, `ChangeTeam`, `DeleteAgent` of a team member, and `ChangeTitle` moving a title in/out of a team.
 - [ ] A newly created team is frozen, its COS active, no other agents present — and the regression test asserting the COS's tmux session stays alive under freeze passes.
 - [ ] Deleting a member from a complete team re-freezes it while the COS stays awake; a frozen team's non-COS agent cannot be woken while frozen.
 - [ ] The COS receives an AMP message / injected directive naming the missing titles when its team freezes.
-- [ ] R9.8's block is unchanged: with no MANAGER, every agent including the COS hibernates.
+- [x] R9.8's block is unchanged: with no MANAGER, every agent including the COS hibernates.
 
 ## Approval log
 
 - 2026-07-14T15:46:47+0200 — MANDATE issued by USER (maestro) (min-approval-requirement: user).
   Pre-approved. Basis: the USER's verbatim rulings on the 5-role base (R12.1) and on the COS
   remaining active during a freeze. No approval request was sent.
+- 2026-09-06T03:00:20+0200 — implemented isTeamComplete + freezeIncompleteTeam in lib/team-registry.ts (new functions, blockAllTeams untouched behaviorally, only its hibernate-loop extracted to a shared helper hibernateTeamAgentSession); test tests/unit/team-registry-freeze-incomplete.test.ts green (3 tests), neuter reddened 'an incomplete team (missing ARCHITECT) freezes and hibernates every non-COS agent, sparing the COS'; tsc clean; call-site wiring deferred: services/teams-service.ts:275 (createNewTeam), services/element-management-service.ts:6992 (ChangeTeam), :9083 (DeleteAgent), :2486 (ChangeTitle); COS notification and unfreeze-on-repair also deferred. Uncommitted — coordinator commits.

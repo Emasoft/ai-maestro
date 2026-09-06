@@ -769,29 +769,35 @@ export async function routeMessage(
 
     if (!auth.authenticated && forwardedFrom) {
       const forwardingHost = getHostById(forwardedFrom)
-      if (forwardingHost) {
-        auth = {
-          authenticated: true,
-          agentId: `mesh-${forwardedFrom}`,
-          tenantId: getOrganization() || 'default',
-          address: `mesh@${forwardedFrom}`
-        }
-
-        // Layer 2: Verify role attestation if present
-        if (attestationHeaders?.senderRoleAttestation && forwardingHost.publicKeyHex) {
-          const attestation = deserializeAttestation(attestationHeaders.senderRoleAttestation)
-          if (attestation && verifyRoleAttestation(attestation, forwardingHost.publicKeyHex)) {
-            verifiedSenderRole = attestation.role
-            verifiedSenderAgentId = attestation.agentId
-            // Override the generic mesh-* agentId with the attested real agent ID
-            auth.agentId = attestation.agentId
-            console.log(`[AMP Route] Verified role attestation from ${forwardedFrom}: agent=${attestation.agentId} role=${attestation.role}`)
-          } else {
-            console.warn(`[AMP Route] Invalid role attestation from ${forwardedFrom} — ignoring`)
+      // TRDD-3VFT513C: registry membership alone — `X-Forwarded-From` naming a host id
+      // that happens to resolve in `getHostById` — is NOT authentication. The header is
+      // caller-controlled and proves nothing about who actually sent the request. The
+      // ONLY thing that proves the claim is a role attestation cryptographically signed
+      // by the forwarding host's own key (`forwardingHost.publicKeyHex`). Previously a
+      // missing or INVALID attestation still left `auth.authenticated = true` (the
+      // attestation only gated which ROLE the caller was credited with, never whether it
+      // was authenticated at all) — a forged header with no attestation walked straight
+      // through. Fail fast instead: no verified attestation ⇒ `auth` stays whatever
+      // `authenticateRequest` returned (unauthenticated), and the 401 below fires.
+      if (forwardingHost?.publicKeyHex && attestationHeaders?.senderRoleAttestation) {
+        const attestation = deserializeAttestation(attestationHeaders.senderRoleAttestation)
+        if (attestation && verifyRoleAttestation(attestation, forwardingHost.publicKeyHex)) {
+          verifiedSenderRole = attestation.role
+          verifiedSenderAgentId = attestation.agentId
+          auth = {
+            authenticated: true,
+            // The attested real agent id — never the generic `mesh-<hostId>` placeholder,
+            // which existed only for the now-removed unattested path.
+            agentId: attestation.agentId,
+            tenantId: getOrganization() || 'default',
+            address: `mesh@${forwardedFrom}`
           }
+          console.log(`[AMP Route] Verified role attestation from ${forwardedFrom}: agent=${attestation.agentId} role=${attestation.role}`)
         } else {
-          console.log(`[AMP Route] Accepting mesh-forwarded request from ${forwardedFrom} (no attestation)`)
+          console.warn(`[AMP Route] Invalid or unverifiable role attestation from ${forwardedFrom} — refusing (mesh auth requires a verified attestation)`)
         }
+      } else if (forwardingHost) {
+        console.warn(`[AMP Route] Mesh-forwarded request from ${forwardedFrom} carries no verifiable role attestation (missing header or host has no public key on file) — refusing`)
       }
     }
 

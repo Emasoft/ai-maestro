@@ -4569,8 +4569,10 @@ function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean
   // 32+ chars after the prefix.
   if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{24,}$/.test(authHdr.trim())) return true
   // X-Forwarded-From is pathname-scoped to /api/v1/route only, mirroring
-  // SRV-CRIT-02's middleware.ts fix. The route handler still does
-  // Ed25519 verification on the forwarded identity.
+  // SRV-CRIT-02's middleware.ts fix. The route handler (routeMessage in
+  // services/amp-service.ts) requires and verifies an Ed25519 role
+  // attestation before authenticating a mesh-forwarded caller (TRDD-3VFT513C,
+  // 2026-09-06) — see `_headlessCredentialIsValid` below for the full account.
   if (pathname === '/api/v1/route' && (req.headers['x-forwarded-from'] as string | undefined)) {
     return true
   }
@@ -4601,27 +4603,21 @@ function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean
  *     `_headlessHasCredential` exempts it — removing the exemption would break
  *     peer routing outright.
  *
- *     ⚠ AN EARLIER VERSION OF THIS COMMENT SAID "its identity is Ed25519-verified
- *     inside the handler". THAT IS FALSE, and it was inherited from the comment
- *     on `_headlessHasCredential`'s own copy of this branch rather than measured.
- *     Read 2026-08-23 in `services/amp-service.ts::routeMessage`:
- *       - `if (!auth.authenticated && forwardedFrom)` grants
- *         `authenticated: true` when `getHostById(forwardedFrom)` merely RESOLVES.
- *         Registry membership, not a signature.
- *       - the Ed25519 `verifyRoleAttestation` is OPTIONAL and only upgrades the
- *         sender ROLE; when it is absent or invalid the code warns and continues
- *         authenticated.
- *       - `X-AMP-Signature` is threaded in as `signatureHeader` and NEVER READ —
- *         one reference in the entire file, its own parameter declaration.
- *     So this exemption admits an unauthenticated caller that knows any valid
- *     host id, and `X-Forwarded-From` is caller-controlled.
- *
- *     THIS PREDATES THE SEMANTIC GATE and is unchanged by it — the structural
- *     gate exempted the same path identically. It is NOT introduced here and is
- *     not fixed here either: repairing the mesh trust model has federation blast
- *     radius and belongs on its own card, TRDD-3VFT513C. What IS fixed here is
- *     this comment, which told the next reader the path was verified when it is
- *     not — the most dangerous artifact of the two.
+ *     TRDD-3VFT513C (2026-09-06) — the exemption is now backed by a REAL check.
+ *     Previously `services/amp-service.ts::routeMessage` granted
+ *     `authenticated: true` the moment `getHostById(forwardedFrom)` merely
+ *     RESOLVED — registry membership, not a signature — and the Ed25519
+ *     `verifyRoleAttestation` only upgraded the sender ROLE, so a missing or
+ *     INVALID attestation still authenticated. That has been fixed at the
+ *     source: `routeMessage` now authenticates a mesh-forwarded caller ONLY
+ *     when `X-AMP-Sender-Role-Attestation` verifies against the forwarding
+ *     host's own `publicKeyHex` (`verifyRoleAttestation`); missing or invalid
+ *     attestation leaves `auth` unauthenticated and the request gets a 401.
+ *     This exemption stays correct because it only skips the STRUCTURAL
+ *     bearer/cookie shape check for a path that never carries either — the
+ *     SEMANTIC check now happens, for real, inside `routeMessage` itself.
+ *     `X-AMP-Signature` (`signatureHeader`) remains threaded through and
+ *     unread — tracked separately, not required for this fix.
  *  3. It FAILS CLOSED. `authenticateAgent` ends in a deliberate
  *     `throw new Error('Unreachable: ...')`; an exception escaping into the gate
  *     must not become a 500 that reveals the request reached routing, nor a

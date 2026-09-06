@@ -131,6 +131,18 @@ const refusedByTheGraph = (res: { status?: number; data?: unknown }) => {
   expect((res.data as { error?: string }).error).toBe('title_communication_forbidden')
 }
 
+/**
+ * TRDD-3VFT513C (2026-09-06): an unattested or unverifiable mesh forward is now
+ * refused at AUTHENTICATION (401), before the graph even runs — it no longer
+ * reaches the R6 check with a null sender title. Named separately from
+ * `refusedByTheGraph` so a test asserting this can never be satisfied by a
+ * refusal from the wrong layer.
+ */
+const refusedAtAuthentication = (res: { status?: number; data?: unknown }) => {
+  expect(res.status).toBe(401)
+  expect((res.data as { error?: string }).error).toBe('unauthorized')
+}
+
 beforeEach(() => {
   deliver.mockClear()
   queueMessage.mockClear()
@@ -155,22 +167,25 @@ describe('amp-service.routeMessage — the receiving host is the real R6 gate', 
     expect(deliver).toHaveBeenCalledTimes(1)
   })
 
-  it('a mesh forward with NO attestation has no sender title, so it is refused', async () => {
-    // `senderTitle = verifiedSenderRole || null` and the graph fails closed on a
-    // null sender. Without this, an unattested peer would inherit whatever the
-    // graph does with `undefined` — the same truthy/falsy trap that let the
-    // sender-side `'unknown'` sentinel skip a safe default.
+  it('a mesh forward with NO attestation is refused at authentication, not the graph', async () => {
+    // Pre-TRDD-3VFT513C: `getHostById('peer-host')` resolving was enough to
+    // authenticate, so this reached the graph with `senderTitle = null` and was
+    // refused there instead. Post-fix: no verified attestation means `auth`
+    // never becomes authenticated, so this is refused earlier, at :798's 401 —
+    // a STRONGER refusal, not a different flavor of the same one.
     const res = await route(undefined)
 
-    refusedByTheGraph(res)
+    refusedAtAuthentication(res)
     expect(deliver).not.toHaveBeenCalled()
   })
 
-  it('an attestation this host cannot verify grants no title, and is refused', async () => {
-    // A forged signature must not be worth more than no signature at all.
+  it('an attestation this host cannot verify is refused at authentication, not the graph', async () => {
+    // A forged signature must not be worth more than no signature at all — and,
+    // post-fix, it must not even authenticate the caller (previously it did,
+    // then fell through to the graph with no title).
     const res = await route(attested('chief-of-staff', 'FORGED'))
 
-    refusedByTheGraph(res)
+    refusedAtAuthentication(res)
     expect(deliver).not.toHaveBeenCalled()
   })
 })

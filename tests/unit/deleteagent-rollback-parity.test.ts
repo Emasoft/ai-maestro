@@ -96,6 +96,10 @@ vi.mock('@/services/agents-core-service', () => ({
 vi.mock('@/lib/team-registry', () => ({
   loadTeams: () => JSON.parse(JSON.stringify(H.state.teams)),
   saveTeams: (t: Array<Record<string, unknown>>) => { H.state.teams = JSON.parse(JSON.stringify(t)) },
+  // TRDD-0KMDJVON: DeleteAgent's G04b destructures getTeam + freezeIncompleteTeam — a missing
+  // export on a vi.mock THROWS at the destructure (see teams-service.test.ts mockTeams).
+  getTeam: (id: string) => H.state.teams.find(t => t.id === id),
+  freezeIncompleteTeam: async () => ({ frozen: false, hibernated: [] }),
 }))
 vi.mock('@/lib/group-registry', () => ({
   loadGroups: () => JSON.parse(JSON.stringify(H.state.groups)),

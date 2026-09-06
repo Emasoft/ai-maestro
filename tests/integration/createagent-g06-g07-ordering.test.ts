@@ -158,6 +158,9 @@ vi.mock('@/lib/team-registry', () => ({
   updateTeam: mockUpdateTeam,
   deleteTeam: vi.fn(async () => undefined),
   addTeam: vi.fn(async () => undefined),
+  // TRDD-0KMDJVON: ChangeTeam's G04e/G07b destructure freezeIncompleteTeam alongside getTeam —
+  // a missing export on a vi.mock THROWS at the destructure (see teams-service.test.ts mockTeams).
+  freezeIncompleteTeam: vi.fn(async () => ({ frozen: false, hibernated: [] })),
 }))
 
 // Governance primitives consulted by ChangeTitle. Stubbed to a

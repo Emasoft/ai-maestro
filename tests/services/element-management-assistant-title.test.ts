@@ -108,6 +108,9 @@ vi.mock('@/lib/team-registry', () => ({
   updateTeam: vi.fn(async () => undefined),
   deleteTeam: vi.fn(async () => undefined),
   addTeam: vi.fn(async () => undefined),
+  // TRDD-0KMDJVON: ChangeTitle's G23 destructures freezeIncompleteTeam alongside loadTeams — a
+  // missing export on a vi.mock THROWS at the destructure (see teams-service.test.ts mockTeams).
+  freezeIncompleteTeam: vi.fn(async () => ({ frozen: false, hibernated: [] })),
 }))
 
 vi.mock('@/lib/governance-sync', () => ({

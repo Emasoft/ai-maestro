@@ -80,7 +80,14 @@ vi.mock('@/lib/agent-registry', async () => {
   return h.registryMock(H.store as never, h.registryPath(H.FAKE_STATE))
 })
 vi.mock('@/lib/governance', async () => (await import(HELPER)).stubs.governance())
-vi.mock('@/lib/team-registry', async () => (await import(HELPER)).stubs.teamRegistry())
+vi.mock('@/lib/team-registry', async () => ({
+  // TRDD-0KMDJVON: DeleteAgent's G04b destructures getTeam + freezeIncompleteTeam — a missing
+  // export on a vi.mock THROWS at the destructure (see teams-service.test.ts mockTeams). The
+  // shared helper's teamRegistry() stub predates R31, so it is extended here rather than widened
+  // globally (out of this fix's write scope).
+  ...(await import(HELPER)).stubs.teamRegistry(),
+  freezeIncompleteTeam: async () => ({ frozen: false, hibernated: [] }),
+}))
 vi.mock('@/lib/group-registry', async () => (await import(HELPER)).stubs.groupRegistry())
 vi.mock('@/lib/agent-runtime', async () => (await import(HELPER)).stubs.agentRuntime())
 vi.mock('@/lib/session-persistence', async () => (await import(HELPER)).stubs.sessionPersistence())

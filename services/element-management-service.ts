@@ -2941,6 +2941,9 @@ export async function ChangeTitle(
        * — so the only way not to record a reverted revocation is not to record it until it sticks.
        */
       g14eEmitDue?: boolean
+      /** G23 (TRDD-0KMDJVON, R31): the team re-evaluated after the title write, whether it was
+       *  ALREADY frozen before this gate ran, and exactly which agent ids it hibernated. */
+      g23?: { teamId: string; wasFrozenBefore: boolean; hibernated: string[] }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -4354,6 +4357,96 @@ export async function ChangeTitle(
           } else {
             ops.push(`G21: Auto-title protection N/A`)
           }
+        },
+      },
+
+      // ── GATE 23 (TRDD-0KMDJVON, R31 acceptance box 3/5): re-check team completeness ──
+      // A title move can flip a COMPLETE team INCOMPLETE WITHOUT ever touching team.agentIds —
+      // e.g. demoting the only MEMBER off its team-required title. `memberTeamG8` is NOT reusable
+      // here: Gate 8 only populates it when newTitle/oldTitle involves a per-team SINGLETON
+      // (chief-of-staff/orchestrator) — TRDD-0KMDJVON's own regression (a member→architect move,
+      // neither end singleton) found `memberTeamG8` `undefined` while the agent was plainly still
+      // on a team's `agentIds`. So this gate does its OWN unconditional lookup instead. By the time
+      // it runs the new title is already persisted (G14) and disk-verified (the invariants hook
+      // below), so `getAgent` inside `isTeamComplete` sees the FINAL title. Never the COS — see
+      // freezeIncompleteTeam's own deadlock-trap comment in lib/team-registry.ts.
+      {
+        id: 'G23',
+        what: 'R31 team-completeness re-evaluated after the title write',
+        // ENFORCEMENT gate, not enrichment (TRDD-0KMDJVON): R31 team-completeness is a
+        // governance invariant, so a failure here (a store this call cannot reach, an older
+        // team-registry build missing the R31 primitives) MUST fail the whole title change.
+        // The transaction runner unwinds every already-executed gate's undo on this throw —
+        // including the title write itself — so the compensation, not a swallow, is what keeps
+        // the system consistent. Fail-fast: no fallbacks, no swallowed errors (project rule).
+        run: async () => {
+          const { loadTeams: loadTeamsG23, freezeIncompleteTeam } = await import('@/lib/team-registry')
+          const team = loadTeamsG23().find(t => t.agentIds.includes(agentId))
+          if (!team) {
+            ops.push(`G23: Agent not in a team — R31 completeness check N/A`)
+            return
+          }
+          // Same "COS itself is missing" deferral as DeleteAgent's G04b / ChangeTeam's G04e/G07b —
+          // freezing with no live COS left to spare would hibernate everyone and deadlock the team.
+          if (!team.chiefOfStaffId) {
+            ops.push(`G23: Team "${team.name}" has no live COS — R31 freeze deferred (TRDD-0KMDJVON edge case)`)
+            return
+          }
+          ctx.g23 = { teamId: team.id, wasFrozenBefore: !!team.frozen, hibernated: [] }
+          const { frozen, hibernated } = await freezeIncompleteTeam(team.id)
+          ctx.g23.hibernated = hibernated
+          ops.push(frozen
+            ? `G23: Team "${team.name}" is now incomplete — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
+            : `G23: Team "${team.name}" still complete — no freeze`)
+        },
+        // Wakes exactly what THIS gate hibernated and restores `frozen` only where THIS gate
+        // flipped it — same shape as G10's undo above (independent attempts, every failure named,
+        // never a blind bulk unfreeze).
+        undo: async () => {
+          const led = ctx.g23
+          if (!led) return
+          const problems: string[] = []
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          let nowLive = new Set<string>()
+          try {
+            const { getRuntime } = await import('@/lib/agent-runtime')
+            nowLive = new Set((await getRuntime().listSessions()).map((s) => s.name))
+          } catch {
+            // Cannot enumerate sessions — attempt every wake and let alreadyRunning absorb the
+            // ones that did not need it.
+          }
+          for (const sleeperId of led.hibernated) {
+            const sleeper = getAgent(sleeperId)
+            if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+            if (nowLive.has(sleeper.name)) continue
+            try {
+              const woke = await wakeAgent(sleeperId, { authContext: options.authContext })
+              if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+              }
+            } catch (err) {
+              problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          if (!led.wasFrozenBefore) {
+            try {
+              const { loadTeams: loadTeamsG23Undo, saveTeams: saveTeamsG23Undo } = await import('@/lib/team-registry')
+              const { withLock: withLockG23Undo } = await import('@/lib/file-lock')
+              await withLockG23Undo('teams', () => {
+                const teams = loadTeamsG23Undo()
+                const idx = teams.findIndex(t => t.id === led.teamId)
+                if (idx !== -1 && teams[idx].frozen) {
+                  teams[idx].frozen = false
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG23Undo(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          ctx.g23 = undefined
+          if (problems.length) throw new Error(`G23 rollback incomplete: ${problems.join('; ')}`)
         },
       },
 
@@ -7103,6 +7196,12 @@ export async function ChangeTeam(
       teamFieldBefore: string
       /** Propagated to the caller on success, exactly as the hand-rolled version did. */
       restartNeeded: boolean
+      /** TRDD-0KMDJVON (R31 acceptance box 3/5): the team G04e/G07b re-evaluated after this roster
+       *  mutation, whether it was ALREADY frozen before that gate ran, and exactly which agent ids
+       *  it hibernated — so undo wakes only those and only un-freezes a freeze this gate caused. */
+      freezeTeamId: string | null
+      freezeWasFrozenBefore: boolean
+      freezeHibernated: string[]
     }
     const tc: TeamCtx = {
       membershipMoved: null,
@@ -7110,6 +7209,9 @@ export async function ChangeTeam(
       titleBefore: agent.governanceTitle ?? null,
       titleChanged: false,
       teamFieldBefore: agent.team ?? '',
+      freezeTeamId: null,
+      freezeWasFrozenBefore: false,
+      freezeHibernated: [],
       restartNeeded: false,
     }
 
@@ -7219,6 +7321,80 @@ export async function ChangeTeam(
             await updateAgent(agentId, { team: c.teamFieldBefore })
           },
         },
+        // TRDD-0KMDJVON (R31 acceptance box 3/5): the removal above (G04c) can flip a COMPLETE
+        // team INCOMPLETE (e.g. the last non-COS holder of a required R12.1 title just left).
+        // Re-check AFTER PG01 so the team snapshot this reads reflects the finished roster move.
+        {
+          id: 'G04e',
+          what: `R31 team-completeness re-evaluated after removal from "${currentTeam.name}"`,
+          // ENFORCEMENT gate, not enrichment — see ChangeTitle's G23 comment: R31 completeness
+          // is a governance invariant, so a failure here MUST fail the whole ChangeTeam call and
+          // let the runner unwind the already-executed gates. Fail-fast: no fallbacks, no
+          // swallowed errors (project rule). Nothing mutates before `c.freezeTeamId` is set.
+          run: async (c: TeamCtx) => {
+            const { getTeam: getTeamG04e, freezeIncompleteTeam } = await import('@/lib/team-registry')
+            const team = getTeamG04e(currentTeam.id)
+            // Same "COS itself is missing" deferral as DeleteAgent's G04b — see that gate's
+            // comment for why freezing with no live COS would deadlock the team.
+            if (!team || !team.chiefOfStaffId) {
+              ops.push(`G04e: Team "${team?.name ?? currentTeam.id}" has no live COS — R31 freeze deferred (TRDD-0KMDJVON edge case)`)
+              return
+            }
+            c.freezeTeamId = currentTeam.id
+            c.freezeWasFrozenBefore = !!team.frozen
+            const { frozen, hibernated } = await freezeIncompleteTeam(currentTeam.id)
+            c.freezeHibernated = hibernated
+            ops.push(frozen
+              ? `G04e: Team "${currentTeam.name}" now incomplete after removal — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
+              : `G04e: Team "${currentTeam.name}" still complete after removal — no freeze`)
+          },
+          undo: async (c: TeamCtx) => {
+            if (!c.freezeTeamId) return
+            const problems: string[] = []
+            const { wakeAgent } = await import('@/services/agents-core-service')
+            let nowLive = new Set<string>()
+            try {
+              const { getRuntime } = await import('@/lib/agent-runtime')
+              nowLive = new Set((await getRuntime().listSessions()).map((s) => s.name))
+            } catch {
+              // Cannot enumerate sessions — attempt every wake and let alreadyRunning absorb the
+              // ones that did not need it.
+            }
+            for (const sleeperId of c.freezeHibernated) {
+              const sleeper = getAgent(sleeperId)
+              if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+              if (nowLive.has(sleeper.name)) continue
+              try {
+                const woke = await wakeAgent(sleeperId, { authContext })
+                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                  problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+                }
+              } catch (err) {
+                problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
+              }
+            }
+            if (!c.freezeWasFrozenBefore) {
+              try {
+                const { loadTeams: loadTeamsG04eUndo, saveTeams: saveTeamsG04eUndo } = await import('@/lib/team-registry')
+                const { withLock: withLockG04eUndo } = await import('@/lib/file-lock')
+                await withLockG04eUndo('teams', () => {
+                  const teams = loadTeamsG04eUndo()
+                  const idx = teams.findIndex(t => t.id === c.freezeTeamId)
+                  if (idx !== -1 && teams[idx].frozen) {
+                    teams[idx].frozen = false
+                    teams[idx].updatedAt = new Date().toISOString()
+                    saveTeamsG04eUndo(teams)
+                  }
+                })
+              } catch (err) {
+                problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+              }
+            }
+            c.freezeTeamId = null
+            c.freezeHibernated = []
+            if (problems.length) throw new Error(`G04e rollback incomplete: ${problems.join('; ')}`)
+          },
+        },
       ]
 
       const txn = await runGateSequence(removeGates, tc)
@@ -7301,6 +7477,81 @@ export async function ChangeTeam(
         },
         undo: async (c: TeamCtx) => {
           await updateAgent(agentId, { team: c.teamFieldBefore })
+        },
+      },
+      // TRDD-0KMDJVON (R31 acceptance box 3/5): re-check the TARGET team's completeness too — G06's
+      // nested ChangeTitle call already runs its own R31 re-check (this same gate, wired there), but
+      // that nested call is skipped (WARN, not thrown) when the title write fails, which would leave
+      // an untitled agent added to the roster with no completeness re-evaluation at all. Cheap and
+      // idempotent to check again here regardless of how G06 fared.
+      {
+        id: 'G07b',
+        what: `R31 team-completeness re-evaluated after joining "${targetTeam.name}"`,
+        // ENFORCEMENT gate, not enrichment — see ChangeTitle's G23 comment: R31 completeness
+        // is a governance invariant, so a failure here MUST fail the whole ChangeTeam call and
+        // let the runner unwind the already-executed gates. Fail-fast: no fallbacks, no
+        // swallowed errors (project rule). Nothing mutates before `c.freezeTeamId` is set.
+        run: async (c: TeamCtx) => {
+          const { getTeam: getTeamG07b, freezeIncompleteTeam } = await import('@/lib/team-registry')
+          const team = getTeamG07b(targetTeamId)
+          // Same "COS itself is missing" deferral as DeleteAgent's G04b.
+          if (!team || !team.chiefOfStaffId) {
+            ops.push(`G07b: Team "${team?.name ?? targetTeamId}" has no live COS — R31 freeze deferred (TRDD-0KMDJVON edge case)`)
+            return
+          }
+          c.freezeTeamId = targetTeamId
+          c.freezeWasFrozenBefore = !!team.frozen
+          const { frozen, hibernated } = await freezeIncompleteTeam(targetTeamId)
+          c.freezeHibernated = hibernated
+          ops.push(frozen
+            ? `G07b: Team "${targetTeam.name}" still incomplete after join — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
+            : `G07b: Team "${targetTeam.name}" complete after join — no freeze`)
+        },
+        undo: async (c: TeamCtx) => {
+          if (!c.freezeTeamId) return
+          const problems: string[] = []
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          let nowLive = new Set<string>()
+          try {
+            const { getRuntime } = await import('@/lib/agent-runtime')
+            nowLive = new Set((await getRuntime().listSessions()).map((s) => s.name))
+          } catch {
+            // Cannot enumerate sessions — attempt every wake and let alreadyRunning absorb the
+            // ones that did not need it.
+          }
+          for (const sleeperId of c.freezeHibernated) {
+            const sleeper = getAgent(sleeperId)
+            if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+            if (nowLive.has(sleeper.name)) continue
+            try {
+              const woke = await wakeAgent(sleeperId, { authContext })
+              if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+              }
+            } catch (err) {
+              problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          if (!c.freezeWasFrozenBefore) {
+            try {
+              const { loadTeams: loadTeamsG07bUndo, saveTeams: saveTeamsG07bUndo } = await import('@/lib/team-registry')
+              const { withLock: withLockG07bUndo } = await import('@/lib/file-lock')
+              await withLockG07bUndo('teams', () => {
+                const teams = loadTeamsG07bUndo()
+                const idx = teams.findIndex(t => t.id === c.freezeTeamId)
+                if (idx !== -1 && teams[idx].frozen) {
+                  teams[idx].frozen = false
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG07bUndo(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          c.freezeTeamId = null
+          c.freezeHibernated = []
+          if (problems.length) throw new Error(`G07b rollback incomplete: ${problems.join('; ')}`)
         },
       },
     ]
@@ -9203,6 +9454,11 @@ export async function DeleteAgent(
       uninstalledPlugins: Record<string, InstallRecord[]> | null
       /** The workdir G08c uninstalled from — captured so the undo cannot drift from the run. */
       uninstalledFrom: string | null
+      /** G04b (TRDD-0KMDJVON, R31): per-team completeness re-check after this agent left it —
+       *  which team, whether IT was already frozen before this gate ran (so undo never un-freezes
+       *  a freeze this gate did not cause), and exactly which agent ids it hibernated (so undo
+       *  wakes only those, never the whole team). */
+      freezeAffected: { teamId: string; wasFrozenBefore: boolean; hibernated: string[] }[] | null
     }
     const dc: DeleteCtx = {
       archivePath: null,
@@ -9218,6 +9474,7 @@ export async function DeleteAgent(
       registryBefore: null,
       uninstalledPlugins: null,
       uninstalledFrom: null,
+      freezeAffected: null,
     }
 
     // Detail lines go into `ops` from inside `run`, preserving today's exact strings. The runner's
@@ -9378,6 +9635,101 @@ export async function DeleteAgent(
           if (!c.teamsBefore) return   // run threw before snapshotting: nothing was written
           const { saveTeams } = await import('@/lib/team-registry')
           saveTeams(c.teamsBefore as Parameters<typeof saveTeams>[0])
+        },
+      },
+      {
+        // TRDD-0KMDJVON (R31 acceptance box 3/5): G04 just removed this agent from every team's
+        // roster (and possibly its COS/orchestrator slot). That can flip a COMPLETE team
+        // INCOMPLETE, and nothing before this pass ever re-checked. Read the affected team ids
+        // from G04's OWN pre-mutation snapshot (`c.teamsBefore`) rather than re-deriving "which
+        // teams changed" — the snapshot already answers it and this gate must run strictly after
+        // G04's write for `getTeam` below to see the post-removal roster.
+        id: 'G04b',
+        what: 'R31 team-completeness re-evaluated after removal from team(s)',
+        // ENFORCEMENT gate, not enrichment — see ChangeTitle's G23 comment: R31 completeness
+        // is a governance invariant, so a failure here MUST fail the whole delete and let the
+        // runner unwind the already-executed gates. Fail-fast: no fallbacks, no swallowed
+        // errors (project rule). `c.freezeAffected` only ever holds entries this loop itself
+        // pushed, so a mid-loop throw leaves undo with exactly the (possibly partial) real work.
+        run: async (c: DeleteCtx) => {
+          if (!c.teamsBefore) { ops.push('G04b: No team snapshot — nothing to re-evaluate'); return }
+          const { getTeam: getTeamG04b, freezeIncompleteTeam } = await import('@/lib/team-registry')
+          const before = c.teamsBefore as Array<{ id: string; agentIds: string[]; chiefOfStaffId?: string | null; orchestratorId?: string | null }>
+          const affectedIds = before
+            .filter(t => t.agentIds.includes(agentId) || t.chiefOfStaffId === agentId || t.orchestratorId === agentId)
+            .map(t => t.id)
+          const affected: NonNullable<DeleteCtx['freezeAffected']> = []
+          c.freezeAffected = affected
+          for (const teamId of affectedIds) {
+            const team = getTeamG04b(teamId)
+            // Deleting the team's OWN COS leaves chiefOfStaffId null. freezeIncompleteTeam hibernates
+            // `agentIds` MINUS `chiefOfStaffId` — with no COS left to spare, that would hibernate
+            // EVERY remaining member with nobody able to repair the roster: exactly the "COS itself
+            // is missing" edge case TRDD-0KMDJVON's Proposed change #6 reserves for its own,
+            // separate handling. Skip the freeze here rather than deadlock the team.
+            if (!team || !team.chiefOfStaffId) {
+              ops.push(`G04b: Team "${team?.name ?? teamId}" has no live COS — R31 freeze deferred (TRDD-0KMDJVON edge case)`)
+              continue
+            }
+            const wasFrozenBefore = !!team.frozen
+            const { frozen, hibernated } = await freezeIncompleteTeam(teamId)
+            affected.push({ teamId, wasFrozenBefore, hibernated })
+            ops.push(frozen
+              ? `G04b: Team "${team.name}" now incomplete after removal — frozen, ${hibernated.length} agent(s) hibernated, COS spared`
+              : `G04b: Team "${team.name}" still complete after removal — no freeze`)
+          }
+        },
+        // Wakes exactly what THIS gate hibernated (never the whole team) and restores `frozen`
+        // only where THIS gate flipped it false→true — a team already frozen before this pass
+        // stays frozen, because un-freezing it would be reverting a state this pipeline never
+        // caused. Same shape as G10's undo in ChangeTitle: independent per-team attempts, every
+        // failure named rather than the first one aborting the rest (R51.5).
+        undo: async (c: DeleteCtx) => {
+          if (!c.freezeAffected || !c.freezeAffected.length) return
+          const problems: string[] = []
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          let nowLive = new Set<string>()
+          try {
+            const { getRuntime } = await import('@/lib/agent-runtime')
+            nowLive = new Set((await getRuntime().listSessions()).map((s) => s.name))
+          } catch {
+            // Cannot enumerate sessions — attempt every wake and let alreadyRunning absorb the
+            // ones that did not need it.
+          }
+          const { loadTeams: loadTeamsG04bUndo, saveTeams: saveTeamsG04bUndo } = await import('@/lib/team-registry')
+          const { withLock: withLockG04bUndo } = await import('@/lib/file-lock')
+          for (const entry of c.freezeAffected) {
+            for (const sleeperId of entry.hibernated) {
+              const sleeper = getAgent(sleeperId)
+              if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+              if (nowLive.has(sleeper.name)) continue
+              try {
+                const woke = await wakeAgent(sleeperId, { authContext: options?.authContext })
+                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                  problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+                }
+              } catch (err) {
+                problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
+              }
+            }
+            if (!entry.wasFrozenBefore) {
+              try {
+                await withLockG04bUndo('teams', () => {
+                  const teams = loadTeamsG04bUndo()
+                  const idx = teams.findIndex(t => t.id === entry.teamId)
+                  if (idx !== -1 && teams[idx].frozen) {
+                    teams[idx].frozen = false
+                    teams[idx].updatedAt = new Date().toISOString()
+                    saveTeamsG04bUndo(teams)
+                  }
+                })
+              } catch (err) {
+                problems.push(`team.frozen clear on ${entry.teamId} (${err instanceof Error ? err.message : err})`)
+              }
+            }
+          }
+          c.freezeAffected = null
+          if (problems.length) throw new Error(`G04b rollback incomplete: ${problems.join('; ')}`)
         },
       },
       {

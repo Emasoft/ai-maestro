@@ -32,6 +32,8 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
     getTeam: vi.fn(),
     updateTeam: vi.fn(),
     deleteTeam: vi.fn(),
+    // TRDD-0KMDJVON: createNewTeam now calls this; a missing export on a vi.mock THROWS at the destructure
+    freezeIncompleteTeam: vi.fn(async () => ({ frozen: false, hibernated: [] })),
     TeamValidationException: _MockTeamValidationException,
   },
   mockGhProject: {
@@ -280,6 +282,7 @@ describe('createNewTeam — progress callback (TRDD-AGHPMRVI)', () => {
     'Creating team',
     'Creating chief-of-staff agent',
     'Installing chief-of-staff role-plugin',
+    'Enforcing R31 incomplete-team freeze', // TRDD-0KMDJVON row 34
     'Linking GitHub project',
   ])
 

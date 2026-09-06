@@ -347,6 +347,14 @@ export async function createNewTeam(
     matchedPortfolioTokenId = tokMatch.token?.token_id ?? null
   }
 
+  // R31 incomplete-team freeze (TRDD-0KMDJVON) — gate FRZ. `run` sets this once
+  // freezeIncompleteTeam() actually hibernates someone; the `catch` below is its
+  // `undo`: it wakes exactly the agent ids recorded here and clears the `frozen`
+  // flag, mirroring the cosWorkDir rollback pattern already used further down in
+  // this function. Declared outside the try so a failure anywhere AFTER the
+  // freeze (inside the try) can still see what needs undoing.
+  let freezeUndo: { teamId: string; hibernated: string[] } | null = null
+
   try {
     // Validate chiefOfStaffId if provided: must be an existing AUTONOMOUS agent (not in any team)
     let cosId: string | null = params.chiefOfStaffId || null
@@ -491,6 +499,29 @@ export async function createNewTeam(
       }
     }
 
+    // ── R31 incomplete-team freeze (gate FRZ, TRDD-0KMDJVON) ────────────────
+    // The roster is fully settled by this point (COS + any auto-titled
+    // members + orchestrator). A fresh team is incomplete by construction
+    // (createNewTeam creates only the COS — see the card's "Deadlock trap"),
+    // so freeze it NOW: R31 is enforced from birth instead of waiting for the
+    // next roster mutation to discover it. freezeIncompleteTeam() is already a
+    // documented no-op when the supplied roster happens to cover all 5 R12.1
+    // titles up front. Unlike the enrichment steps around it (COS/orchestrator
+    // titling, GitHub project linkage below), this is an ENFORCEMENT gate, not
+    // an enrichment — R31 is a governance invariant, and a team reported as
+    // "created" while its freeze silently failed is exactly the invalid state
+    // R51/fail-fast forbids (swallowing this into a console.warn would let the
+    // caller believe an unenforced team is compliant). So this call is bare
+    // inside the outer try: a throw here propagates to the outer catch, which
+    // runs the freeze-undo compensation below plus every other rollback, and
+    // the caller sees team creation fail rather than a silently-unfrozen team.
+    stage('Enforcing R31 incomplete-team freeze')
+    const { freezeIncompleteTeam } = await import('@/lib/team-registry')
+    const freezeResult = await freezeIncompleteTeam(team.id)
+    if (freezeResult.frozen) {
+      freezeUndo = { teamId: team.id, hibernated: freezeResult.hibernated }
+    }
+
     // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): optionally link
     // an existing GitHub Project at create time. We MIRROR the post-creation
     // pattern from `app/api/teams/create-with-project/route.ts` (lines 73-91)
@@ -550,6 +581,39 @@ export async function createNewTeam(
     const finalTeam = getTeam(team.id) || team
     return { data: { team: finalTeam, needsChiefOfStaff: false }, status: 201 }
   } catch (error) {
+    // R31 freeze compensation (TRDD-0KMDJVON gate FRZ `undo`): a downstream
+    // failure AFTER the freeze succeeded must not leave hibernated agents
+    // stranded under a create() that overall reports failure. Reverse
+    // exactly what `run` (freezeIncompleteTeam, above) recorded — wake every
+    // hibernated agent id and clear the `frozen` flag it set — never more,
+    // never less. Best-effort: an undo failure is logged, never thrown, so
+    // the ORIGINAL error (below) is always what the caller sees.
+    if (freezeUndo) {
+      try {
+        const { withLock } = await import('@/lib/file-lock')
+        const { loadTeams: loadTeamsForUnfreeze, saveTeams: saveTeamsForUnfreeze } = await import('@/lib/team-registry')
+        await withLock('teams', () => {
+          const teams = loadTeamsForUnfreeze()
+          const index = teams.findIndex(t => t.id === freezeUndo!.teamId)
+          if (index === -1) return
+          if (teams[index].frozen) {
+            teams[index].frozen = false
+            teams[index].updatedAt = new Date().toISOString()
+            saveTeamsForUnfreeze(teams)
+          }
+        })
+      } catch (undoErr) {
+        console.warn('[teams] Failed to clear frozen flag during freeze-undo:', undoErr instanceof Error ? undoErr.message : undoErr)
+      }
+      for (const agentId of freezeUndo.hibernated) {
+        try {
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          await wakeAgent(agentId, { authContext: { isSystemOwner: true }, continueConversation: false })
+        } catch (wakeErr) {
+          console.warn(`[teams] Failed to wake agent ${agentId} during freeze-undo:`, wakeErr instanceof Error ? wakeErr.message : wakeErr)
+        }
+      }
+    }
     // TeamValidationException carries a specific HTTP status code from governance rules
     if (error instanceof TeamValidationException) {
       return { error: error.message, status: error.code }

@@ -440,8 +440,10 @@ type HibernationDeps = Awaited<ReturnType<typeof resolveHibernationDeps>>
  * from blockAllTeams (TRDD-0KMDJVON) so freezeIncompleteTeam's R31 freeze can reuse the
  * exact same safe-kill logic without duplicating it or extending blockAllTeams itself —
  * the two freezes MUST stay separate functions (see freezeIncompleteTeam's own comment
- * for the deadlock this separation exists to avoid). Returns true iff the session was
- * found and killed (or already offline) and the agent id should be recorded as hibernated.
+ * for the deadlock this separation exists to avoid). Returns true only when a live
+ * session was killed; an already-offline session, an unknown agent, or an unsafe
+ * name all return false — so callers recording the result record only real
+ * offline->hibernated transitions, never a session that was already gone.
  */
 async function hibernateTeamAgentSession(agentId: string, deps: HibernationDeps, logTag: string): Promise<boolean> {
   try {
@@ -673,4 +675,42 @@ export async function freezeIncompleteTeam(teamId: string): Promise<{ frozen: bo
 
   console.log(`[freezeIncompleteTeam] Froze team ${teamId}, hibernated ${hibernated.length} agent(s), spared COS`)
   return { frozen: true, hibernated }
+}
+
+/**
+ * Unfreeze a team once its roster has been repaired (R31's "Proposed change #4"
+ * in TRDD-0KMDJVON — the unfreeze-on-repair half deferred by `freezeIncompleteTeam`).
+ * A no-op unless the team exists, is currently `frozen`, AND `isTeamComplete()` now
+ * returns true — so a partial repair (e.g. adding back the MEMBER but the ARCHITECT
+ * is still missing) leaves the freeze in place.
+ *
+ * DELIBERATELY wakes NOTHING — mirrors `unblockAllTeams()` above: clearing the
+ * frozen flag only lifts the block on future wake attempts, it does not itself
+ * relaunch any hibernated agent's tmux session. Agents stay hibernated until
+ * woken through the normal wake path, which becomes reachable again once
+ * `frozen` is false (the wake-guard change that consumes this flag is a
+ * follow-up pass, per the same TRDD's deferred call-site wiring).
+ */
+export async function unfreezeTeamIfComplete(teamId: string): Promise<{ unfrozen: boolean }> {
+  const team = getTeam(teamId)
+  if (!team || !team.frozen) return { unfrozen: false }
+  if (!(await isTeamComplete(team))) return { unfrozen: false }
+
+  let unfrozen = false
+  await withLock('teams', () => {
+    const teams = loadTeams()
+    const index = teams.findIndex(t => t.id === teamId)
+    if (index === -1) return
+    if (teams[index].frozen) {
+      teams[index].frozen = false
+      teams[index].updatedAt = new Date().toISOString()
+      saveTeams(teams)
+      unfrozen = true
+    }
+  })
+
+  if (unfrozen) {
+    console.log(`[unfreezeTeamIfComplete] Unfroze team ${teamId} — roster complete; agents remain hibernated until manually woken`)
+  }
+  return { unfrozen }
 }

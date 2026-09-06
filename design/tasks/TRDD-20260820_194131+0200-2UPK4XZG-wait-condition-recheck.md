@@ -3,7 +3,7 @@ trdd-id: 2UPK4XZG
 title: A card's wait condition is never re-evaluated after the thing it waits on completes
 column: planned
 created: 2026-08-20T19:41:31+0200
-updated: 2026-08-21T22:00:37+0200
+updated: 2026-09-06T02:55:12+0200
 current-owner: ai-maestro-hub-session
 created-by: architect
 assignee: ai-maestro-hub-session
@@ -81,8 +81,8 @@ a human who thinks to ask.
 ### Proposal
 
 Add an optional frontmatter field carrying a **machine-checkable** unblock condition, and re-run it on
-a cadence. Today **zero** cards carry any such field (verified: no `wait-test:`/`unblock-when:` in the
-corpus), so this is purely additive.
+a cadence. At authoring (2026-08-20) zero cards carried `unblock-when:`/`wait-test:`; re-measured 2026-09-06 via `grep -rl "^unblock-when:" design/`: 1 file carries `unblock-when:` as a real
+frontmatter field (0 carry `wait-test:`), so this remains almost entirely additive.
 
 ```yaml
 unblock-when: gh-issue:Emasoft/ai-maestro-janitor#103:closed
@@ -116,12 +116,12 @@ run on the normal heartbeat rather than a special schedule.
 
 ### Acceptance
 
-- [ ] `unblock-when:` is documented in the frontmatter schema with the closed probe vocabulary.
-- [ ] A parser that **rejects** any value not matching a known probe kind (fail-closed on unknown).
+- [x] `unblock-when:` is documented in the frontmatter schema with the closed probe vocabulary.
+- [x] A parser that **rejects** any value not matching a known probe kind (fail-closed on unknown).
 - [ ] Probes return the tri-state; INCONCLUSIVE is distinguishable from WAIT in the output.
 - [ ] A detector runs every card carrying the field and emits a finding on PASS, including days parked.
 - [ ] A test proves a card is **never** column-moved by the detector.
-- [ ] A test proves a malformed/hostile `unblock-when:` value executes nothing.
+- [x] A test proves a malformed/hostile `unblock-when:` value executes nothing.
 - [ ] The three cards above are annotated with their real conditions as the first real users
       (`5CIL7A07` is already dispatched — use `U9UNWXMV`, `1GGQ4HWY`, `OZZB3DJA`).
 
@@ -142,3 +142,4 @@ and it answers it by re-running a check instead of trusting a sentence.
   column), and opt-in (no mass backfill authorized) — approved as written. The open cross-repo
   question (does this belong upstream in the IND base TRDD format too) is left to whoever
   implements it, per the card's own framing.
+- 2026-09-06T02:55:12+0200 — verified against ai-maestro-janitor 3.4.14 scripts/detectors/trdd-drift.py: boxes 1,2,6 hold (rules/trdd-design-tasks.md:124-129 documents the closed probe vocabulary; scripts/detectors/trdd-drift.py:85-90,107,146,152,177,190 fail-closed to malformed on any unmatched predicate shape; tests/test_trdd_drift_unblock_when.py:132,138,256,392 prove a malformed/hostile value never unblocks). Boxes 3,4,5,7 unproven — the shipped design deliberately AUTO-RESTORES a satisfied blocked card's column (scripts/detectors/trdd-drift.py:263-360, proved by tests/test_trdd_drift_unblock_when.py:335), contradicting the card's own report-never-move/never-column-moved constraint, uses a boolean+malformed-list (not a 3-state PASS/WAIT/INCONCLUSIVE) collapsing I/O errors into WAIT (scripts/detectors/trdd-drift.py:197-227), never reports days-parked, and none of U9UNWXMV/1GGQ4HWY/OZZB3DJA carry unblock-when: in this corpus. Corpus count: grep -rl "^unblock-when:" design/ = 1 real frontmatter use (VLBVO0ZP, archived/superseded); 0 carry wait-test:. Column unchanged.

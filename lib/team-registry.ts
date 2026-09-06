@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Team, TeamsFile } from '@/types/team'
 import type { TeamType } from '@/types/governance'
+import type { AgentRole } from '@/types/agent'
 import type { JsonPatch } from '@/types/json-patch'
 import { withLock } from '@/lib/file-lock'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
@@ -416,6 +417,66 @@ export async function deleteTeam(id: string): Promise<boolean> {
 }
 
 // ═══════════════════════════════════════════════════════════
+// Shared hibernation helper (used by blockAllTeams AND freezeIncompleteTeam)
+// ═══════════════════════════════════════════════════════════
+
+/** Resolved deps for killing a tmux session — hoisted once per caller so a loop
+ * of N agents pays the dynamic-import cost once, not N times. Type inferred (not
+ * hand-declared) to avoid re-stating `promisify(execFile)`'s overloaded signature. */
+async function resolveHibernationDeps() {
+  // The imports stay dynamic (not top-of-file) to avoid a static import cycle
+  // — team-registry must not statically depend on agent-registry.
+  const { getAgent } = await import('@/lib/agent-registry')
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const execFileAsync = promisify(execFile)
+  return { getAgent, execFileAsync }
+}
+
+type HibernationDeps = Awaited<ReturnType<typeof resolveHibernationDeps>>
+
+/**
+ * Kill one agent's tmux session (a "hibernate" for the caller's purposes). Extracted
+ * from blockAllTeams (TRDD-0KMDJVON) so freezeIncompleteTeam's R31 freeze can reuse the
+ * exact same safe-kill logic without duplicating it or extending blockAllTeams itself —
+ * the two freezes MUST stay separate functions (see freezeIncompleteTeam's own comment
+ * for the deadlock this separation exists to avoid). Returns true iff the session was
+ * found and killed (or already offline) and the agent id should be recorded as hibernated.
+ */
+async function hibernateTeamAgentSession(agentId: string, deps: HibernationDeps, logTag: string): Promise<boolean> {
+  try {
+    const agent = deps.getAgent(agentId)
+    if (!agent) return false
+    const sessionName = agent.name
+    if (!sessionName) return false
+    // LIB2-CRIT-01 fix (2026-05-06): the previous version interpolated
+    // `sessionName` directly into a shell command string via `execSync`.
+    // Agent.name is normally regex-validated at creation time, but a
+    // corrupted registry / future code path that bypasses validation
+    // could store a name with shell metachars and trigger arbitrary
+    // command execution. Defence-in-depth: refuse names that contain
+    // anything outside the tmux session-name regex, then call
+    // `execFile` with explicit argv (no shell at all) so the value
+    // lands as a literal arg even if validation drifts.
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+      console.warn(`[${logTag}] Refusing to kill session with unsafe name: ${sessionName}`)
+      return false
+    }
+    try {
+      await deps.execFileAsync('tmux', ['kill-session', '-t', sessionName], { timeout: 5000 })
+      console.log(`[${logTag}] Hibernated team agent "${sessionName}" (${agentId})`)
+      return true
+    } catch {
+      // Session may not exist (already offline) — not an error
+      return false
+    }
+  } catch {
+    // Agent not found in registry — skip
+    return false
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // Manager-gated team blocking
 // ═══════════════════════════════════════════════════════════
 
@@ -456,47 +517,12 @@ export async function blockAllTeams(): Promise<string[]> {
     if (team.orchestratorId) teamAgentIds.add(team.orchestratorId)
   }
 
-  // Hibernate each team agent (kill tmux session).
-  // PERF: resolve the lazy imports ONCE before the loop, not per-iteration.
-  // The imports stay dynamic (not top-of-file) to avoid a static import cycle
-  // — team-registry must not statically depend on agent-registry — but
-  // re-importing them on every agent was pure overhead (the module cache made
-  // each call cheap, yet it still allocated a fresh promise per iteration and
-  // re-derived execFileAsync each time). Hoisting preserves the cycle-avoidance
-  // intent while doing the resolution exactly once.
-  const { getAgent } = await import('@/lib/agent-registry')
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
-  const execFileAsync = promisify(execFile)
+  // Hibernate each team agent (kill tmux session) via the shared helper below.
+  const deps = await resolveHibernationDeps()
   const hibernated: string[] = []
   for (const agentId of teamAgentIds) {
-    try {
-      const agent = getAgent(agentId)
-      if (!agent) continue
-      const sessionName = agent.name
-      if (!sessionName) continue
-      // LIB2-CRIT-01 fix (2026-05-06): the previous version interpolated
-      // `sessionName` directly into a shell command string via `execSync`.
-      // Agent.name is normally regex-validated at creation time, but a
-      // corrupted registry / future code path that bypasses validation
-      // could store a name with shell metachars and trigger arbitrary
-      // command execution. Defence-in-depth: refuse names that contain
-      // anything outside the tmux session-name regex, then call
-      // `execFile` with explicit argv (no shell at all) so the value
-      // lands as a literal arg even if validation drifts.
-      if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
-        console.warn(`[blockAllTeams] Refusing to kill session with unsafe name: ${sessionName}`)
-        continue
-      }
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', sessionName], { timeout: 5000 })
-        hibernated.push(agentId)
-        console.log(`[blockAllTeams] Hibernated team agent "${sessionName}" (${agentId})`)
-      } catch {
-        // Session may not exist (already offline) — not an error
-      }
-    } catch {
-      // Agent not found in registry — skip
+    if (await hibernateTeamAgentSession(agentId, deps, 'blockAllTeams')) {
+      hibernated.push(agentId)
     }
   }
 
@@ -562,4 +588,89 @@ export function getTeamsForAgent(agentId: string): Team[] {
     t.chiefOfStaffId === agentId ||
     t.orchestratorId === agentId
   )
+}
+
+// ═══════════════════════════════════════════════════════════
+// R31 incomplete-team freeze (TRDD-0KMDJVON) — spares the CHIEF-OF-STAFF
+// ═══════════════════════════════════════════════════════════
+
+/** The 5 R12.1 base titles every team must have one of, INCLUDING the COS. */
+const R12_1_REQUIRED_TITLES: readonly AgentRole[] = [
+  'chief-of-staff',
+  'architect',
+  'orchestrator',
+  'integrator',
+  'member',
+]
+
+/**
+ * True iff all 5 R12.1 titles (chief-of-staff, architect, orchestrator, integrator,
+ * member) are held by a LIVE (non-tombstoned) agent among the team's roster.
+ * `getAgent()` already excludes soft-deleted agents by default (no `includeDeleted`
+ * arg passed here), so a tombstoned agent's title never counts toward completeness.
+ */
+export async function isTeamComplete(team: Team): Promise<boolean> {
+  const { getAgent } = await import('@/lib/agent-registry')
+  const ids = new Set<string>(team.agentIds)
+  if (team.chiefOfStaffId) ids.add(team.chiefOfStaffId)
+
+  const titlesPresent = new Set<AgentRole>()
+  for (const id of ids) {
+    const agent = getAgent(id) // excludes deletedAt/tombstoned agents by default
+    if (!agent || !agent.governanceTitle) continue
+    titlesPresent.add(agent.governanceTitle)
+  }
+  return R12_1_REQUIRED_TITLES.every(title => titlesPresent.has(title))
+}
+
+/**
+ * Freeze an incomplete team: hibernate every team agent EXCEPT the
+ * CHIEF-OF-STAFF (R31.1). A no-op when the team is already complete or missing.
+ *
+ * DELIBERATELY a NEW function, NOT a reuse/extension of `blockAllTeams()` — see
+ * TRDD-0KMDJVON's "DEADLOCK TRAP": `blockAllTeams()` hibernates the COS too
+ * (correct for R9.8's no-MANAGER cascade, where nothing in-band can repair the
+ * host), but R31's freeze exists precisely so the COS can repair the ROSTER
+ * (R12.2) — hibernating it here would deadlock every incomplete team forever
+ * (incomplete → freeze → COS hibernated → nobody creates the missing agents →
+ * incomplete forever). The two freezes share a shape and MUST stay two functions.
+ *
+ * NOT YET WIRED into createNewTeam / ChangeTeam / DeleteAgent / ChangeTitle call
+ * sites (TRDD-0KMDJVON acceptance items 3/5) — those are transaction-gated
+ * pipelines needing their own R50/R51 compensations and are deferred to a
+ * follow-up pass. Also NOT implemented here: the COS notification (acceptance
+ * item 6) and the unfreeze-on-repair path (Proposed change #4) — this pass
+ * covers only the freeze primitive + its completeness predicate.
+ */
+export async function freezeIncompleteTeam(teamId: string): Promise<{ frozen: boolean; hibernated: string[] }> {
+  const team = getTeam(teamId)
+  if (!team) return { frozen: false, hibernated: [] }
+  if (await isTeamComplete(team)) return { frozen: false, hibernated: [] }
+
+  // Persist the freeze flag (distinct from `blocked` — see types/team.ts).
+  await withLock('teams', () => {
+    const teams = loadTeams()
+    const index = teams.findIndex(t => t.id === teamId)
+    if (index === -1) return
+    if (!teams[index].frozen) {
+      teams[index].frozen = true
+      teams[index].updatedAt = new Date().toISOString()
+      saveTeams(teams)
+    }
+  })
+
+  // Hibernate every team agent EXCEPT the COS (never the COS — see the deadlock
+  // trap above). Runs OUTSIDE the lock, same rationale as blockAllTeams: it only
+  // kills tmux sessions, not the teams file.
+  const deps = await resolveHibernationDeps()
+  const hibernated: string[] = []
+  for (const agentId of team.agentIds) {
+    if (agentId === team.chiefOfStaffId) continue // NEVER hibernate the COS
+    if (await hibernateTeamAgentSession(agentId, deps, 'freezeIncompleteTeam')) {
+      hibernated.push(agentId)
+    }
+  }
+
+  console.log(`[freezeIncompleteTeam] Froze team ${teamId}, hibernated ${hibernated.length} agent(s), spared COS`)
+  return { frozen: true, hibernated }
 }

@@ -90,6 +90,11 @@ export interface Team {
    */
   agentHostMap?: Record<string, string>
   blocked?: boolean       // true when no MANAGER exists — team ops frozen, agents hibernated
+  // R31 freeze (TRDD-0KMDJVON) — DISTINCT from `blocked` above (R9.8's no-MANAGER cascade,
+  // which hibernates the COS too). `frozen` fires when the team is missing one of the 5
+  // R12.1 titles; only the CHIEF-OF-STAFF stays active (it is the sole agent that can repair
+  // the roster per R12.2/R31.1), so `frozen` must NEVER hibernate `chiefOfStaffId`.
+  frozen?: boolean
   createdAt: string       // ISO
   updatedAt: string       // ISO
   lastMeetingAt?: string  // ISO - last time a meeting was started with this team

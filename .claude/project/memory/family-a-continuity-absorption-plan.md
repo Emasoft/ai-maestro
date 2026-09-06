@@ -65,6 +65,9 @@ absorption specifically. That one owns the SEPARATE question of the janitor's GL
 Read it before assuming any chore is absorbable — it also records that `SERVER_ABSORBED_TASKS` is
 inert while a server is up, because the daemon exits wholesale rather than yielding chore by chore.
 
+The absorbability TEST and the per-chore handover mechanism (including the `SERVER_ABSORBED_TASKS`
+wholesale-exit fact above) live in detail on [[janitor-chore-absorbability-test-and-handover]].
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-FAMA-NPT, status:valid, keywords:"family_a_npt_map decompose_KCRMSNL7 which_npt_unblocked oauth_manager_blocked_on_design", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT author the 6 NPT ids into KCRMSNL7's `npt:` list before the NPT TRDD FILES exist,

@@ -3,7 +3,7 @@ trdd-id: LZR1M3TQ
 title: ChangeTeam freeze context is a scalar — G07b overwrites G04e
 column: backburner
 created: 2026-09-08T21:24:19+0200
-updated: 2026-09-08T21:36:46+0200
+updated: 2026-09-08T21:37:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -36,7 +36,7 @@ Make the freeze record a list, as DeleteAgent's G04b already does (`c.freezeAffe
 ## Verification
 
 - Read both undo bodies first and record what they read (turn the INFERRED line above into a measurement).
-- `tests/unit/roster-mutation-refreeze.test.ts`: a move from complete team A to incomplete team B with a downstream gate failure injected after G07b → - `tests/unit/roster-mutation-refreeze.test.ts`: a move from team A (complete before, incomplete after the removal) to incomplete team B with a downstream gate failure injected after G07b → each team returns to its PRE-PIPELINE `frozen` value (A false; B whatever it was before, so a B frozen beforehand stays frozen) and every member THIS pipeline hibernated, in both teams, is woken. Neuter: restore the scalar fields → the test reds on the `frozen` flag of team A still true. and every hibernated member of BOTH teams is woken. Neuter: restore the scalar fields → the test reds on team A's `frozen` still true.
+- `tests/unit/roster-mutation-refreeze.test.ts`: a move from team A (complete before, incomplete after the removal) to incomplete team B with a downstream gate failure injected after G07b → each team returns to its PRE-PIPELINE `frozen` value (A false; B whatever it was before, so a B frozen beforehand stays frozen) and every member THIS pipeline hibernated, in both teams, is woken. Neuter: restore the scalar fields → the test reds on the `frozen` flag of team A still true.
 
 ## Estimated risk
 

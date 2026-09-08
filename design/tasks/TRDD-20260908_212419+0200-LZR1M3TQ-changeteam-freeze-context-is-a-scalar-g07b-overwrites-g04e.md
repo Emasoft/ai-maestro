@@ -3,7 +3,7 @@ trdd-id: LZR1M3TQ
 title: ChangeTeam freeze context is a scalar — G07b overwrites G04e
 column: backburner
 created: 2026-09-08T21:24:19+0200
-updated: 2026-09-08T21:24:19+0200
+updated: 2026-09-08T21:36:46+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -25,7 +25,7 @@ ChangeTeam carries two R31 freeze gates that write the SAME context fields. Meas
 - G04e (leave, `:7387-7397`): `c.freezeTeamId = currentTeam.id; c.freezeWasFrozenBefore = !!team.frozen; … c.freezeHibernated = hibernated`.
 - G07b (join, `:7548-7558`): `c.freezeTeamId = targetTeamId; c.freezeWasFrozenBefore = !!team.frozen; … c.freezeHibernated = hibernated`.
 
-A member moving from a COMPLETE team A to an INCOMPLETE team B freezes A at G04e and freezes B at G07b; after G07b the context names only B. Anything that reads the context after both gates — the compensating undo, or a post-commit consumer such as the COS notice proposed for TRDD-0KMDJVON box 6 — sees one team where two were frozen.
+A member holding a required title moves from team A to an INCOMPLETE team B while no remaining member of A covers that title, so A BECOMES incomplete on the removal: G04e freezes A and G07b freezes B; after G07b the context names only B. Anything that reads the context after both gates — the compensating undo, or a post-commit consumer such as the COS notice proposed for TRDD-0KMDJVON box 6 — sees one team where two were frozen.
 
 INFERRED, not yet read: that the G04e/G07b `undo` bodies read `c.freezeTeamId` / `c.freezeHibernated` (only the `undo: async (c: TeamCtx) => {` opener at `:7407` was read). If they do, a failure after G07b clears `frozen` and wakes the hibernated members of B only, leaving A frozen with its members hibernated and no record that this pipeline did it.
 
@@ -36,7 +36,7 @@ Make the freeze record a list, as DeleteAgent's G04b already does (`c.freezeAffe
 ## Verification
 
 - Read both undo bodies first and record what they read (turn the INFERRED line above into a measurement).
-- `tests/unit/roster-mutation-refreeze.test.ts`: a move from complete team A to incomplete team B with a downstream gate failure injected after G07b → both teams end `frozen: false` and every hibernated member of BOTH teams is woken. Neuter: restore the scalar fields → the test reds on team A's `frozen` still true.
+- `tests/unit/roster-mutation-refreeze.test.ts`: a move from complete team A to incomplete team B with a downstream gate failure injected after G07b → - `tests/unit/roster-mutation-refreeze.test.ts`: a move from team A (complete before, incomplete after the removal) to incomplete team B with a downstream gate failure injected after G07b → each team returns to its PRE-PIPELINE `frozen` value (A false; B whatever it was before, so a B frozen beforehand stays frozen) and every member THIS pipeline hibernated, in both teams, is woken. Neuter: restore the scalar fields → the test reds on the `frozen` flag of team A still true. and every hibernated member of BOTH teams is woken. Neuter: restore the scalar fields → the test reds on team A's `frozen` still true.
 
 ## Estimated risk
 
@@ -48,7 +48,7 @@ LOW. One ctx type change and two gates; the DeleteAgent shape is the template.
 - [ ] ChangeTeam's freeze record is a list; G04e and G07b each push; each undo unwinds its own entries.
 - [ ] The A-to-B move-with-failure test passes and its recorded neuter reds it.
 
-## Approval log
+
 
 ## Approval log
 

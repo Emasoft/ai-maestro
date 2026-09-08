@@ -91,11 +91,19 @@ const SWITCH_AT_7D = 97
 /** Only rotate ONTO an alternate below this % on BOTH windows (never jump onto a maxed one). */
 const SAFE_5H = 90
 const SAFE_7D = 90
-/** Same two thresholds, applied to a MODEL-SCOPED weekly window (Fable 5 has one of its own).
- * A scoped window IS a weekly window, so it inherits the 7d numbers rather than getting invented
- * ones — named separately only so the two can diverge the day tuning wants them to. */
+/** Same rotate-away threshold, applied to a MODEL-SCOPED weekly window (Fable 5 has one of its
+ * own). A scoped window IS a weekly window, so it inherits the 7d number rather than getting an
+ * invented one — named separately only so the two can diverge the day tuning wants them to. */
 const SWITCH_AT_SCOPED = SWITCH_AT_7D
-const SAFE_SCOPED = SAFE_7D
+/** The alternate-safety bar for the scoped window sits 2 points UNDER its own 97 trip (own
+ * literal, deliberately NOT SAFE_7D): a rotation must never land on an alternate that then trips
+ * away on the very next tick. Without this margin, an alternate at exactly SAFE_7D (90) reads as
+ * "safe" while a real account at 90 is nowhere near its 97 rotate-away point — so the account-
+ * window bar and the scoped bar drifted 7 points apart, and every alternate with scoped 90-96%
+ * (a fleet with Fable headroom, i.e. exactly what should be rotated onto BEFORE a model switch,
+ * per the USER ruling that a model switch resets the fleet-wide cache) was vetoed for no reason
+ * tied to its own exhaustion. 95 keeps a 2-point hysteresis margin instead. */
+const SAFE_SCOPED = 95
 /** Anti-thrash: minimum seconds between two auto-switches. */
 const MIN_DWELL_S = 60
 /** A token within this many hours of its LOCAL expiresAt (or past it) counts as dead/dying —
@@ -259,10 +267,11 @@ export function deriveDecision(f: {
     const accountWindowsOk =
       typeof w?.fiveHourPct === 'number' && typeof w?.sevenDayPct === 'number' &&
       w.fiveHourPct < SWITCH_AT_5H && w.sevenDayPct < SWITCH_AT_7D
-    // `SCOPED_SWITCH_AT_PCT` (90), not `SWITCH_AT_SCOPED` (97): the scoped-only verdict now
-    // trips at the shared policy gate (TRDD-IZ6KU37Y), so an all-maxed declared over a 92% Fable
-    // window must still NAME the model remedy — testing at 97 here would print the generic
-    // "exhausted" wording for exactly the walls the new gate introduces.
+    // `SCOPED_SWITCH_AT_PCT` (the shared janitor-parity constant), not the local `SWITCH_AT_SCOPED`
+    // — even now that the two are numerically equal (TRDD-IZ6KU37Y equal-trip fix), reading the
+    // shared one keeps this wording coupled to the same gate `isScopedOnlyWall` and
+    // `planModelFallback` trip at, so a future retune of one cannot silently desync from this
+    // message.
     const modelSpent = typeof w?.scopedPct === 'number' && w.scopedPct >= SCOPED_SWITCH_AT_PCT
     if (accountWindowsOk && modelSpent) {
       const model = w?.scopedModel ?? 'a model'
@@ -552,7 +561,7 @@ export function isAccountWindowSafe(bfh: number, bsd: number): boolean {
 // One policy, two implementations (the janitor's `token_burn.py` daemon-side, this file
 // server-side), so the fleet behaves identically whichever process is playing the rotator. The
 // three pieces below mirror their `models_in_use` / `scoped_rotation_veto` /
-// `model_fallback_verdict` — same evidence rules, same fail-open asymmetry, same 90/90 gates
+// `model_fallback_verdict` — same evidence rules, same fail-open asymmetry, same 97/90 gates
 // (`SCOPED_SWITCH_AT_PCT` / `ACCOUNT_HEADROOM_PCT`, env-overridable via the SHARED names
 // `ROTATOR_SCOPED_SWITCH_AT` / `ROTATOR_SCOPED_ACCOUNT_HEADROOM`).
 
@@ -1119,12 +1128,13 @@ export async function autoRotate(
     // reasons from, and because it becomes load-bearing the moment anyone reorders the two
     // thresholds. Do not read the green suite as cover for deleting it.
     // THE SCOPED-ONLY TRIGGER (TRDD-IZ6KU37Y, mirroring the janitor's rotator). A model window
-    // at/over the shared 90% gate while the account has proven headroom is a reason to ACT even
-    // though `isNearLimit`'s 97% disjunct has not tripped — and `scopedWall` is deliberately
-    // computed independently of `usageNear`, because a 98% scoped window with healthy accounts
-    // trips BOTH, and the scoped-only rules must apply there too (rotating away from a healthy
-    // account onto a same-model-spent one is the #222 incident regardless of which threshold
-    // noticed the wall first).
+    // at/over the shared gate (`SCOPED_SWITCH_AT_PCT`, equal-trip with `isNearLimit`'s own scoped
+    // disjunct as of the 2026-09-06 fix) while the account has proven headroom trips BOTH
+    // `usageNear` and `scopedWall` together — `scopedWall` is still computed independently
+    // because it carries the extra fact `usageNear` does not: the account windows are healthy, so
+    // the wall is MODEL-ONLY. That is what routes to the scoped-only rules below (rotating away
+    // from a healthy account onto a same-model-spent one is the #222 incident) rather than the
+    // generic near-limit path.
     scopedWall = isScopedOnlyWall(fh, sd, sc)
     expiryOnly = liveExpired && !usageNear && !scopedWall
     near = usageNear || scopedWall || liveExpired

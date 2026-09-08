@@ -160,6 +160,15 @@ describe('tick — pure decision helpers', () => {
     expect(isSafeAlternate(10, 10, null)).toBe(true)
   })
 
+  it('isSafeAlternate: SAFE_SCOPED=95 hysteresis — prefer a rotate with Fable headroom over none', () => {
+    // A 2-point margin under the 97 rotate-away trip: an alternate must not be accepted only to
+    // trip away on the very next tick. 94 has real headroom and is accepted; 95 and 96 are close
+    // enough to the trip point to be rejected.
+    expect(isSafeAlternate(10, 10, 94)).toBe(true)
+    expect(isSafeAlternate(10, 10, 95)).toBe(false)
+    expect(isSafeAlternate(10, 10, 96)).toBe(false)
+  })
+
   it('selectDrainFirst: picks the highest max-of-windows (drain the fullest first); null when empty', () => {
     const a: Candidate = ['a', blob('a', 0), 20, 30]
     const b: Candidate = ['b', blob('b', 0), 80, 10]
@@ -284,17 +293,33 @@ describe('tick — autoRotate: model-scoped fallback (all-maxed regression)', ()
  *  stays put (no scoped-spent push, no degraded rotation) and the all-maxed verdict hands the
  *  wall to the model-fallback lane. */
 describe('tick — autoRotate: scoped-only wall (janitor#222 mirror)', () => {
-  it('scoped wall at 92% (below the old 97 trigger) + a scoped-clear alternate → rotates onto it', async () => {
+  it('scoped wall at 97% (the equal-trip gate, TRDD-IZ6KU37Y 2026-09-06) + a scoped-clear alternate → rotates onto it', async () => {
     seedLive('live@x', blob('LIVE', H8()))
     addSlot('clear@x', blob('CLEAR', H8()))
-    // Accounts healthy (40/50 ≤ 90 headroom), Fable at 92 ≥ the shared 90 gate. `isNearLimit`'s
-    // 97% disjunct does NOT trip — the rotation is triggered by the scoped-only verdict alone,
-    // which is exactly the janitor-parity behaviour this card adds.
+    // Accounts healthy (40/50 ≤ 90 headroom), Fable at 97 ≥ the shared gate. The scoped-only
+    // verdict fires at exactly the same number `isNearLimit`'s scoped disjunct would — the
+    // equal-trip fix removed the old 90-vs-97 gap, but the rotation is still driven by
+    // `scopedWall`, which is what routes this as scoped-only (not a generic near-limit rotate).
     const deps: TickDeps = {
-      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, CLEAR: { fh: 20, sd: 20, scoped: 10 } }),
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 97 }, CLEAR: { fh: 20, sd: 20, scoped: 10 } }),
     }
     expect(await autoRotate(deps)).toBe(true)
     expect(loadState().live_email).toBe('clear@x')
+  })
+
+  it('scoped at 92% (below the 97 gate) → NEITHER the wall nor a rotation trips (equal-trip invariant)', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('clear@x', blob('CLEAR', H8()))
+    // Same fixture as above, scoped dropped from 97 to 92: at 92 the live account is not near
+    // any limit at all (account windows healthy, scoped below the now-97 gate), so autoRotate
+    // must decline entirely — no scoped-only push, no generic rotate. This is the other half of
+    // the TRDD-IZ6KU37Y equal-trip fix: at 97 both `isScopedOnlyWall` and `planModelFallback`
+    // trip; at 92 neither does.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, CLEAR: { fh: 20, sd: 20, scoped: 10 } }),
+    }
+    expect(await autoRotate(deps)).toBe(false)
+    expect(loadState().live_email).toBe('live@x')
   })
 
   it('scoped wall + only same-model-spent alternates → NO rotation, verdict all-maxed', async () => {
@@ -302,9 +327,9 @@ describe('tick — autoRotate: scoped-only wall (janitor#222 mirror)', () => {
     addSlot('spent@x', blob('SPENT', H8()))
     // SPENT is account-healthy (10/10) but Fable-spent (95): before this card the scopedOnly
     // fallback would have rotated onto it — burning the dwell window and a healthy account for a
-    // model that stays walled either way.
+    // model that stays walled either way. LIVE at 97 hits the (now equal-trip) scoped gate.
     const deps: TickDeps = {
-      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, SPENT: { fh: 10, sd: 10, scoped: 95 } }),
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 97 }, SPENT: { fh: 10, sd: 10, scoped: 95 } }),
     }
     const out: { stuck?: unknown } = {}
     expect(await autoRotate(deps, out as never)).toBe(false)
@@ -318,9 +343,9 @@ describe('tick — autoRotate: scoped-only wall (janitor#222 mirror)', () => {
     // DEG's probe answers 503, the refresh mints NEW, and NEW's probe answers 503 again — the
     // exact path that lands a slot in the `degraded` bucket. An ACCOUNT wall rotates onto it
     // (the tier-2 fallback); a scoped-only wall must NOT — a blind rotation off a healthy
-    // account recovers nothing the /model switch would not.
+    // account recovers nothing the /model switch would not. LIVE at 97 hits the scoped gate.
     const deps: TickDeps = {
-      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, DEG: 503, NEW: 503 }),
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 97 }, DEG: 503, NEW: 503 }),
     }
     expect(await autoRotate(deps)).toBe(false)
     expect(loadState().live_email).toBe('live@x')
@@ -365,14 +390,15 @@ describe('tick — autoRotate: scoped-only wall (janitor#222 mirror)', () => {
     expect(scopedVetoPct(new Set(['fable']), cand)).toBe(95)
   })
 
-  it('isScopedOnlyWall: 90/90 gates inclusive; headroom must be PROVEN', () => {
-    expect(isScopedOnlyWall(40, 50, 92)).toBe(true)
-    expect(isScopedOnlyWall(90, 90, 90)).toBe(true) // both gates inclusive, per the shared policy
-    expect(isScopedOnlyWall(98, 50, 92)).toBe(false) // the ACCOUNT is (also) the constraint
-    expect(isScopedOnlyWall(40, 50, 89)).toBe(false) // scoped below the gate
+  it('isScopedOnlyWall: 97 scoped gate / 90 account-headroom gate, both inclusive; headroom must be PROVEN', () => {
+    expect(isScopedOnlyWall(40, 50, 97)).toBe(true)
+    expect(isScopedOnlyWall(90, 90, 97)).toBe(true) // both gates inclusive, per the shared policy
+    expect(isScopedOnlyWall(98, 50, 97)).toBe(false) // the ACCOUNT is (also) the constraint
+    expect(isScopedOnlyWall(40, 50, 92)).toBe(false) // scoped below the (equal-trip) 97 gate
+    expect(isScopedOnlyWall(40, 50, 96)).toBe(false) // one point under the gate — still false
     expect(isScopedOnlyWall(40, 50, null)).toBe(false) // no scoped window at all
-    expect(isScopedOnlyWall(null, null, 92)).toBe(false) // headroom unproven → never claim it
-    expect(isScopedOnlyWall(null, 50, 92)).toBe(true) // one proven window suffices
+    expect(isScopedOnlyWall(null, null, 97)).toBe(false) // headroom unproven → never claim it
+    expect(isScopedOnlyWall(null, 50, 97)).toBe(true) // one proven window suffices
   })
 })
 

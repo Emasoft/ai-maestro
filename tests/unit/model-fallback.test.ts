@@ -145,6 +145,19 @@ describe('planModelFallback — when it refuses, and why the reason is named', (
     expect(plan).toEqual({ act: false, skip: 'no-model-scoped-exhaustion' })
   })
 
+  it('the default gate is 97 (equal-trip with the rotation side, TRDD-IZ6KU37Y) — 94 and 96 skip, no override', () => {
+    expect(planModelFallback(incidentInputs({ scopedPct: 94 }))).toEqual({
+      act: false,
+      skip: 'no-model-scoped-exhaustion',
+    })
+    expect(planModelFallback(incidentInputs({ scopedPct: 96 }))).toEqual({
+      act: false,
+      skip: 'no-model-scoped-exhaustion',
+    })
+    // At 97, with every account window healthy, the scoped check is cleared (proceeds to act).
+    expect(planModelFallback(incidentInputs({ scopedPct: 97 })).act).toBe(true)
+  })
+
   it('refuses when the ACCOUNT is also spent — switching model cannot escape an account limit', () => {
     // The rotator's error inverted: it rotated the credential to escape a MODEL limit. Switching
     // the model to escape an ACCOUNT limit buys nothing and spends a burst against the very

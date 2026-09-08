@@ -150,15 +150,23 @@ function pctEnv(name: string, fallback: number): number {
  * THE ONE POLICY PAIR, shared with the janitor's rotator (janitor#222 / their v3.3.2 f185e521;
  * our TRDD-IZ6KU37Y). Both sides read the SAME env names so one override tunes one policy:
  *
- *   ROTATOR_SCOPED_SWITCH_AT        (default 90) — a model-scoped window at/above this is a WALL.
+ *   ROTATOR_SCOPED_SWITCH_AT        (default 97) — a model-scoped window at/above this is a WALL.
  *   ROTATOR_SCOPED_ACCOUNT_HEADROOM (default 90) — the account is "fine" only when EVERY
  *                                                  account-wide window is at/below this.
+ *
+ * The switch-at default is 97, EQUAL to the rotation side's own account-window rotate-away trip
+ * (`SWITCH_AT_SCOPED`/`SWITCH_AT_7D` in tick.ts) — a second TRDD-IZ6KU37Y fix (2026-09-06): a
+ * live account's scoped window and its account windows all rotate away at the SAME number, so
+ * `isScopedOnlyWall`'s "is the model the sole constraint?" verdict and this sweep's "should the
+ * fleet switch model?" trip stay in lockstep with each other AND with the rotate-away point they
+ * both exist to precede. Two verdicts tripping at two different numbers for what is meant to be
+ * one policy is exactly the trap this constant exists to close.
  *
  * They live HERE (not tick.ts) because tick.ts imports this module for `modelFamily` while this
  * module imports only TYPES from tick.ts — putting the values in tick.ts would turn that
  * type-only edge into a runtime import cycle.
  */
-export const SCOPED_SWITCH_AT_PCT = pctEnv('ROTATOR_SCOPED_SWITCH_AT', 90)
+export const SCOPED_SWITCH_AT_PCT = pctEnv('ROTATOR_SCOPED_SWITCH_AT', 97)
 
 /** Below this the account itself has room, so a model switch is worth doing. At or above it the
  *  account is the constraint and switching model just moves the same pressure to another model.

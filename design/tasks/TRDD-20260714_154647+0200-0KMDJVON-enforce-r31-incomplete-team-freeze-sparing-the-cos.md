@@ -3,7 +3,7 @@ trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 column: dev
 created: 2026-07-14T15:46:47+0200
-updated: 2026-09-06T06:01:24+0200
+updated: 2026-09-08T20:07:48+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -24,15 +24,15 @@ assignee: ai-maestro-hub-session
 
 # Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-08
 
-**USER MANDATE — already approved. The single load-bearing fact is the DEADLOCK TRAP below;
-read it before writing a line of code.** The obvious implementation (`blockAllTeams()`, which
-already exists and is literally named "block the team") **freezes the one agent that can lift
-the freeze.**
+**LANDED on governance-rules:** freeze + completeness helpers in `lib/team-registry.ts`; freeze on createNewTeam with undo; re-evaluation on ChangeTitle (G23), ChangeTeam (G04e/G07b), DeleteAgent (G04b) in `services/element-management-service.ts` — 3847007d, 299ae728; wakeAgent Gate 1c refuses a frozen team's non-COS member (409 `team_frozen:`, COS exempt, isSystemOwner does not bypass) and every undo clears `frozen` and saves BEFORE waking — 9ef24a62, WHY-comment 35e2c3bd.
+Measured 2026-09-08 (reports/lean-worker/20260908_154528+0200-r48-freeze-bypass-measure.md): no restart path bypasses Gate 1c (restart only drives an existing tmux pane); the 409 is preserved by the wake route and the headless router; all five undos persist via saveTeams before waking; loadTeams reads disk, never a cache.
+Correction: 35e2c3bd's subject says the symmetry argument was "measured" — it was reasoned, not observed. Owner exemption is deliberately absent: R31.1 names none. Open question: a dead COS leaves its team frozen with no owner override — the unfreeze path is replacing the COS, not yet verified.
+The DEADLOCK TRAP below still binds: never reuse `blockAllTeams()` — it freezes the one agent that can lift the freeze.
 
-- **NEXT ACTION:** implement `freezeIncompleteTeam(teamId)` as a NEW function. Do **not** reuse
-  or extend `blockAllTeams()`.
+- **NEXT ACTION:** box 6 — the COS receives an AMP message or injected directive naming the missing titles when its team freezes. Everything else is landed and ticked.
+- Then: close the approval log and move the column to testing.
 
 ## Problem
 
@@ -139,7 +139,7 @@ test above is not optional.
 - [x] `isTeamComplete(team)` exists and returns true iff all 5 R12.1 titles are present among the team's live (non-tombstoned) agents.
 - [x] `freezeIncompleteTeam`/`isTeamComplete` are called on every roster mutation: `createNewTeam`, `ChangeTeam`, `DeleteAgent` of a team member, and `ChangeTitle` moving a title in/out of a team.
 - [x] A newly created team is frozen, its COS active, no other agents present — and the regression test asserting the COS's tmux session stays alive under freeze passes.
-- [ ] Deleting a member from a complete team re-freezes it while the COS stays awake; a frozen team's non-COS agent cannot be woken while frozen.
+- [x] Deleting a member from a complete team re-freezes it while the COS stays awake; a frozen team's non-COS agent cannot be woken while frozen.
 - [ ] The COS receives an AMP message / injected directive naming the missing titles when its team freezes.
 - [x] R9.8's block is unchanged: with no MANAGER, every agent including the COS hibernates.
 
@@ -154,3 +154,4 @@ test above is not optional.
 - 2026-09-06T03:43:41+0200 — createNewTeam wiring landed in 94f17915 (gate FRZ, fail-fast; the undo in the outer catch clears frozen and wakes the recorded ids with system-owner authority) on top of 965e3dcd; the roster-mutation re-freeze at ChangeTitle/ChangeTeam/DeleteAgent (services/element-management-service.ts) is in the tree uncommitted pending the coordinator's own acceptance run. Correction to the 03:1x line above: 'measured before the compensations were written' means measured before the createNewTeam gate existed — that gate and its compensation now exist and are pinned by tests/unit/create-team-freezes-incomplete.test.ts (4 tests, coordinator re-run 4/4). Two defects in 94f17915 to be corrected forward this session: the freeze block's WHY overstates the outer catch ('plus every other rollback' — measured, the catch runs ONLY the freeze undo; createNewTeam has no team-level rollback, TRDD-C3CHP8L2), and the undo's system-owner wake carries no WHY at the call.
 - 2026-09-06T05:11:27+0200 — roster-mutation re-freeze landed in 3847007d: G23 (ChangeTitle), G04e/G07b (ChangeTeam remove/add), G04b (DeleteAgent) call freezeIncompleteTeam after the mutation, fail-fast, each undo waking exactly the ids its gate hibernated; four fixtures gained the getTeam/freezeIncompleteTeam mock exports. Box 3 (every roster mutation) is satisfied by 94f17915 + 3847007d. Still open: the wake path does not yet refuse a frozen team's non-COS agent (box 5 second half), and no roster mutation yet calls unfreezeTeamIfComplete (Proposed change #4). Coordinator re-ran the five-file suite (5 files, 38 tests green) and tsc (rc 0) at 05:04 on the tree 3847007d commits.
 - 2026-09-06T06:01:13+0200 — unfreeze-on-repair landed in 299ae728 (Proposed change #4): G07b (ChangeTeam add) and G23 (ChangeTitle) call unfreezeTeamIfComplete when the freeze reports the team complete and it was frozen before the gate; nobody is woken; the outcome is a separate ctx flag (unfroze) whose undo re-sets frozen under the teams lock. Coordinator re-ran tests/unit/roster-mutation-refreeze.test.ts (green, 6 tests) and tsc (rc 0) before 299ae728. Still open: box 5 second half (the wake path refuses a frozen team's non-COS agent — in flight with the undo reorder clear-then-wake) and box 6 (COS notification).
+- 2026-09-08T20:07:47+0200 — Box 5 ticked on measured facts: re-freeze on member delete landed 3847007d/299ae728; wakeAgent Gate 1c refuses a frozen team's non-COS member (409 team_frozen, COS exempt, isSystemOwner does not bypass) 9ef24a62, WHY-comment 35e2c3bd; reports/lean-worker/20260908_154528+0200-r48-freeze-bypass-measure.md measured: no restart path bypasses Gate 1c (runRestartSequence only drives an existing tmux pane), 409 preserved by the wake route and the headless router, all five undos saveTeams before waking, loadTeams reads disk. Correction: 35e2c3bd's subject says the symmetry argument was measured — it was reasoned, not observed. Owner exemption deliberately absent (R31.1 names none). Open: a dead COS leaves its team frozen with no owner override; unfreeze path = replace the COS, unverified. Box 6 (COS AMP message naming the missing titles) stays open.

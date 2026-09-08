@@ -4430,6 +4430,25 @@ export async function ChangeTitle(
           if (!led) return
           const problems: string[] = []
           const { wakeAgent } = await import('@/services/agents-core-service')
+          // Clear `frozen` BEFORE waking anyone — wakeAgent refuses to wake a frozen team's
+          // non-COS member (R31), so waking first would have every one of these wakes refused.
+          if (!led.wasFrozenBefore) {
+            try {
+              const { loadTeams: loadTeamsG23Undo, saveTeams: saveTeamsG23Undo } = await import('@/lib/team-registry')
+              const { withLock: withLockG23Undo } = await import('@/lib/file-lock')
+              await withLockG23Undo('teams', () => {
+                const teams = loadTeamsG23Undo()
+                const idx = teams.findIndex(t => t.id === led.teamId)
+                if (idx !== -1 && teams[idx].frozen) {
+                  teams[idx].frozen = false
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG23Undo(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+            }
+          }
           let nowLive = new Set<string>()
           try {
             const { getRuntime } = await import('@/lib/agent-runtime')
@@ -4449,23 +4468,6 @@ export async function ChangeTitle(
               }
             } catch (err) {
               problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
-            }
-          }
-          if (!led.wasFrozenBefore) {
-            try {
-              const { loadTeams: loadTeamsG23Undo, saveTeams: saveTeamsG23Undo } = await import('@/lib/team-registry')
-              const { withLock: withLockG23Undo } = await import('@/lib/file-lock')
-              await withLockG23Undo('teams', () => {
-                const teams = loadTeamsG23Undo()
-                const idx = teams.findIndex(t => t.id === led.teamId)
-                if (idx !== -1 && teams[idx].frozen) {
-                  teams[idx].frozen = false
-                  teams[idx].updatedAt = new Date().toISOString()
-                  saveTeamsG23Undo(teams)
-                }
-              })
-            } catch (err) {
-              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
             }
           }
           // Mirror-image of the block above: this gate's title write REPAIRED an already-frozen
@@ -7402,6 +7404,25 @@ export async function ChangeTeam(
             if (!c.freezeTeamId) return
             const problems: string[] = []
             const { wakeAgent } = await import('@/services/agents-core-service')
+            // Clear `frozen` BEFORE waking anyone — wakeAgent refuses to wake a frozen team's
+            // non-COS member (R31), so waking first would have every one of these wakes refused.
+            if (!c.freezeWasFrozenBefore) {
+              try {
+                const { loadTeams: loadTeamsG04eUndo, saveTeams: saveTeamsG04eUndo } = await import('@/lib/team-registry')
+                const { withLock: withLockG04eUndo } = await import('@/lib/file-lock')
+                await withLockG04eUndo('teams', () => {
+                  const teams = loadTeamsG04eUndo()
+                  const idx = teams.findIndex(t => t.id === c.freezeTeamId)
+                  if (idx !== -1 && teams[idx].frozen) {
+                    teams[idx].frozen = false
+                    teams[idx].updatedAt = new Date().toISOString()
+                    saveTeamsG04eUndo(teams)
+                  }
+                })
+              } catch (err) {
+                problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+              }
+            }
             let nowLive = new Set<string>()
             try {
               const { getRuntime } = await import('@/lib/agent-runtime')
@@ -7421,23 +7442,6 @@ export async function ChangeTeam(
                 }
               } catch (err) {
                 problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
-              }
-            }
-            if (!c.freezeWasFrozenBefore) {
-              try {
-                const { loadTeams: loadTeamsG04eUndo, saveTeams: saveTeamsG04eUndo } = await import('@/lib/team-registry')
-                const { withLock: withLockG04eUndo } = await import('@/lib/file-lock')
-                await withLockG04eUndo('teams', () => {
-                  const teams = loadTeamsG04eUndo()
-                  const idx = teams.findIndex(t => t.id === c.freezeTeamId)
-                  if (idx !== -1 && teams[idx].frozen) {
-                    teams[idx].frozen = false
-                    teams[idx].updatedAt = new Date().toISOString()
-                    saveTeamsG04eUndo(teams)
-                  }
-                })
-              } catch (err) {
-                problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
               }
             }
             c.freezeTeamId = null
@@ -7582,6 +7586,25 @@ export async function ChangeTeam(
           if (!c.freezeTeamId) return
           const problems: string[] = []
           const { wakeAgent } = await import('@/services/agents-core-service')
+          // Clear `frozen` BEFORE waking anyone — wakeAgent refuses to wake a frozen team's
+          // non-COS member (R31), so waking first would have every one of these wakes refused.
+          if (!c.freezeWasFrozenBefore) {
+            try {
+              const { loadTeams: loadTeamsG07bUndo, saveTeams: saveTeamsG07bUndo } = await import('@/lib/team-registry')
+              const { withLock: withLockG07bUndo } = await import('@/lib/file-lock')
+              await withLockG07bUndo('teams', () => {
+                const teams = loadTeamsG07bUndo()
+                const idx = teams.findIndex(t => t.id === c.freezeTeamId)
+                if (idx !== -1 && teams[idx].frozen) {
+                  teams[idx].frozen = false
+                  teams[idx].updatedAt = new Date().toISOString()
+                  saveTeamsG07bUndo(teams)
+                }
+              })
+            } catch (err) {
+              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
+            }
+          }
           let nowLive = new Set<string>()
           try {
             const { getRuntime } = await import('@/lib/agent-runtime')
@@ -7601,23 +7624,6 @@ export async function ChangeTeam(
               }
             } catch (err) {
               problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
-            }
-          }
-          if (!c.freezeWasFrozenBefore) {
-            try {
-              const { loadTeams: loadTeamsG07bUndo, saveTeams: saveTeamsG07bUndo } = await import('@/lib/team-registry')
-              const { withLock: withLockG07bUndo } = await import('@/lib/file-lock')
-              await withLockG07bUndo('teams', () => {
-                const teams = loadTeamsG07bUndo()
-                const idx = teams.findIndex(t => t.id === c.freezeTeamId)
-                if (idx !== -1 && teams[idx].frozen) {
-                  teams[idx].frozen = false
-                  teams[idx].updatedAt = new Date().toISOString()
-                  saveTeamsG07bUndo(teams)
-                }
-              })
-            } catch (err) {
-              problems.push(`team.frozen clear (${err instanceof Error ? err.message : err})`)
             }
           }
           // Mirror-image of the block above: this gate's join REPAIRED an already-frozen team
@@ -9791,19 +9797,9 @@ export async function DeleteAgent(
           const { loadTeams: loadTeamsG04bUndo, saveTeams: saveTeamsG04bUndo } = await import('@/lib/team-registry')
           const { withLock: withLockG04bUndo } = await import('@/lib/file-lock')
           for (const entry of c.freezeAffected) {
-            for (const sleeperId of entry.hibernated) {
-              const sleeper = getAgent(sleeperId)
-              if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
-              if (nowLive.has(sleeper.name)) continue
-              try {
-                const woke = await wakeAgent(sleeperId, { authContext: options?.authContext })
-                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
-                  problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
-                }
-              } catch (err) {
-                problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
-              }
-            }
+            // Clear `frozen` BEFORE waking anyone in this team — wakeAgent refuses to wake a
+            // frozen team's non-COS member (R31), so waking first would have every one of these
+            // wakes refused.
             if (!entry.wasFrozenBefore) {
               try {
                 await withLockG04bUndo('teams', () => {
@@ -9817,6 +9813,19 @@ export async function DeleteAgent(
                 })
               } catch (err) {
                 problems.push(`team.frozen clear on ${entry.teamId} (${err instanceof Error ? err.message : err})`)
+              }
+            }
+            for (const sleeperId of entry.hibernated) {
+              const sleeper = getAgent(sleeperId)
+              if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+              if (nowLive.has(sleeper.name)) continue
+              try {
+                const woke = await wakeAgent(sleeperId, { authContext: options?.authContext })
+                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                  problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+                }
+              } catch (err) {
+                problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
               }
             }
           }

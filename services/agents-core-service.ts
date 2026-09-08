@@ -2207,6 +2207,21 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       }
     }
 
+    // ── Gate 1c: R31 frozen-team refusal — an incomplete team's non-COS member
+    // cannot be woken. freezeIncompleteTeam() hibernates every member but the
+    // COS; without this gate, wakeAgent would happily undo that hibernation one
+    // agent at a time and the freeze would protect nothing. UNCONDITIONAL — no
+    // isSystemOwner exemption, because that is exactly the surface R31 exists to
+    // close (the dashboard owner waking a frozen member). The COS itself is
+    // exempt: it was never hibernated, and it is the one path back to a repair.
+    const frozenTeam = loadTeams().find(t => t.frozen && t.agentIds.includes(agentId))
+    if (frozenTeam && frozenTeam.chiefOfStaffId !== agentId) {
+      return {
+        error: `team_frozen: Team "${frozenTeam.name}" is frozen (R31: incomplete roster) — ${agentName} cannot be woken until the team is complete`,
+        status: 409,
+      }
+    }
+
     const workingDirectory = agent.workingDirectory ||
                             agent.preferences?.defaultWorkingDirectory ||
                             process.cwd()

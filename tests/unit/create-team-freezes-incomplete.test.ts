@@ -93,8 +93,18 @@ vi.mock('@/services/element-management-service', () => ({
   }),
 }))
 
+// Row37 (R31 wake-refusal ordering): reads the REAL team store at call time — never the
+// caller's claimed order. If createNewTeam's freeze-undo woke an agent BEFORE clearing
+// `frozen`, `wakeFrozenChecks` would record `false` for that call, and the real wakeAgent
+// would have refused the wake outright (R31: a frozen team's non-COS member cannot wake).
+let wakeFrozenChecks: boolean[] = []
 vi.mock('@/services/agents-core-service', () => ({
-  wakeAgent: vi.fn(async (agentId: string) => ({ data: { success: true, agentId }, status: 200 })),
+  wakeAgent: vi.fn(async (agentId: string) => {
+    const { loadTeams: loadTeamsAtWakeTime } = await import('@/lib/team-registry')
+    const team = loadTeamsAtWakeTime().find(t => t.agentIds.includes(agentId))
+    if (team) wakeFrozenChecks.push(team.frozen !== true)
+    return { data: { success: true, agentId }, status: 200 }
+  }),
 }))
 
 let killedSessionNames: string[] = []
@@ -135,6 +145,7 @@ function seedAgents(overrides: Partial<Record<string, Partial<FixtureAgent>>> = 
 
 beforeEach(async () => {
   killedSessionNames = []
+  wakeFrozenChecks = []
   vi.clearAllMocks() // clears CALL history only — every mock's default implementation (set via
   // `vi.fn(impl)` above, never `.mockImplementation()`) survives, per the
   // clearAllMocks-vs-resetAllMocks distinction (resetAllMocks would strip it).
@@ -198,6 +209,11 @@ describe('createNewTeam wires the R31 freeze (TRDD-0KMDJVON)', () => {
     // ...and cleared the frozen flag it set.
     const team = loadTeams().find(t => t.name === 'R31 Compensation Team') as Team
     expect(team.frozen).not.toBe(true)
+
+    // Ordering guard (row37): `frozen` was cleared BEFORE any of these wakes ran, never after —
+    // the non-vacuity floor (`length` > 0) proves the assertion actually ran for every wake.
+    expect(wakeFrozenChecks.length).toBe(3)
+    expect(wakeFrozenChecks.every(Boolean)).toBe(true)
   })
 
   it('a team whose roster already covers all 5 R12.1 titles is not frozen and nothing is hibernated', async () => {

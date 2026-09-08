@@ -38,6 +38,12 @@ const H = vi.hoisted(() => {
     registry: new Map<string, Record<string, unknown>>(),
     killedSessionNames: [] as string[],
     wokenIds: [] as string[],
+    /** Row37 (R31 wake-refusal ordering): each wake call records whether the team holding
+     *  that id was ALREADY unfrozen at the moment wakeAgent ran — the mocked wakeAgent reads
+     *  the real team store at call time (see the mock below) instead of trusting the caller's
+     *  claimed order. wakeAgent itself now REFUSES a frozen team's non-COS member (R31), so a
+     *  wake-then-clear-frozen order would have every one of these come back `false`. */
+    wakeFrozenChecks: [] as boolean[],
     /** Flipped on to force DeleteAgent's G08 (registry delete) to fail — the injection point
      *  for the "a later gate failing after the freeze" case (c). */
     failRegistryDelete: false,
@@ -120,7 +126,14 @@ vi.mock('@/lib/agent-runtime', () => ({
 }))
 
 vi.mock('@/services/agents-core-service', () => ({
+  // Reads the REAL team store at call time (never the caller's claimed order) — the
+  // non-vacuity guard for the ordering fix: if a rollback woke an agent BEFORE clearing
+  // `frozen`, this records `false` for that call, and the real wakeAgent would have
+  // refused the wake outright (R31).
   wakeAgent: async (id: string) => {
+    const { loadTeams: loadTeamsAtWakeTime } = await import('@/lib/team-registry')
+    const team = loadTeamsAtWakeTime().find(t => t.agentIds.includes(id))
+    if (team) H.wakeFrozenChecks.push(team.frozen !== true)
     H.wokenIds.push(id)
     return { data: { woken: true }, status: 200 }
   },
@@ -182,6 +195,7 @@ beforeEach(() => {
   H.registry.clear()
   H.killedSessionNames = []
   H.wokenIds = []
+  H.wakeFrozenChecks = []
   H.failRegistryDelete = false
   H.corruptAfterUnfreeze = null
 })
@@ -251,6 +265,10 @@ describe('roster mutations re-evaluate R31 team completeness (TRDD-0KMDJVON)', (
     // ...and the rollback woke exactly those, and only those.
     expect(new Set(H.wokenIds)).toEqual(new Set([ARCH_ID, ORCH_ID, INT_ID]))
     expect(result.operations).toContain('G04b: reverted')
+    // Ordering guard (row37): `frozen` was cleared BEFORE any of these wakes ran, never after —
+    // the non-vacuity floor (`length` > 0) proves the assertion actually ran for every wake.
+    expect(H.wakeFrozenChecks.length).toBe(3)
+    expect(H.wakeFrozenChecks.every(Boolean)).toBe(true)
 
     const onDisk = loadTeams().find(t => t.id === TEAM_ID) as Team
     expect(onDisk.frozen).not.toBe(true)

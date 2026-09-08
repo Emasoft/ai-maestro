@@ -3,7 +3,7 @@ trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 column: blocked
 created: 2026-07-14T15:46:47+0200
-updated: 2026-09-08T21:36:46+0200
+updated: 2026-09-08T22:45:22+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -38,7 +38,7 @@ Correction: 35e2c3bd's subject says the symmetry argument was "measured" — it 
 The DEADLOCK TRAP below still binds: never reuse `blockAllTeams()` — it freezes the one agent that can lift the freeze.
 
 - **NEXT ACTION (2026-09-08T21:24:43+0200):** USER decision — (a) land the echo half now (post-commit `notifyCosOfFreeze`, list-shaped ChangeTeam ctx per TRDD-LZR1M3TQ, one more review round) or (b) hold until TRDD-RND4LDFK (EHT, manager tier) is ruled. Box 6 stays UNTICKED; column blocked on RND4LDFK, pre-block-column dev: the birth freeze tells nobody (auto-COS has no session, teams-service.ts:427) and the durable AMP path is denied for a system sender (message-filter.ts Step 1) and wrapped data-only (sendFromUI isFromVerified=false).
-- SUPERSEDED 2026-09-08: "then close the approval log and move the column to testing" — not while box 6 is open.
+- SUPERSEDED 2026-09-08: "then close the approval log and move the column to testing" — not while box 6 is open. If (a) is chosen, TRDD-LZR1M3TQ is an NPT of the echo half: add it to npt/blocked-by, move it off backburner in the same commit, and keep this card in blocked until LZR1M3TQ is terminal (pre-block-column is dev, and a card must not re-enter dev with an unmet NPT).
 
 ## Problem
 
@@ -162,6 +162,7 @@ test above is not optional.
 - 2026-09-06T06:01:13+0200 — unfreeze-on-repair landed in 299ae728 (Proposed change #4): G07b (ChangeTeam add) and G23 (ChangeTitle) call unfreezeTeamIfComplete when the freeze reports the team complete and it was frozen before the gate; nobody is woken; the outcome is a separate ctx flag (unfroze) whose undo re-sets frozen under the teams lock. Coordinator re-ran tests/unit/roster-mutation-refreeze.test.ts (green, 6 tests) and tsc (rc 0) before 299ae728. Still open: box 5 second half (the wake path refuses a frozen team's non-COS agent — in flight with the undo reorder clear-then-wake) and box 6 (COS notification).
 - 2026-09-08T20:07:47+0200 — Box 5 ticked on measured facts: re-freeze on member delete landed 3847007d/299ae728; wakeAgent Gate 1c refuses a frozen team's non-COS member (409 team_frozen, COS exempt, isSystemOwner does not bypass) 9ef24a62, WHY-comment 35e2c3bd; reports/lean-worker/20260908_154528+0200-r48-freeze-bypass-measure.md measured: no restart path bypasses Gate 1c (runRestartSequence only drives an existing tmux pane), 409 preserved by the wake route and the headless router, all five undos saveTeams before waking, loadTeams reads disk. Correction: 35e2c3bd's subject says the symmetry argument was measured — it was reasoned, not observed. Owner exemption deliberately absent (R31.1 names none). Open: a dead COS leaves its team frozen with no owner override; unfreeze path = replace the COS, unverified. Box 6 (COS AMP message naming the missing titles) stays open.
 - 2026-09-08T21:24:43+0200 — Box 6 measured BLOCKED, not ticked: the tmux echo cannot reach the birth-freeze COS (createSession:false at services/teams-service.ts:427; notification-service.ts:141-143 returns No sessions) and the durable AMP path cannot carry a system directive to a closed-team COS (lib/message-filter.ts Step 1 null-sender denial; lib/message-send.ts:164-174 isFromVerified=false; lib/content-security.ts:140-190 data-only wrap). EHT TRDD-RND4LDFK (proposal, manager tier) opened for a trusted in-process system sender; review forks 36/37 rejected shape A (retraction at undo) and found ChangeTeam's shared freeze ctx (TRDD-LZR1M3TQ). Card moves to blocked on RND4LDFK.
+- 2026-09-08T22:42:02+0200 — STATE block reconciled in c815fa93/3d7627a7 (NEXT ACTION moved into the top STATE block, the plan step "move the column to testing" superseded while box 6 is open, the bottom STATE section blanked); post-write review (fork 42) applied in part — two findings rejected, stated in the session reply: the STATE line now notes that choice (a) makes TRDD-LZR1M3TQ an NPT of the echo half. No column change.
 
 
 

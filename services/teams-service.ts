@@ -611,10 +611,9 @@ export async function createNewTeam(
         try {
           const { wakeAgent } = await import('@/services/agents-core-service')
           // The freeze killed these sessions through tmux with no RBAC gate,
-          // so the undo reverses the pipeline's OWN kill with system-owner
-          // authority for symmetry (R51: a compensation carries the authority
-          // of the step it reverses) — a wake under the caller's authContext
-          // could be refused (403) and strand the members under a failed create.
+          // so the undo wakes them with the same (system) authority, not the
+          // caller's authContext — a caller-context wake could be refused
+          // with 403 and strand the hibernated members.
           await wakeAgent(agentId, { authContext: { isSystemOwner: true }, continueConversation: false })
         } catch (wakeErr) {
           console.warn(`[teams] Failed to wake agent ${agentId} during freeze-undo:`, wakeErr instanceof Error ? wakeErr.message : wakeErr)

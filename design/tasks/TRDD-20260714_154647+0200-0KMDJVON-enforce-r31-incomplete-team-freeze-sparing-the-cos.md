@@ -3,7 +3,7 @@ trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 column: blocked
 created: 2026-07-14T15:46:47+0200
-updated: 2026-09-08T21:25:43+0200
+updated: 2026-09-08T21:28:35+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -25,6 +25,7 @@ blocked-by: [RND4LDFK]
 pre-block-column: dev
 blocker-probe: sh -c 'for id in RND4LDFK; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
 blocker-holds-if: match:NOT-ALL-TERMINAL
+blocker-probe-canary: match:NOT-ALL-TERMINAL|ALL-TERMINAL
 ---
 
 # Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF

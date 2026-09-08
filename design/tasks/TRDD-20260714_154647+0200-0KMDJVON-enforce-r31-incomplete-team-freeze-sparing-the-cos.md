@@ -1,9 +1,9 @@
 ---
 trdd-id: 0KMDJVON
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
-column: dev
+column: blocked
 created: 2026-07-14T15:46:47+0200
-updated: 2026-09-08T20:07:48+0200
+updated: 2026-09-08T21:25:43+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: bugfix
@@ -20,6 +20,11 @@ release-via: none
 relevant-rules: [9, 12, 29, 30, 31]
 labels: [governance, teams, lifecycle, chief-of-staff, r31]
 assignee: ai-maestro-hub-session
+eht: [RND4LDFK]
+blocked-by: [RND4LDFK]
+pre-block-column: dev
+blocker-probe: sh -c 'for id in RND4LDFK; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: match:NOT-ALL-TERMINAL
 ---
 
 # Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
@@ -155,3 +160,8 @@ test above is not optional.
 - 2026-09-06T05:11:27+0200 — roster-mutation re-freeze landed in 3847007d: G23 (ChangeTitle), G04e/G07b (ChangeTeam remove/add), G04b (DeleteAgent) call freezeIncompleteTeam after the mutation, fail-fast, each undo waking exactly the ids its gate hibernated; four fixtures gained the getTeam/freezeIncompleteTeam mock exports. Box 3 (every roster mutation) is satisfied by 94f17915 + 3847007d. Still open: the wake path does not yet refuse a frozen team's non-COS agent (box 5 second half), and no roster mutation yet calls unfreezeTeamIfComplete (Proposed change #4). Coordinator re-ran the five-file suite (5 files, 38 tests green) and tsc (rc 0) at 05:04 on the tree 3847007d commits.
 - 2026-09-06T06:01:13+0200 — unfreeze-on-repair landed in 299ae728 (Proposed change #4): G07b (ChangeTeam add) and G23 (ChangeTitle) call unfreezeTeamIfComplete when the freeze reports the team complete and it was frozen before the gate; nobody is woken; the outcome is a separate ctx flag (unfroze) whose undo re-sets frozen under the teams lock. Coordinator re-ran tests/unit/roster-mutation-refreeze.test.ts (green, 6 tests) and tsc (rc 0) before 299ae728. Still open: box 5 second half (the wake path refuses a frozen team's non-COS agent — in flight with the undo reorder clear-then-wake) and box 6 (COS notification).
 - 2026-09-08T20:07:47+0200 — Box 5 ticked on measured facts: re-freeze on member delete landed 3847007d/299ae728; wakeAgent Gate 1c refuses a frozen team's non-COS member (409 team_frozen, COS exempt, isSystemOwner does not bypass) 9ef24a62, WHY-comment 35e2c3bd; reports/lean-worker/20260908_154528+0200-r48-freeze-bypass-measure.md measured: no restart path bypasses Gate 1c (runRestartSequence only drives an existing tmux pane), 409 preserved by the wake route and the headless router, all five undos saveTeams before waking, loadTeams reads disk. Correction: 35e2c3bd's subject says the symmetry argument was measured — it was reasoned, not observed. Owner exemption deliberately absent (R31.1 names none). Open: a dead COS leaves its team frozen with no owner override; unfreeze path = replace the COS, unverified. Box 6 (COS AMP message naming the missing titles) stays open.
+- 2026-09-08T21:24:43+0200 — Box 6 measured BLOCKED, not ticked: the tmux echo cannot reach the birth-freeze COS (createSession:false at services/teams-service.ts:427; notification-service.ts:141-143 returns No sessions) and the durable AMP path cannot carry a system directive to a closed-team COS (lib/message-filter.ts Step 1 null-sender denial; lib/message-send.ts:164-174 isFromVerified=false; lib/content-security.ts:140-190 data-only wrap). EHT TRDD-RND4LDFK (proposal, manager tier) opened for a trusted in-process system sender; review forks 36/37 rejected shape A (retraction at undo) and found ChangeTeam's shared freeze ctx (TRDD-LZR1M3TQ). Card moves to blocked on RND4LDFK.
+
+## STATE
+
+- **NEXT ACTION (2026-09-08T21:24:43+0200, supersedes the box-6 line above):** USER decision — (a) land the echo half now (post-commit `notifyCosOfFreeze`, list-shaped ChangeTeam ctx per TRDD-LZR1M3TQ, one more review round) or (b) hold until TRDD-RND4LDFK is ruled. Box 6 stays UNTICKED: the birth freeze tells nobody (auto-COS has no session, teams-service.ts:427) and the durable AMP path is denied for a system sender (message-filter.ts Step 1) and wrapped data-only (sendFromUI isFromVerified=false).

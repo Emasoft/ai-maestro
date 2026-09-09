@@ -85,7 +85,7 @@ const isoNow = () => isoLocal()
  * into a grep-first frontmatter line. So an unparseable value is reported as
  * unparseable, which is a more useful message than "absent" anyway.
  */
-export function readProjectId(designDir: string): { id: string } | { why: string } {
+function readProjectId(designDir: string): { id: string } | { why: string } {
   const prrd = path.join(designDir, 'requirements', 'PRRD.md')
   let text: string
   try {
@@ -93,6 +93,9 @@ export function readProjectId(designDir: string): { id: string } | { why: string
   } catch {
     return { why: `no project-id: ${prrd} is unreadable or absent` }
   }
+  // A UTF-8 BOM is invisible and would make the fence test below fail, minting
+  // every card unbound against a PRRD that plainly carries the field.
+  text = text.replace(/^﻿/, '')
   // The fence must be `---` ALONE on its line. `indexOf('\n---')` also matches a
   // `----------` table border or an em-dash-led continuation INSIDE frontmatter,
   // truncating the search window and losing a field that is really there.
@@ -104,9 +107,19 @@ export function readProjectId(designDir: string): { id: string } | { why: string
   const body = text.slice(open[0].length)
   const close = /^---[ \t]*$/m.exec(body)
   if (!close) return { why: `no project-id: ${prrd} frontmatter is unterminated` }
-  const line = /^project-id:[ \t]*(.*)$/m.exec(body.slice(0, close.index))
-  if (!line) return { why: `no project-id: ${prrd} carries no project-id field` }
-  const raw = line[1].replace(/[ \t]+#.*$/, '').trim()
+  const fm = body.slice(0, close.index)
+  const all = [...fm.matchAll(/^project-id:[ \t]*(.*)$/gm)]
+  if (all.length === 0) return { why: `no project-id: ${prrd} carries no project-id field` }
+  // DUPLICATE KEY: refuse rather than pick one. A regex takes the FIRST; YAML
+  // parsers disagree with each other (strict YAML 1.2 calls it an error, js-yaml
+  // throws, permissive readers take the LAST), so any choice here binds cards on a
+  // guess about which reader the author had in mind — and both values are
+  // well-formed, so the value guard below cannot catch it. Same principle as the
+  // unparseable branch: when the source is ambiguous, do not capture.
+  if (all.length > 1) {
+    return { why: `no project-id: ${prrd} carries ${all.length} project-id lines — ambiguous, so none is used` }
+  }
+  const raw = all[0][1].replace(/[ \t]+#.*$/, '').trim()
   // The same guard the frontmatter-injection review put on `author`/`assignee`: a
   // value with a colon or a control char breaks the grep-first `key: value` line.
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw)) {

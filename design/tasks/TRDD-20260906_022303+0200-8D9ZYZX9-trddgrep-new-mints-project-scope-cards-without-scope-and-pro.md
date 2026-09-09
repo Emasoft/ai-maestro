@@ -1,9 +1,9 @@
 ---
 trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
-column: todo
+column: backburner
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-10T01:18:42+0200
+updated: 2026-09-10T01:24:16+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -64,9 +64,23 @@ here.
 
 **One test in this work is deliberately non-pinning, and says so.** The `slice(4)` neuter reddens
 nothing: an under-slice of a fence that is never shorter than 4 chars only ever leaves leading
-whitespace, which `/m` tolerates. Two of the five fixtures I first wrote were vacuous for
-reasons of that shape, and the neuter runs are what surfaced it. The green run is recorded in the
-test rather than hidden.
+whitespace, which `/m` tolerates. Two of the first five fixtures I wrote were vacuous for reasons
+of that shape, and the neuter runs are what surfaced it. The green run is recorded in the test
+rather than hidden.
+
+**Post-write review (2026-09-10) found two real parse defects; both fixed.** A DUPLICATE
+`project-id:` — a regex takes the FIRST, YAML readers disagree (1.2 calls it an error, js-yaml
+throws, permissive ones take the LAST), and both values are well-formed so the value guard cannot
+see it. Fixed by REFUSING rather than picking, on the same principle as the unparseable branch:
+when the source is ambiguous, do not capture. And a UTF-8 BOM, invisible in every editor, failed
+the fence test and would have minted every card unbound against a PRRD that plainly carries the
+field. `readProjectId` also lost its `export` — nothing outside the module calls it.
+
+**COLUMN — `backburner`, and why not `todo` or `blocked`.** `todo` means pullable and this card is
+not: its only remaining work is a ruling. `blocked` needs a runnable blocker probe, and a human
+decision has none — `blocked-by: [decision: owner]` parses as a YAML object and drew 3 validate
+findings, so forcing it would have bought a column with a malformed value. `backburner` is the
+honest park, and it stays drift-eligible.
 
 ## Problem
 `trddgrep new` (its mint path is lib/trdd-create.ts, called from scripts/trddgrep.mjs) mints a PROJECT-scope card without `scope:` and without `project-id:`, although the ai-maestro overlay (rules/aimaestro/aimaestro-trdd-approval.md, "Scope discriminators"; rules/aimaestro/aimaestro-kanban-multiagent.md) says a `scope: project` card MUST carry `project-id` — the discriminator that binds the card to the project board. Measured 2026-09-06 over design/tasks + design/proposals (193 cards, every column — not the board's `todo` count): 105 carry `scope: project` (no other scope value occurs), 90 carry `project-id:`; 26 `scope: project` cards and 78 cards carrying neither field lack `project-id` — 104 in total; TRDD-OUAQARPL and TRDD-6B1ND5TD, both minted by the verb this week, carry neither. No code under lib/ or scripts/ writes `project-id` (the same grep finds the `mandated-by` writer at lib/trdd-create.ts:205, so its coverage is not in doubt). The PRRD frontmatter carries `project-id: ai-maestro`, so the value is one read away. `trddgrep validate --min-severity error` and the doctor both pass such cards (the IND base says the field is "lint-enforced incrementally"), so the gap is invisible until a cross-project query keys on `project-id`.

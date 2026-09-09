@@ -150,12 +150,16 @@ describe('frontmatter injection guard', () => {
  * TRDD-8D9ZYZX9 — the scope discriminator.
  *
  * One `it()` per branch, deliberately: a neuter stops at the FIRST failing assertion,
- * so a single test bundling all four PRRD shapes would let one neuter certify one
- * branch and leave the other three deletable while green.
+ * so a single test bundling every PRRD shape would let one neuter certify one branch
+ * and leave the rest deletable while green.
  *
  * NEUTER RUNS (2026-09-10, OBSERVED — restore blob-verified byte-identical each time):
+ *   remove the duplicate-project-id guard    → 1 red: duplicate
+ *   remove the BOM strip                     → 1 red: BOM
  *   delete the `lines.push('scope: project', …)`  → 3 red: pair, CRLF, comment-strip
- *   readProjectId always returns an id            → 5 red: every case in this block
+ *   readProjectId always returns an id            → 11 red — MORE than this block's 10,
+ *       so it also reaches tests in the describes above: forcing the pair onto every
+ *       mint perturbs frontmatter those tests assert on. Recorded as measured.
  *   remove the unterminated-fence guard           → 2 red: unterminated, second-colon
  *   loosen the value guard to `\S+`               → 2 red: second-colon, YAML alias
  *   remove the trailing-comment strip             → 1 red: comment-strip
@@ -236,6 +240,25 @@ describe('TRDD-8D9ZYZX9 project-id at mint', () => {
       expect(fs.readFileSync(r.file, 'utf8')).not.toMatch(/^project-id:/m)
     })
   }
+
+  it('refuses a DUPLICATE project-id rather than guessing which one wins', () => {
+    // A regex takes the FIRST; YAML readers disagree (1.2 calls it an error, js-yaml
+    // throws, permissive ones take the LAST). Both values are well-formed, so the
+    // value guard cannot see this — only counting the lines can.
+    writePrrd(design, '---\nproject-id: first-one\nstatus: normative\nproject-id: second-one\n---\n# PRRD\n')
+    const r = mint(design, 'an ambiguous card')
+    expect(r.warning).toMatch(/carries 2 project-id lines — ambiguous/)
+    expect(fs.readFileSync(r.file, 'utf8')).not.toMatch(/^project-id:/m)
+  })
+
+  it('reads a PRRD carrying a UTF-8 BOM', () => {
+    // The BOM is invisible in every editor and would fail the fence test, minting
+    // every card unbound against a PRRD that plainly carries the field.
+    writePrrd(design, '﻿---\nproject-id: bom-repo\n---\n# PRRD\n')
+    const r = mint(design, 'a bom card')
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^project-id: bom-repo$/m)
+    expect(r.warning).toBeUndefined()
+  })
 
   it('strips a trailing YAML comment rather than capturing it', () => {
     writePrrd(design, '---\nproject-id: ai-maestro   # the discriminator\n---\n# PRRD\n')

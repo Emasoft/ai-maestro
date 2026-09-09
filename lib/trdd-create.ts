@@ -95,11 +95,13 @@ function readProjectId(designDir: string): { id: string } | { why: string } {
   }
   // A UTF-8 BOM is invisible and would make the fence test below fail, minting
   // every card unbound against a PRRD that plainly carries the field.
-  // Spelled by CODE POINT, never as a literal U+FEFF in this source: a literal BOM
-  // here is invisible to every reviewer and every diff viewer, so a whitespace-
-  // normalising pass could delete the very character being stripped and leave the
-  // test green against a strip that no longer strips. The loop handles a doubled
-  // BOM (a file prefixed twice by tooling), which a single strip would half-leave.
+  // Spelled by CODE POINT, never as a literal U+FEFF in this source. The reason that
+  // holds on its own: an invisible character in source is UNREVIEWABLE — a reader
+  // cannot see what this matches. (A whitespace-normalising pass deleting it from
+  // both here and the fixture at once is a further risk, but a HYPOTHETICAL one: no
+  // formatter in this repo has been shown to do it, so it is not the justification.)
+  // The loop handles a doubled BOM (a file prefixed twice by tooling), which a single
+  // strip would half-leave — pinned by the DOUBLED-BOM test, not decorative.
   const bom = String.fromCharCode(0xfeff)
   while (text.startsWith(bom)) text = text.slice(bom.length)
   // The fence must be `---` ALONE on its line. `indexOf('\n---')` also matches a

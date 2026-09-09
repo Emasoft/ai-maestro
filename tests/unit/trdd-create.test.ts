@@ -155,7 +155,13 @@ describe('frontmatter injection guard', () => {
  *
  * NEUTER RUNS (2026-09-10, OBSERVED — restore blob-verified byte-identical each time):
  *   remove the duplicate-project-id guard    → 1 red: duplicate
- *   remove the BOM strip                     → 1 red: BOM
+ *   remove the BOM strip                     → 2 red: BOM, doubled BOM
+ *       (was 1 red until the doubled-BOM test existed — RE-MEASURED, not carried
+ *       forward, because a recorded neuter count is about the suite as it was.)
+ *   `while` → `if` in the BOM strip          → 1 red: doubled BOM
+ *       Run because a reviewer noted the loop was UNPINNED: before the doubled-BOM
+ *       test, `if` passed all 20. The comment already advertised the behaviour, so
+ *       the choice was pin it or delete it; this is the pin.
  *   delete the `lines.push('scope: project', …)`  → 3 red: pair, CRLF, comment-strip
  *   readProjectId always returns an id            → 11 red — MORE than this block's 10,
  *       so it also reaches tests in the describes above: forcing the pair onto every
@@ -260,6 +266,18 @@ describe('TRDD-8D9ZYZX9 project-id at mint', () => {
     writePrrd(design, String.fromCharCode(0xfeff) + '---\nproject-id: bom-repo\n---\n# PRRD\n')
     const r = mint(design, 'a bom card')
     expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^project-id: bom-repo$/m)
+    expect(r.warning).toBeUndefined()
+  })
+
+  it('reads a PRRD carrying a DOUBLED UTF-8 BOM', () => {
+    // This is what makes the strip a LOOP rather than a single replace, and without
+    // this test the loop is decorative: `while` -> `if` passes every other test here.
+    // A single strip leaves the second BOM in place, the fence test then fails, and
+    // the card is minted unbound against a PRRD that plainly carries the field —
+    // the same end state as no strip at all, from a file prefixed twice by tooling.
+    writePrrd(design, String.fromCharCode(0xfeff, 0xfeff) + '---\nproject-id: bom2-repo\n---\n# PRRD\n')
+    const r = mint(design, 'a doubled bom card')
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^project-id: bom2-repo$/m)
     expect(r.warning).toBeUndefined()
   })
 

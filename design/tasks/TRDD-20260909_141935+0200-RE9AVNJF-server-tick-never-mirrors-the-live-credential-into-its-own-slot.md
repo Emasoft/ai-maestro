@@ -3,7 +3,8 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: dev
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T14:25:44+0200
+updated: 2026-09-09T14:26:40+0200
+implementation-commits: [5aa945c1]
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -114,7 +115,13 @@ exactly like the existing branch in `refreshAndHealSlot`.
 
 - [x] mirror block in `reconcileLiveEmail` + `nowLocalTz` export landed (14:25)
 - [x] three tests landed; three neuters run, each reddened exactly the test it should (Verification)
-- [ ] `yarn test` green, `tsc --noEmit` 0 errors
+- [x] `tsc --noEmit` 0 errors; oauth-rotator set 29 files / 436 green (14:2x)
+- [ ] full `yarn test` green — MEASURED 14:26: 17 failed / 6814 passed in 5 files, NONE of which
+      import the rotator (`tests/governance/enforcement-coverage` map drift R31/R50;
+      `tests/integration/createagent-g05c-gitignore`, `-g08-cross-client`, `-g11-r17-core`;
+      `tests/services/change-title-window`). Not attributed to this change by the import graph;
+      not proven pre-existing either (no clean-baseline run — the tree carries the owner's
+      uncommitted governance edits). Owned by whoever picks those files up, not this card.
 - [ ] owner built + restarted (on the owner's hold — not this session's to lift)
 - [ ] observed: a slot's `captured_at` advances after the live account is refreshed by Claude Code
 

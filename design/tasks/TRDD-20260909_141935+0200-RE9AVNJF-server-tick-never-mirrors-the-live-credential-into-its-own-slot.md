@@ -3,7 +3,7 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: backburner
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T17:06:31+0200
+updated: 2026-09-09T17:11:24+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -64,9 +64,28 @@ NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` 
 (the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed
 the live server still runs the pre-fix bundle — a slot going stale before then is expected.
 
-**MOVED `dev` → `backburner`** (2026-09-09T17:06). It had sat at `dev` since 14:25 with nobody
-working it — the column asserting activity that does not exist. Restore to `dev` when the hold
-lifts.
+**COLUMN IS UNRESOLVED AND IS THE OWNER'S CALL — I have been wrong about it twice in 90 minutes
+and am not choosing a third time.** It is at `backburner` (moved 2026-09-09T17:06 out of `dev`,
+where it had sat since 14:25 with nobody working it). The third review then faulted `backburner`
+too, and the objection is good: this card's ONLY remaining work is the owner's (boxes 4 and 5),
+and `backburner` is the one column the drain rule EXEMPTS — so the human's own pending action is
+now filed where nothing surfaces it. It is also the FIRST column in the chain, so it positionally
+asserts *not begun* about a card carrying `implementation-commits: [5aa945c1, 48e839b6]` and three
+checked boxes. Candidates, none applied: **`human_review`** (forward, the remaining gate really is
+a USER decision, and not a WIP column so it claims no activity), **`dev` + this note** (stale but
+visible), or leaving it here. `complete` is unavailable — the checklist gate, two boxes open.
+
+**Whichever column is picked, the WAIT CONDITION needs a machine-readable home again.**
+`unblock-when: [decision: owner authorises yarn build + pm2 restart]` was TRUE — `decision:` is
+the documented human-only kind that never auto-clears — and it went out in the same edit as the
+false `blocked-by`. It is scoped to `blocked` cards, which is why it was not simply re-added here;
+that coupling is why this is one decision, not two.
+
+**Recorded, not repairable:** commit `5a579206`'s message says *"a watchdog walking the graph would
+have concluded 'work 8148P30S to unblock RE9AVNJF'"*. No such watchdog is known to run on this
+corpus — that is a mechanism invented to add force to a conclusion the definition of `blocked-by`
+already carries on its own. It is the same defect the sibling commit `8fac9203` removed from the
+other two cards, committed in the same turn. No `--amend` for wording.
 
 **It went through a WRONG intermediate, recorded because that one landed in a commit
 (`11bebaf3`): `column: blocked` with `blocked-by: [TRDD-8148P30S]`.** That edge is FALSE.

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-09T12:28:37+0200
+updated: 2026-09-09T17:24:54+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -18,6 +18,35 @@ priority: 1
 ---
 
 # Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
+
+**CODE LANDED `efb6a509`** (2026-09-08 15:40): `SAFE_SCOPED` given its own literal 95,
+`SCOPED_SWITCH_AT_PCT` default 90 → 97 so the tick's verdict and the fallback sweep's trip at ONE
+number. Boxes 1-4 and 7 closed. Measured then: 5 vitest files matching `isSafeAlternate` or
+`planModelFallback`, 109 passed; `tsc --noEmit` 0 error lines; zero `ROTATOR_` env pins on the
+shell, on pm2 pid 24806, or in `ecosystem.config.js`.
+
+**NOT LIVE.** `lib/*.ts` is bundled into `.next`, so this needs `yarn build` + `pm2 restart` —
+the owner's hold, unchanged. Until then the running server still vetoes at 90.
+
+NEXT ACTION: nothing in this session's hands. Box 5 is the owner's build+restart; box 6 is the
+owner confirming 95 and 97 after it is deployed.
+
+**THIS CARD AND TRDD-RE9AVNJF ARE A PAIR ON ONE DECISION.** Both have landed code, both are
+waiting on the same build+restart hold, and neither is live. Lifting the hold once deploys both.
+
+**COLUMN: deliberately NOT changed.** It says `dev` and has since 12:28 with nobody working it,
+which is the column asserting activity that does not exist — the same defect found on RE9AVNJF.
+That one took three wrong answers (`blocked` with a false `blocked-by` edge, then `backburner`,
+which is drain-exempt and positionally asserts *not begun*) before being handed to the owner
+unresolved. **The same question, same hold, same two cards — so it gets ONE answer, from the
+owner, applied to both.** RE9AVNJF's STATE block carries the candidate list and what is verified
+about each; it is not duplicated here, to keep one fact in one home.
+
+**STATE block added 2026-09-09T17:24** — it was MISSING, which rule 10 forbids once a card spans
+sessions, and this one has since the 12:28 takeover from `ai-maestro-hub-session`. Nothing else
+flagged it.
 
 ## Problem
 

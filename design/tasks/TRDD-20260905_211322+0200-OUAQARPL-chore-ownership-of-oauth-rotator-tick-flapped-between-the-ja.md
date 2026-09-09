@@ -1,20 +1,26 @@
 ---
 trdd-id: OUAQARPL
 title: chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
-column: live_auditing
+column: blocked
 created: 2026-09-05T21:13:22+0200
-updated: 2026-09-06T02:17:42+0200
-current-owner: ai-maestro-hub-session
+updated: 2026-09-09T12:43:31+0200
+current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: audit
 min-approval-requirement: none
-assignee: ai-maestro-hub-session
+assignee: governance-rules-session
 mandate: true
 mandated-by: none
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-09-05T21:13:22+0200
 labels: [oauth-rotator, janitor-coordination]
+blocked-by: [TRDD-8148P30S]
+unblock-when: [trdd:TRDD-8148P30S]
+pre-block-column: live_auditing
+blocker-probe: sh -c 'for id in 8148P30S; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
+blocker-holds-if: match:NOT-ALL-TERMINAL
+blocker-probe-canary: match:NOT-ALL-TERMINAL|ALL-TERMINAL
 ---
 
 # chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
@@ -40,8 +46,8 @@ read a fresh file as stale, the bug is the janitor's (cross-repo -> file an issu
 janitor).
 
 ## Acceptance
-- [ ] The 4-hour window is explained with file:line evidence
-- [ ] The responsible side is named and the fix (or cross-repo issue) is linked
+- [ ] ~~The 4-hour window is explained with file:line evidence~~ PARTIAL (log line 2026-09-09): the 09-05 window's own daemon logs rotated out (daemon.log.1 starts 09-06 12:34) and are unrecoverable; the 09-08 recurrences are explained at the write-gap level, see TRDD-8148P30S. Stays OPEN.
+- [ ] ~~The responsible side is named and the fix (or cross-repo issue) is linked~~ PARTIAL: side = the SERVER writer (write gap of 91 s or more while the pid was alive; the reader side is excluded by the janitor's own age lines); fix = TRDD-8148P30S, whose stage 2 may still route to the janitor. Stays OPEN until that card closes.
 - [ ] A 24 h re-read of daemon.log shows zero janitor-run oauth-rotator-tick tasks while the server is alive
 
 ## Approval log
@@ -75,3 +81,5 @@ janitor).
 - 2026-09-05T22:09:53+0200 — row-29 code commit aa961973 — feat(liveness): log a late heartbeat, 2 files (lib/server-liveness.ts, tests/unit/server-liveness.test.ts); the committed blob is byte-identical to the verifier's pre-neuter copy (cmp). Box 2 stays OPEN: this commit is the INSTRUMENT that will attribute the next flap (a '[server-liveness] late beat' line = the writer was late; none = the reader misjudged or the file was fine), not an attribution of the 15:01-19:18 window, whose cause is still unmeasured. Sha sent to the janitor session 22:08 (pairs with its HXZ8B0IS line). By ai-maestro-hub-session.
 - 2026-09-05T22:14:15+0200 — CORRECTION to the 22:09:53 line (append-only log, so appended, not edited). (1) 'pre-neuter copy' is imprecise: the verifier's .orig is the WORKER'S delivered lib/server-liveness.ts, snapshotted before the verifier's neuter/restore cycle — the cmp proves the committed source equals what the worker delivered; the TEST file was never touched by the verifier and has no such copy — its proof is the 24/24 run plus the neuter reddening its named test. (2) '22:08' was a clock read from adjacent shell output, not the send's own time; the send is identified by msg id fe60bad7. (3) Pairing asymmetry: our warn fires at gap > 2 x 30 s = 60 s; the janitor's staleness threshold is 90 s. A 61-89 s writer gap logs here and never trips the reader (harmless); a writer stall under 60 s that meets a late 60 s reader poll can trip the reader with NO line here. So a '[server-liveness] late beat' line means the writer's WALL-CLOCK gap exceeded 60 s — a real stall OR a clock jump (laptop sleep, NTP step; the gap is Date.now based), to be disambiguated against the janitor's own daemon.log timestamps, which would show the same jump; the absence of a line does NOT exonerate the writer. The janitor session will be told on the next owed message. By ai-maestro-hub-session.
 - 2026-09-06T02:17:41+0200 — FORWARD CORRECTION of the line stamped 22:14:15 (two facts, both known at its commit 22e9ddb1 and fixed here rather than by editing it). (a) Its 22:14:15 stamp is the time the append verb landed the ORIGINAL, unshaped line; the text that stands there now — including point (3)'s wall-clock clause (stall OR clock jump, disambiguate against daemon.log) — was written at the 22:2x repair (between 22:17 and the 22:21:27 commit-script clock), so the stamp back-dates that clause. (b) Its opening "(append-only log, so appended, not edited)" is false: the line was PLACED by trddgrep edit, replacing a bare line the append verb had landed without its list prefix; that edit is legal because this card is live_auditing (non-terminal) — TRDD rule 12 freezes the Approval log only on terminal cards, and the earlier "append-only" wording on this card was a convention this session's coordinator imposed on itself, not a project rule; it is dropped. Root cause of all three same-hour corrections: brief amendments sent to a running worker arrive after its action; the fix is TaskStop plus re-spawn with the full brief, applied from here on. By ai-maestro-hub-session.
+- 2026-09-09T12:41:41+0200 — MEASURED 2026-09-09 by governance-rules-session (takeover: assignee ai-maestro-hub-session not alive in ListAgents 12:26). Box 3 FAILS on 09-08: daemon.log shows the janitor running its own oauth-rotator-tick in 5 distinct episodes (12:22:55, 12:53-12:58, 13:17:10, 22:42:20, 23:47:17), 4 on 09-07, 1 on 09-06, while the server pid has been alive since 09-05 11:16. The janitor's attributed transitions (its TRDD-HXZ8B0IS fix) read ts=1788900049.0 age=91.4s reason=stale at 22:42:20 and age=98.7s at 23:47:17: the on-disk ts was genuinely stale, so the SERVER writer had a write gap of 91 s or more — that is the measured fact; the number of missed beats is not (a stalled setInterval coalesces). Sleep/wake REFUTED: pmset -g log carries zero Sleep/Wake/DarkWake events 09-02..09-09 (reports/lean-worker/20260909_123659+0200-OUAQARPL-sleep-wake-vs-takeovers.md). The JanitorPublish-precedes-the-stall correlation of the 21:51:11 line is REFUTED as a discriminator (705 beats/day, 1801 pm2-log gaps of 60 s or more since boot). The late-beat instrument aa961973 is NOT deployed (the live process predates it; .next has 0 late-beat strings). The 09-05 window's logs rotated out (daemon.log.1 starts 09-06 12:34) — box 1 is unrecoverable as written. Fix card TRDD-8148P30S minted; this card moves live_auditing → blocked on it under the USER /goal of 2026-09-05 (complete all TRDD and pending tasks, fix all issues) — live_auditing → dev is non-exempt and wrong-shaped for an audit, blocked is the honest column. Boxes 1-2 annotated PARTIAL and left open; box 3 unchanged.
+- 2026-09-09T12:43:31+0200 — blocker-probe, blocker-holds-if and blocker-probe-canary set in the TRDD-0KMDJVON form with the id substituted, after validate flagged BLOCKED-WITHOUT-PROBE on the move; validate --min-severity error rc 0.

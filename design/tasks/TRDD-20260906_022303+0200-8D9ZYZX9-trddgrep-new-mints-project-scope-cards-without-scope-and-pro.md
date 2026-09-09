@@ -3,7 +3,7 @@ trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
 column: backburner
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-10T01:40:40+0200
+updated: 2026-09-10T01:49:51+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -79,8 +79,13 @@ invisible U+FEFF in BOTH the source and the test fixture with `String.fromCharCo
 sufficient reason is that an invisible character in source is UNREVIEWABLE; the
 whitespace-normalisation risk is hypothetical and is not the justification — and made the strip a
 loop for a doubled BOM. ROUND 4 found that loop UNPINNED while its comment advertised it
-(`while` → `if` passed all 20 tests), so a doubled-BOM test now pins it; the recorded
-"remove the BOM strip" neuter was RE-MEASURED at 2 red rather than carried forward from 1.
+(`while` → `if` passed all 20 tests), so a doubled-BOM test now pins it. ROUND 5 took the
+staleness that exposed as a CLASS rather than an instance and re-measured the whole neuter table:
+**four of the eight pre-existing rows no longer held** — two made stale by tests this work itself
+added, one (`delete the lines.push`) understating at 3 where it is 5, and one
+(`remove the unterminated-fence guard`) OVER-claiming at 2 where it is 1, which is the worse
+direction because it makes a guard look better covered than it is. The table now carries the
+suite size it was measured against, so the next such drift is visible instead of silent.
 
 **The no-new-failures claim, and exactly what it covers.** Measured over `trdd-doctor` +
 `pillar-grep-cli` ONLY — any other suite reading the corpus is unmeasured. One-variable A/B in a

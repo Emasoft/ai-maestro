@@ -153,20 +153,35 @@ describe('frontmatter injection guard', () => {
  * so a single test bundling every PRRD shape would let one neuter certify one branch
  * and leave the rest deletable while green.
  *
- * NEUTER RUNS (2026-09-10, OBSERVED — restore blob-verified byte-identical each time):
+ * NEUTER RUNS — ALL NINE RE-MEASURED 2026-09-10, against THIS FILE AT 21 TESTS, of
+ * which the `TRDD-8D9ZYZX9` block below is 12. Restores verified with `git diff`, NOT
+ * a remembered checksum: a checksum taken before an unrelated edit is itself stale, and
+ * that happened here — the "mismatch" was the note, not the file.
+ *
+ * A ROW WITHOUT A SUITE SIZE ROTS SILENTLY, and this table is the proof: of the eight
+ * rows that predate today, FOUR no longer held, and not one of them looked wrong. Two
+ * were made stale by tests THIS work added, which is the point — the rot is caused by
+ * the person recording it, not by elapsed time. A neuter count is a claim about the
+ * suite AS IT WAS; it is never a durable property of the guard.
+ *
  *   remove the duplicate-project-id guard    → 1 red: duplicate
  *   remove the BOM strip                     → 2 red: BOM, doubled BOM
- *       (was 1 red until the doubled-BOM test existed — RE-MEASURED, not carried
- *       forward, because a recorded neuter count is about the suite as it was.)
+ *       (recorded 1, until the doubled-BOM test existed)
  *   `while` → `if` in the BOM strip          → 1 red: doubled BOM
- *       Run because a reviewer noted the loop was UNPINNED: before the doubled-BOM
- *       test, `if` passed all 20. The comment already advertised the behaviour, so
- *       the choice was pin it or delete it; this is the pin.
- *   delete the `lines.push('scope: project', …)`  → 3 red: pair, CRLF, comment-strip
- *   readProjectId always returns an id            → 11 red — MORE than this block's 10,
- *       so it also reaches tests in the describes above: forcing the pair onto every
- *       mint perturbs frontmatter those tests assert on. Recorded as measured.
- *   remove the unterminated-fence guard           → 2 red: unterminated, second-colon
+ *       Added because a reviewer found the loop UNPINNED: before the doubled-BOM test
+ *       `if` passed all 20, while the source comment advertised the behaviour.
+ *   delete the `lines.push('scope: project', …)`  → 5 red: pair, CRLF, BOM,
+ *       doubled BOM, comment-strip. (Recorded 3 — stale the moment the BOM test
+ *       landed, and the doubled-BOM test made it stale by two.)
+ *   readProjectId returns `{id}` unconditionally  → 12 red = EXACTLY this block, and
+ *       NOTHING in the two describes above. (Recorded "11 red — MORE than this block's
+ *       10, so it also reaches tests above": false in BOTH halves now. The mutation is
+ *       named deliberately — an early `return { id: 'neutered' }` — because a count
+ *       without the mutation that produced it cannot be reproduced or checked.)
+ *   remove the unterminated-fence guard           → 1 red: unterminated
+ *       (Recorded "2 red: unterminated, second-colon". The second-colon fixture does
+ *       NOT redden here. That is staleness in the OVER-claiming direction, which is
+ *       the worse one: it makes a guard look better covered than it is.)
  *   loosen the value guard to `\S+`               → 2 red: second-colon, YAML alias
  *   remove the trailing-comment strip             → 1 red: comment-strip
  *   `slice(4)` instead of `open[0].length`        → 0 red — REPORTED, not hidden: see

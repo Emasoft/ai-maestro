@@ -3,7 +3,7 @@ trdd-id: OUAQARPL
 title: chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
 column: blocked
 created: 2026-09-05T21:13:22+0200
-updated: 2026-09-09T12:43:31+0200
+updated: 2026-09-10T01:17:43+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: audit
@@ -21,6 +21,8 @@ pre-block-column: live_auditing
 blocker-probe: sh -c 'for id in 8148P30S; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
 blocker-holds-if: match:NOT-ALL-TERMINAL
 blocker-probe-canary: match:NOT-ALL-TERMINAL|ALL-TERMINAL
+scope: project
+project-id: ai-maestro
 ---
 
 # chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours

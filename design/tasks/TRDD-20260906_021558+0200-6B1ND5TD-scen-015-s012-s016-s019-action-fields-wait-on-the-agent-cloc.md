@@ -3,7 +3,7 @@ trdd-id: 6B1ND5TD
 title: SCEN-015 S012 S016 S019 Action fields wait on the agent clock inside a runner step (Rule 15)
 column: todo
 created: 2026-09-06T02:15:58+0200
-updated: 2026-09-06T02:15:58+0200
+updated: 2026-09-10T01:17:44+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: docs
@@ -14,6 +14,8 @@ mandated-by: none
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-09-06T02:15:58+0200
+scope: project
+project-id: ai-maestro
 ---
 
 # SCEN-015 S012 S016 S019 Action fields wait on the agent clock inside a runner step (Rule 15)

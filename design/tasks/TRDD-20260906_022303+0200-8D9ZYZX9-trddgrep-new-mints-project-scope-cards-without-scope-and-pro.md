@@ -3,7 +3,7 @@ trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
 column: todo
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-06T02:30:12+0200
+updated: 2026-09-10T01:18:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -14,9 +14,59 @@ mandated-by: none
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-09-06T02:23:03+0200
+blocked-by: []
+scope: project
+project-id: ai-maestro
 ---
 
 # trddgrep new mints project-scope cards without scope and project-id
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-10
+
+**Boxes 1, 2 and 4 are CLOSED** (`b922e73f` + the two `trddgrep set` repairs). **Box 3 is
+STRUCK, not deferred: its premise is false**, and the only remaining work on this card is an
+owner ruling on whether to re-specify it.
+
+**WHY BOX 3 WAS STRUCK.** The box asked for a `trddgrep validate` WARN on a project-zone card
+lacking `project-id`. `lib/trdd-doctor.ts:776-789` carries the admission criterion for exactly
+that list, and it is not a style note — it is a decision with a measurement behind it: *"Each
+entry names the CONSUMER that silently misreads the card when the field is absent — that is what
+keeps these false-positive-free"*, and widening the list once *"added 218 findings that named no
+broken reader, which is a wall, and a wall is how a linter gets routed around."* The comment
+names `project-id:` **specifically** as deliberately excluded.
+
+Box 3 cannot meet that criterion. **This card argues the WARN purely from the overlay — a rule
+saying a field is REQUIRED — and never names a consumer that breaks without it.** Those are
+different claims. The measurement in this card's own Problem section is the evidence against it:
+five `project-id` hits in `lib/` and `scripts/`, four of them prose and one a fixture generator.
+**Nothing reads the field.** The cross-project query it exists for is still hypothetical.
+
+So box 3 would have been the first entry in that list to fail the list's own admission test, and
+it would have fired on ~104 live cards on its first run with no repair path shipped alongside.
+The card was written without knowledge of the doctor's comment; that makes it a box with a
+falsified premise, and the discipline is to strike and re-specify it, not to implement it and
+rewrite the comment that would have caught it.
+
+**NEXT ACTION — the OWNER's:** rule on one of
+(a) leave `project-id` unlinted until a consumer exists — the doctor's stated criterion, and the
+default if nobody rules;
+(b) name the consumer (a cross-project board query) and re-specify box 3 against it, shipping the
+104-card repair in the same change;
+(c) overturn the FP-free criterion itself — a linter-policy decision, and then the :776-789
+comment is AMENDED with a dated line, never replaced: it is the only artifact of the 218-finding
+measurement.
+
+**Boxes 1+2 cover BOTH producers.** `createTrdd` has exactly two callers — `scripts/trddgrep.mjs`
+and `app/api/trdd/create/route.ts` — and they share the function, so one fix covers the CLI and
+the server mint. A THIRD frontmatter producer exists and is NOT fixed: `lib/trdd-doctor.ts:1536`
+builds frontmatter for a legacy card that has none, and omits both fields. Recorded, not scoped
+here.
+
+**One test in this work is deliberately non-pinning, and says so.** The `slice(4)` neuter reddens
+nothing: an under-slice of a fence that is never shorter than 4 chars only ever leaves leading
+whitespace, which `/m` tolerates. Two of the five fixtures I first wrote were vacuous for
+reasons of that shape, and the neuter runs are what surfaced it. The green run is recorded in the
+test rather than hidden.
 
 ## Problem
 `trddgrep new` (its mint path is lib/trdd-create.ts, called from scripts/trddgrep.mjs) mints a PROJECT-scope card without `scope:` and without `project-id:`, although the ai-maestro overlay (rules/aimaestro/aimaestro-trdd-approval.md, "Scope discriminators"; rules/aimaestro/aimaestro-kanban-multiagent.md) says a `scope: project` card MUST carry `project-id` — the discriminator that binds the card to the project board. Measured 2026-09-06 over design/tasks + design/proposals (193 cards, every column — not the board's `todo` count): 105 carry `scope: project` (no other scope value occurs), 90 carry `project-id:`; 26 `scope: project` cards and 78 cards carrying neither field lack `project-id` — 104 in total; TRDD-OUAQARPL and TRDD-6B1ND5TD, both minted by the verb this week, carry neither. No code under lib/ or scripts/ writes `project-id` (the same grep finds the `mandated-by` writer at lib/trdd-create.ts:205, so its coverage is not in doubt). The PRRD frontmatter carries `project-id: ai-maestro`, so the value is one read away. `trddgrep validate --min-severity error` and the doctor both pass such cards (the IND base says the field is "lint-enforced incrementally"), so the gap is invisible until a cross-project query keys on `project-id`.
@@ -27,10 +77,10 @@ A second observation, recorded for a ruling and NOT a box on this card: at Tier 
 In lib/trdd-create.ts: when the repo's design/requirements/PRRD.md carries a `project-id:` frontmatter field, emit `scope: project` and `project-id: <that value>`; when the PRRD or the field is absent, mint the card unchanged and print ONE warning naming the missing source — never refuse the mint (trddgrep is installed globally and serves repos without a PRRD; a fail-fast here would be a fleet-wide regression). Add a `trddgrep validate` WARN for a project-zone card lacking `project-id`, where project-zone means: the card sits under a project repo's design/ AND its `scope:` is `project` or absent (a `scope: local` or `scope: user` card found there is a separate misfiling defect, excluded from this WARN because such a card MUST NOT carry project-id; the corpus has none today — all 105 `scope:` values are `project`). WARN only: promoting it to ERROR would redden the `--min-severity error` commit gate on every unrepaired card until a sweep, and the overlay's migration policy is migrate-on-next-touch, never a mass rewrite; ERROR becomes admissible only when validate reports zero remaining project-zone cards lacking `project-id`. The 104 existing cards are repaired as each is next touched, via `trddgrep set`.
 
 ## Acceptance
-- [ ] A card minted by `trddgrep new` in this repo carries `scope: project` and `project-id: ai-maestro`
-- [ ] Minting with the PRRD `project-id:` absent still succeeds and prints one named warning (unit test)
-- [ ] `trddgrep validate` WARNS on a project-zone card lacking `project-id`, and no ERROR-tier rule is added (unit test asserts the severity)
-- [ ] The two minted-this-week cards (OUAQARPL, 6B1ND5TD) are repaired on next touch via `trddgrep set`, not by a sweep
+- [x] A card minted by `trddgrep new` in this repo carries `scope: project` and `project-id: ai-maestro` — `b922e73f`
+- [x] Minting with the PRRD `project-id:` absent still succeeds and prints one named warning (unit test) — `b922e73f`
+- [ ] ~~`trddgrep validate` WARNS on a project-zone card lacking `project-id`~~ — **STRUCK 2026-09-10, premise falsified; see the STATE block. Needs an owner ruling, not an implementation.**
+- [x] The two minted-this-week cards (OUAQARPL, 6B1ND5TD) are repaired on next touch via `trddgrep set`, not by a sweep — done 2026-09-10
 
 ## Approval log
 

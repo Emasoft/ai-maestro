@@ -1078,6 +1078,10 @@ switch (cmd) {
 
     console.log(C.g(`created ${C.b(result.id)}  ${path.relative(process.cwd(), result.file)}`))
     console.log(C.d(`  zone=${result.zone}  column=${result.column}`))
+    // TRDD-8D9ZYZX9: the card was minted without `project-id:`. stderr, not stdout,
+    // and AFTER the success lines — the mint succeeded, so a caller piping stdout
+    // still gets a clean id, and this never turns into an exit code.
+    if (result.warning) console.error(C.y(`trddgrep: ${result.warning}`))
     console.log(C.y(`  git add ${path.relative(process.cwd(), result.file)} && git commit`))
     process.exit(0)
   }

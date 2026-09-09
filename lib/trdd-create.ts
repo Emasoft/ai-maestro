@@ -66,6 +66,55 @@ export function idTaken(id: string, roots: string[]): boolean {
 // dated field, and importing it from `trdd-create` would have closed an import cycle.
 const isoNow = () => isoLocal()
 
+/**
+ * The PROJECT-ID source: the PRRD's own frontmatter. The ai-maestro overlay
+ * (rules/aimaestro/aimaestro-trdd-approval.md, "Scope discriminators") makes
+ * `project-id:` the field that binds a `scope: project` card to a project board,
+ * and nothing on the mint path wrote it — so every card this function minted was
+ * unbindable (TRDD-8D9ZYZX9).
+ *
+ * Returns the id, or a REASON why not. Never throws and never refuses the mint:
+ * trddgrep is installed globally and serves repos with no PRRD at all, so a
+ * fail-fast here would be a fleet-wide regression.
+ *
+ * Why the shapes are this strict, rather than `(\S+)`: a loose capture SUCCEEDS
+ * SILENTLY with a WRONG value, which is strictly worse than the absence it
+ * replaces — a missing field is detectable, a wrong one binds every future card
+ * to a board that does not exist. `project-id: "ai maestro"` would yield `"ai`,
+ * a list `[a, b]` would yield `[a,`, and `foo:bar` would write a second colon
+ * into a grep-first frontmatter line. So an unparseable value is reported as
+ * unparseable, which is a more useful message than "absent" anyway.
+ */
+export function readProjectId(designDir: string): { id: string } | { why: string } {
+  const prrd = path.join(designDir, 'requirements', 'PRRD.md')
+  let text: string
+  try {
+    text = fs.readFileSync(prrd, 'utf8')
+  } catch {
+    return { why: `no project-id: ${prrd} is unreadable or absent` }
+  }
+  // The fence must be `---` ALONE on its line. `indexOf('\n---')` also matches a
+  // `----------` table border or an em-dash-led continuation INSIDE frontmatter,
+  // truncating the search window and losing a field that is really there.
+  const open = /^---[ \t]*\r?\n/.exec(text)
+  // NOT a fixed slice(4): the opening fence is 4 chars only for a bare LF `---\n`.
+  // `---\r\n` and `--- \n` are both legal and both shift every later index by one,
+  // which would cut the first frontmatter line in half.
+  if (!open) return { why: `no project-id: ${prrd} has no frontmatter` }
+  const body = text.slice(open[0].length)
+  const close = /^---[ \t]*$/m.exec(body)
+  if (!close) return { why: `no project-id: ${prrd} frontmatter is unterminated` }
+  const line = /^project-id:[ \t]*(.*)$/m.exec(body.slice(0, close.index))
+  if (!line) return { why: `no project-id: ${prrd} carries no project-id field` }
+  const raw = line[1].replace(/[ \t]+#.*$/, '').trim()
+  // The same guard the frontmatter-injection review put on `author`/`assignee`: a
+  // value with a colon or a control char breaks the grep-first `key: value` line.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw)) {
+    return { why: `no project-id: ${prrd} has project-id but its value is unparseable (${JSON.stringify(raw.slice(0, 40))})` }
+  }
+  return { id: raw }
+}
+
 const TASK_TYPES = new Set(['feature', 'bugfix', 'refactor', 'docs', 'infra', 'security', 'artifact', 'spike', 'audit'])
 
 export interface CreateTrddOpts {
@@ -111,6 +160,13 @@ export interface CreateTrddResult {
   file: string
   zone: TrddZone
   column: string
+  /**
+   * Set ONLY when the card was minted WITHOUT `project-id:` — one line naming the
+   * source that was missing. The mint still succeeded; this is a nag, not an error,
+   * and the caller is what prints it (the CLI to stderr, the API route by returning
+   * this object). Absent on a card that carries the field.
+   */
+  warning?: string
 }
 
 export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddResult {
@@ -196,6 +252,12 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     `task-type: ${opts.taskType}`,
     `min-approval-requirement: ${minApproval}`,
   ]
+  // TRDD-8D9ZYZX9: the scope discriminator. Emitted as a PAIR — `scope: project`
+  // alone defaults anyway, but `project-id:` without it leaves the binding implicit,
+  // and the overlay's rule is stated over the pair. Both are omitted together when
+  // the PRRD cannot supply an id, so a card never claims a scope it cannot bind.
+  const projectId = readProjectId(designDir)
+  if ('id' in projectId) lines.push('scope: project', `project-id: ${projectId.id}`)
   const assignee = (opts.assignee ?? (isMandate ? author : '')).trim()
   if (assignee && /[\r\n\u0000-\u001f:]/.test(assignee)) {
     throw new Error('assignee must be a one-line name without a colon')
@@ -227,5 +289,5 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   const tmp = `${file}.tmp`
   fs.writeFileSync(tmp, lines.join('\n'), 'utf8')
   fs.renameSync(tmp, file)
-  return { id, file, zone, column }
+  return { id, file, zone, column, ...('why' in projectId ? { warning: projectId.why } : {}) }
 }

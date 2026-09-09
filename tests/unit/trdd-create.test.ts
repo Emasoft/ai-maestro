@@ -5,7 +5,7 @@
  *   - the minted file parses as a real v2 card (the store's own parser is the oracle);
  *   - a colon title is refused (grep-first frontmatter rule).
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import { mkdtempSync, rmSync } from 'fs'
@@ -143,5 +143,103 @@ describe('frontmatter injection guard', () => {
     for (const z of ['tasks', 'proposals']) {
       expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
     }
+  })
+})
+
+/**
+ * TRDD-8D9ZYZX9 — the scope discriminator.
+ *
+ * One `it()` per branch, deliberately: a neuter stops at the FIRST failing assertion,
+ * so a single test bundling all four PRRD shapes would let one neuter certify one
+ * branch and leave the other three deletable while green.
+ *
+ * NEUTER RUNS (2026-09-10, OBSERVED — restore blob-verified byte-identical each time):
+ *   delete the `lines.push('scope: project', …)`  → 3 red: pair, CRLF, comment-strip
+ *   readProjectId always returns an id            → 5 red: every case in this block
+ *   remove the unterminated-fence guard           → 2 red: unterminated, second-colon
+ *   loosen the value guard to `\S+`               → 2 red: second-colon, YAML alias
+ *   remove the trailing-comment strip             → 1 red: comment-strip
+ *   `slice(4)` instead of `open[0].length`        → 0 red — REPORTED, not hidden: see
+ *       the CRLF test's own comment. The first two shapes I wrote were VACUOUS
+ *       (a space-bearing value is already refused by `\S+`; an under-slice of a
+ *       ≥4-char fence only ever leaves whitespace), and the neuter is how that
+ *       surfaced — the green run is the finding, about the test, not the code.
+ */
+const writePrrd = (dir: string, text: string) => {
+  fs.mkdirSync(path.join(dir, 'requirements'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'requirements', 'PRRD.md'), text, 'utf8')
+}
+const mint = (dir: string, title: string) =>
+  createTrdd(dir, { title, taskType: 'bugfix', authorAuthority: 'none', author: 'probe' })
+
+describe('TRDD-8D9ZYZX9 project-id at mint', () => {
+  it('mints scope and project-id as a PAIR from the PRRD, and warns about nothing', () => {
+    writePrrd(design, '---\nproject-id: ai-maestro\nstatus: normative\n---\n# PRRD\n')
+    const r = mint(design, 'a bound card')
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(text).toMatch(/^scope: project$/m)
+    expect(text).toMatch(/^project-id: ai-maestro$/m)
+    expect(r.warning).toBeUndefined()
+  })
+
+  it('reads a CRLF PRRD', () => {
+    // What this pins: the FENCE regexes tolerate `\r`. It does NOT pin `open[0].length`
+    // over a fixed `slice(4)` — MEASURED 2026-09-10, that neuter came back GREEN, because
+    // the opening fence is never SHORTER than 4 chars, so an under-slice only ever leaves
+    // leading whitespace, which `/m` tolerates. `open[0].length` is kept as the honest
+    // expression of "skip the fence I actually matched", not as a fix for a live bug —
+    // recorded here rather than left as a comment claiming a defence nothing tests.
+    writePrrd(design, '---\r\nproject-id: crlf-repo\r\nstatus: normative\r\n---\r\n# PRRD\n')
+    const r = mint(design, 'a crlf card')
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^project-id: crlf-repo$/m)
+    expect(r.warning).toBeUndefined()
+  })
+
+  it('an unterminated PRRD frontmatter is refused, not read as if it closed', () => {
+    writePrrd(design, '---\nproject-id: never-closed\n# PRRD with no closing fence\n')
+    const r = mint(design, 'an unterminated card')
+    expect(r.warning).toMatch(/frontmatter is unterminated/)
+    expect(fs.readFileSync(r.file, 'utf8')).not.toMatch(/^project-id:/m)
+  })
+
+  it('with NO PRRD the mint still SUCCEEDS, and the warning names the path it looked at', () => {
+    // Both halves are load-bearing. "did not throw" alone passes against a
+    // readProjectId that is entirely broken; the id proves a card was really written.
+    const r = mint(design, 'an unbound card')
+    expect(r.id).toMatch(/^[A-Z0-9]{8}$/)
+    expect(fs.existsSync(r.file)).toBe(true)
+    expect(r.warning).toMatch(/PRRD\.md is unreadable or absent/)
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(text).not.toMatch(/^project-id:/m)
+    expect(text).not.toMatch(/^scope:/m)
+  })
+
+  // One CASE per `it()`, because a neuter stops at the first failing assertion. The
+  // shapes are chosen to discriminate: a SPACE-bearing value is already refused by a
+  // loose `\S+`, so `"ai maestro"` alone cannot tell the strict guard from the loose
+  // one — MEASURED 2026-09-10, that neuter came back GREEN. The colon and bracket
+  // cases are the ones `\S+` captures and writes.
+  for (const [shape, raw] of [
+    ['a second colon — breaks the grep-first `key: value` line', 'foo:bar'],
+    ['a YAML list', '[a, b]'],
+    ['a YAML alias', '*pid'],
+    ['a quoted value with a space', '"ai maestro"'],
+  ] as const) {
+    it(`refuses an unparseable project-id and names it: ${shape}`, () => {
+      // A WRONG project-id is worse than a missing one: the missing one is detectable,
+      // and the wrong one silently binds every later card to a board that is not there.
+      writePrrd(design, `---\nproject-id: ${raw}\n---\n# PRRD\n`)
+      // The card TITLE must not carry `raw` — createTrdd refuses a colon in a title,
+      // so `foo:bar` in the title throws before the code under test ever runs.
+      const r = mint(design, `a mangled card ${shape.replace(/[^a-z ]/gi, '')}`)
+      expect(r.warning).toMatch(/has project-id but its value is unparseable/)
+      expect(fs.readFileSync(r.file, 'utf8')).not.toMatch(/^project-id:/m)
+    })
+  }
+
+  it('strips a trailing YAML comment rather than capturing it', () => {
+    writePrrd(design, '---\nproject-id: ai-maestro   # the discriminator\n---\n# PRRD\n')
+    expect(fs.readFileSync(mint(design, 'a commented card').file, 'utf8'))
+      .toMatch(/^project-id: ai-maestro$/m)
   })
 })

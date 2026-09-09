@@ -3,7 +3,7 @@ trdd-id: WLHP34KZ
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200
-updated: 2026-09-09T16:35:13+0200
+updated: 2026-09-09T16:41:06+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -125,11 +125,21 @@ was a reasonable proxy for health becomes an inversion of it.
 
 Add the same `oauthOf(b).refreshToken` test the sibling branch at `:1247` already applies:
 
-- **Primary — `:1282-1286`**, the network-down arm. One line. This is the janitor session's own
-  suggestion and it is consistent with the stay-put design in TRDD-W11LAPSC.
-- **Secondary — `:1259`**, the `unread`/cooldown path described above. Same one-line test.
-  Listed separately because the owner may reasonably gate only the primary site: `:1259` is
-  correct for the case its comment names and wrong only for the cooldown entry.
+**IF ONLY ONE SITE IS GATED, GATE `:1259`.** The two are asymmetric, and the first draft of this
+card had the priority backwards by calling `:1282-1286` "primary" — that was an artefact of which
+site I found first, not a ranking. Independently traced and agreed by the janitor session
+2026-09-09:
+
+- **`:1259` — needs only a probe cooldown.** Network UP, ordinary operation. `unread` makes the
+  guard false, the refresh block that DOES test `refreshToken` is skipped entirely, and the push
+  runs untested. `blobLocallyExpired` is checked there, but a fabricated one-year `expiresAt`
+  passes it, so the slot enters `degraded` and then wins the max-expiry ranking. **This is the
+  common path.**
+- **`:1282-1286` — needs an outage AND a locally-expired live blob** (see the trace above). Two
+  conditions, both uncommon. This is the janitor session's originally-suggested site.
+
+Both take the same one-line test. Gating both is the complete fix; gating only `:1282-1286`
+leaves the more reachable hazard live.
 
 ## Related
 
@@ -166,8 +176,12 @@ degraded target"). The change makes the arm agree with its own stated intent.
 ## Acceptance
 
 - [ ] owner rules on whether to apply the gate, and at one site or both
-- [ ] the `:1247` refreshToken test added to the `:1282-1286` arm
-- [ ] decided + done or declined: the same test at `:1259` (the cooldown entry)
+- [ ] the janitor importer's blob shape READ, confirming `oauthOf(b).refreshToken` is actually
+      falsy for an imported setup-token — if it writes a placeholder string, or nests the field
+      differently, this gate and TRDD-W11LAPSC's both silently never fire and both cards still
+      read as correct. Neither session has read it; it is one grep away
+- [ ] the `:1247` refreshToken test added at `:1259` (the more reachable site)
+- [ ] the same test at `:1282-1286`, or a recorded decision to leave that site ungated
 - [ ] the failing-first test above written and passing, with all three preconditions asserted
 - [ ] janitor told the branch is gated, so it can ship the import as runnable-by-default
 

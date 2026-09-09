@@ -3,7 +3,7 @@ trdd-id: W11LAPSC
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200
-updated: 2026-09-09T16:35:13+0200
+updated: 2026-09-09T16:41:06+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -28,6 +28,11 @@ already become an admissible rotation TARGET. If WLHP34KZ's gate is applied, no 
 reaches `degraded`, and this defect is unreachable by that route. It is filed anyway because the
 gate is one line in one arm and this is the failure mode if that line is ever relaxed, or if such
 a slot becomes the LIVE credential by another path (a manual `/login`, an import).
+
+**THE DESIGN HALF HAS ALREADY CHANGED ONCE, on the day this card was filed — treat it as
+UNSETTLED.** It was filed with a body-read discrimination; that was withdrawn hours later by the
+session that proposed it, and replaced with the slot-type gate now in Proposed design. The
+acceptance boxes changed with it.
 
 NEXT ACTION: owner decides — and may reasonably decide it is subsumed by WLHP34KZ's gate and
 close this as such. That is a legitimate outcome, not a failure of the card.
@@ -63,42 +68,95 @@ plus the documented 403 behaviour of a setup-token, and no such slot exists in t
 
 ## Proposed design
 
-AGREED BY DESIGN 2026-09-09 between this session and the janitor session, **NOT IMPLEMENTED on
-either side**. When the LIVE blob has no refresh token, the tick STAYS PUT unless it has positive
-evidence of failure:
+**SUPERSEDED 2026-09-09 16:41 — the design THIS CARD WAS FILED WITH, summarised in this
+paragraph, is withdrawn. It is not the design in the bullets underneath.** That original gated
+stay-put on distinguishing `oauth_scope_insufficient` from other 403s, which required widening
+the janitor's `usage_probe.http_get` to return the error body (it currently discards it). It was
+proposed by the janitor session, recorded here as AGREED between both sessions, and withdrawn by
+them the same day — and it was never independently established on this side either. Their stated
+grounds: a corrupted-bearer-token control returned **401 `authentication_error`, not 403**, so
+credential death already surfaces as 401, which is fatal on both sides.
 
-- distinguish `oauth_scope_insufficient` from other 403s — the latter stay fatal;
-- treat "unmeasurable" as distinct from "near limit". A probe that cannot answer is not evidence
-  of exhaustion;
-- if such slots ever become admissible TARGETS, they need their OWN bucket, tried AFTER
-  `degraded` — never inside it, because reusing `degraded` reproduces the max-expiry inversion
+**The design now on the table — key on SLOT SHAPE, not on the response body:**
+
+- the gate keys on **absence of `refreshToken` in the blob**. That is a MARKER for a
+  `claude setup-token` mint, not a definition of one: any other path that lands a blob without a
+  refresh grant (a capture that never persisted one, a partial write that dropped it) inherits
+  the same leniency. Keying on it is a deliberate trade, not an identity;
+- for such a slot a 403 on `/usage` is EXPECTED (the mint has no `user:profile` scope) and must
+  NOT mark it dead;
+- **401 stays fatal for every slot type**, unchanged;
+- a **full-OAuth** slot keeps BOTH 401 and 403 fatal, unchanged — the leniency reaches exactly
+  the credential class that cannot be measured;
+- "unmeasurable" stays distinct from "near limit". A probe that cannot answer is not evidence of
+  exhaustion;
+- if such slots ever become admissible TARGETS they need their OWN bucket, tried AFTER
+  `degraded`, never inside it — reusing `degraded` reproduces the max-expiry inversion
   TRDD-WLHP34KZ is about.
 
-What would falsify the agreement half: read the janitor's own rotator for a scope-aware 403
-branch. Until then assume neither side has shipped it.
+**The unread fact both gates rest on.** Neither session has read the blob shape this gate keys
+on. All 3 slots in this vault record `via: slot_capture_browser(full-oauth)`; no setup-token blob
+has ever been held here, and the janitor's importer has not been read on this side. If it writes
+`refreshToken` absent, `null` or `""`, `oauthOf(b).refreshToken` is falsy and the gate fires. If
+it writes a placeholder string, or nests the field differently, **this gate and TRDD-WLHP34KZ's
+both silently never fire — and both cards still read as correct.** That is the
+highest-probability failure in the pair and it is one grep of their importer away.
+
+REPORTED, not measured here (janitor session, 2026-09-09): the 401-not-403 control, and that they
+are implementing the slot-type gate on their side. **The generalisation is from ONE sample**, and
+a weak one: a CORRUPTED bearer token returning `authentication_error` is close to tautological —
+a malformed token authenticates as nothing. It says little about a well-formed but no-longer-
+authorized credential, which is what revocation and account suspension look like.
+
+What would FALSIFY the "they are implementing it" half: read the janitor's own rotator for a
+`refreshToken is None` branch on its 403 path. Until then, assume neither side has shipped it.
+
+**The trade, stated without consolation.** If the generalisation is wrong — if a revoked
+no-refresh credential answers 403 rather than 401 — this change converts a working rotation into
+a permanent pin on a dead live credential, for as long as it stays live, while healthy alternates
+idle and the tick logs a deliberate hold that looks correct. Today's behaviour would instead
+rotate away and keep the user working. Recovering the *credential* needs a human re-mint either
+way; recovering *service* is the rotator's entire job, and that is what the pin costs. The
+exposure is accepted only because no no-refresh slot exists in this vault today.
+
+Note the pair is a one-way door: TRDD-WLHP34KZ forbids rotating ONTO a no-refresh slot, and this
+card forbids rotating OFF one. A no-refresh credential that becomes live by any route (a manual
+`/login`, an import) has exactly one exit — a 401.
 
 ## Verification (when it is authorised)
 
-A test seeding a live blob with no refresh grant whose `/usage` probe returns 403 with a
-scope-insufficient body, driving two consecutive ticks, asserting ZERO `switchLiveTo` calls
+A test seeding a live blob with **no `refreshToken`** whose `/usage` probe returns a bare 403 (no
+body inspection — the gate no longer reads one), driving two consecutive ticks, asserting ZERO
+`switchLiveTo` calls
 across both. It must FAIL before the fix — the current code rotates on the first tick — and the
 two-tick shape is what distinguishes "stayed put" from "rotated once and had nowhere to go".
 
-A second case must assert the fix did not disarm the real failure: a 403 that is NOT
-scope-insufficient still rotates.
+A second case must assert the fix did not disarm the real failure, and under slot-type gating
+that case is a different one than it was under the withdrawn design: a **full-OAuth** live blob
+(refresh grant present) whose probe returns 403 must still rotate, unchanged. A third asserts 401
+stays fatal for a no-refresh blob — the one exit from the one-way door named above.
 
 ## Risk
 
 MEDIUM, higher than TRDD-WLHP34KZ's. That card's change only ever removes candidates; this one
-makes the tick decline to rotate in a case where it currently rotates, so a mistake here keeps a
-genuinely dead live credential in place. The `oauth_scope_insufficient` discrimination is the
-whole safety margin, and it depends on the endpoint's error body being stable — which has not
-been verified against a live 403 on this side.
+makes the tick decline to rotate where it currently rotates, so a mistake keeps a genuinely dead
+live credential in place while healthy alternates idle.
+
+NOT a smaller risk than the withdrawn body-read design — a DIFFERENT one, and the card should not
+be quoted as saying otherwise. The body-read design consumed more information (the server's own
+reason) and its exposure was body-format instability. This one is cheaper, touches no shared
+frozen contract, and carries two exposures instead: a structural proxy that may not identify the
+class it stands for, and the unmeasured 401-only generalisation.
 
 ## Acceptance
 
 - [ ] owner rules — including the option to close this as subsumed by TRDD-WLHP34KZ's gate
-- [ ] the scope-insufficient 403 discrimination read from a real response body, not assumed
+- [ ] the janitor importer's blob shape READ, confirming `oauthOf(b).refreshToken` is actually
+      falsy for an imported setup-token — if it writes a placeholder, this gate and
+      TRDD-WLHP34KZ's both silently never fire
+- [ ] confirm 401-not-403 for a death mode other than a corrupted bearer token, **or the OWNER
+      accepts the residual permanent-pin exposure on the record** (this box gates the SHIP, not
+      a sentence: it is not satisfiable before the branch exists)
 - [ ] stay-put branch implemented for a no-refresh LIVE blob
 - [ ] both tests above written and passing; the first FAILS before the fix
 - [ ] janitor told which side shipped what, so the agreement stops being an intention

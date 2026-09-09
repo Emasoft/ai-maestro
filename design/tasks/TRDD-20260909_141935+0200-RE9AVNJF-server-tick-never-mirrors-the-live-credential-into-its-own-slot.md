@@ -3,7 +3,7 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: backburner
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T17:13:37+0200
+updated: 2026-09-09T17:16:52+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -78,11 +78,27 @@ Candidates, none applied: **`dev` + this note** (stale, but the drain rule keeps
 **`human_review` was recommended here and is WITHDRAWN — it was wrong, and wrong for the reason
 this card keeps re-learning.** I picked it on "it is not a WIP column, so it claims no activity",
 which is the wrong test: a column is a good home because what it ASSERTS is true, not because it
-asserts nothing. Its only documented entry is `ai_review → human_review` and its exits are
-`complete` and `dev`, so it means *a human must review this work product* — false here. The code
-WAS reviewed (boxes 1-3); what remains is an operational action. Worse, its obvious exit
-(`human_review → complete`) is closed by the same checklist gate, so the owner would be parked
-somewhere whose natural resolution is blocked.
+asserts nothing. **MEASURED by the COMPLEMENT** — every line mentioning `human_review` across both
+ai-maestro overlays, the IND base, `universal-kanban` and both `manager-approval-defaults` — there
+is exactly ONE documented entry, `ai_review → human_review`, and the exits are `complete` and
+`dev`; the kanban chain places it between them. (The first version of this claim rested on a
+`grep -c` of ONE file for the string I expected, which can only confirm, never falsify. The claim
+survived the real check; the method had not earned it.) So the column means *a human must review
+this work product* — false here. The code WAS reviewed (boxes 1-3); what remains is an operational
+action. Worse, its obvious exit (`human_review → complete`) is closed by the same checklist gate
+(D4 step 5b: a terminal column with any unchecked box is a false completion), so the owner would
+be parked somewhere whose natural resolution is blocked.
+
+**An UNVERIFIED third option, surfaced because it would beat both listed candidates if legal:**
+`column: blocked` with NO `blocked-by:` and `unblock-when: [decision: ...]` alone — visible,
+forward-positioned, and it encodes the wait condition machine-readably, which is the exact thing
+the next paragraph says is missing. It was `blocked-by` that was false two commits ago, not the
+column. What stops it being recommended: D4 step 5b states the biconditional *`blocked-by`
+non-empty ⟺ `column: blocked`*, and I have not read the linter's actual predicate. **I tried to
+settle it empirically and the probe was VACUOUS** — a throwaway card in the session scratchpad
+validated clean, but so did a positive control seeded with a guaranteed violation (`complete` +
+an unchecked box), which proves the linter never evaluated either file. Settling it needs a probe
+card inside `design/tasks/`, and polluting the board to interrogate a linter is not worth it.
 
 Two corrections to the paragraph above, both against me: "filed where nothing surfaces it" is
 OVERSTATED — `backburner` drops out of DRAIN pressure but stays drift-eligible, so `trdd-drift`
@@ -110,7 +126,8 @@ the linter's demand for a non-empty `blocked-by` — optimising for the instrume
 and a prose caveat in a STATE block does not un-say a machine-read frontmatter field: a watchdog
 walking the graph would have concluded *"work 8148P30S to unblock RE9AVNJF"*. `backburner` is a
 resting state the pipeline rule already exempts from drain pressure, so it needs no edge and
-asserts nothing untrue.
+asserts nothing untrue. **← THAT LAST CLAUSE IS SUPERSEDED by the column paragraph below: it does
+assert something untrue, positionally.**
 
 Box 5's deploy check, kept here as a RECIPE and deliberately NOT as a `blocker-probe:` —
 `grep -rl --include='*.js' --exclude='*.map' live-mirror .next` — the string literal this fix

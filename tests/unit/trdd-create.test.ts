@@ -254,7 +254,10 @@ describe('TRDD-8D9ZYZX9 project-id at mint', () => {
   it('reads a PRRD carrying a UTF-8 BOM', () => {
     // The BOM is invisible in every editor and would fail the fence test, minting
     // every card unbound against a PRRD that plainly carries the field.
-    writePrrd(design, '﻿---\nproject-id: bom-repo\n---\n# PRRD\n')
+    // The fixture spells it by CODE POINT for the same reason the source does: a
+    // literal BOM in this file is invisible, so a whitespace-normalising pass could
+    // strip it from the fixture and the test would then pass against no BOM at all.
+    writePrrd(design, String.fromCharCode(0xfeff) + '---\nproject-id: bom-repo\n---\n# PRRD\n')
     const r = mint(design, 'a bom card')
     expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^project-id: bom-repo$/m)
     expect(r.warning).toBeUndefined()

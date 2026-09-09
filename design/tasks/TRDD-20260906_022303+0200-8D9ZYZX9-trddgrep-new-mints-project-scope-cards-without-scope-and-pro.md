@@ -3,7 +3,7 @@ trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
 column: backburner
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-10T01:24:16+0200
+updated: 2026-09-10T01:33:04+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -68,13 +68,32 @@ whitespace, which `/m` tolerates. Two of the first five fixtures I wrote were va
 of that shape, and the neuter runs are what surfaced it. The green run is recorded in the test
 rather than hidden.
 
-**Post-write review (2026-09-10) found two real parse defects; both fixed.** A DUPLICATE
-`project-id:` — a regex takes the FIRST, YAML readers disagree (1.2 calls it an error, js-yaml
-throws, permissive ones take the LAST), and both values are well-formed so the value guard cannot
-see it. Fixed by REFUSING rather than picking, on the same principle as the unparseable branch:
-when the source is ambiguous, do not capture. And a UTF-8 BOM, invisible in every editor, failed
-the fence test and would have minted every card unbound against a PRRD that plainly carries the
-field. `readProjectId` also lost its `export` — nothing outside the module calls it.
+**Post-write review ROUND 2 (2026-09-10) found two real parse defects, both fixed that day** — a
+count as of that round, not a running total. A DUPLICATE `project-id:` — a regex takes the FIRST,
+YAML readers disagree (1.2 calls it an error, js-yaml throws, permissive ones take the LAST), and
+both values are well-formed so the value guard cannot see it. **Fixed by REFUSING rather than
+picking, which DEVIATES from that review's recommendation of last-wins** (to match the permissive
+readers); refusing follows the same principle as the unparseable branch — when the source is
+ambiguous, do not capture — and is recorded here as a finding REJECTED with its reason, not an
+applied one. And a UTF-8 BOM, invisible in every editor, failed the fence test and would have
+minted every card unbound against a PRRD that plainly carries the field. `readProjectId` also
+lost its `export` — nothing outside the module calls it.
+
+**ROUND 3 (2026-09-10) — one finding, applied.** The BOM was written as a LITERAL U+FEFF in BOTH
+the source and the test fixture, so a whitespace-normalising pass could strip it from both at
+once and leave the test green against a strip that no longer strips. Both now spell it
+`String.fromCharCode(0xfeff)`, and the strip is a loop (a doubled BOM). The review asked for the
+backslash-u-F-E-F-F escape, written out in words HERE for the same reason: this session's output
+path normalises that six-character sequence back into a literal BOM —
+MEASURED with a probe, not assumed — so the code-point spelling is the reachable form with the
+same properties. Neuter re-run on the new shape: 1 red, the BOM test.
+
+**The corpus-mutation control RAN (2026-09-10); the no-new-failures claim holds.** Round 2 left it
+open — both arms of the first attempt saw the same mutated corpus, so an empty diff could not
+separate "my card edits changed nothing" from "they broke something already broken". Re-run in a
+throwaway worktree at HEAD over `trdd-doctor` + `pillar-grep-cli`: cards as committed, then the
+same three cards reverted to `d8d039cc` **in the same tree**. 2 failed / 123 passed both arms,
+failure messages byte-identical. One variable, two arms, same result.
 
 **COLUMN — `backburner`, and why not `todo` or `blocked`.** `todo` means pullable and this card is
 not: its only remaining work is a ruling. `blocked` needs a runnable blocker probe, and a human

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-09T17:31:24+0200
+updated: 2026-09-09T17:36:47+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -21,38 +21,37 @@ priority: 1
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
 
-**CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed; 5 and 6 open and BOTH
-owner-owned — box 5 is `yarn build` + `pm2 restart` (the standing hold), box 6 is the owner
-confirming 95 and 97 once it deploys.
+**CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
+BOTH the owner's.
 
-**THE 09-08 NUMBERS ARE A THIRD-HAND RECORD, not a measurement by this session.** The approval
-log's figures (5 vitest files, 109 passed, `tsc --noEmit` 0 error lines, no `ROTATOR_` env pins)
-came from a worker's report under `reports/lean-worker/`, and that same log line flags the
-weakest hop itself: box 2's neuters were **not re-run**. The `pid 24806` in it describes a
-process as of 09-08 — roughly a day old; do not read it as the current server.
+NEXT ACTION — **the OWNER's, not this session's:** lift the build/restart hold (box 5; ONE
+`yarn build` + `pm2 restart` also deploys TRDD-RE9AVNJF, whose fix is in the same bundle and
+equally undeployed), then confirm 95 and 97 (box 6).
 
-**NOT DEPLOYED BY ANY ROUTE THIS CARD RECORDS.** `lib/*.ts` is bundled into `.next` and no build
-has run since, so the running server is not expected to be using 95/97 — **but that is an
-inference, not an observation.** Nothing here greps the compiled chunk or dates `.next` against
-the commit, and caveat (c) makes the live threshold depend on the env the pm2 process was
-STARTED with, which is not the env checked on 09-08. An earlier draft of this block asserted
-"the running server still vetoes at 90"; that is withdrawn as over-claimed.
+**NOT MEASURED BY THIS SESSION.** The 09-08 approval log records the COORDINATOR's own checks
+(5 vitest files, 109 passed, `tsc --noEmit` 0 error lines, no `ROTATOR_` pins) and SEPARATELY
+flags that box 2's neuters were the WORKER's recorded runs, *not re-run*. Two different
+provenance chains — an earlier draft of this block collapsed them and attributed all of it to a
+`reports/lean-worker/` file nobody here opened. `pid 24806` describes a process as of 09-08; the
+running server may no longer be that pid, which is what leaves caveat (c)'s env question OPEN
+rather than settled either way.
 
-NEXT ACTION: nothing in this session's hands.
+**NOT DEPLOYED BY ANY ROUTE THIS CARD RECORDS** — `lib/*.ts` is bundled into `.next` and no build
+has run since. So 95/97 is not expected to be live, **but that is an inference, not an
+observation**: nothing here greps the compiled chunk or dates `.next` against the commit. An
+earlier draft asserted "the running server still vetoes at 90" — withdrawn as over-claimed.
 
-**PAIRED WITH TRDD-RE9AVNJF ON THE DEPLOY.** Both have landed code, neither is live, and ONE
-`yarn build` + restart covers both. That is the whole of the pairing. An earlier draft went on to
-claim the two cards' COLUMN question is also one question; it is not established, and the two are
-not even in the same column.
+**COLUMN — `dev`, and it is the OWNER's call, not a defect this session is sitting on.**
+RE9AVNJF's STATE block lists **`dev` + a note** as its FIRST candidate ("stale, but the drain rule
+keeps it in view"); it took `backburner` for itself and explicitly declined to choose a third
+time. So `dev` is a WEIGHED option here, not a rejected one.
 
-**COLUMN — this card asserts TWO states at once, and this block outranks the frontmatter.**
-`column: dev` claims active work and nobody has worked it since the 12:28 takeover. `dev` is not
-among the options RE9AVNJF's STATE block weighs — READ THERE 2026-09-09 and confirmed to carry
-them: `backburner` kept, `complete` unavailable on the checklist gate, `human_review` recommended
-then withdrawn with a complement measurement, plus an UNVERIFIED `blocked` + `decision:`-only
-variant. That sibling LEFT `dev` at 17:06 for this exact reason. Not moved here because its
-landing spot is itself disputed and this session has been wrong on that choice twice — but the
-honest reading is that `dev` is a LIVE DEFECT awaiting the owner, not a settled deferral.
+**Two earlier drafts of this block said otherwise and both were wrong** — the second called `dev`
+a "LIVE DEFECT" and "not among the options RE9AVNJF weighs". That was FALSE, and instructively
+so: it was read off a `grep` whose keyword list omitted `dev` and whose `head -40` truncated a
+118-line block — verified-absent claimed from not-searched-for. A review fork then argued from
+that false premise that the card was parked at a rejected option and should move. Corrected
+2026-09-09T17:36 by grepping for the word itself.
 
 ## Problem
 

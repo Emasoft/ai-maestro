@@ -3,7 +3,7 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: dev
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T14:26:40+0200
+updated: 2026-09-09T14:28:09+0200
 implementation-commits: [5aa945c1]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -42,7 +42,19 @@ unreadable) never reaches this mirror — the server reads the primary (reconcil
 today), and F1 is the janitor daemon's context, whose own `cmd_capture` is the mirror there;
 `switchLiveTo` needs no write (it stamps `live_fp` from the slot it copied, so the next tick sees
 no drift); the janitor daemon's tick running beside the server (5 takeover episodes 09-08,
-TRDD-8148P30S) writes the same slot + meta last-writer-wins — pre-existing, not worsened.
+TRDD-8148P30S) writes the same slot + meta last-writer-wins — pre-existing, and this adds ONE
+MORE writer to the live account's meta (post-write review, finding 1).
+
+**Post-write review (fork over commit 5aa945c1):** accepted — test 3's `readSlot(...)===null`
+line was vacuous under backend `none` (dropped; the `slots` assertion is what N3 reddens);
+under N1 test 1 fell on its FIRST expect (`slotToken`), so `fp`/`via`/the two absences are
+pinned transitively by the one atomic `slots[realEmail] = {…}` assignment, not each on its own;
+"restored" is proven by `git diff … | grep -c NEUTER` = 0, not the file grep; the "rotator set"
+was the vitest PREFIX `tests/unit/oauth-rotator-` (28 files on disk) + `statusline-admissible`
+= the 29 files run. Rejected: "the refused-path log carries no email" — `writeSlot`'s own
+message names the slot, so `${exc.message}` carries it exactly once; "tick box 3, the full
+suite exited 0" — it did NOT (17 failed / 6814 passed, wrapper exit was the `tail`'s); no
+`--amend` of the landed commit for wording.
 
 NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` + `pm2 restart`
 (the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed

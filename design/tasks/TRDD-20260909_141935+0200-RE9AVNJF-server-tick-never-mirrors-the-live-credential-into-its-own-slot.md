@@ -3,7 +3,7 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: backburner
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T17:11:24+0200
+updated: 2026-09-09T17:13:37+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -68,12 +68,27 @@ the live server still runs the pre-fix bundle — a slot going stale before then
 and am not choosing a third time.** It is at `backburner` (moved 2026-09-09T17:06 out of `dev`,
 where it had sat since 14:25 with nobody working it). The third review then faulted `backburner`
 too, and the objection is good: this card's ONLY remaining work is the owner's (boxes 4 and 5),
-and `backburner` is the one column the drain rule EXEMPTS — so the human's own pending action is
-now filed where nothing surfaces it. It is also the FIRST column in the chain, so it positionally
-asserts *not begun* about a card carrying `implementation-commits: [5aa945c1, 48e839b6]` and three
-checked boxes. Candidates, none applied: **`human_review`** (forward, the remaining gate really is
-a USER decision, and not a WIP column so it claims no activity), **`dev` + this note** (stale but
-visible), or leaving it here. `complete` is unavailable — the checklist gate, two boxes open.
+and `backburner` is the one column the drain rule EXEMPTS. It is also the FIRST column in the
+chain, so it positionally asserts *not begun* about a card carrying
+`implementation-commits: [5aa945c1, 48e839b6]` and three checked boxes.
+
+Candidates, none applied: **`dev` + this note** (stale, but the drain rule keeps it in view), or
+**leaving it at `backburner`**. `complete` is unavailable — the checklist gate, two boxes open.
+
+**`human_review` was recommended here and is WITHDRAWN — it was wrong, and wrong for the reason
+this card keeps re-learning.** I picked it on "it is not a WIP column, so it claims no activity",
+which is the wrong test: a column is a good home because what it ASSERTS is true, not because it
+asserts nothing. Its only documented entry is `ai_review → human_review` and its exits are
+`complete` and `dev`, so it means *a human must review this work product* — false here. The code
+WAS reviewed (boxes 1-3); what remains is an operational action. Worse, its obvious exit
+(`human_review → complete`) is closed by the same checklist gate, so the owner would be parked
+somewhere whose natural resolution is blocked.
+
+Two corrections to the paragraph above, both against me: "filed where nothing surfaces it" is
+OVERSTATED — `backburner` drops out of DRAIN pressure but stays drift-eligible, so `trdd-drift`
+still sees it. And `review-after: <date>` is the one documented field that works at this column;
+it is a date snooze rather than a wait condition, so it does not encode "waiting on the owner",
+but it was omitted from the paragraph below that says a machine-readable home is needed.
 
 **Whichever column is picked, the WAIT CONDITION needs a machine-readable home again.**
 `unblock-when: [decision: owner authorises yarn build + pm2 restart]` was TRUE — `decision:` is

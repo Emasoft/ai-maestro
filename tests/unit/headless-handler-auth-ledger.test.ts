@@ -58,6 +58,8 @@ const AUTH_NEEDLES = [
   'enforceSystemOwner(',
   'authorize(',
   'checkTeamAccess(',
+  // authenticates via the AMP service — bearer or verified attestation (TRDD-3VFT513C), like delegateNextRoute
+  'routeMessage(',
 ]
 
 interface Handler { key: string; guarded: boolean }
@@ -160,7 +162,6 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   // pinned by tests/unit/capabilities.test.ts, not this line.
   'GET /^\\/api\\/capabilities$/',
   'POST /^\\/api\\/v1\\/register$/',
-  'POST /^\\/api\\/v1\\/route$/',
   'GET /^\\/api\\/v1\\/agents\\/me$/',
   'PATCH /^\\/api\\/v1\\/agents\\/me$/',
   'DELETE /^\\/api\\/v1\\/agents\\/me$/',

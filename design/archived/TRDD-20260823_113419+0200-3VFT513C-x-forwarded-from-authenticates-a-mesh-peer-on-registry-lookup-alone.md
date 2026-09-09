@@ -1,9 +1,9 @@
 ---
 trdd-id: 3VFT513C
 title: X-Forwarded-From authenticates a mesh peer on registry lookup alone and the signature header is never read
-column: dev
+column: complete
 created: 2026-08-23T11:34:19+0200
-updated: 2026-09-09T12:29:46+0200
+updated: 2026-09-09T12:37:07+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-00
 task-type: security
@@ -271,3 +271,5 @@ Then the mirror: a correctly-attested peer still routes, so the fix is not simpl
 - 2026-09-06T03:48:06+0200 — CORRECTION to the 03:31:29 line above: it originally read 'refused at 401 from commit 2b7b2d64 on'; nothing is deployed (pm2 restart replays the existing build, no rebuild has run since 2b7b2d64), so the line now reads 'once 2b7b2d64 is DEPLOYED' and qualifies cloud-server-1 with what was measured at 03:22 — the only registered host, no publicKeyHex, enabled false, 0 mesh-forward lines in the server log. The edit itself did not bump updated; this line does.
 - 2026-09-09T12:28:10+0200 — takeover by governance-rules-session: assignee ai-maestro-hub-session not alive in ListAgents at 2026-09-09 12:26.
 - 2026-09-09T12:29:46+0200 — box 5 done: 'routeMessage(' added to AUTH_NEEDLES (auth lives in the AMP service, shared by the Next route and the headless handler), ledger line deleted, suite 4/4, neuter reds exactly 'no handler is added without auth'. NEXT: deploy (yarn build + restart is USER-HELD) and the USER's cloud-server-1 key decision; this card has no STATE block — no trddgrep verb inserts a section.
+- 2026-09-09T12:37:06+0200 — post-write review (fork, 0 tools) of b0b976e7 applied: the 'routeMessage(' needle is a business call, not a refusal primitive, so a fifth test now pins that routeMessage in services/amp-service.ts (754-1357) still calls authenticateRequest( and verifyRoleAttestation( — suite 5/5, neuter (needle → bogus) reds exactly that test; complementary neuter (ledger line re-added) reds exactly 'the ledger carries no stale entries', so the deletion is pinned too (reports/lean-worker/20260909_123548+0200-3VFT513C-complementary-neuter.md). Comment no longer cites delegateNextRoute as precedent. All 6 boxes ticked, release-via absent (terminal = complete): hopping dev→testing→ai_review→complete on the per-part suites (amp-forwarded-from-peer-auth 2026-09-06, ledger 5/5 today); the full suite was not re-run. No STATE block: the card closes on this edit and no trddgrep verb inserts a section. What stays open is NOT this card's: deploying 2b7b2d64 (yarn build + restart, USER HOLD) and the USER's cloud-server-1 key decision, both recorded in the 2026-09-06 lines above.
+- 2026-09-09T12:37:07+0200 — COMPLETE by emanuelesabetta. archived → complete.

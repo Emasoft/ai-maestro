@@ -3,7 +3,7 @@ trdd-id: 8L6GZOSE
 title: Log each alternate's own model-scoped percent on the SCOPED-WALL verdict line
 column: todo
 created: 2026-09-09T12:28:26+0200
-updated: 2026-09-09T12:28:26+0200
+updated: 2026-09-09T12:35:33+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: feature
@@ -31,3 +31,4 @@ On a tick whose verdict carries SCOPED-WALL, log one line per alternate `alt=<ac
 ## Approval log
 
 - 2026-09-09T12:28:26+0200 — MANDATE issued by governance-rules-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-09T12:35:33+0200 — post-write review (fork, 0 tools) record-only findings: (a) frontmatter carries mandated-by: none as trddgrep new wrote it; the aimaestro-trdd-approval overlay names self for a tier-none self-mandate — tool-owned value, left as written, D4 ladder evaluates none >= none true; (b) the Problem's 'never reach the log' asserts what the ASSUMPTION line disclaims — resolve at verify_assumptions by reading the loop near tick.ts:1242, not before.

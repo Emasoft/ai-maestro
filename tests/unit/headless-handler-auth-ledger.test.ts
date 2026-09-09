@@ -49,6 +49,7 @@ import { readFileSync } from 'fs'
 import path from 'path'
 
 const ROUTER = path.resolve(__dirname, '..', '..', 'services', 'headless-router.ts')
+const AMP_SERVICE = path.resolve(__dirname, '..', '..', 'services', 'amp-service.ts')
 
 /** Any of these in a handler body means the handler authenticates its caller itself. */
 const AUTH_NEEDLES = [
@@ -58,7 +59,9 @@ const AUTH_NEEDLES = [
   'enforceSystemOwner(',
   'authorize(',
   'checkTeamAccess(',
-  // authenticates via the AMP service — bearer or verified attestation (TRDD-3VFT513C), like delegateNextRoute
+  // a business call, not a refusal primitive: it counts as a guard only because routeMessage
+  // itself authenticates (bearer, or a verified attestation — TRDD-3VFT513C); the last test
+  // in this file pins that the check is still inside routeMessage
   'routeMessage(',
 ]
 
@@ -273,5 +276,21 @@ describe('TRDD-8Q5EVGV1 — headless per-handler auth ledger', () => {
     const unguarded = new Set(handlers.filter(h => !h.guarded).map(h => h.key))
     const stale = [...UNGUARDED_LEDGER].filter(k => !unguarded.has(k))
     expect(stale, 'these are guarded now (or renamed) — delete them from UNGUARDED_LEDGER').toEqual([])
+  })
+
+  it('the routeMessage needle rests on a check the AMP service still carries (TRDD-3VFT513C)', () => {
+    // `routeMessage(` is a business call, not a refusal primitive like the other needles:
+    // the headless POST /api/v1/route handler counts as guarded ONLY because routeMessage
+    // itself authenticates — a bearer via authenticateRequest, or a verified Ed25519 role
+    // attestation for a mesh peer (TRDD-3VFT513C). Pin both here so the needle cannot
+    // outlive the check it stands for. The span runs to the next top-level `export`, which
+    // is the function's end today (services/amp-service.ts:754-1357, next export :1363).
+    const amp = readFileSync(AMP_SERVICE, 'utf8')
+    const start = amp.indexOf('export async function routeMessage(')
+    expect(start, 'routeMessage moved or was renamed — re-derive the needle').toBeGreaterThan(-1)
+    const next = amp.indexOf('\nexport ', start + 1)
+    const body = amp.slice(start, next === -1 ? undefined : next)
+    expect(body, 'bearer authentication left routeMessage').toContain('authenticateRequest(')
+    expect(body, 'mesh-peer attestation check left routeMessage').toContain('verifyRoleAttestation(')
   })
 })

@@ -669,3 +669,68 @@ describe('tick — runTick (compose)', () => {
     expect(res.reason).toBe('slot-unreadable')
   })
 })
+
+// The live account is refreshed by Claude Code itself, and the grant is single-use rotating: the
+// slot keeps the PRE-rotation pair, which the endpoint rejects the moment the tick switches away
+// and tries to renew it. Measured 2026-09-09: all three slots captured 08-26, all three branded
+// credential-dead, 13h40m unrotated beside a healthy alternate — the janitor's cmd_capture mirrors
+// live→slot, and this port had no such step (TRDD-RE9AVNJF).
+// NOT pinned here: the fail-soft `SlotKeychainWriteError` branch. Backend `none` writes a file and
+// cannot refuse, exactly like the same branch in `refreshAndHealSlot` — filed on the card.
+describe('tick — reconcile mirrors a rotated live credential into its own slot (TRDD-RE9AVNJF)', () => {
+  const rolesAs = (email: string, base: typeof fetch): typeof fetch =>
+    (async (url: RequestInfo | URL, init?: RequestInit) =>
+      String(url).includes('/roles')
+        ? new Response(JSON.stringify({ organization_name: `${email}'s Organization` }), { status: 200 })
+        : base(url, init)) as typeof fetch
+  const slotToken = (email: string) => (readSlot(email) as { claudeAiOauth: { accessToken: string } }).claudeAiOauth.accessToken
+
+  it('writes the live pair back to the slot and REPLACES the meta, lifting the dead-refresh ban', async () => {
+    const old = blob('OLD', H8(), 'r-old')
+    addSlot('live@x', old)
+    const st = loadState()
+    // The exact on-disk state measured 2026-09-09 on every slot: branded dead against the copy it holds.
+    Object.assign(st.slots['live@x'], { refresh_failures: 11, refresh_dead_fp: fingerprint(old), last_refresh_failure: 'credential-dead' })
+    st.live_email = 'live@x'
+    st.live_fp = fingerprint(old)
+    saveState(st)
+    // Claude Code refreshed on its own: the live file carries a pair the slot never saw.
+    const fresh = blob('LIVE', H8(), 'r-new')
+    writeLiveBlob(fresh)
+    // Premise, asserted: the slot holds OLD and carries the ban the tick must lift.
+    expect(slotToken('live@x')).toBe('OLD')
+    expect(loadState().slots['live@x']).toHaveProperty('refresh_dead_fp', fingerprint(old))
+
+    await runTick({ fetchImpl: rolesAs('live@x', stubFetch({ LIVE: { fh: 20, sd: 20 } })) })
+
+    expect(slotToken('live@x')).toBe('LIVE')
+    const meta = loadState().slots['live@x']
+    expect(meta.fp).toBe(fingerprint(fresh))
+    expect(meta.via).toBe('live-mirror')
+    expect(meta).not.toHaveProperty('refresh_dead_fp')
+    expect(meta).not.toHaveProperty('refresh_failures')
+    expect(loadState().live_fp).toBe(fingerprint(fresh))
+  })
+
+  it('skips the write when the slot already holds this credential and only state.json was behind', async () => {
+    const fresh = blob('LIVE', H8())
+    addSlot('live@x', fresh) // slot == live already; via 'test'
+    const st = loadState()
+    st.live_email = 'live@x'
+    st.live_fp = 'stale-fp'
+    saveState(st)
+    writeLiveBlob(fresh)
+    await runTick({ fetchImpl: rolesAs('live@x', stubFetch({ LIVE: { fh: 20, sd: 20 } })) })
+    expect(loadState().live_fp).toBe(fingerprint(fresh)) // reconciled
+    expect(loadState().slots['live@x'].via).toBe('test') // and NOT re-mirrored
+  })
+
+  it('never enrols an account that has no slot — a one-off /login is reconciled, not captured', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    writeLiveBlob(blob('OTHER', H8())) // a human /login into an account the rotator never enrolled
+    await runTick({ fetchImpl: rolesAs('other@x', stubFetch({ OTHER: { fh: 20, sd: 20 } })) })
+    expect(loadState().live_email).toBe('other@x') // state follows the real live account
+    expect(loadState().slots).not.toHaveProperty('other@x') // but no slot is created for it
+    expect(readSlot('other@x')).toBeNull()
+  })
+})

@@ -397,8 +397,9 @@ export function deleteSlot(email: string): void {
   }
 }
 
-/** Local time with a `±HHMM` offset — Python `time.strftime("%Y-%m-%dT%H:%M:%S%z")`. */
-function nowLocalTz(): string {
+/** Local time with a `±HHMM` offset — Python `time.strftime("%Y-%m-%dT%H:%M:%S%z")`. Exported
+ * so the tick's live→slot mirror stamps `captured_at` in the ONE format every slot carries. */
+export function nowLocalTz(): string {
   const d = new Date()
   const p2 = (n: number) => String(n).padStart(2, '0')
   const offMin = -d.getTimezoneOffset() // getTimezoneOffset is inverted (UTC−local)

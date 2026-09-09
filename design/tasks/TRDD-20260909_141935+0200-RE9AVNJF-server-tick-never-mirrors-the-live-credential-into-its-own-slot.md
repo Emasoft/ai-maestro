@@ -1,9 +1,9 @@
 ---
 trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
-column: todo
+column: dev
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T14:19:35+0200
+updated: 2026-09-09T14:25:44+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -23,11 +23,29 @@ external-refs: [TRDD-CVQJNW3A, TRDD-MN0Q1IA2, TRDD-X4RK1NUW, TRDD-8148P30S]
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
 
 Minted after the owner rotated by hand for the third time (2026-09-09 13:40, 13h40m unrotated
-with a usable alternate). Root cause verified in code + logs (below). Proposed diff reviewed by
-the per-turn fork (verdict recorded in this block next turn). NEXT ACTION: implement the diff in
-`lib/oauth-rotator/tick.ts` + the two tests, run both neuters, `yarn test` + `tsc`. NO build /
-restart — the owner's `server.mjs` hold stands (TRDD-8148P30S STATE); the fix goes live on the
-owner's next `yarn build` + `pm2 restart`.
+with a usable alternate). Root cause verified in code + logs (below).
+
+**CODE LANDED 14:25** — `reconcileLiveEmail` now mirrors a drifted live credential into its
+EXISTING slot (`lib/oauth-rotator/tick.ts`), `nowLocalTz` exported from slots.ts, 3 tests in
+`tests/unit/oauth-rotator-tick.test.ts`. Measured: tick file 40/40, the 29-file oauth-rotator set
+436/436, `tsc --noEmit` 0 errors; three neuters each reddened exactly one named test (Verification).
+
+**Review verdict (per-turn fork, pre-write) — accepted:** scope the mirror to EXISTING slots
+(the rationale never required enrolling a new account; an unenrolled one-off `/login` must not
+become a rotation target) — pinned by test 3 / neuter N3; ONE narrowing of `state.slots`
+(`??=`) instead of a typed-optional chain plus a dead guard; positive control asserting the ban
+is PRESENT before the tick; honest `RequestInfo | URL` cast in the test stub; no line-range
+citation in the comment; log line carries the email once. **Rejected: none.** Not a code change
+but recorded here from the review: the F1 path (`resolveUntrustedLive`, primary keychain item
+unreadable) never reaches this mirror — the server reads the primary (reconcile logged 13:40:32
+today), and F1 is the janitor daemon's context, whose own `cmd_capture` is the mirror there;
+`switchLiveTo` needs no write (it stamps `live_fp` from the slot it copied, so the next tick sees
+no drift); the janitor daemon's tick running beside the server (5 takeover episodes 09-08,
+TRDD-8148P30S) writes the same slot + meta last-writer-wins — pre-existing, not worsened.
+
+NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` + `pm2 restart`
+(the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed
+the live server still runs the pre-fix bundle — a slot going stale before then is expected.
 
 ## Problem
 
@@ -65,13 +83,16 @@ one keychain write per genuine drift and nothing in steady state. Fail-soft on
 
 ## Verification
 
-- `tests/unit/oauth-rotator-tick.test.ts`: (1) slot holds OLD + branded dead, live file holds a
-  rotated pair, `/roles` resolves the same email → after `runTick` the slot holds the new pair,
-  meta fp/via replaced, `refresh_dead_fp` and `refresh_failures` gone; (2) slot already equals
-  the live pair, only `state.live_fp` stale → state reconciled, slot NOT rewritten (`via` stays).
-- Neuters, each named: delete the mirror block → (1) red, (2) green; drop the fp guard → (2)
-  red, (1) green.
-- `yarn test` green, `npx tsc --noEmit` 0 errors.
+- `tests/unit/oauth-rotator-tick.test.ts`: (1) slot holds OLD + branded dead (asserted present
+  BEFORE the tick — the positive control), live file holds a rotated pair, `/roles` resolves the
+  same email → after `runTick` the slot holds the new pair, meta fp/via replaced,
+  `refresh_dead_fp` and `refresh_failures` gone, `live_fp` reconciled; (2) slot already equals
+  the live pair, only `state.live_fp` stale → state reconciled, slot NOT rewritten (`via` stays
+  `test`); (3) live is an account with NO slot → `live_email` follows it, no slot is created.
+- Neuters, MEASURED 2026-09-09 14:2x (1 failed | 39 passed each, exit 1): N1 `if (false && …)`
+  on the mirror guard → only (1) red; N2 `if (meta)` (fp compare dropped) → only (2) red; N3
+  `if (meta?.fp !== realFp)` (existing-slot guard dropped) → only (3) red. Restored: 40/40.
+- `tsc --noEmit` 0 errors; oauth-rotator set 29 files / 436 green; full `yarn test` — box 3.
 
 ## Risk
 
@@ -91,8 +112,8 @@ exactly like the existing branch in `refreshAndHealSlot`.
 
 ## Acceptance
 
-- [ ] mirror block in `reconcileLiveEmail` + `nowLocalTz` export landed
-- [ ] two tests landed; both neuters run and each reddened exactly the test it should
+- [x] mirror block in `reconcileLiveEmail` + `nowLocalTz` export landed (14:25)
+- [x] three tests landed; three neuters run, each reddened exactly the test it should (Verification)
 - [ ] `yarn test` green, `tsc --noEmit` 0 errors
 - [ ] owner built + restarted (on the owner's hold — not this session's to lift)
 - [ ] observed: a slot's `captured_at` advances after the live account is refreshed by Claude Code

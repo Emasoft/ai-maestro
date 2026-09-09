@@ -41,6 +41,7 @@ import {
   oauthOf,
   expiresInH,
   rotatorRoot,
+  nowLocalTz,
   SlotKeychainWriteError,
   type RotatorState,
   type CredentialBlob,
@@ -758,16 +759,18 @@ async function refreshAndHealSlot(
 }
 
 // ── Ground-truth reconcile: make state.json agree with the ACTUAL live credential ────────────
-/** Faithful port of `_reconcile_live_email`. Cheap in steady state (local fp compare, no
- * network, no write); calls /roles at most once per genuine drift. Leaves state UNTOUCHED when
- * the credential changed but its account is unresolvable, so the drift stays detectable (F5). */
+/** Port of `_reconcile_live_email` PLUS the janitor's `cmd_capture` mirror. Cheap in steady
+ * state (local fp compare, no network, no write); on a genuine drift calls /roles at most once
+ * and mirrors the live credential into its EXISTING slot. Leaves state UNTOUCHED when the
+ * credential changed but its account is unresolvable, so the drift stays detectable (F5). */
 async function reconcileLiveEmail(state: RotatorState, liveBlob: CredentialBlob, deps?: TickDeps): Promise<RotatorState> {
   const realFp = fingerprint(liveBlob)
   if (state.live_fp === realFp) return state // steady state — no drift
   const oldEmail = state.live_email
+  const slots = (state.slots ??= {})
   let realEmail = await accountEmail(liveBlob, netDeps(deps))
   if (!realEmail) {
-    for (const em of Object.keys(state.slots ?? {})) {
+    for (const em of Object.keys(slots)) {
       const sb = readSlot(em)
       if (sb && fingerprint(sb) === realFp) { realEmail = em; break }
     }
@@ -775,6 +778,32 @@ async function reconcileLiveEmail(state: RotatorState, liveBlob: CredentialBlob,
   if (!realEmail) {
     decide(deps, `auto: live credential CHANGED (fp ${state.live_fp ?? '?'} -> ${realFp}) but its account is UNRESOLVABLE — leaving state unreconciled so the drift stays detectable; will retry next tick (F5)`)
     return state
+  }
+  // MIRROR the live credential into its own slot — the janitor's cmd_capture step, which this
+  // port omitted (TRDD-RE9AVNJF). Claude Code refreshes the live account on its own, and the
+  // grant is single-use rotating (module header; reauth-flow.ts header): every such refresh left
+  // the slot holding a pre-rotation copy that the endpoint rejects as invalid_grant the moment
+  // the tick switches away and tries to renew it. Measured 2026-09-09: all three slots captured
+  // 08-26, all three `credential-dead`, 13h40m unrotated beside a healthy alternate.
+  // EXISTING slots only — enrolling a new account stays the job of the janitor's capture and
+  // reauth-flow's fileSlot, so a one-off /login into an unenrolled account never becomes a
+  // rotation target. Keyed on fp, so it costs one keychain write per genuine drift and nothing
+  // in steady state. REPLACE the meta, never merge (fileSlot's rule): refresh_failures /
+  // refresh_dead_fp describe the token just superseded. FAIL-SOFT like refreshAndHealSlot: a
+  // refused keychain must not stop the state reconcile below, which is the older, still-correct
+  // behaviour. `switchLiveTo` needs no such write — it stamps live_fp from the slot it copied,
+  // so the next tick sees no drift and the slot already equals live.
+  const meta = slots[realEmail]
+  if (meta && meta.fp !== realFp) {
+    try {
+      writeSlot(realEmail, liveBlob)
+      const exp = oauthOf(liveBlob).expiresAt
+      slots[realEmail] = { captured_at: nowLocalTz(), fp: realFp, expires_at: typeof exp === 'number' ? exp : null, via: 'live-mirror' }
+      decide(deps, `auto: mirrored the live credential into slot ${realEmail} (fp ${meta.fp} -> ${realFp})`)
+    } catch (exc) {
+      if (!(exc instanceof SlotKeychainWriteError)) throw exc
+      decide(deps, `auto: keychain write refused while mirroring the live credential into its slot (${exc.message}) — slot left stale`)
+    }
   }
   state.live_email = realEmail
   state.live_fp = realFp

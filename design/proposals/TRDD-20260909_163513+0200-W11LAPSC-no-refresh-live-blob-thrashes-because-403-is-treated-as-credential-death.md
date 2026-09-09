@@ -3,7 +3,7 @@ trdd-id: W11LAPSC
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200
-updated: 2026-09-09T16:58:12+0200
+updated: 2026-09-09T17:04:30+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -96,12 +96,15 @@ credential death already surfaces as 401, which is fatal on both sides.
 
 **The fact both gates rest on — was unread, now READ (2026-09-09).** Owned and recorded on
 TRDD-WLHP34KZ; not restated here beyond the outcome: the janitor's capture writes
-`"refreshToken": None`, and the storage path was then read hop by hop (`file_slot` → `write_slot`
-→ `_oauth`'s bare `.get` → `json.dumps` on BOTH the keychain and plaintext paths) — so the value
-reaching JS is `null`, and this gate's test **would** fire on a slot captured that way.
-**NOT "fires on the real artifact": there is no such artifact** — all 3 slots in this vault record
-`via: slot_capture_browser(full-oauth)`, so this is a read of the CODE PATH and it expires with
-the version read (3.4.15). Read first-hand in the installed plugin cache
+`"refreshToken": None`, and the storage path was read IN SOURCE (`file_slot` → `write_slot` →
+`_oauth`'s bare `.get` → `json.dumps` on BOTH the keychain and plaintext paths), so a slot written
+by that path **would** serialise `refreshToken` as JSON `null` and this gate's test would fire on
+it. Nothing was executed and no stored blob was read.
+**NOT "fires on the real artifact"** — and the negative is only this: no slot here is RECORDED as
+a setup-token capture (all 3 say `via: slot_capture_browser(full-oauth)`, a provenance LABEL, not
+a blob read; a browser-captured slot that later lost its refresh grant would carry it too).
+**RE-READ on any janitor upgrade past 3.4.15** — that is the trigger, not a standing disclaimer.
+Read first-hand in the installed plugin cache
 (reading another project's source is permitted; editing is not). Had it written a placeholder
 string, **this gate and TRDD-WLHP34KZ's would both have silently never fired — and both cards
 would still have read as correct.** It was the highest-probability failure in the pair, and it
@@ -169,12 +172,12 @@ class it stands for, and the unmeasured 401-only generalisation.
 ## Acceptance
 
 - [ ] owner rules — including the option to close this as subsumed by TRDD-WLHP34KZ's gate
-- [x] blob shape confirmed — **owned by TRDD-WLHP34KZ and closed there 2026-09-09** — and FIRST
-      CLOSED THERE ON WEAKER EVIDENCE THAN THE BOX CLAIMED; see that card's box for what the
-      re-read actually covered. Now read hop by hop: `refreshToken` is `None` → JSON `null` →
-      falsy. **Not "on the real artifact" — no no-refresh slot exists in this vault**; it is a
-      code-path read and it EXPIRES WITH THE VERSION. One fact, one home; not restated as a
-      second copy free to diverge
+- [x] blob shape confirmed IN SOURCE — **owned by TRDD-WLHP34KZ**, read there 2026-09-09 (that
+      box was first closed on weaker evidence than it claimed; it now records what the read
+      covers). `refreshToken` is `None`, so a slot written by that path WOULD reach JS as `null`
+      → falsy. Not an artifact read, and not a claim that no such slot exists — only that none
+      here is RECORDED as one. RE-READ on any janitor upgrade past 3.4.15. One fact, one home;
+      not restated as a second copy free to diverge
 - [ ] measured — 401-not-403 for a death mode OTHER than a corrupted bearer token
 - [ ] OR the OWNER accepted the residual permanent-pin exposure, dated, on the record
       (deliberately TWO boxes: as one box with an "or", the cheap branch closes it every time,

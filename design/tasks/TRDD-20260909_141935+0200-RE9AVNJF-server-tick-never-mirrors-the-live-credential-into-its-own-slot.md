@@ -1,9 +1,14 @@
 ---
 trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
-column: dev
+column: blocked
+pre-block-column: dev
+blocked-by: [TRDD-8148P30S]
+unblock-when: [decision: owner authorises yarn build + pm2 restart, lifting the server.mjs hold]
+blocker-probe: grep -rq live-mirror /Users/emanuelesabetta/ai-maestro/.next/server
+blocker-holds-if: exit-nonzero
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T14:44:00+0200
+updated: 2026-09-09T17:04:30+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -63,6 +68,21 @@ suite exited 0" — it did NOT (17 failed / 6814 passed, wrapper exit was the `t
 NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` + `pm2 restart`
 (the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed
 the live server still runs the pre-fix bundle — a slot going stale before then is expected.
+
+**MOVED `dev` → `blocked` 17:04.** It had sat at `dev` since 14:25 with nobody working it, which
+is the column asserting activity that does not exist. **Read `blocked-by: [TRDD-8148P30S]` as a
+RUNTIME edge only:** both cards wait on the SAME owner hold, and 8148P30S is the card of record
+for that hold — this card does NOT need 8148P30S's work done. `unblock-when:` carries the real
+condition, and it is a `decision:` predicate, so it never auto-clears. Restore to `dev` when the
+hold lifts.
+
+The `blocker-probe:` is what stops that `decision:` predicate rotting with a silent timestamp
+(`trddgrep validate` flagged exactly that, BLOCKED-WITHOUT-PROBE, on the first version of this
+move). It greps the BUILT bundle for `live-mirror` — the string literal this fix introduces, taken
+from the emitter (`lib/oauth-rotator/tick.ts:801`), never from vocabulary guessed elsewhere.
+MEASURED 17:0x: exit 1, absent — `.next` is dated Sep 7, the fix landed Sep 9, so the blocker
+genuinely holds. It clears only when a real build+restart puts the fix in the artifact that
+EXECUTES, which is the same thing box 4 asks for and is not answerable from `git log`.
 
 ## Problem
 

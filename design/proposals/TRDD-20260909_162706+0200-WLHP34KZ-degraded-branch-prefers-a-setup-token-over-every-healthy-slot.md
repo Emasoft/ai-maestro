@@ -3,7 +3,7 @@ trdd-id: WLHP34KZ
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200
-updated: 2026-09-09T16:54:06+0200
+updated: 2026-09-09T17:04:30+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -113,7 +113,7 @@ another project's source is permitted, editing is not) — this was second-hand 
 first draft correctly labelled it as the one link nobody on this side had read:
 `slot_capture_token.py:185` sets `"expiresAt": int((time.time() + ONE_YEAR_S) * 1000)` — now + 1
 year, in milliseconds, unconditionally, in the same literal that sets `"refreshToken": None`.
-**First-hand at the point the value is CONSTRUCTED, and — since 16:5x — through the storage path as well; see the blob-shape acceptance box for the hop-by-hop reads and for the version this is scoped to.**
+**First-hand IN SOURCE at the point the value is constructed, and through the storage path; see the blob-shape acceptance box for exactly what that read covers, what it does not, and when to re-read it.**
 
 ## Root cause
 
@@ -220,12 +220,17 @@ degraded target"). The change makes the arm agree with its own stated intent.
       · both storage paths serialise with `json.dumps(blob, separators=(",", ":"))` —
         `_slot_keychain_write:1152` and the 0600 plaintext fallback at `:1243`.
       JS side, read this repo: `slots.ts:300/315/383` `JSON.parse(...) as CredentialBlob`, and
-      `oauthOf` (`:163-169`) returns `blob.claudeAiOauth` as-is. So Python `None` → JSON `null` →
-      JS `null` → `oauthOf(b).refreshToken` **falsy**. The gate fires.
-      **NOT "on the real artifact" — there is no real artifact.** All 3 slots here are
-      `via: slot_capture_browser(full-oauth)`; no setup-token blob has ever existed in this vault.
-      What is established is a property of the code that WOULD construct one. The earlier wording
-      asserted an empirical check that never happened.
+      `oauthOf` (`:163-169`) returns `blob.claudeAiOauth` as-is. So a slot written by that path
+      **would** carry Python `None` → JSON `null` → JS `null` → `oauthOf(b).refreshToken` falsy,
+      and the gate would fire on it. **Nothing was executed and no stored blob was read** — this
+      is a source read, not an execution trace, so the subjunctive is the strongest honest mood.
+      **NOT "on the real artifact"** — and the NEGATIVE is weaker than the first correction of
+      this box claimed. All 3 slots here RECORD `via: slot_capture_browser(full-oauth)`, which is
+      a provenance LABEL written at capture time, not a read of any blob: a browser-captured slot
+      that later lost its refresh grant (a partial write, a refresh that nulled the field) would
+      carry that same label and BE a no-refresh blob. So the supported claim is *no slot is
+      RECORDED as a setup-token capture* — not "none exists". Correcting a proxy claim by
+      asserting a more confident proxy claim is the same error one turn later.
       **THIS READ EXPIRES WITH THE VERSION.** `setup_token_blob()` — the builder the janitor named
       — does NOT exist in 3.4.15; what is there is an inline dict literal. The first draft recorded
       that as the peer misnaming their own function. **More likely it is VERSION SKEW**: they cited

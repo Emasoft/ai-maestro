@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-09T17:24:54+0200
+updated: 2026-09-09T17:31:24+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -21,32 +21,38 @@ priority: 1
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
 
-**CODE LANDED `efb6a509`** (2026-09-08 15:40): `SAFE_SCOPED` given its own literal 95,
-`SCOPED_SWITCH_AT_PCT` default 90 → 97 so the tick's verdict and the fallback sweep's trip at ONE
-number. Boxes 1-4 and 7 closed. Measured then: 5 vitest files matching `isSafeAlternate` or
-`planModelFallback`, 109 passed; `tsc --noEmit` 0 error lines; zero `ROTATOR_` env pins on the
-shell, on pm2 pid 24806, or in `ecosystem.config.js`.
+**CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed; 5 and 6 open and BOTH
+owner-owned — box 5 is `yarn build` + `pm2 restart` (the standing hold), box 6 is the owner
+confirming 95 and 97 once it deploys.
 
-**NOT LIVE.** `lib/*.ts` is bundled into `.next`, so this needs `yarn build` + `pm2 restart` —
-the owner's hold, unchanged. Until then the running server still vetoes at 90.
+**THE 09-08 NUMBERS ARE A THIRD-HAND RECORD, not a measurement by this session.** The approval
+log's figures (5 vitest files, 109 passed, `tsc --noEmit` 0 error lines, no `ROTATOR_` env pins)
+came from a worker's report under `reports/lean-worker/`, and that same log line flags the
+weakest hop itself: box 2's neuters were **not re-run**. The `pid 24806` in it describes a
+process as of 09-08 — roughly a day old; do not read it as the current server.
 
-NEXT ACTION: nothing in this session's hands. Box 5 is the owner's build+restart; box 6 is the
-owner confirming 95 and 97 after it is deployed.
+**NOT DEPLOYED BY ANY ROUTE THIS CARD RECORDS.** `lib/*.ts` is bundled into `.next` and no build
+has run since, so the running server is not expected to be using 95/97 — **but that is an
+inference, not an observation.** Nothing here greps the compiled chunk or dates `.next` against
+the commit, and caveat (c) makes the live threshold depend on the env the pm2 process was
+STARTED with, which is not the env checked on 09-08. An earlier draft of this block asserted
+"the running server still vetoes at 90"; that is withdrawn as over-claimed.
 
-**THIS CARD AND TRDD-RE9AVNJF ARE A PAIR ON ONE DECISION.** Both have landed code, both are
-waiting on the same build+restart hold, and neither is live. Lifting the hold once deploys both.
+NEXT ACTION: nothing in this session's hands.
 
-**COLUMN: deliberately NOT changed.** It says `dev` and has since 12:28 with nobody working it,
-which is the column asserting activity that does not exist — the same defect found on RE9AVNJF.
-That one took three wrong answers (`blocked` with a false `blocked-by` edge, then `backburner`,
-which is drain-exempt and positionally asserts *not begun*) before being handed to the owner
-unresolved. **The same question, same hold, same two cards — so it gets ONE answer, from the
-owner, applied to both.** RE9AVNJF's STATE block carries the candidate list and what is verified
-about each; it is not duplicated here, to keep one fact in one home.
+**PAIRED WITH TRDD-RE9AVNJF ON THE DEPLOY.** Both have landed code, neither is live, and ONE
+`yarn build` + restart covers both. That is the whole of the pairing. An earlier draft went on to
+claim the two cards' COLUMN question is also one question; it is not established, and the two are
+not even in the same column.
 
-**STATE block added 2026-09-09T17:24** — it was MISSING, which rule 10 forbids once a card spans
-sessions, and this one has since the 12:28 takeover from `ai-maestro-hub-session`. Nothing else
-flagged it.
+**COLUMN — this card asserts TWO states at once, and this block outranks the frontmatter.**
+`column: dev` claims active work and nobody has worked it since the 12:28 takeover. `dev` is not
+among the options RE9AVNJF's STATE block weighs — READ THERE 2026-09-09 and confirmed to carry
+them: `backburner` kept, `complete` unavailable on the checklist gate, `human_review` recommended
+then withdrawn with a complement measurement, plus an UNVERIFIED `blocked` + `decision:`-only
+variant. That sibling LEFT `dev` at 17:06 for this exact reason. Not moved here because its
+landing spot is itself disputed and this session has been wrong on that choice twice — but the
+honest reading is that `dev` is a LIVE DEFECT awaiting the owner, not a settled deferral.
 
 ## Problem
 

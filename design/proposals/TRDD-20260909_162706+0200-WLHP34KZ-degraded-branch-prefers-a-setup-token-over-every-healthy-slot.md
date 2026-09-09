@@ -3,7 +3,7 @@ trdd-id: WLHP34KZ
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200
-updated: 2026-09-09T16:41:06+0200
+updated: 2026-09-09T16:46:28+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -36,9 +36,9 @@ taken from a review fork that makes zero tool calls and therefore never read `ti
   on this card. That is their stated intention about another repo's runtime, which this card
   cannot inspect. Do not read it as a system property.
 
-NEXT ACTION: owner decides. The fix is one line at the primary site (below). It is NOT authorised
-yet, and the `server.mjs` build/restart hold (TRDD-8148P30S) means a landed fix would not be
-running.
+NEXT ACTION: owner decides. The fix is the same one line at EACH OF TWO sites (below — the card
+makes no ranking between them, having got that ranking wrong twice). It is NOT authorised yet,
+and the `server.mjs` build/restart hold (TRDD-8148P30S) means a landed fix would not be running.
 
 ## Problem
 
@@ -104,14 +104,16 @@ Its comment describes the intended case ("transient probe failure on a FRESH tok
 reached after a SUCCESSFUL refresh — and such a slot has a refresh grant by construction, so the
 missing test costs nothing there. But it is also reached when `unread` is true (`st2 === 0` with
 reason `cooldown` or `lock_contended`, `:1240`), which SKIPS the refresh block entirely. A
-no-refresh slot that lands in a probe cooldown therefore enters `degraded` with the network UP —
-the common case, not the rare one. Narrower than the primary site (it needs the cooldown), and it
-is the same one-line omission.
+no-refresh slot that lands in a probe cooldown therefore enters `degraded` with the network UP.
+It is the same one-line omission. **No frequency claim is made here about either site** — see
+Proposed fix for the full precondition sets and for the two rankings this card got wrong.
 
-REPORTED, not read here (cross-session message from the janitor Claude, 2026-09-09): its
-importer sets `claudeAiOauth.expiresAt` unconditionally to now + 1 year in milliseconds. The
-first-hand links above are read in this repo; this last one is second-hand and is what closes the
-chain. It has not been read in the janitor's source by anyone on this side.
+**READ FIRST-HAND 2026-09-09 16:4x** (installed plugin cache `ai-maestro-janitor/3.4.15`; reading
+another project's source is permitted, editing is not) — this was second-hand until now, and the
+first draft correctly labelled it as the one link nobody on this side had read:
+`slot_capture_token.py:185` sets `"expiresAt": int((time.time() + ONE_YEAR_S) * 1000)` — now + 1
+year, in milliseconds, unconditionally, in the same literal that sets `"refreshToken": None`.
+**The chain is now first-hand end to end.**
 
 ## Root cause
 
@@ -125,21 +127,43 @@ was a reasonable proxy for health becomes an inversion of it.
 
 Add the same `oauthOf(b).refreshToken` test the sibling branch at `:1247` already applies:
 
-**IF ONLY ONE SITE IS GATED, GATE `:1259`.** The two are asymmetric, and the first draft of this
-card had the priority backwards by calling `:1282-1286` "primary" — that was an artefact of which
-site I found first, not a ranking. Independently traced and agreed by the janitor session
-2026-09-09:
+**GATE BOTH SITES.** They take the same one-line test and the second line costs nothing, so there
+is no ranking to make and the card offers none.
 
-- **`:1259` — needs only a probe cooldown.** Network UP, ordinary operation. `unread` makes the
-  guard false, the refresh block that DOES test `refreshToken` is skipped entirely, and the push
-  runs untested. `blobLocallyExpired` is checked there, but a fabricated one-year `expiresAt`
-  passes it, so the slot enters `degraded` and then wins the max-expiry ranking. **This is the
-  common path.**
-- **`:1282-1286` — needs an outage AND a locally-expired live blob** (see the trace above). Two
-  conditions, both uncommon. This is the janitor session's originally-suggested site.
+This section has been wrong twice, in opposite directions, and both errors are recorded rather
+than quietly replaced — the second is the more instructive:
 
-Both take the same one-line test. Gating both is the complete fix; gating only `:1282-1286`
-leaves the more reachable hazard live.
+1. The first draft called `:1282-1286` "primary" and `:1259` "secondary". That was an artefact of
+   which site I found first, not a ranking.
+2. The correction then said *"if only one site is gated, gate `:1259` — it needs only a probe
+   cooldown"*. **Also wrong**, and wrong in the direction that flattered the peer report I had
+   just adopted. **A push into `degraded` is only harmful if `degraded` is ever CONSULTED**, and I
+   had traced reachability as far as the push, stopping one statement short of the selection.
+
+The complete precondition sets, traced to the selection (`selectDrainFirst([])` returns `null`,
+`:637-642`):
+
+| site | what must hold for the harmful selection to run |
+|---|---|
+| `:1282-1286` | network DOWN · live blob LOCALLY EXPIRED. `candidates` is then empty and `scopedWall` false **by construction**, so `best === null` comes free. **Two conditions.** |
+| `:1259` | live near/exhausted (past the `!near` return at `:1193`) · the no-refresh slot in a probe cooldown · **no usage-confirmed candidate at all** (else `best !== null` at `:1343` and `degraded` is never read) · **not a scoped-only wall** (else `:1356` returns first). **Four conditions.** |
+
+So the asymmetry runs OPPOSITE to what the correction claimed: `:1259` has to earn `best === null`
+by every healthy alternate failing, while `:1282-1286` is handed it by the outage. Neither
+"common path" nor "two conditions, both uncommon" was measured by anyone.
+
+What is true, and is a frequency claim about THIS machine only: the rotator logged "all paid
+accounts maxed" every minute from 00:00 to 13:39 on 2026-09-09, so "no usage-confirmed candidate"
+is not an exotic state here. That is an observation about one deployment, not the structural
+argument this section previously pretended to make.
+
+The `:1259` MECHANISM is first-hand (I read the loop): `unread` makes the guard
+`st2 !== 200 && st2 !== 429 && !unread` false, so the refresh block — the one that DOES test
+`refreshToken` — is skipped entirely, control falls to `if (st2 !== 200)`, `st2` is 0 so it is not
+429, and the push runs untested. `blobLocallyExpired` is checked there, but a fabricated one-year
+`expiresAt` passes it. The janitor session REPORTS having traced the same mechanism and reached
+the same conclusion — reported, not witnessed by me. Agreement between two parties who have each
+been wrong today, about a ranking neither measured, is not corroboration.
 
 ## Related
 
@@ -175,13 +199,24 @@ degraded target"). The change makes the arm agree with its own stated intent.
 
 ## Acceptance
 
-- [ ] owner rules on whether to apply the gate, and at one site or both
-- [ ] the janitor importer's blob shape READ, confirming `oauthOf(b).refreshToken` is actually
-      falsy for an imported setup-token — if it writes a placeholder string, or nests the field
-      differently, this gate and TRDD-W11LAPSC's both silently never fire and both cards still
-      read as correct. Neither session has read it; it is one grep away
-- [ ] the `:1247` refreshToken test added at `:1259` (the more reachable site)
-- [ ] the same test at `:1282-1286`, or a recorded decision to leave that site ungated
+- [ ] owner rules on whether to apply the gate
+- [x] **the blob shape both gates rest on — READ FIRST-HAND 2026-09-09 16:4x**, in the installed
+      plugin cache (`ai-maestro-janitor/3.4.15`; reading another project's source is permitted,
+      only editing is not). `slot_capture_token.py:182-188` builds
+      `{"claudeAiOauth": {..., "refreshToken": None, "expiresAt": <now+1y ms>, ...}}`, and
+      `rotator.py:1212` `write_slot` does `inner = _oauth(blob)` — it strips TOP-LEVEL siblings
+      (`mcpOAuth`) and passes the inner dict through verbatim. So the field is PRESENT with value
+      `None` → JSON `null` → **falsy in JS**, so `oauthOf(b).refreshToken` fires, and it
+      round-trips to `None`, so the janitor's `refreshToken is None` fires. **Both gates work on
+      the real artifact.** Had it been a placeholder string, both would have silently never fired
+      and both cards would still have read as correct — a failure with no symptom.
+      SCOPE OF WHAT I READ: the single-account capture path. The janitor reports a bulk path
+      sharing one blob definition; I did not read that one. Their message named the builder
+      `setup_token_blob()`; what is actually there is an inline dict literal in the capture flow —
+      same substance, and the naming discrepancy is recorded rather than smoothed over.
+      This also closes TRDD-W11LAPSC's dependency on the same fact.
+- [ ] the `:1247` refreshToken test added at `:1259`
+- [ ] the same test added at `:1282-1286` — both, not one; the card makes no ranking
 - [ ] the failing-first test above written and passing, with all three preconditions asserted
 - [ ] janitor told the branch is gated, so it can ship the import as runnable-by-default
 

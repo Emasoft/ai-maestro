@@ -3,7 +3,7 @@ trdd-id: W11LAPSC
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200
-updated: 2026-09-09T16:41:06+0200
+updated: 2026-09-09T16:46:28+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -94,13 +94,14 @@ credential death already surfaces as 401, which is fatal on both sides.
   `degraded`, never inside it — reusing `degraded` reproduces the max-expiry inversion
   TRDD-WLHP34KZ is about.
 
-**The unread fact both gates rest on.** Neither session has read the blob shape this gate keys
-on. All 3 slots in this vault record `via: slot_capture_browser(full-oauth)`; no setup-token blob
-has ever been held here, and the janitor's importer has not been read on this side. If it writes
-`refreshToken` absent, `null` or `""`, `oauthOf(b).refreshToken` is falsy and the gate fires. If
-it writes a placeholder string, or nests the field differently, **this gate and TRDD-WLHP34KZ's
-both silently never fire — and both cards still read as correct.** That is the
-highest-probability failure in the pair and it is one grep of their importer away.
+**The fact both gates rest on — was unread, now READ (2026-09-09).** Owned and recorded on
+TRDD-WLHP34KZ; not restated here beyond the outcome: the janitor's capture writes
+`"refreshToken": None`, which survives `write_slot` verbatim and serialises to JSON `null`, so
+this gate's test fires on the real artifact. Read first-hand in the installed plugin cache
+(reading another project's source is permitted; editing is not). Had it written a placeholder
+string, **this gate and TRDD-WLHP34KZ's would both have silently never fired — and both cards
+would still have read as correct.** It was the highest-probability failure in the pair, and it
+was one grep away the whole time.
 
 REPORTED, not measured here (janitor session, 2026-09-09): the 401-not-403 control, and that they
 are implementing the slot-type gate on their side. **The generalisation is from ONE sample**, and
@@ -119,9 +120,22 @@ rotate away and keep the user working. Recovering the *credential* needs a human
 way; recovering *service* is the rotator's entire job, and that is what the pin costs. The
 exposure is accepted only because no no-refresh slot exists in this vault today.
 
-Note the pair is a one-way door: TRDD-WLHP34KZ forbids rotating ONTO a no-refresh slot, and this
-card forbids rotating OFF one. A no-refresh credential that becomes live by any route (a manual
-`/login`, an import) has exactly one exit — a 401.
+**A "one-way door with exactly one exit" framing was written here and is WITHDRAWN as false** —
+recorded rather than deleted, because it was sent to the janitor session and adopted on their
+card before the error was found. Two things were wrong with it:
+
+- **"Exactly one exit — a 401" is false.** The blob passing its OWN expiry is a second automatic
+  exit: the `else if (liveExpired)` arm at `:1174` sets `near = true` and the tick rotates. A
+  fabricated one-year `expiresAt` DEFERS that exit; it does not remove it.
+- **The two gates are not two halves of one door.** TRDD-WLHP34KZ gates ALTERNATE slots entering
+  a target list (its loop skips `email === liveEmail`); this card gates whether a 403 on the LIVE
+  blob counts as death. Different objects, different roles — the symmetry was tidying.
+
+The accurate form: both gates restrict movement around a no-refresh credential — WLHP34KZ keeps
+it out of the target list, this card keeps a 403 from evicting it. The automatic exits that
+remain are a 401 and the blob's own expiry; a human, or the janitor, can still rotate off it
+directly. The error's direction is worth noting — it OVERSTATED how locked-in the design is, so a
+reader acting on it would have designed an exit that already exists.
 
 ## Verification (when it is authorised)
 
@@ -151,12 +165,13 @@ class it stands for, and the unmeasured 401-only generalisation.
 ## Acceptance
 
 - [ ] owner rules — including the option to close this as subsumed by TRDD-WLHP34KZ's gate
-- [ ] the janitor importer's blob shape READ, confirming `oauthOf(b).refreshToken` is actually
-      falsy for an imported setup-token — if it writes a placeholder, this gate and
-      TRDD-WLHP34KZ's both silently never fire
-- [ ] confirm 401-not-403 for a death mode other than a corrupted bearer token, **or the OWNER
-      accepts the residual permanent-pin exposure on the record** (this box gates the SHIP, not
-      a sentence: it is not satisfiable before the branch exists)
+- [x] blob shape confirmed — **owned by TRDD-WLHP34KZ and closed there 2026-09-09**, read
+      first-hand: `refreshToken` is `None` → JSON `null` → falsy, so this gate fires on the real
+      artifact. One fact, one home; not restated as a second copy free to diverge
+- [ ] measured — 401-not-403 for a death mode OTHER than a corrupted bearer token
+- [ ] OR the OWNER accepted the residual permanent-pin exposure, dated, on the record
+      (deliberately TWO boxes: as one box with an "or", the cheap branch closes it every time,
+      and the parenthetical that used to claim otherwise only told the next reader not to look)
 - [ ] stay-put branch implemented for a no-refresh LIVE blob
 - [ ] both tests above written and passing; the first FAILS before the fix
 - [ ] janitor told which side shipped what, so the agreement stops being an intention

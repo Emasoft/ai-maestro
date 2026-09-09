@@ -3,7 +3,7 @@ trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: dev
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T14:39:42+0200
+updated: 2026-09-09T14:44:00+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -46,8 +46,9 @@ TRDD-8148P30S) writes the same slot + meta last-writer-wins — pre-existing, an
 MORE writer to the live account's meta (post-write review, finding 1).
 
 **Post-write review (fork over commit 5aa945c1):** accepted — test 3's `readSlot(...)===null`
-line was vacuous under backend `none` (dropped; the `slots` assertion is the first, BY ORDER,
-that N3 reddens — the run named the test, not the expect);
+line was vacuous under backend `none` (dropped; N3's captured failing frame is the `slots`
+expect — `oauth-rotator-tick.test.ts:733`, `expected { 'other@x': … } to not have property
+"other@x"`);
 under N1 test 1 fell on its FIRST expect (`slotToken`), so `fp`/`via`/the two absences are
 pinned transitively by the one atomic `slots[realEmail] = {…}` assignment, not each on its own;
 "restored" is proven by `git diff … | grep -c NEUTER` = 0, not the file grep; the "rotator set"
@@ -56,7 +57,8 @@ filter `tests/unit/oauth-rotator-` + `statusline-admissible`; separately, `find 
 -name 'oauth-rotator-*.test.ts'` counts 28 on disk. The filenames vitest ran were not listed. Rejected: "the refused-path log carries no email" — `writeSlot`'s own
 message names the slot, so `${exc.message}` carries it exactly once; "tick box 3, the full
 suite exited 0" — it did NOT (17 failed / 6814 passed, wrapper exit was the `tail`'s); no
-`--amend` of the landed commit for wording.
+`--amend` of the landed commit for wording. `implementation-commits:` lists commits that change
+`lib/` or test BEHAVIOUR; comment-only and card-only commits are excluded by this policy.
 
 NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` + `pm2 restart`
 (the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed
@@ -131,12 +133,12 @@ exactly like the existing branch in `refreshAndHealSlot`.
 - [x] three tests landed; three neuters run, each reddened exactly the test it should (Verification)
 - [x] `tsc --noEmit` 0 errors; oauth-rotator set 29 files / 436 green (14:2x)
 - [ ] full `yarn test` green — MEASURED 14:26 (the `exit=` line the command wrote for itself; the
-      background-task notification's "exit 0" was the trailing `tail`'s and is never evidence
-      about a backgrounded suite): 17 failed / 6814 passed in 5 files, none of which imports the
+      background-task notification's "exit 0" was the trailing `tail`'s): 17 failed / 6814
+      passed in 5 files, none of which imports the
       rotator DIRECTLY (grep over the 5 files; transitive reach through the createagent
       pipeline unchecked) (`tests/governance/enforcement-coverage` map drift R31/R50;
       `tests/integration/createagent-g05c-gitignore`, `-g08-cross-client`, `-g11-r17-core`;
-      `tests/services/change-title-window`). Not attributed to this change by the import graph;
+      `tests/services/change-title-window`). Not attributed to this change by a direct-import grep;
       not proven pre-existing either (no clean-baseline run — the tree carries the owner's
       uncommitted governance edits). Owned by whoever picks those files up, not this card.
 - [ ] owner built + restarted (on the owner's hold — not this session's to lift)

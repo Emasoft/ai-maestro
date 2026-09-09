@@ -730,6 +730,6 @@ describe('tick — reconcile mirrors a rotated live credential into its own slot
     writeLiveBlob(blob('OTHER', H8())) // a human /login into an account the rotator never enrolled
     await runTick({ fetchImpl: rolesAs('other@x', stubFetch({ OTHER: { fh: 20, sd: 20 } })) })
     expect(loadState().live_email).toBe('other@x') // state follows the real live account (so reconcile RESOLVED — not an F5 early return)
-    expect(loadState().slots).not.toHaveProperty('other@x') // but no slot is created for it — the first assertion, by order, that N3 reddens
+    expect(loadState().slots).not.toHaveProperty('other@x') // but no slot is created for it — the assertion N3 reddens (its captured failing frame is this line)
   })
 })

@@ -3,7 +3,7 @@ trdd-id: W11LAPSC
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200
-updated: 2026-09-09T17:04:30+0200
+updated: 2026-09-09T17:06:31+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -101,8 +101,8 @@ TRDD-WLHP34KZ; not restated here beyond the outcome: the janitor's capture write
 by that path **would** serialise `refreshToken` as JSON `null` and this gate's test would fire on
 it. Nothing was executed and no stored blob was read.
 **NOT "fires on the real artifact"** — and the negative is only this: no slot here is RECORDED as
-a setup-token capture (all 3 say `via: slot_capture_browser(full-oauth)`, a provenance LABEL, not
-a blob read; a browser-captured slot that later lost its refresh grant would carry it too).
+a setup-token capture (all 3 say `via: slot_capture_browser(full-oauth)`, a capture-time LABEL
+that cannot establish what any blob now contains).
 **RE-READ on any janitor upgrade past 3.4.15** — that is the trigger, not a standing disclaimer.
 Read first-hand in the installed plugin cache
 (reading another project's source is permitted; editing is not). Had it written a placeholder

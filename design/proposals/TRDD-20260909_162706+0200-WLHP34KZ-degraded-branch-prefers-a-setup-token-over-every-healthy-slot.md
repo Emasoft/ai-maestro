@@ -3,7 +3,7 @@ trdd-id: WLHP34KZ
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200
-updated: 2026-09-09T17:04:30+0200
+updated: 2026-09-09T17:06:31+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -226,9 +226,8 @@ degraded target"). The change makes the arm agree with its own stated intent.
       is a source read, not an execution trace, so the subjunctive is the strongest honest mood.
       **NOT "on the real artifact"** — and the NEGATIVE is weaker than the first correction of
       this box claimed. All 3 slots here RECORD `via: slot_capture_browser(full-oauth)`, which is
-      a provenance LABEL written at capture time, not a read of any blob: a browser-captured slot
-      that later lost its refresh grant (a partial write, a refresh that nulled the field) would
-      carry that same label and BE a no-refresh blob. So the supported claim is *no slot is
+      a provenance LABEL written at capture time, not a read of any blob, so it cannot establish
+      what any blob currently contains. The supported claim is *no slot is
       RECORDED as a setup-token capture* — not "none exists". Correcting a proxy claim by
       asserting a more confident proxy claim is the same error one turn later.
       **THIS READ EXPIRES WITH THE VERSION.** `setup_token_blob()` — the builder the janitor named

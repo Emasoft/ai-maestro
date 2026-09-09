@@ -1,14 +1,9 @@
 ---
 trdd-id: RE9AVNJF
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
-column: blocked
-pre-block-column: dev
-blocked-by: [TRDD-8148P30S]
-unblock-when: [decision: owner authorises yarn build + pm2 restart, lifting the server.mjs hold]
-blocker-probe: grep -rq live-mirror /Users/emanuelesabetta/ai-maestro/.next/server
-blocker-holds-if: exit-nonzero
+column: backburner
 created: 2026-09-09T14:19:35+0200
-updated: 2026-09-09T17:04:30+0200
+updated: 2026-09-09T17:06:31+0200
 implementation-commits: [5aa945c1, 48e839b6]
 current-owner: governance-rules-session
 created-by: governance-rules-session
@@ -69,20 +64,28 @@ NEXT ACTION: nothing in this session's hands. Box 4 is the owner's `yarn build` 
 (the `server.mjs` hold, TRDD-8148P30S STATE); box 5 is a post-deploy observation. Until deployed
 the live server still runs the pre-fix bundle — a slot going stale before then is expected.
 
-**MOVED `dev` → `blocked` 17:04.** It had sat at `dev` since 14:25 with nobody working it, which
-is the column asserting activity that does not exist. **Read `blocked-by: [TRDD-8148P30S]` as a
-RUNTIME edge only:** both cards wait on the SAME owner hold, and 8148P30S is the card of record
-for that hold — this card does NOT need 8148P30S's work done. `unblock-when:` carries the real
-condition, and it is a `decision:` predicate, so it never auto-clears. Restore to `dev` when the
-hold lifts.
+**MOVED `dev` → `backburner`** (2026-09-09T17:06). It had sat at `dev` since 14:25 with nobody
+working it — the column asserting activity that does not exist. Restore to `dev` when the hold
+lifts.
 
-The `blocker-probe:` is what stops that `decision:` predicate rotting with a silent timestamp
-(`trddgrep validate` flagged exactly that, BLOCKED-WITHOUT-PROBE, on the first version of this
-move). It greps the BUILT bundle for `live-mirror` — the string literal this fix introduces, taken
-from the emitter (`lib/oauth-rotator/tick.ts:801`), never from vocabulary guessed elsewhere.
-MEASURED 17:0x: exit 1, absent — `.next` is dated Sep 7, the fix landed Sep 9, so the blocker
-genuinely holds. It clears only when a real build+restart puts the fix in the artifact that
-EXECUTES, which is the same thing box 4 asks for and is not answerable from `git log`.
+**It went through a WRONG intermediate, recorded because that one landed in a commit
+(`11bebaf3`): `column: blocked` with `blocked-by: [TRDD-8148P30S]`.** That edge is FALSE.
+`blocked-by` means *cannot proceed until that one resolves*, and 8148P30S can sit at `todo`
+indefinitely while this card becomes workable the moment the owner builds. I wrote it to satisfy
+the linter's demand for a non-empty `blocked-by` — optimising for the instrument over the fact —
+and a prose caveat in a STATE block does not un-say a machine-read frontmatter field: a watchdog
+walking the graph would have concluded *"work 8148P30S to unblock RE9AVNJF"*. `backburner` is a
+resting state the pipeline rule already exempts from drain pressure, so it needs no edge and
+asserts nothing untrue.
+
+Box 5's deploy check, kept here as a RECIPE and deliberately NOT as a `blocker-probe:` —
+`grep -rl --include='*.js' --exclude='*.map' live-mirror .next` — the string literal this fix
+introduces, from the emitter (`lib/oauth-rotator/tick.ts:801`). Its limits, because a check that
+fails toward *keep waiting* looks correct forever: grep exits **2** for a missing directory and
+**1** for a stale build, so "not deployed" and "could not look" are the same answer; `.js.map`
+embeds original source, hence the exclude; and it witnesses the BUILT artifact, never a RUNNING
+one — `pm2 restart` is what makes it execute. So read box 5 off the EFFECT (a slot's
+`captured_at` advancing after Claude Code refreshes the live account), not off the bundle.
 
 ## Problem
 

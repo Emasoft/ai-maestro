@@ -3,7 +3,7 @@ trdd-id: WLHP34KZ
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200
-updated: 2026-09-09T16:46:28+0200
+updated: 2026-09-09T16:54:06+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -113,7 +113,7 @@ another project's source is permitted, editing is not) — this was second-hand 
 first draft correctly labelled it as the one link nobody on this side had read:
 `slot_capture_token.py:185` sets `"expiresAt": int((time.time() + ONE_YEAR_S) * 1000)` — now + 1
 year, in milliseconds, unconditionally, in the same literal that sets `"refreshToken": None`.
-**The chain is now first-hand end to end.**
+**First-hand at the point the value is CONSTRUCTED, and — since 16:5x — through the storage path as well; see the blob-shape acceptance box for the hop-by-hop reads and for the version this is scoped to.**
 
 ## Root cause
 
@@ -200,20 +200,41 @@ degraded target"). The change makes the arm agree with its own stated intent.
 ## Acceptance
 
 - [ ] owner rules on whether to apply the gate
-- [x] **the blob shape both gates rest on — READ FIRST-HAND 2026-09-09 16:4x**, in the installed
-      plugin cache (`ai-maestro-janitor/3.4.15`; reading another project's source is permitted,
-      only editing is not). `slot_capture_token.py:182-188` builds
-      `{"claudeAiOauth": {..., "refreshToken": None, "expiresAt": <now+1y ms>, ...}}`, and
-      `rotator.py:1212` `write_slot` does `inner = _oauth(blob)` — it strips TOP-LEVEL siblings
-      (`mcpOAuth`) and passes the inner dict through verbatim. So the field is PRESENT with value
-      `None` → JSON `null` → **falsy in JS**, so `oauthOf(b).refreshToken` fires, and it
-      round-trips to `None`, so the janitor's `refreshToken is None` fires. **Both gates work on
-      the real artifact.** Had it been a placeholder string, both would have silently never fired
-      and both cards would still have read as correct — a failure with no symptom.
-      SCOPE OF WHAT I READ: the single-account capture path. The janitor reports a bulk path
-      sharing one blob definition; I did not read that one. Their message named the builder
-      `setup_token_blob()`; what is actually there is an inline dict literal in the capture flow —
-      same substance, and the naming discrepancy is recorded rather than smoothed over.
+- [x] **the blob shape both gates rest on — READ FIRST-HAND at EVERY HOP, 2026-09-09 16:5x**, in
+      the installed plugin cache **version `ai-maestro-janitor/3.4.15`** (reading another
+      project's source is permitted, only editing is not). This box was FIRST CLOSED at 16:4x on
+      two greps and a `sed`, with three hops unread and the key clause taken from a DOCSTRING —
+      recorded here because it is the same cheapest-evidence-labelled-as-strongest error this
+      card corrected four times already today, committed inside the correction itself. The hops
+      are now actually read:
+      · `slot_capture_token.py:184-185` — `"refreshToken": None` and
+        `"expiresAt": int((time.time() + ONE_YEAR_S) * 1000)` in one literal;
+      · that literal is passed to `rotator.file_slot(...)` (`rotator.py:1022`), which calls
+        `write_slot(email, blob)` at `:1045` with the blob UNCHANGED (and stores `expires_at`
+        separately in the state.json index at `:1050` — two copies; `expiresInH` reads the BLOB's);
+      · `write_slot:1230` `inner = _oauth(blob)`, and `_oauth` (`:1013-1014`) is
+        `blob.get("claudeAiOauth", {})` — **a bare dict `.get`. No filtering, no normalisation,
+        nothing that could drop or rewrite the key.** This is the clause that was previously
+        docstring-only;
+      · `:1232` `blob = {"claudeAiOauth": inner}` strips top-level siblings only;
+      · both storage paths serialise with `json.dumps(blob, separators=(",", ":"))` —
+        `_slot_keychain_write:1152` and the 0600 plaintext fallback at `:1243`.
+      JS side, read this repo: `slots.ts:300/315/383` `JSON.parse(...) as CredentialBlob`, and
+      `oauthOf` (`:163-169`) returns `blob.claudeAiOauth` as-is. So Python `None` → JSON `null` →
+      JS `null` → `oauthOf(b).refreshToken` **falsy**. The gate fires.
+      **NOT "on the real artifact" — there is no real artifact.** All 3 slots here are
+      `via: slot_capture_browser(full-oauth)`; no setup-token blob has ever existed in this vault.
+      What is established is a property of the code that WOULD construct one. The earlier wording
+      asserted an empirical check that never happened.
+      **THIS READ EXPIRES WITH THE VERSION.** `setup_token_blob()` — the builder the janitor named
+      — does NOT exist in 3.4.15; what is there is an inline dict literal. The first draft recorded
+      that as the peer misnaming their own function. **More likely it is VERSION SKEW**: they cited
+      a commit (`f4457513`, "one shared blob definition for the single-account and bulk paths")
+      that is plausibly not in the published 3.4.15 I read. So (a) recording it as a peer error was
+      itself a small unfair second-hand claim, withdrawn here, and (b) on the version I read there
+      may be NO shared definition, which means the bulk path is not merely "another caller I
+      skipped" — it is unread and possibly separate. Re-check this box against any newer published
+      version before relying on it.
       This also closes TRDD-W11LAPSC's dependency on the same fact.
 - [ ] the `:1247` refreshToken test added at `:1259`
 - [ ] the same test added at `:1282-1286` — both, not one; the card makes no ranking

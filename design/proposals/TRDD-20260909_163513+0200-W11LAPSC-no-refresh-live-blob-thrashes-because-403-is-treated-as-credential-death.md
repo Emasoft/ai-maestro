@@ -3,7 +3,7 @@ trdd-id: W11LAPSC
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200
-updated: 2026-09-09T16:46:28+0200
+updated: 2026-09-09T16:58:12+0200
 current-owner: unassigned
 created-by: governance-rules-session
 assignee: unassigned
@@ -96,8 +96,12 @@ credential death already surfaces as 401, which is fatal on both sides.
 
 **The fact both gates rest on — was unread, now READ (2026-09-09).** Owned and recorded on
 TRDD-WLHP34KZ; not restated here beyond the outcome: the janitor's capture writes
-`"refreshToken": None`, which survives `write_slot` verbatim and serialises to JSON `null`, so
-this gate's test fires on the real artifact. Read first-hand in the installed plugin cache
+`"refreshToken": None`, and the storage path was then read hop by hop (`file_slot` → `write_slot`
+→ `_oauth`'s bare `.get` → `json.dumps` on BOTH the keychain and plaintext paths) — so the value
+reaching JS is `null`, and this gate's test **would** fire on a slot captured that way.
+**NOT "fires on the real artifact": there is no such artifact** — all 3 slots in this vault record
+`via: slot_capture_browser(full-oauth)`, so this is a read of the CODE PATH and it expires with
+the version read (3.4.15). Read first-hand in the installed plugin cache
 (reading another project's source is permitted; editing is not). Had it written a placeholder
 string, **this gate and TRDD-WLHP34KZ's would both have silently never fired — and both cards
 would still have read as correct.** It was the highest-probability failure in the pair, and it
@@ -165,9 +169,12 @@ class it stands for, and the unmeasured 401-only generalisation.
 ## Acceptance
 
 - [ ] owner rules — including the option to close this as subsumed by TRDD-WLHP34KZ's gate
-- [x] blob shape confirmed — **owned by TRDD-WLHP34KZ and closed there 2026-09-09**, read
-      first-hand: `refreshToken` is `None` → JSON `null` → falsy, so this gate fires on the real
-      artifact. One fact, one home; not restated as a second copy free to diverge
+- [x] blob shape confirmed — **owned by TRDD-WLHP34KZ and closed there 2026-09-09** — and FIRST
+      CLOSED THERE ON WEAKER EVIDENCE THAN THE BOX CLAIMED; see that card's box for what the
+      re-read actually covered. Now read hop by hop: `refreshToken` is `None` → JSON `null` →
+      falsy. **Not "on the real artifact" — no no-refresh slot exists in this vault**; it is a
+      code-path read and it EXPIRES WITH THE VERSION. One fact, one home; not restated as a
+      second copy free to diverge
 - [ ] measured — 401-not-403 for a death mode OTHER than a corrupted bearer token
 - [ ] OR the OWNER accepted the residual permanent-pin exposure, dated, on the record
       (deliberately TWO boxes: as one box with an "or", the cheap branch closes it every time,

@@ -60,10 +60,23 @@ const AUTH_NEEDLES = [
   'authorize(',
   'checkTeamAccess(',
   // a business call, not a refusal primitive: it counts as a guard only because routeMessage
-  // itself authenticates (bearer, or a verified attestation — TRDD-3VFT513C); the last test
-  // in this file pins that the check is still inside routeMessage
+  // itself authenticates (bearer, or a verified attestation — TRDD-3VFT513C); the test
+  // 'the routeMessage needle rests on a check the AMP service still carries' pins that the
+  // check is still inside routeMessage
   'routeMessage(',
 ]
+
+// A line that STARTS a comment is prose about the code, not the code — and so is the tail
+// of a code line after `//`. See the header: an unstripped body matches every needle this
+// file explains in words; measured 2026-09-09, a line-only stripper let
+// `let auth = … // previously: authenticateRequest(authHeader)` satisfy the routeMessage pin.
+// Shared by the router enumerator and the routeMessage pin below.
+// ponytail: line + trailing-// stripping only; a needle inside a /* */ block line that does
+// not start with `*`, or inside a string literal, still counts — good enough while no needle
+// contains '//' or a quote.
+const isComment = (l: string) => /^\s*(\/\/|\*|\/\*)/.test(l)
+const stripComments = (lines: string[]): string =>
+  lines.filter(l => !isComment(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n')
 
 interface Handler { key: string; guarded: boolean }
 
@@ -79,13 +92,9 @@ function enumerateHandlers(): Handler[] {
     if (m) entries.push({ key: `${m[1]} ${m[2]}`, at: i })
   }
 
-  // A line that STARTS a comment is prose about the code, not the code. See the header:
-  // an unstripped body matches every needle this file explains in words.
-  const isComment = (l: string) => /^\s*(\/\/|\*|\/\*)/.test(l)
-
   return entries.map((e, k) => {
     const stop = k + 1 < entries.length ? entries[k + 1].at : end
-    const body = src.slice(e.at, stop).filter(l => !isComment(l)).join('\n')
+    const body = stripComments(src.slice(e.at, stop))
     return { key: e.key, guarded: AUTH_NEEDLES.some(n => body.includes(n)) }
   })
 }
@@ -279,17 +288,15 @@ describe('TRDD-8Q5EVGV1 — headless per-handler auth ledger', () => {
   })
 
   it('the routeMessage needle rests on a check the AMP service still carries (TRDD-3VFT513C)', () => {
-    // `routeMessage(` is a business call, not a refusal primitive like the other needles:
-    // the headless POST /api/v1/route handler counts as guarded ONLY because routeMessage
-    // itself authenticates — a bearer via authenticateRequest, or a verified Ed25519 role
-    // attestation for a mesh peer (TRDD-3VFT513C). Pin both here so the needle cannot
-    // outlive the check it stands for. The span runs to the next top-level `export`, which
-    // is the function's end today (services/amp-service.ts:754-1357, next export :1363).
+    // The span runs to the next top-level `export` (routeMessage's end today; a helper added
+    // between them would widen it, never narrow it), with comment lines and trailing `//`
+    // comments stripped so a surviving mention of the call cannot satisfy the pin — the same
+    // stripping the router enumerator applies, for the same reason.
     const amp = readFileSync(AMP_SERVICE, 'utf8')
     const start = amp.indexOf('export async function routeMessage(')
     expect(start, 'routeMessage moved or was renamed — re-derive the needle').toBeGreaterThan(-1)
     const next = amp.indexOf('\nexport ', start + 1)
-    const body = amp.slice(start, next === -1 ? undefined : next)
+    const body = stripComments(amp.slice(start, next === -1 ? undefined : next).split('\n'))
     expect(body, 'bearer authentication left routeMessage').toContain('authenticateRequest(')
     expect(body, 'mesh-peer attestation check left routeMessage').toContain('verifyRoleAttestation(')
   })

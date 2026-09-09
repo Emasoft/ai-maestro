@@ -3,7 +3,7 @@ trdd-id: 8D9ZYZX9
 title: trddgrep new mints project-scope cards without scope and project-id
 column: backburner
 created: 2026-09-06T02:23:03+0200
-updated: 2026-09-10T01:49:51+0200
+updated: 2026-09-10T01:50:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -68,7 +68,13 @@ whitespace, which `/m` tolerates. Two of the first five fixtures I wrote were va
 of that shape, and the neuter runs are what surfaced it. The green run is recorded in the test
 rather than hidden.
 
-**REVIEW HISTORY (2026-09-10), condensed — three post-write rounds, all applied or disclosed.**
+**REVIEW HISTORY (2026-09-10), condensed — post-write ROUNDS 2-5** (round 1 was the pre-write
+proposal review; it is in git, not here). THREE findings were REJECTED rather than applied, and
+all three are named with their reason: the last-wins duplicate handling, immediately below, plus
+two from round 4 recorded in `13cdb3f8`'s commit message (keeping the regex shape; guarding
+against a maintainer rewriting the code-point spelling). Everything else was applied. That is
+stated as a checkable list because a blanket "all findings addressed" is precisely what a reader
+cannot verify.
 ROUND 2 found two real parse defects, both fixed: a DUPLICATE `project-id:` (a regex takes the
 FIRST; YAML readers disagree — 1.2 calls it an error, js-yaml throws, permissive ones take the
 LAST — and both values are well-formed, so the value guard cannot see it), and a UTF-8 BOM that

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-09T17:36:47+0200
+updated: 2026-09-09T17:41:10+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -24,34 +24,19 @@ priority: 1
 **CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
 BOTH the owner's.
 
-NEXT ACTION — **the OWNER's, not this session's:** lift the build/restart hold (box 5; ONE
-`yarn build` + `pm2 restart` also deploys TRDD-RE9AVNJF, whose fix is in the same bundle and
-equally undeployed), then confirm 95 and 97 (box 6).
+**NOT DEPLOYED** — `lib/*.ts` is bundled into `.next` and no build has run since, so 95/97 is not
+expected to be live. **That is an inference, not an observation:** nothing here greps the compiled
+chunk or dates `.next` against the commit.
 
-**NOT MEASURED BY THIS SESSION.** The 09-08 approval log records the COORDINATOR's own checks
-(5 vitest files, 109 passed, `tsc --noEmit` 0 error lines, no `ROTATOR_` pins) and SEPARATELY
-flags that box 2's neuters were the WORKER's recorded runs, *not re-run*. Two different
-provenance chains — an earlier draft of this block collapsed them and attributed all of it to a
-`reports/lean-worker/` file nobody here opened. `pid 24806` describes a process as of 09-08; the
-running server may no longer be that pid, which is what leaves caveat (c)'s env question OPEN
-rather than settled either way.
+**The 09-08 numbers quoted on this card were not measured by this session.** The approval log is
+the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
-**NOT DEPLOYED BY ANY ROUTE THIS CARD RECORDS** — `lib/*.ts` is bundled into `.next` and no build
-has run since. So 95/97 is not expected to be live, **but that is an inference, not an
-observation**: nothing here greps the compiled chunk or dates `.next` against the commit. An
-earlier draft asserted "the running server still vetoes at 90" — withdrawn as over-claimed.
+NEXT ACTION — **the OWNER's:** lift the build/restart hold (box 5; one `yarn build` +
+`pm2 restart` also covers TRDD-RE9AVNJF, whose fix is in the same `lib/` bundle), then confirm 95
+and 97 (box 6).
 
-**COLUMN — `dev`, and it is the OWNER's call, not a defect this session is sitting on.**
-RE9AVNJF's STATE block lists **`dev` + a note** as its FIRST candidate ("stale, but the drain rule
-keeps it in view"); it took `backburner` for itself and explicitly declined to choose a third
-time. So `dev` is a WEIGHED option here, not a rejected one.
-
-**Two earlier drafts of this block said otherwise and both were wrong** — the second called `dev`
-a "LIVE DEFECT" and "not among the options RE9AVNJF weighs". That was FALSE, and instructively
-so: it was read off a `grep` whose keyword list omitted `dev` and whose `head -40` truncated a
-118-line block — verified-absent claimed from not-searched-for. A review fork then argued from
-that false premise that the card was parked at a rejected option and should move. Corrected
-2026-09-09T17:36 by grepping for the word itself.
+COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
+each introduced a false or over-read claim; that argument is in git, not here.
 
 ## Problem
 

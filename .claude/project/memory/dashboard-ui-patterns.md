@@ -2,7 +2,7 @@
 name: dashboard-ui-patterns
 description: "how are agent category colors assigned in the sidebar / why no Redux or Zustand in ai-maestro / where do agent notes get saved / nested button React hydration error / which hooks manage terminal and websocket lifecycle / Skills Explorer vs Plugins Explorer settings tabs / 3-level agent hierarchy naming"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-10
 metadata:
   node_type: memory
   type: reference
@@ -121,6 +121,34 @@ types/websocket.ts  - Message protocol, connection states
 ```
 
 All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in `{ type: 'output', data: ... }`.
+
+
+^ATOM-KT97-MNIH [desc: "app/page.tsx early-returns MobileDashboard, so a banner mounted beside MigrationBanner/TmuxKeychainAlarmBanner is DESKTOP-ONLY — mount it in both arms, and nothing pins that by default", keywords: banner_only_shows_on_desktop mobile_dashboard_banner_missing added_a_banner_and_the_phone_does_not_show_it two_dashboard_arms isMobile_early_return MobileDashboard_mount fleet-level_banner global_banner_surface where_do_I_mount_a_dashboard_banner app/page.tsx_banner flex-shrink-0_inert banner_shrinks_main deleting_the_mount_leaves_tests_green RotatorReauthBanner TmuxKeychainAlarmBanner MigrationBanner, trdd: TRDD-CVQJNW3A, ocd: 2026-09-10, lmd: 2026-09-10]
+
+**The dashboard has TWO arms, and `app/page.tsx` early-returns the mobile one** — around `:671`,
+`if (isMobile) { return (<TerminalProvider key="mobile-dashboard"><MobileDashboard …/></TerminalProvider>) }`.
+Every banner mounted below that return (`MigrationBanner`, `TmuxKeychainAlarmBanner`,
+`RotatorReauthBanner`) is therefore **DESKTOP-ONLY**: the JSX is never evaluated on a phone. A
+fleet-level alarm copied from its siblings' mount site ships silent on mobile, and looks correct in
+review — the file reads as one component, and nothing type-checks or tests the reachability.
+
+**A second mount inside `components/MobileDashboard.tsx` is the fix**, after `</header>` and before
+`<main>`. Two things about that root are worth knowing before adding one:
+
+- It is `position: fixed; inset: 0` — a banner rendered in the *other* arm would paint outside it,
+  which is why "mount it once, higher up" is not available.
+- `<main>` is the ONLY grow item (`flex-1` with `minHeight: 0`, so its flex base is 0), so free
+  space is positive and distribution goes through GROW. **A `flex-shrink-0` wrapper on the banner
+  is inert** — shrink never fires on it in any reachable case. What the banner does cost is
+  `<main>`'s height, and that is safe because every pane inside it is `absolute inset-0` (empty
+  state, terminal/messages, work, hosts): they resize with it rather than overflowing, so nothing
+  is clipped out of reach despite both being `overflow: hidden`.
+
+**Nothing pins either mount by default.** Component tests render the banner directly, so deleting
+either mount line leaves them all green. `tests/unit/rotator-reauth-banner-mounts.test.ts` is the
+pattern to copy — a source-presence guard reading both files, six lines, no fixtures. Note its
+stated limit: it pins PRESENCE, not REACHABILITY, so it guards the regression and **would not have
+caught the original bug**, whose desktop mount was present but unreachable.
 
 ## See also
 

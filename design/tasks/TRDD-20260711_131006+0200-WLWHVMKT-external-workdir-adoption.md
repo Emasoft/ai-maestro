@@ -3,7 +3,7 @@ trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-09-10T09:49:56+0200
+updated: 2026-09-10T09:52:01+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -38,7 +38,7 @@ attempts: 0
 test-failures: 0
 last-test-result: not-run
 last-test-at: null
-implementation-commits: []
+implementation-commits: [f8a1fac7, 11e1a580]
 external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/27"]
 ---
 

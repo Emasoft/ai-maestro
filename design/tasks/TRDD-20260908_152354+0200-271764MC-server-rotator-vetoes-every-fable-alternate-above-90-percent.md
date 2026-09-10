@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T08:18:06+0200
+updated: 2026-09-10T08:22:22+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -75,7 +75,7 @@ the next reader can attack the claim rather than take it:
 **What the writes show — TEN backed-up writes, and whether any were pruned is NOT established.**
 Sep 5 12:55/13:04/13:07/19:50/20:00/21:29, Sep 9 14:25, Sep 10 01:16/01:21/01:21, every one under
 pid 24895; the live `abc123.json` at Sep 10 01:21 is the CURRENT CONTENT, not an eleventh distinct
-write. A draft called this "eleven writes, and that is a FLOOR because the set is AT the cap" —
+write. An earlier round called this "eleven writes, and that is a FLOOR because the set is AT the cap" —
 **both halves wrong.** The prune is `mine.slice(0, max(0, mine.length - BACKUP_KEEP))`
 (`lib/json-io.ts:282`, `BACKUP_KEEP = 10` at `:151`), which at length 10 slices nothing: being *at*
 the cap is not being *over* it, so ten surviving backups is equally consistent with ten writes and
@@ -102,7 +102,7 @@ four sites onto their enclosing functions settles it:
 | `restoreRawSnapshot` (`:529`) | tmp `:539` | **+1** — but **+0** on its `raw === null` branch, which deletes instead of writing |
 | `saveJsonSafe` (`:550`) | tmp `:584` | **+1** |
 
-So per-write cost is path-dependent ACROSS functions and constant WITHIN one. A draft withdrew
+So per-write cost is path-dependent ACROSS functions and constant WITHIN one. An earlier round withdrew
 too far here — it concluded that path-dependence "removes the ability to map counter values to a
 write count at all without knowing which paths ran, which is precisely the unknown". It was not
 an unknown; it was an unread file. What the withdrawal keeps is narrower and still right: "nothing
@@ -110,10 +110,10 @@ else used THAT module instance over those 4.5 days" is about the long statusline
 several callers on several paths could produce the same values, and nothing above rests on it.
 (`settings.json`'s counter 56 is EVEN, which fits a different instance with a different offset and
 does not fit a code-level parity rule; that datum is why the stronger claim was withdrawn.) And the
-counter is **per MODULE INSTANCE, not process-global** as a draft said — several module copies is
+counter is **per MODULE INSTANCE, not process-global** as an earlier round said — several module copies is
 the live explanation. A reset via the exported `_setAtomicWriteCounterForTests` (`:111`) is
 mentioned only for completeness: it is a **test-only** export and should not execute in
-production, so listing it beside the bundling explanation as a co-equal alternative — as a draft
+production, so listing it beside the bundling explanation as a co-equal alternative — as an earlier round
 did — gives a path that should never run undeserved parity. Either way it bounds nothing
 process-wide: the same pid 24895 carries `~/.claude/settings.json` at counter
 **56** stamped Sep 5 13:03 UTC while the statusline set is still at counter **23** on Sep 9 23:21
@@ -144,7 +144,7 @@ reading.
 > running now**, and the +2 step and the doublet are **stable recurring properties** rather than
 > artefacts of one read.
 >
-> **A draft then wrote "the doublet RECURRED … therefore periodic".** That inferred PERIODICITY
+> **An earlier round then wrote "the doublet RECURRED … therefore periodic".** That inferred PERIODICITY
 > from minute labels, which this card's own two-instruments rule forbids — a shared `0437` label
 > is consistent with anything from 0.1 s to 59 s, so it could not confirm the original 11.93 s
 > interval. The claim is superseded anyway: the doublet is now identified below, from the payload.
@@ -159,7 +159,7 @@ reading.
 > the findings set is EMPTY. `:453-455` can never fire. A raw diff of two consecutive backups
 > shows exactly `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call that
 > reaches the mutator writes,
-> full stop — a draft hedged this to "while a finding is live", which `:206` makes unnecessary and
+> full stop — an earlier round hedged this to "while a finding is live", which `:206` makes unnecessary and
 > which would have left the ten backups enumerating only the beats that happened to find something.
 >
 > **The other half of "every call writes" — that every call REACHES the mutator — is now measured
@@ -176,7 +176,7 @@ reading.
 > (`tests/unit/oauth-alert-delivery.test.ts:127`, `:201`), and `server-supervisor.ts:99-107`
 > documents its own call as "CALLED ON EVERY BEAT, INCLUDING THE ALL-CLEAR", explicitly ungated
 > because gating it on `findings.length > 0` once disabled the resolution half of the system.
-> **A draft justified this with "a throw only SUBTRACTS writes, and the conclusion needs
+> **An earlier round justified this with "a throw only SUBTRACTS writes, and the conclusion needs
 > write ⇒ call". That is right for ONE of the two things this card infers from the backups and
 > WRONG for the other, and it was introduced by the fix for the previous defect.** The card runs
 > two arguments off the same series:
@@ -198,7 +198,7 @@ reading.
 > beats.** `if (alertable)` gates the write, so the 2638-vs-2463 difference never denoted dropped
 > beats and needs no candidate mechanism at all.
 >
-> **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+> **An earlier round attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -245,7 +245,7 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   tsx/loader.mjs server.mjs` — the process actually executing the server, booted 11:16:27, which
   spawns esbuild at 11:16:51, the same second as the startup line above. Precisely: **24895 is
   the worker child of the pm2-managed process 24806**, and is the process executing `server.mjs`
-  (a draft compressed this to "24895 is the pm2-managed server", which pm2 would dispute — it
+  (an earlier round compressed this to "24895 is the pm2-managed server", which pm2 would dispute — it
   manages 24806). The timestamp agreement is CORRELATION, not identity: the log line carries no
   pid. What licenses the attribution is a sweep that had not been done — `ps -eo …` over **898**
   processes finds exactly **two** ai-maestro `server.mjs` processes, 24806 and 24895 (a third hit
@@ -258,14 +258,14 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   Read as ABSOLUTE OFFSETS from the first sample rather than as gaps — a review's correction, and
   it reads STRONGER than the draft it replaces: **0 · 60.153 · 120.579 · 167.972 · 179.903**.
   Against a **60.0 s** grid the residuals are **0 · +0.153 · +0.579 · −0.097**, max **0.579 s**.
-  (A draft used 60.2 s, taken from averaging the first two gaps; 60.0 fits better — max 0.697
+  (An earlier round used 60.2 s, taken from averaging the first two gaps; 60.0 fits better — max 0.697
   against 0.579 — so the draft's own arithmetic understated its finding.) **167.972 is 12 s off
   the nearest grid point, ~20× the residual scale**, so discarding it is separation, not
   curve-fitting. Honest statement: four of five writes fit a 60.0 s grid within 0.6 s; the fifth
   is an interloper that does not disturb it. Not "a doublet filling a slot" (withdrawn).
   `SUPERVISOR_INTERVAL_MS` is **600_000**, predicting 0-1 writes in that window: **the supervisor
   alone is excluded by rate.**
-- **The two instruments measure DIFFERENT properties — a draft's "the stamps are stronger" was an
+- **The two instruments measure DIFFERENT properties — an earlier round's "the stamps are stronger" was an
   over-correction that demoted the card's own mechanism evidence.** Nine consecutive one-per-minute
   stamps `0403…0411` establish **RATE over 9 minutes**, on a larger sample. Only the sub-second
   watch establishes **PERIODICITY** — and periodicity is exactly what distinguishes a
@@ -277,17 +277,17 @@ after an adversarial review correctly ruled the reads insufficient — one live 
 - **No writer outside the process, over the observed window.** Each mtime change in the 200 s
   watch has a matching `lib/json-io.ts` backup stamped pid 24895 (writes at
   04:05/04:06/04:07/04:07 UTC against backups `0405, 0406, 0407, 0407`). Stated as a **window
-  observation, n=4** — not the universal "no writer outside the process" a draft claimed. Note
+  observation, n=4** — not the universal "no writer outside the process" an earlier round claimed. Note
   the match is coarser than it looks: the two writes 12 s apart both land in the single minute
   `0407`, so this is minute-resolution agreement, not a true 1:1. The logic is still the right
   shape — a non-`json-io` writer (a python one, say) would move mtime with no backup at all.
   Separately, the janitor daemon does NOT write this file despite it living in the janitor's data
   dir: grepping the janitor plugin tree for `active-alerts` matches only TRDD docs and memory
   pages, no code.
-- **The counter tells us LESS than a draft claimed, and re-derives what the pid already gave.**
+- **The counter tells us LESS than an earlier round claimed, and re-derives what the pid already gave.**
   The backup counters step **+2 uniformly across all ten, doublet included**, so all ten writes
   share one counter — a second bundle copy would have to coincidentally land mid-sequence.
-  (A draft illustrated this with `…012479 → 012481 → 012483…`, which is in **neither** the
+  (An earlier round illustrated this with `…012479 → 012481 → 012483…`, which is in **neither** the
   12423-12441 window it was attached to **nor** the re-measured 012567-012585 one: a number
   carried across from a third, intermediate read. The illustration is dropped rather than
   re-sourced — the property is stated for the window it is measured on, above.)
@@ -334,7 +334,7 @@ after an adversarial review correctly ruled the reads insufficient — one live 
     backoff plus small-file I/O — **its backup must land immediately after the one it retries**.
     The interloper sits at offset `167.972`, 47.4 s after its predecessor and 11.9 s before its
     successor: adjacent to nothing. That is positional and cannot be argued away by slow I/O.
-    (A draft instead said retries were "two orders of magnitude" outside the spacing. The bound
+    (An earlier round instead said retries were "two orders of magnitude" outside the spacing. The bound
     it never read is `maxRetries = Math.max(0, opts.retries ?? 3)` (`:396`), so total backoff is
     ≤ 1.2 s against 60 s — **~50×, not 100×**. The adjacency argument needs no bound at all.)
     Lock contention is excluded the same way: `withJsonLock`'s `maxWaitMs` could DELAY a beat, but
@@ -384,19 +384,19 @@ PAYLOAD instead of the filenames.**
 > `alert-delivery.ts:6` and `:189` are comments, leaving `supervisor.ts:204` (a registry) and
 > `:268` (the emission)).
 >
-> **FILE vs CONTENT — the distinction a draft blurred, and it matters because of the retry
+> **FILE vs CONTENT — the distinction an earlier round blurred, and it matters because of the retry
 > loop.** `updateJson`'s staleness retry `continue`s ABOVE `keepBackup` (measured earlier on this
 > card: +2 counter, two backup FILES from ONE call), and the 200 ms sleep keeps both inside one
 > minute stamp. So a single tick call that lost a staleness race to the supervisor would emit the
 > doublet's two files itself — observationally identical to two separate calls, and NOT excluded
-> by the adjacency argument, since under that reading the doublet IS the adjacent pair. A draft
+> by the adjacency argument, since under that reading the doublet IS the adjacent pair. An earlier round
 > wrote "a tick beat cannot have produced that write", which is false on the FILE reading. What
 > the emission sites license is the CONTENT claim, and it holds under both readings: whoever
 > wrote the file, the `cookie +1` recorded in it came from the supervisor, because no tick
 > emission can produce that code. Cadence is unaffected either way — a retry stamps `lastSeenAt`
 > once, on the attempt that lands.
 >
-> **And the counter spacing CANNOT decide it either — measured, against a draft that said it
+> **And the counter spacing CANNOT decide it either — measured, against an earlier round that said it
 > could.** Both `keepBackup` (`json-io.ts:275`) and the tmp name (`:472`) `++` the SAME
 > `_atomicWriteCounter`, and both sit inside the retry loop, so **each attempt consumes 2 and a
 > call's backups are spaced 2 apart however many attempts it made** — byte-for-byte the spacing
@@ -410,7 +410,7 @@ PAYLOAD instead of the filenames.**
 > **The one observable that MIGHT have discriminated does not exist, and the code comment claims
 > it does.** A retry's two backups are ~200 ms apart, so a sub-second stamp would SOMETIMES
 > separate them from a tick-plus-supervisor pair — only sometimes, because those are independent
-> writes that could themselves land milliseconds apart, and a draft wrote "would settle it
+> writes that could themselves land milliseconds apart, and an earlier round wrote "would settle it
 > outright" against a two-tick-beat pair nobody proposed. Minute precision never separates them.
 > `keepBackup`'s
 > stamp is `new Date().toISOString()…slice(0, 15)` (`:269`) — 15 characters is `YYYY-MM-DD_HHMM`,
@@ -421,15 +421,15 @@ PAYLOAD instead of the filenames.**
 > (`BACKUP_KEEP`; zero `active-alerts` backups survive), so this cannot be re-measured on the
 > original artifacts either way — but the format alone forecloses it for any future doublet.
 >
-> **Three things the "only emission" half rests on, each now measured, because a draft rested it
-> on a grep with ZERO RECALL. The warrant is the THREE TOGETHER, not any one of them** — a draft
+> **Three things the "only emission" half rests on, each now measured, because an earlier round rested it
+> on a grep with ZERO RECALL. The warrant is the THREE TOGETHER, not any one of them** — an earlier round
 > called the `deliver(` grep "the exhaustiveness check" on its own, which overstates a needle
 > tuned to one syntactic form, the same fault one level up:
 >
 > - `grep -n 'deliver(' server-tick.ts` → **one hit, `:265`**. This BOUNDS the local's direct
 >   calls, and on its own it is blind to an alias or a `.call` — which is why the bare-identifier
 >   sweep below is part of the warrant and not a flourish.
->   A draft instead cited `grep -n "code:"`, which returned four hits — a signature, a type, a
+>   An earlier round instead cited `grep -n "code:"`, which returned four hits — a signature, a type, a
 >   comment, a parameter annotation — and **not one of them was an emission**. It could not have
 >   been: the builder is `const code = …` and the call is `deliver([{ code, message: … }])`, using
 >   shorthand, so neither line contains the token `code:`. The needle scored **0/1 on the class it
@@ -437,7 +437,7 @@ PAYLOAD instead of the filenames.**
 >   by re-running it against the two lines in isolation: 0 matches. **A review fork caught this,
 >   not I.**
 > - `grep -rn deliverAlerts` over `lib app services scripts tests` → exactly **two production call
->   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. A draft left `server.mjs` — the
+>   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. An earlier round left `server.mjs` — the
 >   file that imports the rotator at runtime — outside that scan. Now scanned: **zero**
 >   `deliverAlerts`, zero `deliverImpl`; its only rotator import is `startOauthRotatorTick` at
 >   `:1995`.
@@ -448,7 +448,7 @@ PAYLOAD instead of the filenames.**
 >   from what a `??`-default usually means would have been the same move that failed twice below.
 >
 > **Two earlier sourcings of this same conclusion were wrong, and they were TWO DIFFERENT
-> ERRORS** — a draft called them "wrong in the same direction, each citing something adjacent to
+> ERRORS** — an earlier round called them "wrong in the same direction, each citing something adjacent to
 > the emission", which is a description invented afterwards, loose enough to fit anything near
 > the file, and whose rhetorical work is to make a third guess read as a converging series.
 > Round 4 argued it from `alert-delivery.ts:180-188`, a comment about the August TRDD-W6PHZFC9
@@ -465,17 +465,16 @@ PAYLOAD instead of the filenames.**
 > POINTER and a bad WARRANT.** It could not settle the question, and it is what led to the answer
 > — reading the expression it names is what produced the row above, and that source is strictly
 > stronger than either draft: an expression that CONSTRUCTS the value beats a constant that does
-> not constrain it. A draft kept only the "bad warrant" half, which teaches the reader to skip
-> the thing that got you there. A draft also wrote "a second tick beat would have bumped
+> not constrain it. An earlier round kept only the "bad warrant" half, which teaches the reader to skip
+> the thing that got you there. An earlier round also wrote "a second tick beat would have bumped
 > `reauth-needed`", which assumed the conclusion; the emission sites make it unnecessary.
 >
 > **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
 > reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. **The two numbers
-> are NOT the same quantity** — 2638 counts SCHEDULED BEATS, 2463 counts DELIVERIES OF ONE CODE,
-> and `server-tick.ts:239-240` puts every write inside `if (alertable)`, so a healthy beat writes
-> nothing. The ~175 difference is therefore not a count of missing beats; it is the count of
-> intervals in which no `reauth-needed:*` delivery was recorded. **There is no shortfall to
-> explain** (below). cookie: 143 229 s ÷
+> are NOT the same quantity** — 2638 counts SCHEDULED BEATS, 2463 counts ROWS UNDER A
+> `reauth-needed:*` RECORD, and `server-tick.ts:239-246` puts the emission and the reap inside
+> `if (alertable)`. The ~175 difference denotes nothing. **There is no shortfall to
+> explain, and no rate may be read off 2463** (below). cookie: 143 229 s ÷
 > 600 s = 239 expected, **238 observed (99.6%)**. Two independent confirmations, each of one beat
 > against its own nominal period — **and confirmations of the period's SCALE only, silent on its
 > REGULARITY.** The rate says ~60 s is the right order and says nothing about whether the beat is
@@ -492,7 +491,7 @@ PAYLOAD instead of the filenames.**
 > "Default 60000 — the janitor daemon's cadence". **And the call site takes the default:**
 > `server.mjs:1996` is `startOauthRotatorTick()`, no arguments.
 >
-> **A draft stopped one line short of that and wrote "60 s is the beat, by declaration", calling
+> **An earlier round stopped one line short of that and wrote "60 s is the beat, by declaration", calling
 > the windows mere CONFIRMATIONS of it — which was the fourth instance of the very error that
 > paragraph names itself as the third instance of.** `?? 60_000` is a DEFAULT; a default is not a
 > running period until the call site is read, and the draft cited only the `import` line at
@@ -501,7 +500,7 @@ PAYLOAD instead of the filenames.**
 > three-part one — *the declared default is 60 s, the call site overrides nothing, and two
 > independent windows measure the live value at 60 s.*
 >
-> **The windows still do work the declaration cannot**, which is the other half a draft gave
+> **The windows still do work the declaration cannot**, which is the other half an earlier round gave
 > away: this card measured **two** live ai-maestro `server.mjs` processes (24806, 24895). Two
 > 60 s timers, phase-offset and serialized by the machine-wide `withTickLock`, would write at a
 > SUB-60 s rate. Observing 60 s rules that out; no reading of the source can. **Narrowed below**
@@ -538,7 +537,7 @@ PAYLOAD instead of the filenames.**
 > eight in `tests/unit/oauth-rotator-tick-attempt-floor.test.ts`, and this card.** Untracked
 > files are still outside it.
 >
-> **The residual argument is REPLACED by arithmetic, because the mechanism a draft proposed is
+> **The residual argument is REPLACED by arithmetic, because the mechanism an earlier round proposed is
 > refuted by the project's own test.** Round 11 wrote that ingest "can only backfill windows the
 > timer MISSED", which equivocates: a window the timer NEVER FIRED IN, versus one where it fired
 > and wrote nothing — and by the block below, the second kind is what a HEALTHY beat does, so the
@@ -550,31 +549,38 @@ PAYLOAD instead of the filenames.**
 > ENTRY even when the R16 gate is off and no work is done"*, then `tickAttemptAllowed()` false,
 > with a three-mutation neuter run at `:110-130`) proves a fortiori that every later-returning
 > path stamps. The test corroborates the ordering; it does not itself drive the lock-drop case,
-> and a draft said it "pins this directly".
+> and an earlier round said it "pins this directly".
 >
 > **AND THE WHOLE SHORTFALL IS AN ARTEFACT OF THE DENOMINATOR'S MEANING. A BEAT DOES NOT WRITE.**
-> `server-tick.ts:239-240` is `const alertable = alertableTick(result); if (alertable) {` — the
-> emission, the `deliver(` call and every write sit INSIDE that branch. A beat that finds the
-> rotator healthy calls nothing, writes nothing, and reaps nothing. So `2638 = 158 267 s ÷ 60 s`
-> counts SCHEDULED BEATS while `2463` counts DELIVERIES OF ONE CODE, and the 175 difference is
-> not a count of missing beats at all — **it is the count of 60 s intervals in which no
-> `reauth-needed:*` delivery was recorded, which includes every interval in which the condition
-> was absent or a different code won the `reason > stuck` precedence.** Nothing is missing; the
-> two numbers were never the same quantity.
+> **MEASURED, at `server-tick.ts:239-246`, lexically:** `const alertable = alertableTick(result);
+> if (alertable) {` — the `deliver(` call, the `code` ternary and the reap filter (`owns:
+> ownsTickAlert`) all sit INSIDE that branch, and the branch is taken at most once per beat. So
+> `2638 = 158 267 s ÷ 60 s` counts SCHEDULED BEATS while `2463` counts ROWS UNDER A
+> `reauth-needed:*` RECORD, and **the two were never the same quantity.** The 175 difference
+> denotes nothing; there is no residual, and no mechanism is needed for it.
 >
-> **Five rounds argued about the CAUSES of that residual and no round asked what the numerator
-> MEANT** — restarts (r9), jitter and an unknown denominator (r10), ingest backfill (r11), a
-> floor-based bound (r12), a configuration-independent bound (r13). All five are withdrawn, and
-> the last two were bounds on a subtraction that does not denote. The bound question is moot: the
-> per-process scope that falsified r12's version, and the equivocation on "nominal" that
-> falsified r13's, both argued about how many beats a configuration permits, when a permitted
-> beat need not write. Round 10's `setInterval`-jitter candidate dies here rather than for the
-> reason r13 gave (which was borrowed from the floor argument): drift cannot produce a 6.6%
-> deficit over 44 h, and nothing measured it.
+> **The dissolution does NOT rest on what `alertableTick` returns** — which was not read. Whatever
+> it returns on a healthy tick, a scheduled beat and an alert row are different things being
+> counted. Do not upgrade this: the ternary's third branch (`: 'reauth-needed:unknown'`) fires
+> when `alertable` is truthy with both `reason` and `stuck` falsy, which is evidence AGAINST
+> "healthy ⇒ falsy". And a healthy beat does not write *nothing* — `stampTickAttempt()` precedes
+> every gate, which is this block's own hardest-won finding.
 >
-> **What the 93% DOES license, and it is not nothing:** the rotator's alertable condition held for
-> at least 2463 of 2638 intervals across 44 h — a duty cycle, not a reliability figure. That is
-> the fleet being in the vetoing state essentially continuously, which is the card's subject.
+> **What 2463 counts is NOT settled, and is recorded here at the strength its evidence carries.**
+> `deliverAlerts` was not read, so: whether the store increments per CALL or per STATE TRANSITION
+> is unknown (a `firstSeenAt`/`lastSeenAt`/`count` shape is used both ways), and whether the row
+> is one CODE or a sum over the `reauth-needed:*` FAMILY is unknown (`code` is
+> `` `reauth-needed:${alertable.reason}` ``, parameterized). One read of `deliverAlerts` settles
+> both. **No duty-cycle figure may be derived from 2463** until it is: 2463 deliveries occupy AT
+> MOST 2463 distinct intervals, and converting that to a rate needs the even spacing this same
+> block disclaims two paragraphs above.
+>
+> **Every mechanism proposed for the residual is gone — but by two different routes, and the
+> difference matters.** REFUTED on its own evidence, independent of the denominator: ingest
+> backfill (r11 — the stamp-before-gates ordering locks ingest out of exactly those windows) and
+> the floor-based bound (r12 — the floor is per-process, and the card measured two processes).
+> MOOT, because the question dissolved under them: restarts (r9), `setInterval` jitter (r10), the
+> configuration-independent bound (r13). Nothing measured jitter's magnitude and nothing needs to.
 >
 > **The two-processes narrowing SURVIVES, and it rests on the lock, not the floor.**
 > `withTickLock` returns null when the lock is held rather than queueing, so a losing process's
@@ -595,7 +601,7 @@ PAYLOAD instead of the filenames.**
 > is also clean: `grep -n '\bdeliver\b' server-tick.ts` → three hits, a comment at `:41`, the
 > binding at `:258`, the call at `:265` — no alias, no `.call`, no passing the value elsewhere.
 >
-> **The tick period is NINE writes, not ten.** A draft said "the identification pays for itself
+> **The tick period is NINE writes, not ten.** An earlier round said "the identification pays for itself
 > here" — overstated by one notch: **the exclusion is forced by the DATA, not licensed by the
 > identification.** Differencing reauth's `lastSeenAt` across all ten backups yields a **0** at
 > the supervisor write; it announces itself, and any reader would drop it. The identification
@@ -731,7 +737,7 @@ from the mechanism. Deriving it:
 >
 > `HASH_HEX_LEN` (= 64, `lib/dev-mode-token.ts:48`) is **immaterial to the CURRENT verdict** — the
 > guard is `status.enabled || status.issued` and `enabled` alone is `true` — but it is
-> **load-bearing for the PATCH claim below**, and a draft that flatly called it "immaterial"
+> **load-bearing for the PATCH claim below**, and an earlier round that flatly called it "immaterial"
 > over-corrected into a contradiction with its own next paragraph. If `tokenHash.length !== 64`
 > then `issued` is false, and after a `PATCH {enabled:false}` the guard would NOT fire, making
 > PATCH sufficient. Both claims need the constant; only one needs it today.
@@ -758,7 +764,7 @@ from the mechanism. Deriving it:
 > IMMATERIAL.** It is the most owner-actionable thing measured here:
 >
 > The tuning trades a visible fast-fail for **~42 h of flapping before the app reaches `errored`**
-> — i.e. it never reaches it inside any window an owner would notice. (A draft made this a
+> — i.e. it never reaches it inside any window an owner would notice. (An earlier round made this a
 > two-row table whose left column was borrowed from the same `ecosystem.config.js` comment the
 > paragraph below impeaches, asking the reader to trust a source three lines above being told it
 > is unreliable. The finding lives entirely in the measured right-hand side, so the table is gone.)
@@ -874,7 +880,7 @@ they say the POSTer is not the obvious candidate:
 arriving *through the live server's own pid* means someone is POSTing test-shaped data at the
 running server, not that a test wrote the file directly. Who, is unidentified.
 
-**What this changes for box 5 — LESS than a draft of this block claimed.** That draft said "the
+**What this changes for box 5 — LESS than an earlier round of this block claimed.** That draft said "the
 build is now the load-bearing half rather than a precaution". **Retracted:** `yarn build` is
 required identically under BOTH readings, because the stale default lives in the bundle whether or
 not any route is hit, and this block already said "run BOTH" before either draft. What the finding
@@ -942,6 +948,16 @@ of this block:
   to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
   absent from symptom search; that is a choice, not a default.
 
+> **THE SERIES ENDS AT ROUND 15 (this one). Test (3) has been met ZERO times in fifteen rounds.**
+> The only thing that has ever gated this card — `pm2 restart` crash-looping the server against
+> the uncommitted `assertDevModeAbsentInProduction()` in `server.mjs` — has been stable,
+> correct and unactioned since round 1, while this block was rewritten fifteen times. A
+> sixteenth round is AVAILABLE and would not be WARRANTED: the series is now consuming the card
+> instead of advancing it. The two open reads named in the residue (`deliverAlerts`,
+> `alertableTick`) are recorded as open and are NOT a licence to reopen — whoever needs them
+> should read them and act, not redraft. **Next action on this card is the owner's deploy, not
+> another round.**
+
 STOPPING RULE for this STATE block. A further round is warranted ONLY if it (1) removes a claim
 whose evidence does not support it, (2) closes a gap by measurement, or (3) **changes the card's
 operational recommendation or an acceptance box.** A wording change to an already-correct claim
@@ -979,9 +995,13 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
 - Whether the two live `server.mjs` processes started at near-zero phase (one `pm2 restart`) is
   not measured, and near-zero phase is the case the windows cannot exclude.
 - ~~The 175-beat shortfall has no measured cause.~~ **DISSOLVED, not explained.** `if (alertable)`
-  gates every write, so 2638 (scheduled beats) and 2463 (deliveries of one code) were never the
-  same quantity and their difference denotes nothing. Every mechanism proposed for it is
-  withdrawn; no further mechanism is warranted, because there is no residual.
+  gates the emission, so 2638 (scheduled beats) and 2463 (rows under an alert record) were never
+  the same quantity and their difference denotes nothing. No further mechanism is warranted.
+- **`deliverAlerts` was never read, and one read closes the last open question on this block:**
+  does the store increment per CALL or per STATE TRANSITION, and is 2463 one code or the
+  `reauth-needed:*` family summed? Until then 2463 supports no rate and no duty cycle.
+- **`alertableTick`'s return on a healthy tick is INFERRED FROM ITS NAME, never read.** The
+  dissolution above does not depend on it; nothing else should be built on it either.
 - **Candidate OPERATIONAL finding, unmeasured:** a beat dropped by `withTickLock` covered nothing
   and still stamps the floor, refusing the ingest push-trigger for a full 60 s — while the
   stamp-before-gates comment justifies itself by "an ingest arriving just after a beat would fire

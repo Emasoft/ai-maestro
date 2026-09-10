@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:08:41+0200
+updated: 2026-09-10T07:17:58+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -161,7 +161,22 @@ reading.
 > the findings set is EMPTY. `:453-455` can never fire. A raw diff of two consecutive backups
 > shows exactly `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call writes,
 > full stop — a draft hedged this to "while a finding is live", which `:206` makes unnecessary and
-> which would have left the ten backups enumerating only the beats that happened to find something. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+> which would have left the ten backups enumerating only the beats that happened to find something.
+>
+> **The other half of "every call writes" — that every call REACHES the mutator — is now measured
+> too, because a review asked for it and an early return on an empty findings set is the obvious
+> guard to write.** There is none: `deliverAlerts` (`alert-delivery.ts:146`) runs `nowS`, `log`,
+> `owns`, `delivered = []`, then straight into `try {` → `alertsFile()` → `readJson` → `prior` →
+> `toNotify` → `live` → `await updateJson(...)` at `:166`, with no return in between. Two
+> independent corroborations: the suite calls `deliverAlerts([], …)` as a real delivery
+> (`tests/unit/oauth-alert-delivery.test.ts:127`, `:201`), and `server-supervisor.ts:99-107`
+> documents its own call as "CALLED ON EVERY BEAT, INCLUDING THE ALL-CLEAR", explicitly ungated
+> because gating it on `findings.length > 0` once disabled the resolution half of the system.
+> (This direction is the weaker of the two anyway — the conclusion needs *every write corresponds
+> to a call*, and an early return would only remove writes that never happened. But the card
+> asserted the stronger claim, so the stronger claim is what got measured.)
+>
+> **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -330,21 +345,35 @@ PAYLOAD instead of the filenames.**
 > | 12615 | 0458 | 2459 | 238 | reauth **+1** |
 >
 > **The doublet's second write bumped a DIFFERENT alert code and left the tick's own code
-> untouched** — and the two producers' code namespaces are DECLARED and DISJOINT in source, so
-> this is an entailment rather than an inference:
+> untouched** — and the two producers' EMISSION SITES are disjoint by construction, so this is an
+> entailment rather than an inference:
 >
-> | producer | its declared codes | site |
+> | producer | its sole emission | site |
 > |---|---|---|
-> | tick | `TICK_ALERT_PREFIXES = ['rotator-stuck:', 'reauth-needed:']` | `server-tick.ts:47` |
-> | supervisor | `SUPERVISOR_ALERT_CODES` — includes `'cookie-leg-stuck'`, emitted at `:268` | `supervisor.ts:204`, `:268` |
+> | tick | `const code = alertable.reason ? \`reauth-needed:${alertable.reason}\` : alertable.stuck ? \`rotator-stuck:${alertable.stuck}\` : 'reauth-needed:unknown'`, then `deliver([{ code, … }])` — a three-branch ternary, every branch prefixed, and the file's only emission | `server-tick.ts:257`, delivered `:265` |
+> | supervisor | `code: 'cookie-leg-stuck'` in a finding literal | `supervisor.ts:268` |
 >
-> `deliverAlerts` writes the findings its caller hands it. `cookie-leg-stuck` matches neither tick
-> prefix, so **a tick beat cannot have produced that write**; the supervisor owns the code and
-> emits it. (A draft argued this from `alert-delivery.ts:180-188` — a comment about the August
-> TRDD-W6PHZFC9 antiphase incident. A comment about a fixed bug is not a producer registry; the
-> two declarations above are, and `server-tick.ts:230` mentions `cookie-leg-stuck` only inside a
-> comment. A draft also wrote "a second tick beat would have bumped `reauth-needed`", which
-> assumed the conclusion. The namespaces make it unnecessary.)
+> `deliverAlerts` writes the findings its caller hands it, and the tick hands it a ONE-element
+> array built from that ternary. No branch of it can produce `cookie-leg-stuck`, so **a tick beat
+> cannot have produced that write**; the supervisor is the only site that emits the code
+> (`grep -rn cookie-leg-stuck lib` → 6 hits, of which `server-tick.ts:230`, `supervisor.ts:142`,
+> `alert-delivery.ts:6` and `:189` are comments, leaving `supervisor.ts:204` (a registry) and
+> `:268` (the emission)).
+>
+> **Two earlier sourcings of this same conclusion were wrong, in the same direction — each cited
+> something ADJACENT to the emission instead of the emission.** Round 4 argued it from
+> `alert-delivery.ts:180-188`, a comment about the August TRDD-W6PHZFC9 antiphase incident; a
+> comment about a fixed bug is not a producer registry. Round 5 replaced that with
+> `TICK_ALERT_PREFIXES` (`server-tick.ts:47`) called a "declared namespace" — **also wrong, and
+> wrong in a way its own name warned about.** That constant has exactly ONE use site,
+> `ownsTickAlert` at `:52`, which is passed as `owns:` at `:259` — the REAP filter. It constrains
+> what the beat DELETES from `active-alerts.json`, never what it EMITS, which is the whole point
+> of the TRDD-W6PHZFC9 fix. Its docstring (`:43-47`) does assert correspondence with the builder
+> and points at "the `const code` expression in `runOneTick`" — but a docstring asserting a
+> correspondence is not the correspondence. Reading the expression it points at is what produced
+> the row above, and that source is strictly stronger than either draft: exhaustive by
+> construction rather than by claim. A draft also wrote "a second tick beat would have bumped
+> `reauth-needed`", which assumed the conclusion; the emission sites make it unnecessary.
 >
 > **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
 > reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. cookie: 143 229 s ÷
@@ -352,11 +381,22 @@ PAYLOAD instead of the filenames.**
 > against its own nominal period. (A draft instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
 > matching 10:1. Withdrawn: the two codes start 4.2 h apart, and correcting for that moves the
 > expectation to ~11:1 — **away** from the observation, so the apparent match was an artefact of
-> not correcting. reauth's 93% is ~175 beats short over 44 h, consistent with restarts.)
+> not correcting. reauth's 93% is ~175 beats short over 44 h. **A draft added "consistent with
+> restarts" — withdrawn as an unmeasured story attached to a residual, and the kind that ends an
+> investigation.** It also bears on the cadence claim, so it is not cosmetic: 175 misses over 44 h
+> is one per ~15 min, and the cadence evidence is a CONTIGUOUS nine-write window with clean 60 s
+> deltas. Those coexist only if the misses are CLUSTERED (restarts) rather than spread (a beat
+> that sometimes does not reach `deliverAlerts`). Nothing here distinguishes them; the shortfall
+> stands bare, and the cadence claim is scoped to the window that was measured.)
 >
 > **The tick period is NINE writes, not ten** — the identification pays for itself here by letting
 > the interloper be excluded from the arithmetic instead of averaged into it. Consecutive
-> `lastSeenAt` deltas across the nine tick writes: **60, 61, 60, 59, 60, 60, 60, 60 s**.
+> `lastSeenAt` deltas across the nine tick writes: **60, 61, 60, 59, 60, 60, 60, 60 s**. Nine
+> writes give EIGHT deltas; eight are listed. **These are tick-to-tick only because the supervisor
+> write was excluded BEFORE differencing, which is exactly what the identification licenses** —
+> and the interloper sits mid-window at `12613`, not at an edge, so under the old ten-write
+> reading the delta spanning it would have been the wrong one. The 61/59 pair is the adjacent
+> arithmetic; it is ±1 s around 60, which is what an exclusion done correctly looks like.
 >
 > This is **a second reading of the same ten files, not a second sample** — different bytes
 > (payload vs filesystem metadata) and a different clock (in-process `Date.now()` vs the
@@ -675,23 +715,28 @@ runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_M
 is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to
 settle box 6 given that no runtime surface prints either number.
 
-OPEN ITEMS not owned by the owner, carried so they are not lost:
-- A lesson for `.claude/rules/lessons-verification.md`, **not yet filed** because that file is at
-  its size cap and an entry requires relocating one into `.claude/rules-reference/` first:
-  *labelling an unverified claim is honest disclosure when the argument NEEDS it and retention
-  when it does not — delete the claim and see whether the conclusion weakens.* Earned here by the
-  pm2 restart-ordering clause, which survived deletion untouched.
-- A second, from this card's own instrument failures, stated at the level that will actually fire
-  again: **a pipeline whose PRODUCER fails silently makes "no difference" and "no data"
-  indistinguishable, and the wrong answer it returns is the confident one.** Here `json.tool`
-  errored to `/dev/null` on two already-pruned backups, `diff` compared two empty streams, and
-  printed `IDENTICAL` — which would have REFUTED writes≡calls and ended the search. Same shape as
-  `grep -c` returning 0 from a crashed producer and as the `stat -f` blob, both also on this card.
-  Positive-control the producer (file existence, exit status) before reading its silence.
-- **The blocking task for both of the above is unglamorous and unnamed until now:** relocate one
-  entry from `.claude/rules/lessons-verification.md` into
-  `.claude/rules-reference/lessons-verification-full.md` to get under the size cap. Neither lesson
-  can be filed before that.
+OPEN ITEMS not owned by the owner — **all three now CLOSED, done rather than carried**, because
+a lesson parked behind an unscheduled chore is findable only by someone reading this card, which
+is the one population that already knows it. "Recorded" was the wrong word for the previous state
+of this block:
+- **DONE — the blocking chore.** Four enforcement-ratchet entries (the R20.5/G15 free-pin, the
+  R7.8/R4.8 coupling, the R39.5/R39.7 superseded-guard, the R32.2/R37.4/R37.2 clause count)
+  relocated verbatim from `.claude/rules/lessons-verification.md` into
+  `.claude/rules-reference/lessons-verification-full.md` under their own headings. All four are
+  the lowest-recurrence class the budget rule names — one completed campaign, dense in its own
+  R-numbers and gate ids. Freed 1610 B; the file went 98059 → 97819 B against the 98304 cap after
+  the three new entries landed. `tests/governance/lessons-file-budget.test.ts` 3/3.
+- **DONE — lesson 1** (`## Claims about the codebase`): labelling an unverified claim is
+  disclosure only when the conclusion still needs it — delete the claim and see whether the
+  conclusion weakens; if it does not, the label is retention dressed as honesty.
+- **DONE — lesson 2** (`## Shell`): a pipeline whose PRODUCER fails silently makes "no
+  difference" and "no data" indistinguishable, and the wrong answer is the confident one. Here
+  `json.tool` errored to `/dev/null` on two already-pruned backups, `diff` compared two empty
+  streams, and printed `IDENTICAL` — which would have REFUTED writes≡calls and ended the search.
+- **DONE — lesson 3, earned by round 6 itself** (`## Claims about the codebase`): a constant's
+  NAME and its own DOCSTRING are not its use sites. `TICK_ALERT_PREFIXES` reads as a producer's
+  declared namespace and its docstring asserts the correspondence; its one use site is the reap
+  filter. Read who calls it before deriving anything from it.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

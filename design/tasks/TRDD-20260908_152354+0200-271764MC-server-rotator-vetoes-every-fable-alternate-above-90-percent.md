@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:14:29+0200
+updated: 2026-09-10T02:19:45+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -39,22 +39,36 @@ mtime of 09-07 is NOT a build stamp and what touched it is unknown.
   `fleet-liveness-watchdog.ts`, the model-fallback SWEEP's only importer. tsx reads both from
   disk, so Change 1 and Change 2 both land.
 - **Bundled, stale until built.** `app/api/statusline/ingest/route.ts:190` calls `runOneTick()`
-  and `:188` calls `isNearLimit` — both from the Sep-5 bundle. **After a restart-only, a tick
-  triggered through that route compares against 90 while the server's own tick compares against
-  95/97.** That is precisely the two-verdicts-drift failure Change 2 exists to prevent
-  (TRDD-IZ6KU37Y), reintroduced by deploy topology rather than by code.
+  from the Sep-5 bundle. The two tick paths DO serialise — the 60s attempt floor is
+  `Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')` on `globalThis` and the mutex is a
+  LOCKFILE (`oauth-rotator-server-tick.lock`), so neither splits across the registries — but
+  whichever copy WINS the lock then runs with its OWN constants. **So after a restart-only the
+  effective threshold is NONDETERMINISTIC between 90 and 95/97**, which is worse than a fixed
+  wrong value because it is intermittent. `yarn build` closes it; the restart alone does not.
+  (`:188`'s gate, `isNearLimit`, keys on `SCOPED_SWITCH_AT_PCT` — so the gate deciding whether
+  the stale tick runs is itself stale.)
 
-Precisely: `tick.ts` IS compiled into `.next` — what is true is that the SERVER's tick does not
-RUN the bundled copy.
+`tick.ts` IS compiled into `.next`; what is true is that the SERVER's tick does not RUN the
+bundled copy.
+
+**CHANGE 2 MAY BE INERT IN PRODUCTION, whatever the deploy.** No caller overrides
+`scopedThresholdPct` (zero hits outside its own file), so the new default does take effect — but
+`fleet-liveness-watchdog.ts` sets `DEFAULT_MODEL_FALLBACK = process.env.AIM_FLEET_MODEL_FALLBACK
+=== '1'`, so **the sweep leg is OFF unless the owner armed it**, deliberately (its comment: one
+switch must be watched end-to-end on a real pane first). Change 2 changes a number the sweep
+reads; if the sweep never runs, it changes nothing observable. The Problem section treats the
+sweep as an active cause of the bug — that premise needs the owner's confirmation.
 
 **BOX 6 IS NOT CONFIRMABLE BY OBSERVING THE SERVER, with or without a build.** Surveyed across
-`lib/` and `app/` (not sampled): every use of `SAFE_SCOPED` and `SCOPED_SWITCH_AT_PCT` is a
-COMPARISON. Neither number is logged, returned, or exposed by any route —
-`/api/oauth-rotator/status` carries only a comment mentioning the threshold. So box 6 is
-satisfiable by reading the source, or by observing BEHAVIOUR (an alternate at scoped 94
-accepted, at 96 vetoed) — not by reading a number off the running system. Two earlier drafts of
-this block named a confirmation surface, the status route and then the tick's SCOPED-WALL log
-line, and both were wrong; the reasoning is in git.
+`lib/` and `app/`: neither constant is logged, returned, or exposed by any route.
+`/api/oauth-rotator/status` carries only a comment naming the threshold. Every use is a
+comparison except `model-fallback.ts:212` (`const threshold = input.scopedThresholdPct ??
+SCOPED_SWITCH_AT_PCT`), and that local never escapes — every return below it is `{act, skip}`.
+Reach caveat: the grep was `--include=*.ts`, so `.tsx` components and `.next/static` are
+unsearched. Box 6 is therefore satisfiable by reading the source, or by BEHAVIOUR (94 accepted,
+96 vetoed) — but that check is **not on demand**: the scoped percentages are consumption-driven
+and unsettable, and the accept path does not log. Three drafts of this block have now named a
+confirmation surface without first checking it; this one is named as unverified, not as advice.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the
@@ -65,10 +79,11 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the hold (box 5) and run **both** `yarn build` and
-`pm2 restart` — the restart alone leaves the statusline route ticking at 90. The same deploy
+`pm2 restart` — a restart alone leaves the effective threshold nondeterministic. The same deploy
 also lands TRDD-RE9AVNJF (`5aa945c1`, `48e839b6` touched `tick.ts` and `slots.ts`, the same
-runtime chain). Box 6 then needs a call of its own: nothing at runtime prints 95 or 97, so
-confirm from the source, or restate the box as the behavioural check.
+runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_MODEL_FALLBACK`
+is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to
+settle box 6 given that no runtime surface prints either number.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

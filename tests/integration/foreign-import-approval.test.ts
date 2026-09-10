@@ -459,3 +459,45 @@ describe('foreign-import-approval — native (same-host) import is unaffected', 
     expect(authority.isAidAssociated(importedFp).ok).toBe(true)
   })
 })
+
+describe('foreign-import-approval — TRDD-WLWHVMKT: importAgent gates workingDirectory', () => {
+  it('a same-host export whose workingDirectory is OUTSIDE ~/agents/ is rejected (400), no agent created', async () => {
+    // Before this card, importAgent carried importedAgent.workingDirectory
+    // straight into the new registry entry with NO ~/agents/ confinement —
+    // the "opposite defect" from ChangeFolder's G01b (which refuses the
+    // same shape of path). This is the regression test for the gate added
+    // at agents-transfer-service.ts::importAgent (G-IMPORT).
+    const manifest = {
+      version: '1.2.0',
+      exportedAt: new Date().toISOString(),
+      exportedFrom: { hostname: 'this-host', platform: 'darwin', aiMaestroVersion: '0.29.0' },
+      agent: { id: 'b2c3d4e5-f6a7-4890-ab12-3c4d5e6f7890', name: 'delta-escape' },
+      contents: { hasRegistry: true, hasDatabase: false, hasMessages: false, hasKeys: false, hasRegistrations: false },
+    }
+    const agentRecord = {
+      id: 'b2c3d4e5-f6a7-4890-ab12-3c4d5e6f7890', name: 'delta-escape', alias: 'delta-escape', governanceTitle: 'autonomous',
+      // OUTSIDE ~/agents/ — under the (mocked) $HOME but not under
+      // $HOME/agents. Mirrors the ~/.claude escape target used by the
+      // ChangeFolder confinement regression test.
+      workingDirectory: path.join(TMP_HOME, '.claude'),
+      deployment: { type: 'local', local: { hostname: 'this-host', platform: 'darwin' } },
+      sessions: [], status: 'offline', tools: {}, metadata: {},
+    }
+    const zip = await new Promise<Buffer>((resolve, reject) => {
+      const archive = archiver('zip', { zlib: { level: 9 } })
+      const chunks: Buffer[] = []
+      archive.on('data', (c: Buffer) => chunks.push(c))
+      archive.on('end', () => resolve(Buffer.concat(chunks)))
+      archive.on('error', reject)
+      archive.append(JSON.stringify(manifest), { name: 'manifest.json' })
+      archive.append(JSON.stringify(agentRecord), { name: 'registry.json' })
+      archive.finalize()
+    })
+
+    const res = await transfer.importAgent(zip, { newId: true })
+    expect(res.status).toBe(400)
+    expect(res.error).toMatch(/workingDirectory rejected/i)
+    expect(res.error).toMatch(/allowExternalFolder was not set/i)
+    expect(registry.getAgentByName('delta-escape')).toBeNull()
+  })
+})

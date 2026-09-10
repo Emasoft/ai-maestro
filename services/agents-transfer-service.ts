@@ -760,6 +760,29 @@ export async function importAgent(
       }
     }
 
+    // ── G-IMPORT (external workdir adoption, TRDD-WLWHVMKT): the manifest's
+    // workingDirectory is UNTRUSTED — it comes verbatim from the imported
+    // ZIP's registry.json — and was previously carried through into the new
+    // registry entry with NO gate at all. Every other ~/agents/-confining
+    // path in this codebase (ChangeFolder G01b, CreateAgent G03) refuses an
+    // out-of-bounds workdir; importAgent alone did not, which is the
+    // "opposite defect" this card names. Route it through the same
+    // creation-time authority (lib/agent-workdir-policy.ts) the other gates
+    // use. AgentImportOptions carries no allowExternalFolder-equivalent
+    // field today, so allowExternal is always false — fail closed with a
+    // clear 400 rather than silently reparenting the agent under
+    // ~/agents/. An absent workingDirectory is untouched (nothing to gate).
+    if (importedAgent.workingDirectory) {
+      const { checkAdoptableWorkdir } = await import('@/lib/agent-workdir-policy')
+      const workdirVerdict = checkAdoptableWorkdir(importedAgent.workingDirectory, false)
+      if (!workdirVerdict.ok) {
+        return {
+          error: `Invalid agent export: workingDirectory rejected — ${workdirVerdict.reason}`,
+          status: 400,
+        }
+      }
+    }
+
     // Prepare agent for import
     const newAgentId = options.newId ? uuidv4() : importedAgent.id
 

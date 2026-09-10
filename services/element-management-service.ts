@@ -7847,12 +7847,25 @@ export async function ChangeFolder(
     // MISSING here (G03 only fetched the agent — no confinement). Checked
     // BEFORE the existsSync/stat probe so an out-of-bounds path never touches
     // the filesystem.
+    //
+    // Routed through the single ~/agents/ authority (TRDD-WLWHVMKT) rather
+    // than re-deriving the confinement here: this is a CREATION-shaped
+    // question (the target folder is not yet this agent's registered
+    // workdir), so checkAdoptableWorkdir — not the runtime
+    // checkAuthorizedAgentWorkdir — is the right half of the authority.
+    // allowExternal is always false: ChangeFolder has no
+    // allowExternalFolder flag today, so this preserves the "always
+    // confined" behavior exactly. The error text keeps the literal phrase
+    // "under ~/agents/" so it matches the existing security-regression test
+    // (tests/integration/change-folder-confinement.test.ts) whichever half
+    // of the shared policy rejected the path.
     const { resolve } = await import('path')
-    const agentsRoot = resolve(HOME, 'agents')
+    const { checkAdoptableWorkdir } = await import('@/lib/agent-workdir-policy')
     const normalizedTarget = resolve(resolved)
-    if (normalizedTarget !== agentsRoot && !normalizedTarget.startsWith(agentsRoot + '/')) {
-      result.error = `Working directory must be under ~/agents/ (got "${resolved}"). Relocating an agent outside ~/agents/ would escape the per-agent write boundary.`
-      ops.push(`G01b: REFUSED — "${resolved}" is outside ~/agents/`)
+    const adoptable = checkAdoptableWorkdir(normalizedTarget, false)
+    if (!adoptable.ok) {
+      result.error = `Working directory must be under ~/agents/ (got "${resolved}"). ${adoptable.reason}`
+      ops.push(`G01b: REFUSED — ${adoptable.reason}`)
       return result
     }
     ops.push(`G01b: "${resolved}" confined to ~/agents/`)

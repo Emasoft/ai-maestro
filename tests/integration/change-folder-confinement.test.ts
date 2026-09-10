@@ -15,6 +15,17 @@
  * short-circuit at the boundary or the existence check. The dependency mocks
  * exist only so the module loads cleanly (mirrors
  * change-title-authcontext-required.test.ts).
+ *
+ * TRDD-WLWHVMKT (2026-09-10): G01b was re-wired to route through the shared
+ * `checkAdoptableWorkdir` authority (lib/agent-workdir-policy.ts) instead of
+ * re-deriving the ~/agents/ confinement inline. NEUTER RUN: short-circuited
+ * the new check (`if (false && !adoptable.ok)`) — the two "outside ~/agents/"
+ * tests ("rejects a folder OUTSIDE ~/agents/…", "rejects /tmp and other
+ * non-agents absolute dirs") went RED as expected (both failed on the
+ * `/under ~\/agents/i` assertion, surfacing the downstream "Failed to update
+ * working directory in registry" error instead); the other two tests
+ * (under-~/agents/ existence-check case, path-traversal case) stayed GREEN,
+ * as expected since neither reaches G01b's outcome. Reverted; full 4/4 green.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { homedir } from 'node:os'

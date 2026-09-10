@@ -96,6 +96,21 @@ process.on('SIGPIPE', () => {
 
 // =============================================================================
 
+// TRDD-7IJ08EUV: a dev-mode login token bypasses the keychain custody root, so
+// a production process must never run with one present (enabled, or merely
+// minted-but-parked). This is checked before ANYTHING else in this file —
+// before hostname/port are even read — so it fires identically for both
+// server modes (`yarn start` full mode and `yarn headless`, both `tsx
+// server.mjs`) and can never race a bound listener. Fail fast: one-line
+// reason to stderr, non-zero exit, no partial startup.
+try {
+  const { assertDevModeAbsentInProduction } = await import('./lib/dev-mode-token.ts')
+  assertDevModeAbsentInProduction()
+} catch (err) {
+  console.error(`[SECURITY] ${err?.message || err}`)
+  process.exit(1)
+}
+
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = process.env.HOSTNAME || '127.0.0.1' // Primary bind address (localhost-only by default)
 const port = parseInt(process.env.PORT || '23000', 10)

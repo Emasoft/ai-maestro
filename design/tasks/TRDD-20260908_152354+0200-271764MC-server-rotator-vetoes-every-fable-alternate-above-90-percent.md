@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:32:55+0200
+updated: 2026-09-10T02:35:40+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -25,15 +25,16 @@ priority: 1
 BOTH the owner's.
 
 **NOT DEPLOYED — the deploy needs BOTH `yarn build` AND `pm2 restart`.** The running pid is
-`tsx server.mjs` from 2026-09-05 11:16 and `efb6a509` landed 09-08 15:40, so the process predates
-the fix. A restart alone is not enough: `app/api/statusline/ingest/route.ts:190` calls
-`runOneTick()` from the bundle, and the bundle still carries the old default
-(`.next/server/chunks/3242.js` holds `ROTATOR_SCOPED_SWITCH_AT",90)`) — so a second tick can run
-at 90 beside the restarted one. **Which of the two wins on a given beat is NOT recorded here on
-purpose:** five commits analysed it and got it wrong repeatedly, most recently by measuring the
-RUNTIME copy of the lock and symbol code to draw a conclusion about the BUNDLED copy — the same
-error this card documents. That analysis is in git (`fd6ad062` … `9edc3d40`); the deploy needs
-only the two commands.
+`tsx server.mjs` from 2026-09-05 11:16; `efb6a509` landed 09-08 15:40, so the process predates the
+fix. A restart alone is not enough: the bundle still carries the old default
+(`.next/server/chunks/3242.js` holds the string `ROTATOR_SCOPED_SWITCH_AT",90)`) and
+`app/api/statusline/ingest/route.ts:190` calls `runOneTick()`, so a bundled second tick CAN run at
+90 beside the restarted one. **CAN, not does** — that call is read from today's SOURCE, not from
+the chunk (`runOneTick` is a binding a minifier may rename, so its **0** hits across `.next/server`
+prove nothing either way; the constant above matched only because a string literal is never
+rewritten), and the route ticks only if something POSTs to it and `:176`/`:188` let it through.
+Which copy wins on a given beat is unknown and deliberately not analysed here (`fd6ad062` …
+`9edc3d40`); running both commands removes the question.
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
@@ -41,11 +42,14 @@ no options — so Change 2 changes nothing observable, and the Problem section's
 sweep independently declares scoped exhaustion at 90" describes a lane that is not running. The
 tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
-**BOX 6 HAS NO RUNTIME SURFACE.** Neither 95 nor 97 is logged, returned, or exposed by any
-route; every use of both constants is a comparison. So box 6 cannot be settled by reading a
-number off the running system, build or no build — it needs the source, or restating as a
-behavioural check (94 accepted, 96 vetoed), which is itself not on demand because the scoped
-percentages are consumption-driven.
+**BOX 6 HAS NO RUNTIME SURFACE.** Neither 95 nor 97 is logged, returned, or exposed by any route.
+The one place either is ASSIGNED rather than compared — `model-fallback.ts:212`,
+`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT` — binds it to a local that
+never escapes: every return below it is `{act, skip}`. (An earlier draft said "every use is a
+comparison", which `:212` refutes in one grep; the conclusion never rested on that, it rests on
+the value not escaping.) So box 6 cannot be settled by reading a number off the running system,
+build or no build — it needs the source, or restating as a behavioural check (94 accepted, 96
+vetoed), which is itself not on demand because the scoped percentages are consumption-driven.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the
@@ -56,7 +60,7 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the hold (box 5) and run **both** `yarn build` and
-`pm2 restart` — a restart alone leaves a second tick running at 90 from the stale bundle. The same deploy
+`pm2 restart` — a restart alone can leave a second tick running at 90 from the stale bundle. The same deploy
 also lands TRDD-RE9AVNJF (`5aa945c1`, `48e839b6` touched `tick.ts` and `slots.ts`, the same
 runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_MODEL_FALLBACK`
 is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to

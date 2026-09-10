@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:51:03+0200
+updated: 2026-09-10T02:53:10+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -35,8 +35,8 @@ letting it through. Which copy wins on a given beat is unknown and deliberately 
 
 *The method behind each fact above — which needles, why, and five rounds of getting it wrong — is
 in `fd6ad062` … `25968956`. It is deliberately NOT restated here: this block is read first for
-operational state, and by the fifth round the provenance had grown to five times the length of the
-decision it supports, which is exactly what the first cut existed to remove.*
+operational state. One measurement was never taken and would settle whether the second-tick hazard
+is live or theoretical — does anything actually POST to `/api/statusline/ingest` on this box?*
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
@@ -44,14 +44,17 @@ no options — so Change 2 changes nothing observable, and the Problem section's
 sweep independently declares scoped exhaustion at 90" describes a lane that is not running. The
 tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
-**BOX 6 HAS NO RUNTIME SURFACE.** Every use of `SAFE_SCOPED` and `SCOPED_SWITCH_AT_PCT` is a
-COMPARISON or a DEFINITION — never an argument, never interpolated. Seven sites, the complete set
+**BOX 6 HAS NO RUNTIME SURFACE.** Neither `SAFE_SCOPED` nor `SCOPED_SWITCH_AT_PCT` is ever an
+argument or interpolated into a string. Seven sites, the complete set
 over a repo-wide sweep of every file type: `tick.ts:107` defines 95 and `model-fallback.ts:169`
 defines 97; `tick.ts:56` imports (a plain import, not a re-export); `:276`, `:532`, `:625` compare;
 and `model-fallback.ts:212` is the sole ASSIGNMENT, whose local appears exactly once below it —
 `input.scopedPct >= threshold` — leaving no room for a logger, a throw, a closure or a write back.
-Separately, neither literal `95` nor `97` occurs in any log or response string, and nothing but
-these two files calls `pctEnv('ROTATOR_SCOPED_SWITCH_AT', …)`. So box 6 cannot be settled by
+Separately, in BOTH modules every non-comment occurrence of the literals `95` and `97` is a `const`
+initializer — `:169`, `:107`, and `tick.ts:90`/`:91`, the ACCOUNT-window trips that merely share
+the value 97 — and a number reachable only from a `const` initializer cannot sit inside a template
+literal, whatever emitter wraps it. Nothing but these two files calls
+`pctEnv('ROTATOR_SCOPED_SWITCH_AT', …)`. So box 6 cannot be settled by
 reading a number off the running system, build or no build — it needs the source, or restating as
 a behavioural check (94 accepted, 96 vetoed), itself not on demand because the scoped percentages
 are consumption-driven.

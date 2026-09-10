@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:35:40+0200
+updated: 2026-09-10T02:39:11+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -26,15 +26,17 @@ BOTH the owner's.
 
 **NOT DEPLOYED — the deploy needs BOTH `yarn build` AND `pm2 restart`.** The running pid is
 `tsx server.mjs` from 2026-09-05 11:16; `efb6a509` landed 09-08 15:40, so the process predates the
-fix. A restart alone is not enough: the bundle still carries the old default
-(`.next/server/chunks/3242.js` holds the string `ROTATOR_SCOPED_SWITCH_AT",90)`) and
-`app/api/statusline/ingest/route.ts:190` calls `runOneTick()`, so a bundled second tick CAN run at
-90 beside the restarted one. **CAN, not does** — that call is read from today's SOURCE, not from
-the chunk (`runOneTick` is a binding a minifier may rename, so its **0** hits across `.next/server`
-prove nothing either way; the constant above matched only because a string literal is never
-rewritten), and the route ticks only if something POSTs to it and `:176`/`:188` let it through.
-Which copy wins on a given beat is unknown and deliberately not analysed here (`fd6ad062` …
-`9edc3d40`); running both commands removes the question.
+fix. A restart alone is not enough, and this is measured IN THE BUNDLE rather than inferred from
+source: `.next/server/app/api/statusline/ingest/route.js` (Sep-5 11:15) contains the string
+`aimaestro.oauth-rotator.lastTickAttemptMs`, so the tick machinery IS compiled into that route,
+and `.next/server/chunks/3242.js` still holds `ROTATOR_SCOPED_SWITCH_AT",90)`. Both needles are
+STRING LITERALS, which is exactly why they are the right ones — a minifier renames bindings but
+never rewrites a literal, so `runOneTick` scoring **0** hits across `.next/server` establishes
+nothing: it is a binding, and the very route that calls it is one of the files that scored zero.
+What is still conditional is only whether the route is REACHED — it ticks when something POSTs to
+`/api/statusline/ingest` and `:176`/`:188` let it through. Which copy wins on a given beat is
+unknown and deliberately not analysed here (`fd6ad062` … `9edc3d40`); running both commands
+removes the question.
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
@@ -43,11 +45,14 @@ sweep independently declares scoped exhaustion at 90" describes a lane that is n
 tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
 **BOX 6 HAS NO RUNTIME SURFACE.** Neither 95 nor 97 is logged, returned, or exposed by any route.
-The one place either is ASSIGNED rather than compared — `model-fallback.ts:212`,
-`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT` — binds it to a local that
-never escapes: every return below it is `{act, skip}`. (An earlier draft said "every use is a
-comparison", which `:212` refutes in one grep; the conclusion never rested on that, it rests on
-the value not escaping.) So box 6 cannot be settled by reading a number off the running system,
+`model-fallback.ts:212` is the one place either is ASSIGNED rather than compared
+(`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT`), and the local does not
+escape — `planModelFallback` was read END TO END, not grepped: `threshold` appears in exactly one
+comparison, and the four returns are `{act: false, skip: '<literal>'}` three times and
+`{act: true, actions: […]}` once, whose entries carry agentId, name, commandKey, escapeFirst,
+confirmAfterMs and dueAtMs. No interpolated string in any of them — a `skip` reason spelling the
+number would put it on a runtime surface and flip this paragraph, which is why the returns were
+read rather than assumed from their shape. So box 6 cannot be settled by reading a number off the running system,
 build or no build — it needs the source, or restating as a behavioural check (94 accepted, 96
 vetoed), which is itself not on demand because the scoped percentages are consumption-driven.
 

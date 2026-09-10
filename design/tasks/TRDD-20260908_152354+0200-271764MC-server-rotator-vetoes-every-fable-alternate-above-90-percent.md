@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:35:05+0200
+updated: 2026-09-10T07:44:46+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -399,6 +399,15 @@ PAYLOAD instead of the filenames.**
 > emission can produce that code. Cadence is unaffected either way — a retry stamps `lastSeenAt`
 > once, on the attempt that lands.
 >
+> **And the counter spacing CANNOT decide it either — measured, against a draft that said it
+> could.** Both `keepBackup` (`json-io.ts:275`) and the tmp name (`:472`) `++` the SAME
+> `_atomicWriteCounter`, and both sit inside the retry loop, so one retried call consumes 4 and
+> lays its two BACKUPS at *n* and *n+2* — byte-for-byte the spacing two single-attempt calls
+> produce (`n`, `n+1` tmp; `n+2`, `n+3` tmp). The observed 12611 → 12613 → 12615 is therefore
+> consistent with BOTH readings, and the discarded tmp files are `rm`-ed on the retry path, so
+> nothing on disk records the attempt count. Round 9's file-vs-content split is not a redundant
+> answer to a question the data had closed; it is the ONLY thing that closes it.
+>
 > **Three things the "only emission" half rests on, each now measured, because a draft rested it
 > on a grep with ZERO RECALL. The warrant is the THREE TOGETHER, not any one of them** — a draft
 > called the `deliver(` grep "the exhaustiveness check" on its own, which overstates a needle
@@ -413,9 +422,7 @@ PAYLOAD instead of the filenames.**
 >   shorthand, so neither line contains the token `code:`. The needle scored **0/1 on the class it
 >   was cited to enumerate**, and its four confident hits made that look like a survey. Confirmed
 >   by re-running it against the two lines in isolation: 0 matches. **A review fork caught this,
->   not I.** (Two paragraphs analysing why the always-injected lesson failed to fire are struck
->   from here: real, but a finding about the lessons system, not about a rotator veto — the same
->   category as the commit-hygiene bullet struck last round. It is in `ba1e6a3b`'s message.)
+>   not I.**
 > - `grep -rn deliverAlerts` over `lib app services scripts tests` → exactly **two production call
 >   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. A draft left `server.mjs` — the
 >   file that imports the rotator at runtime — outside that scan. Now scanned: **zero**
@@ -485,7 +492,10 @@ PAYLOAD instead of the filenames.**
 > **The windows still do work the declaration cannot**, which is the other half a draft gave
 > away: this card measured **two** live ai-maestro `server.mjs` processes (24806, 24895). Two
 > 60 s timers, phase-offset and serialized by the machine-wide `withTickLock`, would write at a
-> SUB-60 s rate. Observing 60 s rules that out; no reading of the source can.
+> SUB-60 s rate. Observing 60 s rules that out; no reading of the source can. **Narrowed below**
+> — `withTickLock` DROPS a losing beat rather than queueing it, so what the windows exclude is a
+> second live timer *whose beats both reach `deliverAlerts`*, and near-zero phase is not excluded
+> either.
 >
 > **And the timer is not the only production caller.** `grep -rn runOneTick` tree-wide (round 8
 > scoped it to `server-tick.ts` alone and so could not have seen this) finds a second:
@@ -493,9 +503,44 @@ PAYLOAD instead of the filenames.**
 > beat in a request path, gated by `tickAttemptAllowed()` (`:176`) and `isNearLimit` (`:188`).
 > It does not disturb the doublet (it is still the tick module's emission, so still prefixed) and
 > it does not reopen `deliverImpl` (also called with NO arguments, so `deps` is `{}` there too).
-> It does bear on cadence: the clean 60 s spacing means no ingest-triggered beat landed inside
-> that window, or the attempt floor gated every one that tried. That is a property of the window,
-> not of the beat in general.
+>
+> **THE ATTEMPT FLOOR IS 60 s, AND IT COSTS THE CARD ITS CADENCE INFERENCE.**
+> `TICK_ATTEMPT_FLOOR_MS = 60_000` (`server-tick.ts:152`); `tickAttemptAllowed(nowMs, floorMs)`
+> is `nowMs - lastTickAttemptMs() >= floorMs` (`:175-177`). **The floor equals the timer period**,
+> so the observed 59-61 s spacing has TWO sufficient causes and the nine writes cannot separate
+> them: a 60 s timer, or a floor clamping any producer to 60 s. Every earlier round read that
+> spacing as measuring the timer. It does not. `evidence-must-discriminate` names exactly this —
+> an observation both hypotheses predict cannot tell them apart, and a control is all it can be.
+>
+> **What survives:** the declared default (`?? 60_000`) with `startOauthRotatorTick()` taking it
+> unmodified at `server.mjs:1996` is now the ONLY evidence for the timer's period; the windows
+> are CONSISTENT with it and do not independently measure it. Round 9's three-part warrant is
+> two parts and a control. The card had this backwards in both directions across two rounds —
+> round 8 called the windows mere confirmations of the declaration, round 9 called the
+> declaration mere agreement with the windows, and the truth is the first with the reason the
+> second was reaching for now gone.
+>
+> **The two-processes argument survives the floor but not the LOCK.** The floor is
+> PROCESS-LOCAL — `Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')` on `globalThis`
+> (`:163-169`), no file, no lock — so it cannot clamp two processes to a shared 60 s, and a draft
+> feared it could. But `withTickLock` returns null when the lock is held rather than queueing, so
+> the losing process's beat is DROPPED and writes nothing. Two live timers therefore still look
+> like one, and the honest claim is narrower than round 9's: *the windows rule out a second live
+> timer whose beats both reach `deliverAlerts`.* Near-zero phase (both processes started by one
+> `pm2 restart`) is not excluded either.
+>
+> **A fourth candidate for the 175 missing beats, and the residual's DENOMINATOR is now unknown
+> too.** `setInterval` jitter can put a beat marginally under 60 s after the previous attempt,
+> where the floor refuses it — a call that never attempts a write, which is neither of the two
+> throw-path cases enumerated above. And ingest-triggered beats would raise the expected count
+> above the single-producer figure the 93% was computed against. The card computed a residual
+> against a one-producer model it has now disproved: not merely the cause is undetermined, the
+> expectation is.
+>
+> **The identification is caller-independent**, which is worth stating rather than re-deriving:
+> it is a property of the EMISSION (the ternary at `:257`), not of the trigger, and both callers
+> reach that same emission with `deps = {}`. No caller of `runOneTick` can forge a supervisor
+> code.
 >
 > **The same read closes the `deliverImpl` question STRUCTURALLY**, replacing round 7's
 > token-absence argument. `runOneTick(deps: RunOneTickDeps = {})` (`:199`) is called at `:323` as
@@ -885,6 +930,23 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
   NAME and its own DOCSTRING are not its use sites. `TICK_ALERT_PREFIXES` reads as a producer's
   declared namespace and its docstring asserts the correspondence; its one use site is the reap
   filter. Read who calls it before deriving anything from it.
+
+**Round 10 ran as the rule allows: two test-1/test-2 findings written above, everything else
+listed here and not written.**
+
+### unreviewed residue
+
+- The 175-beat reauth shortfall now has a **fourth** candidate and no denominator: `setInterval`
+  jitter landing a beat marginally inside the 60 s floor is a call that never attempts a write,
+  and ingest-triggered beats would raise the expectation above the single-producer figure the
+  93% was computed against. Unmeasured; both directions.
+- `withTickLock`'s drop-vs-queue behaviour is read from the null return, not driven. The
+  narrowed two-processes claim above rests on it.
+- Whether the two live `server.mjs` processes started at near-zero phase (one `pm2 restart`) is
+  not measured, and near-zero phase is the case the windows cannot exclude.
+- The observed 60 s has two sufficient causes and no experiment here separates them. Separating
+  them needs a run with the floor lowered, which is a change to the running server.
+- Nothing in rounds 5-10 moved the operational finding, which has been unchanged since round 1.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

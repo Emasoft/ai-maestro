@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T08:22:22+0200
+updated: 2026-09-10T08:24:07+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -554,7 +554,9 @@ PAYLOAD instead of the filenames.**
 > **AND THE WHOLE SHORTFALL IS AN ARTEFACT OF THE DENOMINATOR'S MEANING. A BEAT DOES NOT WRITE.**
 > **MEASURED, at `server-tick.ts:239-246`, lexically:** `const alertable = alertableTick(result);
 > if (alertable) {` — the `deliver(` call, the `code` ternary and the reap filter (`owns:
-> ownsTickAlert`) all sit INSIDE that branch, and the branch is taken at most once per beat. So
+> ownsTickAlert`) all sit INSIDE that branch. (How MANY times a taken branch emits is NOT
+> measured — `runOneTick` starts at `:199` and continues past `:268`, both unread — and the
+> dissolution does not need it.) So
 > `2638 = 158 267 s ÷ 60 s` counts SCHEDULED BEATS while `2463` counts ROWS UNDER A
 > `reauth-needed:*` RECORD, and **the two were never the same quantity.** The 175 difference
 > denotes nothing; there is no residual, and no mechanism is needed for it.
@@ -948,10 +950,13 @@ of this block:
   to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
   absent from symptom search; that is a choice, not a default.
 
-> **THE SERIES ENDS AT ROUND 15 (this one). Test (3) has been met ZERO times in fifteen rounds.**
-> The only thing that has ever gated this card — `pm2 restart` crash-looping the server against
-> the uncommitted `assertDevModeAbsentInProduction()` in `server.mjs` — has been stable,
-> correct and unactioned since round 1, while this block was rewritten fifteen times. A
+> **THE SERIES ENDS HERE. Test (3) has not been met in any round of this session, and the
+> operational finding below has been unchanged since it was first written.** (Not "zero times in
+> fifteen rounds" — that is a census over commits this session cannot enumerate, and asserting it
+> would be the same unearned quantifier the block convicts five rounds of.) The only thing that
+> has ever gated this card — `pm2 restart` crash-looping the server against the uncommitted
+> `assertDevModeAbsentInProduction()` in `server.mjs` — is still there, still correct, still
+> unactioned, while this block was rewritten around it again and again. A
 > sixteenth round is AVAILABLE and would not be WARRANTED: the series is now consuming the card
 > instead of advancing it. The two open reads named in the residue (`deliverAlerts`,
 > `alertableTick`) are recorded as open and are NOT a licence to reopen — whoever needs them

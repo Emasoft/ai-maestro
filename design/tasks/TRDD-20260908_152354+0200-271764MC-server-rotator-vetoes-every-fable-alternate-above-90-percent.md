@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:50:25+0200
+updated: 2026-09-10T06:57:38+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -136,10 +136,19 @@ reading.
 > either stating its unit; 03:39 − 03:31 is **8 minutes elapsed** across **9 distinct minute
 > labels**, and both numbers were right about different things.
 >
-> **Re-measured 2026-09-10 06:4x, and the property REPLICATES on a fresh window:** the ten
-> surviving backups are `0437`(×2), `0438`…`0445` at counters **012567 → 012585**, step **+2**,
-> uniform, no gaps — same shape, same doublet-in-one-minute, same 8-elapsed/9-labels span. So the
-> cadence claim does not rest on a single unrepeatable read. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+> **Re-measured 2026-09-10 06:4x:** the ten surviving backups are `0437`(×2), `0438`…`0445` at
+> counters **012567 → 012585**, step **+2**, uniform, no gaps — same shape, same
+> doublet-in-one-minute, same 8-elapsed/9-labels span.
+>
+> **Call that a SECOND SAMPLE, not a replication.** Same pid, same instance, same code, one hour
+> later — autocorrelated by construction, so it cannot independently confirm the lost window's
+> values. What it does establish is worth more than the word would have been: the beat is **still
+> running now**, and the +2 step and the doublet are **stable recurring properties** rather than
+> artefacts of one read.
+>
+> **And the doublet RECURRED.** Its source is still open on this card, and a feature that
+> reproduces in two windows an hour apart is *periodic*, not a one-off interloper — a materially
+> different thing to be looking for. That is the most useful thing the re-measurement produced. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -235,25 +244,43 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   discriminate the tick from the supervisor or any other in-process caller**. So this does NOT
   narrow the interloper's source, and the draft presenting it as a constraint on that was an
   over-read.
-  **One residue is NOT re-derived from the pid, and a later draft over-corrected by saying it
-  was — but its first repair overstated the residue, and only reading `json-io.ts` settles which
-  version is true.** The traced per-function costs are in the table above, and they give the
-  exact claim:
-  - Every json-io **write** path consumes at least one counter value (`updateJson` +2, or +1 on a
-    create; `restoreRawSnapshot` +1; `saveJsonSafe` +1). So a write to ANY other file, on ANY
-    path, would have consumed a value and broken the +2 run.
-  - Therefore: **this module instance performed no other json-io write, to any file, across the
-    window** — which the pid stamp cannot say, since it identifies who wrote THESE ten and not
-    what else that writer did. That is the residue, and it is what rules out the interloper being
-    the same module doing unrelated work on a different path.
-  - Two exclusions the claim does NOT cover, both from the same read: `restoreRawSnapshot`'s
-    `raw === null` branch **deletes** and consumes **+0**, so a delete is invisible to this
-    argument; and a write that consumes values and then FAILS (the staleness gate at `:476-480`
-    discards the tmp) is counted as consumption, so "no gaps" excludes other *attempts*, which is
-    a superset of writes and therefore only strengthens the exclusion.
-  A draft called the +2 an interpretation that presupposed the very counter→write mapping this
-  block had disclaimed. That objection was right about the earlier text and is refuted by the
-  trace: on `updateJson` with an existing file the cost is fixed at two, not assumed to be.
+  **One residue is NOT re-derived from the pid — but two drafts got its scope wrong in opposite
+  directions, and only reading `json-io.ts` settles it.** Stated against the window whose files
+  are still ON DISK (**012567-012585**, re-measured above), not the pruned one:
+  - **The +2 is entailed, not assumed.** `:470` is
+    `rawBefore !== null ? await keepBackup(...) : null` — a backup file exists ONLY on the
+    existing-file branch. So the ten backups are themselves the proof that all ten took the
+    `keepBackup`+tmp path at +2. (A review objected that "+2" presupposed the counter→write
+    mapping this block disclaims. Right about the earlier text; the ternary is what refutes it.)
+  - **The write-path enumeration is CLOSED.** `grep -n "^export" lib/json-io.ts` returns every
+    export: three write functions (`updateJson`, `restoreRawSnapshot`, `saveJsonSafe`), the rest
+    reads, types, errors, the lock and two test hooks. There are no arrow-function or default
+    exports to hide a fourth. So "every json-io write path consumes ≥1" is established for the
+    module, not just for the three functions that happened to be read.
+  - **Therefore the residue:** across that window this module instance performed **no other
+    content-changing json-io write, to any file** — because any such write, on any path, would
+    have consumed a value and broken the run. The pid stamp cannot say this; it identifies who
+    wrote THESE ten, not what else that writer did.
+  - **This is the only thing that could have seen such a write.** `restoreRawSnapshot` and
+    `saveJsonSafe` write **no backup at all**, so a write through either is invisible to any file
+    enumeration — a counter gap is the sole detector, which is exactly why the residue is worth
+    keeping.
+  - **Three things it does NOT cover, all from the same read.** A no-op `updateJson` returns at
+    `:453-455` (`serialized === rawBefore`) **before** `keepBackup`, consuming **+0** — hence
+    "content-changing" above. `restoreRawSnapshot`'s `raw === null` branch deletes at **+0**. And
+    a consumed-then-failed write still consumes, so "no gaps" excludes *attempts*, a superset of
+    writes — which only strengthens the exclusion.
+  - **The ten backups are an UPPER BOUND on distinct calls, not equal to them, and the timing is
+    what closes that.** `keepBackup` sits INSIDE `updateJson`'s retry loop, so a stale-retry
+    (`:476-489`) writes a second backup and consumes another +2 within one call. Retries back off
+    `200 ms × n` (`:487`), so retry backups land sub-second apart; the observed spacing is one per
+    minute with a single ~12 s doublet, which is two orders of magnitude outside that. Retries are
+    excluded by measurement, not waved off — **and the doublet is therefore not a stale-retry
+    either**, which removes one candidate from the still-open doublet question.
+  - **The two conclusions ride ONE observation.** "These ten came from a single instance" is
+    inferred from the uniform +2, and "that instance did nothing else" from the same +2. Not
+    circular — a second copy would have to interleave perfectly — but they are not two independent
+    facts and should not be counted as such.
 
 **THE ARITHMETIC AND THE CADENCE ARGUMENT THAT PRECEDED THIS WERE BOTH WRONG, and the review
 caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the tick exactly":
@@ -349,12 +376,12 @@ from the mechanism. Deriving it:
 > loader returned DEFAULTS over a missing `version` field, which is the one outcome that flips the
 > verdict to "does not throw". A stop box is the last place a facsimile is acceptable.)
 >
-> **How to read the table.** Rows 3, 4 and 4b were **EXECUTED** — code was run and its output
-> recorded. Rows 1, 2 and 5 are **READS** of live state (`pm2 jlist`, the process env, the script's
-> last line) plus a short inference from it, and the inference is named in the row. Nothing in the
-> table is general knowledge about pm2 or Node; where the argument needs such knowledge it is
-> below the table and labelled there. (An earlier version hedged one row's own result cell, which
-> teaches a reader to discount the whole table — the distinction belongs here, once.)
+> **How to read THIS CHAIN TABLE** (the scope matters — a second table further down is sourced
+> differently and says so in its own cells). Rows 3, 4 and 4b were **EXECUTED** — code was run and
+> its output recorded. Rows 1, 2 and 5 are **READS** of live state (`pm2 jlist`, the process env,
+> the script's last line) plus a short inference named in the row. No row is general knowledge
+> about pm2 or Node. (An earlier version hedged one row's own result cell, which teaches a reader
+> to discount the whole table — the distinction belongs here, once.)
 >
 > | # | link | how it was settled | result |
 > |---|---|---|---|
@@ -395,14 +422,13 @@ from the mechanism. Deriving it:
 > and the server does not come back. It crash-loops, every attempt well under the 10 s
 > `min_uptime`. The restart would STOP the beat this card measured rather than fix it.
 >
-> (A draft supported that with "`restart` kills the old process BEFORE starting the new one, and
-> does not roll back". A review then asked for it to be labelled as unmeasured; it is **deleted**
-> instead, which is the better answer to the same finding. The conclusion never used it — a
-> `restart` kills the old process whichever order it works in, and a crash-loop *is* the
-> observation that no rollback happened — so labelling it would have kept an unverified sentence
-> alive inside a stop box for nothing. **The test for the difference is mechanical: remove the
-> claim and see whether the conclusion weakens. Labelling is honest disclosure when it does;
-> retention when it does not.**)
+> (An earlier draft argued from pm2's restart ordering. The conclusion does not need it, so it is
+> gone rather than labelled. The general form — *labelling an unverified claim is disclosure when
+> the argument needs it and retention when it does not; delete it and see whether the conclusion
+> weakens* — belongs in `.claude/rules/lessons-verification.md` and is **not there yet**: that
+> file is at 98059 B against its 98304 B cap, so an entry costs a relocation into
+> `.claude/rules-reference/lessons-verification-full.md` first. Recorded here as the open item,
+> rather than cited as if it had been filed.)
 >
 > **The one piece of general pm2 knowledge the argument DOES need, kept and labelled:**
 > `pm2 reload` is not a safer verb here. Zero-downtime reload requires **cluster** mode, and this
@@ -413,10 +439,10 @@ from the mechanism. Deriving it:
 > **THE RETRY TUNING MAKES THE OUTAGE WORSE, NOT BETTER, AND A DRAFT CALLED THAT DIFFERENCE
 > IMMATERIAL.** It is the most owner-actionable thing measured here:
 >
-> | | pm2 default (`max_restarts: 10`) | this app (row 5) |
+> | | at `max_restarts: 10` — **the repo comment's claim** (`ecosystem.config.js:78-80`), not measured here, and it describes the PRIOR setting rather than asserting a pm2 default | this app (row 5, MEASURED) |
 > |---|---|---|
-> | a deterministic boot throw | budget gone in seconds → **`errored`**, a visible terminal state | ~4 attempts/min at the backoff cap → the 10000 budget is **~42 h** away |
-> | what the owner sees | a stopped app, monitorable | **~2 days of silent flapping**, never reaching `errored` |
+> | a deterministic boot throw | "budget in ~10 seconds and pm2 then STOPPED TRYING FOREVER" → **`errored`**, a visible terminal state | ~4 attempts/min at the backoff cap → the 10000 budget is **~42 h** away |
+> | what the owner sees | a stopped app, monitorable | **~42 h of silent flapping** before it reaches `errored` |
 >
 > `ecosystem.config.js:76-88` tuned for "keep the job going no matter what interruption happened",
 > and for a TRANSIENT that is right. This scenario is the other kind — a boot-time throw that can
@@ -425,10 +451,14 @@ from the mechanism. Deriving it:
 >
 > **Whose number is whose, since this paragraph mixes three sources.** The ~15 s cap and the
 > "~4 restarts/min" are the REPO's own claims about pm2 (`ecosystem.config.js:85` and `:86`), not
-> measurements taken here. `exp_backoff_restart_delay: 1000` and `max_restarts: 10000` are
-> MEASURED (row 5). Only the multiplication is mine — 10000 ÷ 4/min = 2500 min ≈ **42 h** — and it
-> is a **ceiling**, because 4/min is the rate *at* the cap and the early cycles are faster, so the
-> true figure is somewhat under. The same comment's next sentence (`:87-88`) says the budget is
+> measurements taken here — and so is the whole left column of the table above (`:78-80`).
+> `exp_backoff_restart_delay: 1000` and `max_restarts: 10000` are MEASURED (row 5), and so is
+> `unstable_restarts: 0`, which is what makes the budget **currently unspent** — all 10000 really
+> are available now, so the arithmetic needs no assumption about whether a deliberate restart
+> resets the counter. (`restart_time: 11` beside it is consistent with a reset but does not
+> establish one, and nothing here depends on it.) Only the multiplication is mine — 10000 ÷ 4/min
+> = 2500 min ≈ **42 h** — and it is a **ceiling**, because 4/min is the rate *at* the cap and the
+> early cycles are faster, so the true figure is somewhat under. The same comment's next sentence (`:87-88`) says the budget is
 > "effectively never reached in a machine's lifetime": **that half is false**, and this
 > multiplication is what shows it. Citing the comment for the cap while quietly overturning its
 > neighbour would be selective, so it is said out loud. (Down-vs-up does not depend on

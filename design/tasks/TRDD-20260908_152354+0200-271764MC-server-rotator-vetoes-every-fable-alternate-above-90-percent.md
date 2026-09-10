@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T01:47:25+0200
+updated: 2026-09-10T02:03:07+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -19,23 +19,44 @@ priority: 1
 
 # Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-10
 
 **CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
 BOTH the owner's.
 
-**NOT DEPLOYED — MEASURED 2026-09-10, and the remedy is SMALLER than caveat (d) claims.** The
-running pid is `tsx server.mjs`, started **Sat 2026-09-05 11:16** — three days BEFORE `efb6a509`
-(2026-09-08 15:40) — so it holds the pre-fix constants. Two independently stale paths, not one:
+**NOT DEPLOYED — the bundle still CONTAINS the old constant, read directly 2026-09-10.**
+`.next/server/chunks/3242.js` carries `ROTATOR_SCOPED_SWITCH_AT",90)` — the pre-`efb6a509`
+default, verbatim — and that chunk is reachable from
+`.next/server/app/api/oauth-rotator/status/route.js`. Corroborating dates: the running pid is
+`tsx server.mjs` started 2026-09-05 11:16, `BUILD_ID` (the build stamp) is the same minute, and
+the route chunk is 11:15:30, all before `efb6a509` at 2026-09-08 15:40. `.next`'s own dir mtime
+of 2026-09-07 15:12 is an ENTRY TOUCH, not a build — do not read it as one.
 
-- **The TICK is NOT bundled.** `server.mjs:1995` does a runtime `await import('./lib/oauth-rotator/server-tick.ts')`, and that file's line 29 imports `runTick` from `./tick` — the changed file. tsx transpiles it at boot; it never goes through `.next`. **So the tick deploys on `pm2 restart` ALONE — `yarn build` is not required for it.** Caveat (d) asserts the opposite and is corrected in place below.
-- **The API routes ARE bundled.** `app/api/oauth-rotator/{status,reauth/start,reauth/complete}/route.ts` import the rotator and are served from `.next`, whose mtime is 2026-09-07 15:12 with `BUILD_ID` at 2026-09-05 11:16 — both older than the commit. Only those need the build.
+**BOTH halves of `efb6a509` are runtime-loaded, so `pm2 restart` alone deploys the whole fix.**
+`server.mjs:1995` → runtime `await import('./lib/oauth-rotator/server-tick.ts')` → that file's
+`:29` imports `runTick` from `./tick` → `tick.ts:56` is a VALUE import of `SCOPED_SWITCH_AT_PCT`
+and `ACCOUNT_HEADROOM_PCT` from `./model-fallback`, the commit's OTHER changed file. tsx
+transpiles that whole closure at boot. Say it precisely: `tick.ts` **is** compiled into `.next`
+(the routes import it), so "the tick is not bundled" would be false — what is true is that the
+tick does not RUN the bundled copy.
 
-No content-grep of the bundle was attempted, deliberately: `efb6a509` adds no string literal, and
-a numeric constant is the wrong needle (a bundler keeps `95` as an expression, so both the old and
-new values would match nothing and the zero would read as "the old value is gone"). The DATE
-comparison is the decisive instrument, and it is decisive in the safe direction — artifact older
-than commit.
+**THE HAZARD A RESTART-ONLY CREATES, and it lands on box 6.** After `pm2 restart` without a
+build, ONE process holds TWO copies of these constants: the tick's (97, tsx-resolved) and the
+routes' (90, from the Sep-5 bundle). So **box 6 must NOT be confirmed from
+`/api/oauth-rotator/status` or the dashboard** unless the build is run too — they serve chunk
+3242 and would read the stale 90, and the owner would conclude the fix did not land. Confirm
+from the tick's own SCOPED-WALL log line, or build as well. At least these FIVE route files are
+bundle-served and need the build (an earlier draft said three):
+`app/api/oauth-rotator/{status,reauth/start,reauth/complete}/route.ts`,
+`app/api/statusline/ingest/route.ts`, `app/api/governance/password/invalidate/route.ts`.
+
+**CORRECTION, recorded rather than overwritten.** An earlier draft of this block declined to
+content-grep the bundle, reasoning that `efb6a509` adds no string literal and a bare `95` is a
+useless needle. The second half is right and worth keeping; the generalisation from it was
+wrong. The env-var NAME sits immediately beside the changed default, is a stable literal that
+survives minification, and grepping it produced the direct evidence above — strictly better than
+the date inference it replaced. Positive control: `ROTATOR_SCOPED_ACCOUNT_HEADROOM` matches 1
+file, so the grep does reach the tree.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the
@@ -46,12 +67,9 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the build/restart hold (box 5), then confirm 95 and 97
-(box 6). The 2026-09-10 measurement above makes this cheaper than the box says: **`pm2 restart`
-alone deploys the tick fix** — the actual subject of this card — and `yarn build` is needed only
-for the `app/api/oauth-rotator/*` routes. The same restart ALSO deploys TRDD-RE9AVNJF: its
-commits (`5aa945c1`, `48e839b6`) changed `lib/oauth-rotator/tick.ts` and `slots.ts`, the same
-runtime-imported chain. That is measured, and it corrects this line's own earlier phrasing —
-"in the same `lib/` bundle" repeated caveat (d)'s error, inherited rather than re-checked.
+(box 6) — **not from the status route** unless you `yarn build` too; the hazard paragraph above
+is the reason. `pm2 restart` alone deploys this card's whole fix, and also TRDD-RE9AVNJF's
+(`5aa945c1`, `48e839b6` changed `tick.ts` and `slots.ts` — the same runtime chain, measured).
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.
@@ -80,7 +98,7 @@ Quantified at the measured burn rate (~3 points / 9 minutes from the evidence tr
 (a) 95 is 5 points more conservative than the janitor's own detector, which treats a window as spent only at >= 100 — deliberate, for the hysteresis reason in Change 1.
 (b) UNVERIFIED premise for the USER's ruling: rotating accounts may itself force a prompt-cache cold start (org-scoped caches), in which case rotate-first buys Fable minutes rather than cache — not verified here.
 (c) pctEnv reads its env var at module load, so a pinned ROTATOR_SCOPED_SWITCH_AT in the live pm2 environment makes the new default inert until checked against `ps eww` on the running pid.
-(d) ~~lib/*.ts is bundled into .next, not live on pm2 restart alone — this fix needs `yarn build` + restart~~ — **CORRECTED 2026-09-10 by measurement; see the STATE block.** The TICK is reached by a runtime `import()` in server.mjs under tsx, so it deploys on `pm2 restart` alone; only the `app/api/oauth-rotator/*` routes come from `.next` and need the build. The hold itself is unchanged and still stands (the dispatching session's write-scope constraint: no build/commit/push here).
+(d) ~~lib/*.ts is bundled into .next, not live on pm2 restart alone — this fix needs `yarn build` + restart~~ — **CORRECTED 2026-09-10 by measurement; the STATE block carries it, including the split-brain hazard a restart-only creates.** The hold itself is unchanged and still stands (the dispatching session's write-scope constraint: no build/commit/push here).
 (e) out of scope: a race with the janitor's separate, manual, Fable-blind rotate_to.py rotation path — named only, not analyzed.
 
 ## Acceptance

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:04:42+0200
+updated: 2026-09-10T07:08:41+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -155,10 +155,13 @@ reading.
 > `:453-455` means a `deliverAlerts` call whose content is unchanged writes NOTHING — so a
 > backup-per-minute could in principle have been the rate at which alert CONTENT changes, not the
 > tick rate, and the cadence conclusion rests on the difference. Discharged by reading the
-> payload: the mutator sets `seen: (rec?.seen ?? 0) + 1` and `lastSeenAt: nowS` on every call
-> (`alert-delivery.ts:170-176`), so the serialization differs on every call and `:453-455` can
-> never fire while a finding is live. A raw diff of two consecutive backups shows exactly
-> `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call writes. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+> payload: the mutator sets `seen: (rec?.seen ?? 0) + 1` and `lastSeenAt: nowS` per finding
+> (`alert-delivery.ts:170-176`), and — the part that makes it UNCONDITIONAL — **`data.updatedAt =
+> nowS` at `:206` sits outside both loops**, so the serialization differs on every call even when
+> the findings set is EMPTY. `:453-455` can never fire. A raw diff of two consecutive backups
+> shows exactly `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call writes,
+> full stop — a draft hedged this to "while a finding is live", which `:206` makes unnecessary and
+> which would have left the ten backups enumerating only the beats that happened to find something. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -269,7 +272,9 @@ after an adversarial review correctly ruled the reads insufficient — one live 
     returns three write functions (`updateJson`, `restoreRawSnapshot`, `saveJsonSafe`) with no
     arrow or default exports, and `fsyncWrite|keepBackup` shows their only call sites are `:278`
     (inside `keepBackup`), `:470`, `:474`, `:541` — all within those three. The right test is not
-    "is it exported" but "can the INSTANCE reach it another way", and it cannot.
+    "is it exported" but "can the INSTANCE reach it another way", and it cannot. **The two greps
+    are a NECESSARY PAIR, not belt-and-braces:** `saveJsonSafe` writes with plain `writeFile`
+    (`:585`), not `fsyncWrite`, so the second grep misses it and only `^export` catches it.
   - **Therefore the residue:** across that window this module instance performed **no other
     content-changing json-io write, to any file** — because any such write, on any path, would
     have consumed a value and broken the run. The pid stamp cannot say this; it identifies who
@@ -325,21 +330,40 @@ PAYLOAD instead of the filenames.**
 > | 12615 | 0458 | 2459 | 238 | reauth **+1** |
 >
 > **The doublet's second write bumped a DIFFERENT alert code and left the tick's own code
-> untouched.** `deliverAlerts` writes the findings its caller hands it, so a write that advances
-> `cookie-leg-stuck` while `reauth-needed` stands still came from a different producer — and
-> `cookie-leg-stuck` is the code this repo already attributes to the supervisor beat
-> (`alert-delivery.ts:180-188`, the TRDD-W6PHZFC9 antiphase incident). That is a discriminating
-> observation, not a rate coincidence: a second tick beat would have bumped `reauth-needed`.
+> untouched** — and the two producers' code namespaces are DECLARED and DISJOINT in source, so
+> this is an entailment rather than an inference:
 >
-> **Two corroborations from the same table.** `cookie-leg-stuck.seen` advances exactly ONCE in the
-> window while `reauth-needed.seen` advances nine times — 1:9 against the 600 s / 60 s ratio of
-> `SUPERVISOR_INTERVAL_MS` to the tick; and lifetime, 2463 : 238 ≈ **10.35 : 1**.
+> | producer | its declared codes | site |
+> |---|---|---|
+> | tick | `TICK_ALERT_PREFIXES = ['rotator-stuck:', 'reauth-needed:']` | `server-tick.ts:47` |
+> | supervisor | `SUPERVISOR_ALERT_CODES` — includes `'cookie-leg-stuck'`, emitted at `:268` | `supervisor.ts:204`, `:268` |
 >
-> **This also replaces the mtime watch as the cadence instrument.** `lastSeenAt` is written by the
-> beat itself, so the tick period is readable straight out of the payload with no filesystem
-> timing in the path: consecutive deltas **60, 61, 60, 59, 60, 60, 60, 60 s**. The sub-second
-> `stat` watch that produced `0 · 60.153 · 120.579 · 167.972 · 179.903` remains the independent
-> confirmation, and the two agree.
+> `deliverAlerts` writes the findings its caller hands it. `cookie-leg-stuck` matches neither tick
+> prefix, so **a tick beat cannot have produced that write**; the supervisor owns the code and
+> emits it. (A draft argued this from `alert-delivery.ts:180-188` — a comment about the August
+> TRDD-W6PHZFC9 antiphase incident. A comment about a fixed bug is not a producer registry; the
+> two declarations above are, and `server-tick.ts:230` mentions `cookie-leg-stuck` only inside a
+> comment. A draft also wrote "a second tick beat would have bumped `reauth-needed`", which
+> assumed the conclusion. The namespaces make it unnecessary.)
+>
+> **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
+> reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. cookie: 143 229 s ÷
+> 600 s = 239 expected, **238 observed (99.6%)**. Two independent confirmations, each of one beat
+> against its own nominal period. (A draft instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
+> matching 10:1. Withdrawn: the two codes start 4.2 h apart, and correcting for that moves the
+> expectation to ~11:1 — **away** from the observation, so the apparent match was an artefact of
+> not correcting. reauth's 93% is ~175 beats short over 44 h, consistent with restarts.)
+>
+> **The tick period is NINE writes, not ten** — the identification pays for itself here by letting
+> the interloper be excluded from the arithmetic instead of averaged into it. Consecutive
+> `lastSeenAt` deltas across the nine tick writes: **60, 61, 60, 59, 60, 60, 60, 60 s**.
+>
+> This is **a second reading of the same ten files, not a second sample** — different bytes
+> (payload vs filesystem metadata) and a different clock (in-process `Date.now()` vs the
+> filesystem's), which is what makes it immune to the `stat`-format and UTC/local traps that broke
+> three instruments on this card. But if those ten files were wrong, both readings inherit it. The
+> live `stat` watch (`0 · 60.153 · 120.579 · 167.972 · 179.903`) keeps the one property this
+> lacks: it observed writes AS THEY HAPPENED rather than artefacts afterwards. The two agree.
 
 Also withdrawn: the earlier claim that `server-tick.ts:32` importing `deliverAlerts` implicated
 the tick. `server-supervisor.ts:25` imports the same symbol — an import shared by both candidates
@@ -657,11 +681,17 @@ OPEN ITEMS not owned by the owner, carried so they are not lost:
   *labelling an unverified claim is honest disclosure when the argument NEEDS it and retention
   when it does not — delete the claim and see whether the conclusion weakens.* Earned here by the
   pm2 restart-ordering clause, which survived deletion untouched.
-- A second, from this card's own instrument failures: **a `diff` of two files that no longer
-  exist reports them IDENTICAL** when the parser's stderr is discarded — `json.tool` errored on
-  two pruned backups, `diff` compared two empty streams, and the answer was the strongest
-  possible confirmation of exactly the wrong thing. Positive-control file EXISTENCE before
-  diffing anything under a rotating retention.
+- A second, from this card's own instrument failures, stated at the level that will actually fire
+  again: **a pipeline whose PRODUCER fails silently makes "no difference" and "no data"
+  indistinguishable, and the wrong answer it returns is the confident one.** Here `json.tool`
+  errored to `/dev/null` on two already-pruned backups, `diff` compared two empty streams, and
+  printed `IDENTICAL` — which would have REFUTED writes≡calls and ended the search. Same shape as
+  `grep -c` returning 0 from a crashed producer and as the `stat -f` blob, both also on this card.
+  Positive-control the producer (file existence, exit status) before reading its silence.
+- **The blocking task for both of the above is unglamorous and unnamed until now:** relocate one
+  entry from `.claude/rules/lessons-verification.md` into
+  `.claude/rules-reference/lessons-verification-full.md` to get under the size cap. Neither lesson
+  can be filed before that.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

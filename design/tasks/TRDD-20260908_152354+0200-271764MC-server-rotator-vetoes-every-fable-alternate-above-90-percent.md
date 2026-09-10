@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:42:11+0200
+updated: 2026-09-10T02:47:32+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -35,11 +35,17 @@ rewrite a literal it keeps. So `runOneTick` scoring **0** hits across `.next/ser
 nothing: it is a binding, and the very route that calls it is one of the files that scored zero.
 That the compiled route calls it, rather than merely importing the gate beside it, is settled by
 history and not by the chunk: `git log -S runOneTick -- app/api/statusline/ingest/route.ts` returns
-one commit, `39bc5cad` (2026-08-02), and the file last changed 2026-08-02 16:35 — over a month
-before the Sep-5 11:15 build, so today's source IS that build's source for this file, and webpack
-cannot shake out a function the route's own code calls. What is still conditional is only whether
-the route is REACHED — it ticks when something POSTs to `/api/statusline/ingest` and `:176`/`:188`
-let it through. Which copy wins on a given beat is
+one commit, `39bc5cad` (2026-08-02) — but the fact that actually closes it is that the file LAST
+CHANGED 2026-08-02 16:35, over a month before the Sep-5 11:15 build, so nothing touched it in
+between and today's source IS that build's source for this file. (The pickaxe alone would not have
+sufficed: `-S` counts occurrence-COUNT changes, so a remove-and-reintroduce nets to zero and never
+lists. `-G` was run too, same single commit.) Nor is the call shakeable: the guards above it,
+`:176` `tickAttemptAllowed()` and `:188` `isNearLimit()`, branch on RUNTIME values, which no
+bundler can fold — a called function CAN be eliminated when the branch is statically dead
+(`process.env.NODE_ENV`), just not this one. And the two bundle facts do join: `ROTATOR_SCOPED_SWITCH_AT`
+matched exactly ONE file in all of `.next/server`, so there is a single copy of the threshold and
+any path reading it reads that 90. What is still conditional is only whether the route is REACHED
+— it ticks when something POSTs to `/api/statusline/ingest` and `:176`/`:188` let it through. Which copy wins on a given beat is
 unknown and deliberately not analysed here (`fd6ad062` … `9edc3d40`); running both commands
 removes the question.
 
@@ -49,19 +55,25 @@ no options — so Change 2 changes nothing observable, and the Problem section's
 sweep independently declares scoped exhaustion at 90" describes a lane that is not running. The
 tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
-**BOX 6 HAS NO RUNTIME SURFACE.** Neither 95 nor 97 is logged, returned, or exposed by any route.
-Both constants have five uses between them: `tick.ts:276`, `:532` and `:625` are comparisons,
-`model-fallback.ts:169` is the definition, and `:212` is the one ASSIGNMENT
-(`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT`). That local does not escape,
-and the load-bearing fact is not the return shapes but that **`threshold` appears exactly once
-below `:212`**, in the comparison `input.scopedPct >= threshold` — one appearance leaves no room
-for a logger, a throw, a closure or a write back onto `input`. Corroborating it, the four returns
-are `{act: false, skip: '<literal>'}` three times and `{act: true, actions: […]}` once, whose
-entries carry agentId, name, commandKey, escapeFirst, confirmAfterMs and dueAtMs — no interpolated
-string in any of them (a `skip` reason spelling the number would put it on a runtime surface and
-flip this paragraph). `planModelFallback` was read END TO END, not grepped. So box 6 cannot be settled by reading a number off the running system,
-build or no build — it needs the source, or restating as a behavioural check (94 accepted, 96
-vetoed), which is itself not on demand because the scoped percentages are consumption-driven.
+**BOX 6 HAS NO RUNTIME SURFACE.** Measured repo-wide across EVERY file type with NO `--include`
+filter (that flag silently fails to filter on some greps, so a filtered sweep proves nothing):
+`SAFE_SCOPED` and `SCOPED_SWITCH_AT_PCT` occur in exactly TWO source files — `tick.ts` and
+`model-fallback.ts` — plus one test. No `.mjs`, no `services/`, no `scripts/`, no component;
+positive control `governanceTitle` matched 1200 files, so the sweep reached the tree. **Seven
+sites**, not the five an earlier draft claimed: `tick.ts:276`, `:532`, `:625` are comparisons;
+`:56` is a plain import, not a re-export; `model-fallback.ts:169` defines 97 as `export const`, so
+it is inert for the CURRENT importer set rather than by construction; **`tick.ts:107` defines 95 as
+`const SAFE_SCOPED = 95` with NO `export`** — module-private, so nothing outside `tick.ts` can
+reach 95 at all, which is the strongest fact on this paragraph and three drafts omitted it; and
+`:212` is the sole ASSIGNMENT (`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT`).
+That local does not escape: `threshold` appears exactly once below `:212`, in
+`input.scopedPct >= threshold`, and one appearance leaves no room for a logger, a throw, a closure
+or a write back onto `input`. Corroborating, the four returns are `{act: false, skip: '<literal>'}`
+three times and `{act: true, actions: […]}` once (agentId, name, commandKey, escapeFirst,
+confirmAfterMs, dueAtMs) — no interpolated string; `planModelFallback` was read END TO END, not
+grepped. So box 6 cannot be settled by reading a number off the running system, build or no build
+— it needs the source, or restating as a behavioural check (94 accepted, 96 vetoed), which is
+itself not on demand because the scoped percentages are consumption-driven.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the

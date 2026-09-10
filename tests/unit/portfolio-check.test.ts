@@ -134,8 +134,18 @@ async function issueAnchored(over: Partial<PortfolioToken> = {}): Promise<Portfo
 const cosCtx: AuthContext = { isSystemOwner: false, agentId: 'cos-agent', governanceTitle: 'chief-of-staff', teamId: 'team-1' }
 
 describe('no-op / bypass cases', () => {
-  it('returns null when the operation is NOT gated (empty-map default)', async () => {
-    expect(await check.checkPortfolioToken(cosCtx, 'CreateAgent')).toBeNull()
+  it('returns null when the operation is NOT gated (op absent from the map)', async () => {
+    // TRDD-F1SL03CK flipped the shipped default: CreateAgent/CreateTeam are now
+    // POPULATED by default (see lib/portfolio-check.ts), so this no-op case can no
+    // longer be demonstrated on CreateAgent itself — it would now be gated. Prove
+    // the same no-op behavior on an operation name that is genuinely absent from
+    // OPERATIONS_REQUIRING_TOKEN, which is what this test exists to pin.
+    // NEUTER RUN (TRDD-F1SL03CK, 2026-09-10): temporarily called
+    // enable('SomeUngatedOp', 'x:y') before the assertion (simulating the op
+    // becoming gated) — reddened exactly this 1 test with
+    // `AssertionError: expected 'Portfolio token required: operation "SomeUngatedOp"...' to be null`,
+    // 14 siblings skipped. Reverted; confirmed green again after restore.
+    expect(await check.checkPortfolioToken(cosCtx, 'SomeUngatedOp')).toBeNull()
   })
 
   it('system-owner bypasses even a gated op', async () => {

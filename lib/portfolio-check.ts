@@ -27,21 +27,24 @@ import { ledgerHasIssue } from '@/lib/portfolio-ledger'
 
 /**
  * Map of gated operation → required portfolio scope (IBCT `resource:action`
- * grammar). SHIPPED EMPTY (D2). The targeted v1 set, enabled per-op when the
- * USER decides, is `{ CreateAgent: 'agent:create', CreateTeam: 'team:create' }`
- * — kept narrow (only ops R28-R31 actually gate).
+ * grammar). Ships as the v1 set (D2 decision executed): `CreateAgent` needs
+ * `agent:create`, `CreateTeam` needs `team:create` — kept narrow (only ops
+ * R28-R31 actually gate).
  */
 export const OPERATIONS_REQUIRING_TOKEN: Record<string, string> = {
-  // EMPTY by default — see header. Do NOT add ops without the governance
-  // decision (D2 / spec §7). Enabling an op here is the only behavior change.
-  //
-  // The v1 set (`CreateAgent: 'agent:create'`, `CreateTeam: 'team:create'`) is
-  // PROPOSED in TRDD-F1SL03CK and awaits a MANAGER decision. It is one line with a
-  // fleet-wide blast radius: it turns "a COS may create an agent" into "a COS may
-  // create an agent ONLY IF a MANAGER minted it a token saying so". That is a
-  // governance change dressed as a refactor, which is why it is a proposal and not
-  // a commit — and why ai-maestro#47, which asked for VERIFICATION, deliberately did
-  // not flip it. Read the TRDD before adding a key here.
+  // TRDD-F1SL03CK — APPROVED by ai-maestro-hub-session (min-approval-requirement:
+  // manager), 2026-08-21T21:59:38+0200. This is the ONE line with a fleet-wide
+  // blast radius: it turns "a COS may create an agent" into "a COS may create an
+  // agent ONLY IF a MANAGER minted it a token saying so". The service-layer gates
+  // that read this map (G01e in services/element-management-service.ts for
+  // CreateAgent; the equivalent check in services/teams-service.ts for CreateTeam)
+  // were already wired unconditionally, so flipping this map is the only change
+  // needed to activate enforcement — see the TRDD's Acceptance section for the
+  // verified call sites. Minting standing agent:create mandates to existing COS
+  // agents BEFORE this ships to a live deploy is a SEPARATE, owner-side step
+  // (TRDD-F1SL03CK acceptance box 2) — this flip alone does not perform it.
+  CreateAgent: 'agent:create',
+  CreateTeam: 'team:create',
 }
 
 /** Result of the granular match used by consume-after-success callers. */

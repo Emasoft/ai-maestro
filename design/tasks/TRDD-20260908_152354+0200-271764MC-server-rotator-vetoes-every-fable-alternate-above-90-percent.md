@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T08:07:53+0200
+updated: 2026-09-10T08:18:06+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -88,12 +88,10 @@ a 3-second statusline refresh would be ~144,000 writes over these five days, wit
 match. The observed counter is **23**. No pruning argument is needed — the POSTer is emphatically
 not a per-refresh statusline feed, whatever else it is.
 
-**The step-of-2 in the counters is explained, and the explanation corrects a claim a draft of this
-block made — and a later draft then got the COUNT of those places wrong.** `_atomicWriteCounter`
+**The step-of-2 in the counters is explained.** `_atomicWriteCounter`
 is incremented in **FOUR** places in `json-io.ts` (`++` sites: `:275`, `:472`, `:539`, `:584`) —
-once for the backup name and once for each of three tmp paths. A draft said FIVE while
-enumerating four beside it; the fifth is the declaration (`:103`) or the test setter (`:111`),
-neither of which increments.
+once for the backup name and once for each of three tmp paths. (The declaration `:103` and the
+test setter `:111` do not increment; an earlier round counted one of them and said FIVE.)
 
 **The per-path cost is NOT an unknown — it was read, and it is fixed per function.** Mapping the
 four sites onto their enclosing functions settles it:
@@ -196,10 +194,9 @@ reading.
 > ~120 s delta and there is none. A wrong reason is worse than the hedge it replaced, because it
 > reads as settled.
 >
-> **And it adds a third candidate for the 175 missing beats**, alongside restarts (withdrawn) and
-> "a beat that never reaches `deliverAlerts`": a beat that reaches it and throws inside it. The
-> rate-check paragraph names two; there are three, and none is distinguished by anything measured
-> here.
+> ~~**And it adds a third candidate for the 175 missing beats.**~~ **VOID — there are no missing
+> beats.** `if (alertable)` gates the write, so the 2638-vs-2463 difference never denoted dropped
+> beats and needs no candidate mechanism at all.
 >
 > **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
@@ -473,23 +470,20 @@ PAYLOAD instead of the filenames.**
 > `reauth-needed`", which assumed the conclusion; the emission sites make it unnecessary.
 >
 > **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
-> reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)** — and the ~175
-> shortfall is a MINIMUM, because any additional producer only raises the nominal count (below).
-> cookie: 143 229 s ÷
+> reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. **The two numbers
+> are NOT the same quantity** — 2638 counts SCHEDULED BEATS, 2463 counts DELIVERIES OF ONE CODE,
+> and `server-tick.ts:239-240` puts every write inside `if (alertable)`, so a healthy beat writes
+> nothing. The ~175 difference is therefore not a count of missing beats; it is the count of
+> intervals in which no `reauth-needed:*` delivery was recorded. **There is no shortfall to
+> explain** (below). cookie: 143 229 s ÷
 > 600 s = 239 expected, **238 observed (99.6%)**. Two independent confirmations, each of one beat
 > against its own nominal period — **and confirmations of the period's SCALE only, silent on its
-> REGULARITY.** With the restart story withdrawn (below), reauth's 7% shortfall is unexplained,
-> so the same number cannot also be read as corroborating clean 60 s deltas; it says ~60 s is the
-> right order and says nothing about whether the beat is evenly spaced over 44 h. (A draft instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
+> REGULARITY.** The rate says ~60 s is the right order and says nothing about whether the beat is
+> evenly spaced over 44 h; the cadence claim is scoped to the CONTIGUOUS nine-write window that
+> was actually measured. (An earlier round instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
 > matching 10:1. Withdrawn: the two codes start 4.2 h apart, and correcting for that moves the
 > expectation to ~11:1 — **away** from the observation, so the apparent match was an artefact of
-> not correcting. reauth's 93% is ~175 beats short over 44 h. **A draft added "consistent with
-> restarts" — withdrawn as an unmeasured story attached to a residual, and the kind that ends an
-> investigation.** It also bears on the cadence claim, so it is not cosmetic: 175 misses over 44 h
-> is one per ~15 min, and the cadence evidence is a CONTIGUOUS nine-write window with clean 60 s
-> deltas. Those coexist only if the misses are CLUSTERED (restarts) rather than spread (a beat
-> that sometimes does not reach `deliverAlerts`). Nothing here distinguishes them; the shortfall
-> stands bare, and the cadence claim is scoped to the window that was measured.)
+> not correcting.)
 >
 > **THE PERIOD IS DECLARED IN THE SOURCE, and six rounds measured what could have been read.**
 > `startOauthRotatorTick` (`server-tick.ts:320-326`): `const intervalMs = opts.intervalMs ??
@@ -547,7 +541,8 @@ PAYLOAD instead of the filenames.**
 > **The residual argument is REPLACED by arithmetic, because the mechanism a draft proposed is
 > refuted by the project's own test.** Round 11 wrote that ingest "can only backfill windows the
 > timer MISSED", which equivocates: a window the timer NEVER FIRED IN, versus one where it fired
-> and wrote nothing. The 175 shortfall counts the second kind, and `stampTickAttempt()` runs
+> and wrote nothing — and by the block below, the second kind is what a HEALTHY beat does, so the
+> equivocation was fatal on its own terms. `stampTickAttempt()` runs
 > BEFORE the gates and before `withTickLock` — so a beat dropped by the lock, refused by the
 > flag, or thrown out still stamps, and ingest is locked out of exactly the windows under
 > investigation. The load-bearing evidence is the SOURCE ORDERING — the stamp precedes every
@@ -557,18 +552,29 @@ PAYLOAD instead of the filenames.**
 > path stamps. The test corroborates the ordering; it does not itself drive the lock-drop case,
 > and a draft said it "pins this directly".
 >
-> **The replacement bound must NOT be argued from the floor, and a draft argued it from the floor
-> one paragraph after deleting the sentence that falsifies it.** The floor is PER-PROCESS
-> (`Symbol.for` keys the cross-realm registry, which spans the two module copies inside ONE
-> FULL-mode process, not two processes), and this card measured TWO live `server.mjs` processes
-> with phase unmeasured. So "2638 upper-bounds the attempts, because the floor permits no more"
-> is false under a configuration the card explicitly refuses to rule out — two processes admit up
-> to ~5276 — and it CONTRADICTED the two-processes paragraph a few screens below. The bound that
-> actually holds needs no floor and no mechanism: **2638 is what one perfect 60 s producer yields
-> over the window, 2463 landed, and any ADDITIONAL producer only raises the nominal count — so
-> ≥175 nominal beats produced no write under every configuration.** Withdrawn with the story:
-> round 10's `setInterval`-jitter candidate, since a beat the timer never submits to the floor
-> cannot be refused by it.
+> **AND THE WHOLE SHORTFALL IS AN ARTEFACT OF THE DENOMINATOR'S MEANING. A BEAT DOES NOT WRITE.**
+> `server-tick.ts:239-240` is `const alertable = alertableTick(result); if (alertable) {` — the
+> emission, the `deliver(` call and every write sit INSIDE that branch. A beat that finds the
+> rotator healthy calls nothing, writes nothing, and reaps nothing. So `2638 = 158 267 s ÷ 60 s`
+> counts SCHEDULED BEATS while `2463` counts DELIVERIES OF ONE CODE, and the 175 difference is
+> not a count of missing beats at all — **it is the count of 60 s intervals in which no
+> `reauth-needed:*` delivery was recorded, which includes every interval in which the condition
+> was absent or a different code won the `reason > stuck` precedence.** Nothing is missing; the
+> two numbers were never the same quantity.
+>
+> **Five rounds argued about the CAUSES of that residual and no round asked what the numerator
+> MEANT** — restarts (r9), jitter and an unknown denominator (r10), ingest backfill (r11), a
+> floor-based bound (r12), a configuration-independent bound (r13). All five are withdrawn, and
+> the last two were bounds on a subtraction that does not denote. The bound question is moot: the
+> per-process scope that falsified r12's version, and the equivocation on "nominal" that
+> falsified r13's, both argued about how many beats a configuration permits, when a permitted
+> beat need not write. Round 10's `setInterval`-jitter candidate dies here rather than for the
+> reason r13 gave (which was borrowed from the floor argument): drift cannot produce a 6.6%
+> deficit over 44 h, and nothing measured it.
+>
+> **What the 93% DOES license, and it is not nothing:** the rotator's alertable condition held for
+> at least 2463 of 2638 intervals across 44 h — a duty cycle, not a reliability figure. That is
+> the fleet being in the vetoing state essentially continuously, which is the card's subject.
 >
 > **The two-processes narrowing SURVIVES, and it rests on the lock, not the floor.**
 > `withTickLock` returns null when the lock is held rather than queueing, so a losing process's
@@ -972,8 +978,10 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
   narrowed two-processes claim above rests on it.
 - Whether the two live `server.mjs` processes started at near-zero phase (one `pm2 restart`) is
   not measured, and near-zero phase is the case the windows cannot exclude.
-- The 175-beat shortfall has no measured cause. Four proposed mechanisms have been withdrawn.
-  **A fifth is not warranted; a measurement is.**
+- ~~The 175-beat shortfall has no measured cause.~~ **DISSOLVED, not explained.** `if (alertable)`
+  gates every write, so 2638 (scheduled beats) and 2463 (deliveries of one code) were never the
+  same quantity and their difference denotes nothing. Every mechanism proposed for it is
+  withdrawn; no further mechanism is warranted, because there is no residual.
 - **Candidate OPERATIONAL finding, unmeasured:** a beat dropped by `withTickLock` covered nothing
   and still stamps the floor, refusing the ingest push-trigger for a full 60 s — while the
   stamp-before-gates comment justifies itself by "an ingest arriving just after a beat would fire

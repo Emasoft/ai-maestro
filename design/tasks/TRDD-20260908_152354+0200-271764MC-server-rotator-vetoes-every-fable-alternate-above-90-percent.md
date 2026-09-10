@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:19:45+0200
+updated: 2026-09-10T02:23:15+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -41,23 +41,31 @@ mtime of 09-07 is NOT a build stamp and what touched it is unknown.
 - **Bundled, stale until built.** `app/api/statusline/ingest/route.ts:190` calls `runOneTick()`
   from the Sep-5 bundle. The two tick paths DO serialise — the 60s attempt floor is
   `Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')` on `globalThis` and the mutex is a
-  LOCKFILE (`oauth-rotator-server-tick.lock`), so neither splits across the registries — but
-  whichever copy WINS the lock then runs with its OWN constants. **So after a restart-only the
-  effective threshold is NONDETERMINISTIC between 90 and 95/97**, which is worse than a fixed
-  wrong value because it is intermittent. `yarn build` closes it; the restart alone does not.
-  (`:188`'s gate, `isNearLimit`, keys on `SCOPED_SWITCH_AT_PCT` — so the gate deciding whether
-  the stale tick runs is itself stale.)
+  LOCKFILE at `path.join(globalStateDir(), 'oauth-rotator-server-tick.lock')` — and
+  `globalStateDir()` resolves to an absolute, home-or-env path, never a module-relative one, so
+  both registries name the same file. Neither mechanism splits. But whichever copy WINS then
+  runs with its OWN constants, so **after a restart-only the threshold in force depends on which
+  path ticked.** Not a coin flip: `runOneTick` calls `stampTickAttempt()` BEFORE its gates and
+  the 60s timer re-stamps continuously, so the route can only pass `:176`'s
+  `tickAttemptAllowed()` in the sliver between the floor expiring and the next beat — **the
+  timer almost always wins; the route runs at 90 on rare scheduling coincidence.** That is
+  rarer, and harder to reproduce, than the previous draft's flat "the route ticks at 90".
+  `yarn build` closes it; the restart alone does not.
 
 `tick.ts` IS compiled into `.next`; what is true is that the SERVER's tick does not RUN the
 bundled copy.
 
-**CHANGE 2 MAY BE INERT IN PRODUCTION, whatever the deploy.** No caller overrides
-`scopedThresholdPct` (zero hits outside its own file), so the new default does take effect — but
-`fleet-liveness-watchdog.ts` sets `DEFAULT_MODEL_FALLBACK = process.env.AIM_FLEET_MODEL_FALLBACK
-=== '1'`, so **the sweep leg is OFF unless the owner armed it**, deliberately (its comment: one
-switch must be watched end-to-end on a real pane first). Change 2 changes a number the sweep
-reads; if the sweep never runs, it changes nothing observable. The Problem section treats the
-sweep as an active cause of the bug — that premise needs the owner's confirmation.
+**CHANGE 2 IS INERT UNLESS `AIM_FLEET_MODEL_FALLBACK=1` — traced end to end.** No caller
+overrides `scopedThresholdPct` (zero hits outside its own file), so the new default does take
+effect where it is read. But: `fleet-liveness-watchdog.ts:344` gates on
+`opts.modelFallbackEnabled ?? DEFAULT_MODEL_FALLBACK`; `server.mjs:2042` calls
+`startFleetLivenessWatchdog()` with NO arguments, so the option is undefined and the env-derived
+default (`:211`) decides; and `runModelFallbackSweep` is called INSIDE that gate, so with the
+leg off **the sweep does not run at all** — it does not even compute a verdict to log. Change 2
+then changes nothing observable. The leg is off deliberately (its comment: one switch must be
+watched end-to-end on a real pane before arming). **So the Problem section's "the fallback sweep
+independently declares scoped exhaustion at 90" describes a lane that is dormant unless you
+armed it** — the owner's to confirm.
 
 **BOX 6 IS NOT CONFIRMABLE BY OBSERVING THE SERVER, with or without a build.** Surveyed across
 `lib/` and `app/`: neither constant is logged, returned, or exposed by any route.

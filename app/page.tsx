@@ -17,6 +17,7 @@ import { useDeviceType } from '@/hooks/useDeviceType'
 import { AgentSubconsciousIndicator } from '@/components/AgentSubconsciousIndicator'
 import MigrationBanner from '@/components/MigrationBanner'
 import TmuxKeychainAlarmBanner from '@/components/TmuxKeychainAlarmBanner'
+import RotatorReauthBanner from '@/components/RotatorReauthBanner'
 import { VersionChecker } from '@/components/VersionChecker'
 import AgentSearch from '@/components/AgentSearch'
 import TranscriptExport from '@/components/TranscriptExport'
@@ -698,6 +699,10 @@ export default function DashboardPage() {
 
         {/* Tmux-server keychain alarm — silent when clear (TRDD-GIA2LC83) */}
         <TmuxKeychainAlarmBanner />
+
+        {/* Rotator needs a human re-login — silent when clear (TRDD-CVQJNW3A).
+            Also mounted inside MobileDashboard: this arm is unreachable on a phone. */}
+        <RotatorReauthBanner />
 
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden relative">

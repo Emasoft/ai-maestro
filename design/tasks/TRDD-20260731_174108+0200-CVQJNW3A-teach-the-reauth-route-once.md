@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-08-22T14:41:00+0200
+updated: 2026-09-10T08:38:25+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
@@ -68,8 +68,17 @@ half is a change to the OWNER's unbrowse config — outside this project — or 
 drive's teardown. **That is the owner's call and it gates everything after it.**
 
 Then, and only with the owner present: the LIVE end-to-end run. `driveConsent` has still **never**
-been run against the real consent page — the one thing fixtures cannot establish. Still open after
-that: surface `reauth-needed` to the owner as a push/banner.
+been run against the real consent page — the one thing fixtures cannot establish.
+
+**Box 3 (surface `reauth-needed` to the owner) is CLOSED — 2026-09-10.**
+`components/RotatorReauthBanner.tsx`, mounted in BOTH dashboard arms. Checked as a BANNER, not a
+push: it reaches the owner when they open the dashboard, not when the fault occurs. Two things a
+resumer must not re-derive: the mobile arm needs its OWN mount (`app/page.tsx` early-returns
+`<MobileDashboard>` at `:671`, so the existing banners are desktop-only — and this route is
+readable remotely precisely so a phone can see it), and the banner is deliberately SILENT on a
+`null` verdict because armed-but-dead and never-armed are indistinguishable through this route.
+That silence reads as health to the owner; the named fix is a new SIGNAL (`tickArmed`), not a new
+guard. Both are recorded in the checklist.
 
 **Do NOT create the repair flag file to "test it".** Arming it opens a visible browser window
 unattended, and that is the human's act.
@@ -473,7 +482,36 @@ trust the rendered identity, not the extraction count, when checking which accou
       construction and tested (`reauth-flow.ts:101`; test `:211`, `:270`). Struck rather than
       deleted: the box was aimed at the janitor's Python failure mode, and knowing our path never
       shared it is the reason step (c) is the only new work.
-- [ ] `reauth-needed` reaches the owner as a push/banner when it still cannot self-repair
+- [x] `reauth-needed` reaches the owner as a ~~push/~~**banner** when it still cannot self-repair —
+      `components/RotatorReauthBanner.tsx`, mounted in BOTH dashboard arms. **Checked as a BANNER,
+      not a push, and the difference is not pedantry: a banner is a PULL surface.** It reaches the
+      owner when they open the dashboard, not when the fault occurs. A real push (OS notification,
+      phone alert) is NOT built and is not claimed here.
+      - **The mobile mount is the half that nearly shipped broken.** `app/page.tsx` returns
+        `<MobileDashboard>` from an early `if (isMobile)` at `:671`, so the two existing banners
+        at `:697`/`:700` are DESKTOP-ONLY — while this route is deliberately not console-gated
+        *because* "seeing that an account is dead is exactly what the owner needs from their
+        phone". Mounting only beside its siblings would have passed every test, checked this box,
+        and been silent on the surface the box exists for. It is mounted inside `MobileDashboard`
+        after the header (that root is `position: fixed; inset: 0`, so a sibling renders outside it).
+      - **Copy says re-login must happen AT the host.** The `Re-login` control is real
+        (`ClaudeAccountsSection.tsx:240`) but `reauth/start` and `reauth/complete` are
+        console-gated, host-only — so a phone can SEE this alarm and cannot act on it. Sending a
+        remote owner to a button they cannot press is the wrong errand at the worst moment.
+      - 4 tests, **3 recorded neuters** (`tests/unit/rotator-reauth-banner.test.tsx`), run
+        2026-09-10: guard→`'ok'` reds 2; alarm-on-null reds 4 (case 3 falls only to it); deleting
+        the `!response.ok` guard reds EXACTLY case 4, which is what proves that case's fixture is
+        load-bearing rather than decorative. `tsc --noEmit` exit 0 / 0 lines.
+- [ ] **RESIDUE, named with its mechanism so it is actionable rather than a worry:** the banner is
+      SILENT on a `null` verdict, and to the owner that silence is indistinguishable from health.
+      This is FORCED, not chosen — `readTickStatus` returns null when the beat is absent OR stale,
+      the tick is behind `OAUTH_TICK_FLAG` and defaults OFF, so armed-but-dead and never-armed both
+      arrive as `null` and this route carries nothing that separates them. Alarming on null would
+      put a permanent banner on every install that never armed the rotator. **The fix needs a new
+      SIGNAL, not a new guard:** surface `oauthTickEnabled()` on the status route as `tickArmed`,
+      then `tickArmed && tickNextAction === null` drives a SEPARATE banner ("the rotator is armed
+      but not beating"). Deliberately not built here — different copy, own test matrix, and backing
+      it out would be a second independent revert.
 - [x] `tsc` clean + full suite green, both DATED in this card — **2026-07-31 19:05**: `tsc
       --noEmit` exit 0 / 0 lines; `yarn test` 313 files, 4524 passed, 2 skipped. ONE failure,
       `pillar-graph-cli` → `board is byte-identical`, a 5 s subprocess timeout under parallel load:
@@ -505,13 +543,22 @@ for itself. Pinned by a neuter that reds EXACTLY ONE test (`?? "ok"` → 1 red /
 the point: with null collapsed, the `reauth-needed` and `rotating` cases still pass, so that
 single test is the whole thing standing between a dead rotator and a green dashboard.
 
-**THE BOX STAYS OPEN, and here is precisely what is missing.** It asks for a **push/banner**, and
-this is only the data. Grepped: there is no global banner surface in this codebase — no
-`GlobalBanner`, `SystemBanner`, `AlertBar`, `TopBanner`, `Toaster`. The route's ONLY consumer is
-`components/settings/ClaudeAccountsSection.tsx`, a page the owner must navigate to, which is not
-materially better than reading the file. **Remaining work: an always-visible surface that polls
-this route and shows `tickNextAction === 'reauth-needed'`.** That is a UI feature, not a wiring
-change, which is why it is named here rather than half-built.
+~~**THE BOX STAYS OPEN**~~ — **CLOSED 2026-09-10**, see the checklist. What this paragraph said
+was missing was correct; **why it looked hard was not.**
+
+> ~~"Grepped: there is no global banner surface in this codebase — no `GlobalBanner`,
+> `SystemBanner`, `AlertBar`, `TopBanner`, `Toaster`."~~ **FALSE, and it is the
+> needle-keyed-on-the-wrong-name trap.** That grep enumerated five plausible names and missed
+> **two banners that exist and are mounted in `app/page.tsx`**: `MigrationBanner` (`:697`) and
+> `TmuxKeychainAlarmBanner` (`:700`) — the latter documented *"silent when clear"*, polling its
+> route every 30 s, `if (!alarm?.active) return null`, with a component test beside it
+> (`tests/unit/tmux-keychain-banner.test.tsx`). That is EXACTLY the surface this box asked to be
+> built, already in the tree, already tested. A confident absence from a name list made a
+> copy-the-neighbour job read as a from-scratch UI feature, which is part of why this box sat
+> open. **An absence proven by enumerating names you thought of is not an absence.**
+
+The route's other consumer remains `components/settings/ClaudeAccountsSection.tsx`, a page the
+owner must navigate to.
 
 The other two open boxes are unchanged and both are OWNER-gated by their own text: box 1 waits on
 the `auto_publish_checkpoints` decision (the owner's unbrowse config, outside this project —

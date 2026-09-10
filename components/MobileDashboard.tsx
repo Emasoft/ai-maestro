@@ -14,6 +14,7 @@ import { agentToSession } from '@/lib/agent-utils'
 import type { Agent } from '@/types/agent'
 import { useHosts } from '@/hooks/useHosts'
 import versionInfo from '@/version.json'
+import RotatorReauthBanner from '@/components/RotatorReauthBanner'
 
 interface MobileDashboardProps {
   agents: Agent[]
@@ -163,6 +164,14 @@ export default function MobileDashboard({
           </div>
         )}
       </header>
+
+      {/* Rotator needs a human re-login — silent when clear (TRDD-CVQJNW3A). Mounted HERE and not
+          beside its siblings in app/page.tsx, because that arm sits after `if (isMobile) return`
+          and this root is `position: fixed; inset: 0` — a sibling banner would render outside it.
+          The status route is readable remotely precisely so a phone can see this. */}
+      <div className="flex-shrink-0">
+        <RotatorReauthBanner />
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>

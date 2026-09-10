@@ -50,18 +50,43 @@ a POSTer that is not the configured statusline and has not been identified.
 > short-lived pid, never that one. The inference was "fixture data therefore tests"; the datum was
 > a pid.
 
-**The route is the ONLY way that file gets written in that process** — `writeStatuslineSnapshot`
-has exactly one non-test caller, `app/api/statusline/ingest/route.ts:130`, and
-`statuslineStatePath` is referenced nowhere outside `lib/statusline-store.ts` itself. The 13 other
-hits are `tests/unit/statusline-store.test.ts`, whose ids are `sess-1`/`sess-keys`/`sess-shed`/
-`rt`/`corrupt`/`old`/`new`/`real`/`only` — **none is `abc123`**. So two independent facts (the pid,
-and the sole caller) point the same way.
+**WHICH FACT CARRIES THIS, because the two are not equal partners.** The pid alone establishes only
+that *the live server process wrote the file* — it does NOT by itself establish that the ROUTE ran.
+What closes that gap is the **sole-caller** check: `writeStatuslineSnapshot` has exactly one
+non-test caller, `app/api/statusline/ingest/route.ts:130`, and `statuslineStatePath` /
+`statuslineStateDir` are referenced nowhere outside `lib/statusline-store.ts` itself (searched
+across `app/`, `lib/`, `services/`, `scripts/`, `server.mjs`). The 13 other hits are
+`tests/unit/statusline-store.test.ts`, whose ids are `sess-1`/`sess-keys`/`sess-shed`/`rt`/
+`corrupt`/`old`/`new`/`real`/`only` — **none is `abc123`**. So: the pid excludes a *different
+process*; the sole caller excludes a *different code path*. Both are needed and only the second is
+load-bearing.
 
-**What the writes show — eleven observed, and that is a FLOOR.** Sep 5 12:55/13:04/13:07/19:50/
-20:00/21:29, Sep 9 14:25, Sep 10 01:16/01:21/01:21, plus the live file at Sep 10 01:21, every one
-under pid 24895. There are exactly **10** surviving backups against `BACKUP_KEEP = 10`
-(`lib/json-io.ts:151`), i.e. the set is AT the cap, so older ones were pruned and the true count is
-higher. The **last** write is Sep 10 01:21 local; nothing since.
+**The five in-process paths that would break this were enumerated and each refuted** — recorded so
+the next reader can attack the claim rather than take it:
+
+| alternative write path | why it does not apply |
+|---|---|
+| another route importing the store | no other file in `app/`, `lib/`, `services/` references the store's writer or its path helpers |
+| a server-side scheduled task (watchdogs, rotator) | would still have to call `writeStatuslineSnapshot`; nothing does |
+| the statusline-capture wrapper | it is `scripts/aimaestro-statusline-capture.sh`, a SHELL script — not in-process code, and if it runs at all it POSTs |
+| a pty / WebSocket frame handler | same as the scheduled task: no caller exists |
+| repair-on-read by a lenient reader | `readJson` contains no `write`/`rename`/`keepBackup`/`unlink` call — its only matches for those words are comments |
+
+**What the writes show — TEN backed-up writes, and whether any were pruned is NOT established.**
+Sep 5 12:55/13:04/13:07/19:50/20:00/21:29, Sep 9 14:25, Sep 10 01:16/01:21/01:21, every one under
+pid 24895; the live `abc123.json` at Sep 10 01:21 is the CURRENT CONTENT, not an eleventh distinct
+write. A draft called this "eleven writes, and that is a FLOOR because the set is AT the cap" —
+**both halves wrong.** The prune is `mine.slice(0, max(0, mine.length - BACKUP_KEEP))`
+(`lib/json-io.ts:282`, `BACKUP_KEEP = 10` at `:151`), which at length 10 slices nothing: being *at*
+the cap is not being *over* it, so ten surviving backups is equally consistent with ten writes and
+nothing pruned. What IS true: the oldest surviving backup carries counter **5, not 1**, so at least
+one earlier backed-up write went through that module instance — whether it was a statusline write
+is not established. The **last** write is Sep 10 01:21 local; nothing since.
+
+**What the counter DOES kill, and it is worth stating because it is the one clean inference here:**
+a 3-second statusline refresh would be ~144,000 writes over these five days, with a counter to
+match. The observed counter is **23**. No pruning argument is needed — the POSTer is emphatically
+not a per-refresh statusline feed, whatever else it is.
 
 **The step-of-2 in the counters is explained, and the explanation corrects a claim a draft of this
 block made.** `_atomicWriteCounter` is incremented in FIVE places in `json-io.ts` — once for the
@@ -76,12 +101,28 @@ So the counter bounds nothing process-wide and is not relied on above.
 DEMONSTRABLY EXECUTING inside pid 24895 — i.e. inside the stale Sep-5 bundle.** The same pid holds
 10 backups of `~/.claude/plugins/data/ai-maestro-janitor-ai-maestro-plugins/oauth-rotator/active-alerts.json`
 at counters 12423-12441, stamped Sep 10 03:31 through 03:39 UTC — **ten writes in eight minutes**,
-i.e. roughly one a minute, right now. That path is `lib/oauth-rotator/alert-delivery.ts:41`, and
-`lib/*.ts` is bundled into `.next`, so it is stale-bundle code running live. **This does NOT show
-`runOneTick` firing, and must not be read as such** — alert delivery is a different function from
-the tick, and `lib/oauth-rotator/server-supervisor.ts` gives the rotator its own in-server schedule
-independent of the ingest route. What it does show is that the subsystem this card is about is not
-dormant in the process carrying the old default.
+i.e. roughly one a minute, right now. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
+and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
+`server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
+The project's blanket "`lib/*.ts` is bundled" rule does not hold for a module the server imports
+itself, and this same block had already proved the process runs more than one module registry.
+
+**The corrected version is MORE relevant to this card, not less, and it moves the tick question:**
+
+- `server.mjs:1995` starts `startOauthRotatorTick` on its **own timer**, gated on the flag file
+  `~/.aimaestro/oauth-rotator-tick.enabled` — which this block already confirms is **PRESENT**. So
+  a tick runs in-process on a schedule that owes nothing to the ingest route.
+- `tsx` transpiles at IMPORT time, and this process imported at start — **Sep 5 11:16**. So the
+  running rotator is Sep-5 SOURCE, which still predates `efb6a509` (Sep 8) and therefore still
+  carries the old default. The deploy conclusion is unchanged; only the mechanism was wrong.
+- That makes **two** candidate tick paths, not one: the `server.mjs` timer (runtime source) and the
+  ingest route (`.next` bundle). The "second tick" this block worries about is the second of those.
+
+**Still NOT established, and the caveat is unchanged:** none of this shows `runOneTick` firing.
+`deliverAlerts` is imported by BOTH `server-tick.ts:32` and `server-supervisor.ts:25`, so a write
+to `active-alerts.json` does not say which one ran, and the supervisor is documented as alert-only.
+What is shown is that the rotator subsystem is not dormant in a process whose code predates the fix.
 
 **What is still NOT established, and must not be read into this:** reaching the route is not the
 same as the stale tick FIRING. `app/api/statusline/ingest/route.ts:176` is a gate that can return
@@ -107,11 +148,17 @@ they say the POSTer is not the obvious candidate:
 arriving *through the live server's own pid* means someone is POSTing test-shaped data at the
 running server, not that a test wrote the file directly. Who, is unidentified.
 
-**What this changes for box 5:** the deploy needs both `yarn build` and `pm2 restart`, and the
-build is now the load-bearing half rather than a precaution — a restart alone leaves a route that
-is demonstrably being hit still serving the Sep-5 bundle. It does not lift the hold, which remains
-the owner's, and it adds a question that is also theirs: **what is POSTing to
-`/api/statusline/ingest`?**
+**What this changes for box 5 — LESS than a draft of this block claimed.** That draft said "the
+build is now the load-bearing half rather than a precaution". **Retracted:** `yarn build` is
+required identically under BOTH readings, because the stale default lives in the bundle whether or
+not any route is hit, and this block already said "run BOTH" before either draft. What the finding
+actually removes is the *reading under which skipping the build would have been harmless*. That is
+worth having and it is not an escalation.
+
+It does add a question that is the owner's: **what is POSTing to `/api/statusline/ingest`?** The
+obvious candidates are excluded — **27** `settings*.json` files under `~/agents` and `~/.claude`
+were scanned and **none** wires `aimaestro-statusline*`, on top of the configured statusline
+chain's 0 hits above.
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with

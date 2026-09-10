@@ -52,7 +52,10 @@ export default function RotatorReauthBanner() {
         const data = (await response.json()) as RotatorStatus
         if (!cancelled) setStatus(data)
       } catch {
-        // Transient fetch failure — keep the last known state, try again next tick.
+        // Same shape as the `!response.ok` branch above, and it fails the same way: a network
+        // error from the first poll on leaves `status` at its initial null forever, which renders
+        // as silence. "Keep the last known state" only describes the case where a poll already
+        // succeeded — it is not a fallback, it is the absence of one.
       }
     }
 

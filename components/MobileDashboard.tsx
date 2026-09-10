@@ -173,9 +173,13 @@ export default function MobileDashboard({
           NO `flex-shrink-0` WRAPPER, deliberately — it was here and it was inert. `<main>` is the
           only grow item (`flex-1` with `minHeight: 0`, so its base is 0), which makes free space
           positive and distribution go through GROW: shrink never fires on this banner in any
-          reachable case. What the banner does cost is `<main>`'s height, and that is safe here
-          because every pane inside it is `absolute inset-0` — they resize with main rather than
-          overflowing it, so nothing is clipped out of reach; the terminal just gets shorter. */}
+          reachable case. What the banner DOES cost is `<main>`'s height, and `<main>` is
+          `overflow: hidden` — safe here, but it takes TWO steps to say so and the first alone
+          proves nothing. (1) Every pane TRACKS main's height rather than adding to it: three are
+          `absolute inset-0`, the empty state is `h-full`. (2) The two panes whose content can be
+          arbitrarily long carry their own scroller — `MobileWorkTree:354` and
+          `MobileHostsList:252`, both `flex-1 overflow-y-auto`. Step 1 is only about each pane's
+          BOX; without step 2 a long list would overflow its own box and main would clip it. */}
       <RotatorReauthBanner />
 
       {/* Main Content */}

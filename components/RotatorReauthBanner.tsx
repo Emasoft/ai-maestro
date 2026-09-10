@@ -25,7 +25,8 @@ const POLL_MS = 30_000
  * ⚠ `null` IS DELIBERATELY SILENT, and this is FORCED, not chosen. The route's own comment is
  * emphatic that null means the beat is absent or its verdict stale — UNKNOWN, not fine. But the
  * tick is behind OAUTH_TICK_FLAG and defaults OFF, so armed-but-dead and never-armed BOTH arrive
- * here as null, and this route carries no signal separating them. Alarming on null would put a
+ * here as null, and this route carries no signal separating them — MEASURED, not assumed: its one
+ * `NextResponse.json` returns exactly `{liveEmail, accounts, tickNextAction}`. Alarming on null would put a
  * permanent banner on every install that never armed the rotator. The consequence is real and
  * must not be glossed: to the owner, this banner's silence is indistinguishable from health.
  * The fix needs a new signal, not a new guard — see the card's residue (`oauthTickEnabled()`
@@ -42,8 +43,11 @@ export default function RotatorReauthBanner() {
         const response = await fetch('/api/oauth-rotator/status')
         // Stay silent on a non-ok response rather than alarming. The route is enforceMaestro-gated,
         // so a non-maestro viewer gets 403 on every poll — failing loud would fire this banner at
-        // people who cannot act on it. On a 500 we keep the last known state, which errs toward
-        // over-showing an alarm, which is the right direction to err.
+        // people who cannot act on it. Keeping the last known state errs in WHICHEVER direction
+        // that state pointed, and the common case is the bad one: on first load `status` is still
+        // null and no poll has ever succeeded, so a route that is 500ing from the start leaves
+        // this permanently silent. Only when the last good poll said `reauth-needed` does this
+        // err toward over-showing.
         if (!response.ok) return
         const data = (await response.json()) as RotatorStatus
         if (!cancelled) setStatus(data)

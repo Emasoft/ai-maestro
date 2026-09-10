@@ -168,10 +168,15 @@ export default function MobileDashboard({
       {/* Rotator needs a human re-login — silent when clear (TRDD-CVQJNW3A). Mounted HERE and not
           beside its siblings in app/page.tsx, because that arm sits after `if (isMobile) return`
           and this root is `position: fixed; inset: 0` — a sibling banner would render outside it.
-          The status route is readable remotely precisely so a phone can see this. */}
-      <div className="flex-shrink-0">
-        <RotatorReauthBanner />
-      </div>
+          The status route is readable remotely precisely so a phone can see this.
+
+          NO `flex-shrink-0` WRAPPER, deliberately — it was here and it was inert. `<main>` is the
+          only grow item (`flex-1` with `minHeight: 0`, so its base is 0), which makes free space
+          positive and distribution go through GROW: shrink never fires on this banner in any
+          reachable case. What the banner does cost is `<main>`'s height, and that is safe here
+          because every pane inside it is `absolute inset-0` — they resize with main rather than
+          overflowing it, so nothing is clipped out of reach; the terminal just gets shorter. */}
+      <RotatorReauthBanner />
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-09-10T08:38:25+0200
+updated: 2026-09-10T08:48:15+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
@@ -547,8 +547,10 @@ single test is the whole thing standing between a dead rotator and a green dashb
 was missing was correct; **why it looked hard was not.**
 
 > ~~"Grepped: there is no global banner surface in this codebase — no `GlobalBanner`,
-> `SystemBanner`, `AlertBar`, `TopBanner`, `Toaster`."~~ **FALSE, and it is the
-> needle-keyed-on-the-wrong-name trap.** That grep enumerated five plausible names and missed
+> `SystemBanner`, `AlertBar`, `TopBanner`, `Toaster`."~~ **The claim does not hold: it is a
+> UNIVERSAL supported by a SAMPLED enumeration.** (Not "false" — that would be a claim about
+> 2026-07-31, and whether both banners existed *then* is a date I have not checked. The refutation
+> below needs no date.) That grep enumerated five plausible names and missed
 > **two banners that exist and are mounted in `app/page.tsx`**: `MigrationBanner` (`:697`) and
 > `TmuxKeychainAlarmBanner` (`:700`) — the latter documented *"silent when clear"*, polling its
 > route every 30 s, `if (!alarm?.active) return null`, with a component test beside it
@@ -556,6 +558,14 @@ was missing was correct; **why it looked hard was not.**
 > built, already in the tree, already tested. A confident absence from a name list made a
 > copy-the-neighbour job read as a from-scratch UI feature, which is part of why this box sat
 > open. **An absence proven by enumerating names you thought of is not an absence.**
+
+**Residue from the post-write review of `47dc522c`, recorded because neither is closed.** The
+banner is silent to a **logged-out or non-maestro owner**, forever, and that silence is
+indistinguishable from health — the `!response.ok` comment justifies not alarming *other* viewers
+and does not cover the owner in a non-maestro session. And "reaches the owner" over-promises: this
+is PULL, not push, so it requires the dashboard to be open. Both sit beside the `null` hole
+(`tickArmed`) as the same shape of gap: the surface reports a stranded rotator only to someone
+already looking at a working dashboard as maestro.
 
 The route's other consumer remains `components/settings/ClaudeAccountsSection.tsx`, a page the
 owner must navigate to.

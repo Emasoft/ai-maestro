@@ -50,12 +50,38 @@ a POSTer that is not the configured statusline and has not been identified.
 > short-lived pid, never that one. The inference was "fixture data therefore tests"; the datum was
 > a pid.
 
-**What the writes show.** Eleven writes across five days (Sep 5 12:55/13:04/13:07/19:50/20:00/21:29,
-Sep 9 14:25, Sep 10 01:16/01:21/01:21, plus the live file at Sep 10 01:21) — **every one under pid
-24895**. That cadence is occasional, not the 3-second statusline refresh, which is part of why the
-POSTer is still unidentified. The backup counters run 5, 7, 9 … 23, a uniform step of **2**;
-`_atomicWriteCounter` is process-global across every backed-up write, so the step implies exactly
-one other backed-up write between each — unexplained here, and NOT relied on for any claim above.
+**The route is the ONLY way that file gets written in that process** — `writeStatuslineSnapshot`
+has exactly one non-test caller, `app/api/statusline/ingest/route.ts:130`, and
+`statuslineStatePath` is referenced nowhere outside `lib/statusline-store.ts` itself. The 13 other
+hits are `tests/unit/statusline-store.test.ts`, whose ids are `sess-1`/`sess-keys`/`sess-shed`/
+`rt`/`corrupt`/`old`/`new`/`real`/`only` — **none is `abc123`**. So two independent facts (the pid,
+and the sole caller) point the same way.
+
+**What the writes show — eleven observed, and that is a FLOOR.** Sep 5 12:55/13:04/13:07/19:50/
+20:00/21:29, Sep 9 14:25, Sep 10 01:16/01:21/01:21, plus the live file at Sep 10 01:21, every one
+under pid 24895. There are exactly **10** surviving backups against `BACKUP_KEEP = 10`
+(`lib/json-io.ts:151`), i.e. the set is AT the cap, so older ones were pruned and the true count is
+higher. The **last** write is Sep 10 01:21 local; nothing since.
+
+**The step-of-2 in the counters is explained, and the explanation corrects a claim a draft of this
+block made.** `_atomicWriteCounter` is incremented in FIVE places in `json-io.ts` — once for the
+backup name (`:275`) and once for each tmp path (`:472`, `:539`, `:584`) — so one write consumes
+**two** counters. Nothing is interleaving. And the counter is **per MODULE INSTANCE, not
+process-global** as a draft said: the same pid 24895 carries `~/.claude/settings.json` at counter
+**56** stamped Sep 5 13:03 UTC while the statusline set is still at counter **23** on Sep 9 23:21
+UTC. A single monotonic counter cannot do that; Next.js bundling gives several copies of the module.
+So the counter bounds nothing process-wide and is not relied on above.
+
+**SIDE FINDING, and the most operationally significant thing here: the oauth-rotator subsystem is
+DEMONSTRABLY EXECUTING inside pid 24895 — i.e. inside the stale Sep-5 bundle.** The same pid holds
+10 backups of `~/.claude/plugins/data/ai-maestro-janitor-ai-maestro-plugins/oauth-rotator/active-alerts.json`
+at counters 12423-12441, stamped Sep 10 03:31 through 03:39 UTC — **ten writes in eight minutes**,
+i.e. roughly one a minute, right now. That path is `lib/oauth-rotator/alert-delivery.ts:41`, and
+`lib/*.ts` is bundled into `.next`, so it is stale-bundle code running live. **This does NOT show
+`runOneTick` firing, and must not be read as such** — alert delivery is a different function from
+the tick, and `lib/oauth-rotator/server-supervisor.ts` gives the rotator its own in-server schedule
+independent of the ingest route. What it does show is that the subsystem this card is about is not
+dormant in the process carrying the old default.
 
 **What is still NOT established, and must not be read into this:** reaching the route is not the
 same as the stale tick FIRING. `app/api/statusline/ingest/route.ts:176` is a gate that can return

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:57:38+0200
+updated: 2026-09-10T07:04:42+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -146,9 +146,19 @@ reading.
 > running now**, and the +2 step and the doublet are **stable recurring properties** rather than
 > artefacts of one read.
 >
-> **And the doublet RECURRED.** Its source is still open on this card, and a feature that
-> reproduces in two windows an hour apart is *periodic*, not a one-off interloper — a materially
-> different thing to be looking for. That is the most useful thing the re-measurement produced. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+> **A draft then wrote "the doublet RECURRED … therefore periodic".** That inferred PERIODICITY
+> from minute labels, which this card's own two-instruments rule forbids — a shared `0437` label
+> is consistent with anything from 0.1 s to 59 s, so it could not confirm the original 11.93 s
+> interval. The claim is superseded anyway: the doublet is now identified below, from the payload.
+>
+> **WRITES ≡ CALLS, and it needed discharging rather than assuming.** The no-op return at
+> `:453-455` means a `deliverAlerts` call whose content is unchanged writes NOTHING — so a
+> backup-per-minute could in principle have been the rate at which alert CONTENT changes, not the
+> tick rate, and the cadence conclusion rests on the difference. Discharged by reading the
+> payload: the mutator sets `seen: (rec?.seen ?? 0) + 1` and `lastSeenAt: nowS` on every call
+> (`alert-delivery.ts:170-176`), so the serialization differs on every call and `:453-455` can
+> never fire while a finding is live. A raw diff of two consecutive backups shows exactly
+> `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call writes. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -252,11 +262,14 @@ after an adversarial review correctly ruled the reads insufficient — one live 
     existing-file branch. So the ten backups are themselves the proof that all ten took the
     `keepBackup`+tmp path at +2. (A review objected that "+2" presupposed the counter→write
     mapping this block disclaims. Right about the earlier text; the ternary is what refutes it.)
-  - **The write-path enumeration is CLOSED.** `grep -n "^export" lib/json-io.ts` returns every
-    export: three write functions (`updateJson`, `restoreRawSnapshot`, `saveJsonSafe`), the rest
-    reads, types, errors, the lock and two test hooks. There are no arrow-function or default
-    exports to hide a fourth. So "every json-io write path consumes ≥1" is established for the
-    module, not just for the three functions that happened to be read.
+  - **The enumeration is CLOSED, at the DOCUMENT-WRITE level — and the level matters, because at
+    the filesystem level the sentence is false.** `fsyncWrite` (`:243`) writes and consumes 0; the
+    prune loop unlinks; `rename` commits. None takes a counter. What holds is: every call that
+    REPLACES A TARGET FILE'S CONTENTS consumes ≥1. Closed on two greps, not one — `^export`
+    returns three write functions (`updateJson`, `restoreRawSnapshot`, `saveJsonSafe`) with no
+    arrow or default exports, and `fsyncWrite|keepBackup` shows their only call sites are `:278`
+    (inside `keepBackup`), `:470`, `:474`, `:541` — all within those three. The right test is not
+    "is it exported" but "can the INSTANCE reach it another way", and it cannot.
   - **Therefore the residue:** across that window this module instance performed **no other
     content-changing json-io write, to any file** — because any such write, on any path, would
     have consumed a value and broken the run. The pid stamp cannot say this; it identifies who
@@ -270,13 +283,21 @@ after an adversarial review correctly ruled the reads insufficient — one live 
     "content-changing" above. `restoreRawSnapshot`'s `raw === null` branch deletes at **+0**. And
     a consumed-then-failed write still consumes, so "no gaps" excludes *attempts*, a superset of
     writes — which only strengthens the exclusion.
-  - **The ten backups are an UPPER BOUND on distinct calls, not equal to them, and the timing is
-    what closes that.** `keepBackup` sits INSIDE `updateJson`'s retry loop, so a stale-retry
-    (`:476-489`) writes a second backup and consumes another +2 within one call. Retries back off
-    `200 ms × n` (`:487`), so retry backups land sub-second apart; the observed spacing is one per
-    minute with a single ~12 s doublet, which is two orders of magnitude outside that. Retries are
-    excluded by measurement, not waved off — **and the doublet is therefore not a stale-retry
-    either**, which removes one candidate from the still-open doublet question.
+  - **The ten backups are an UPPER BOUND on distinct calls, and ADJACENCY is what closes it —
+    not magnitude.** `keepBackup` sits INSIDE `updateJson`'s retry loop, so a stale-retry
+    (`:476-489`) writes a second backup and consumes another +2 within one call. The loop keeps
+    HOLDING the lock across attempts on purpose (`:485-488`), so a retry's only extra cost is the
+    backoff plus small-file I/O — **its backup must land immediately after the one it retries**.
+    The interloper sits at offset `167.972`, 47.4 s after its predecessor and 11.9 s before its
+    successor: adjacent to nothing. That is positional and cannot be argued away by slow I/O.
+    (A draft instead said retries were "two orders of magnitude" outside the spacing. The bound
+    it never read is `maxRetries = Math.max(0, opts.retries ?? 3)` (`:396`), so total backoff is
+    ≤ 1.2 s against 60 s — **~50×, not 100×**. The adjacency argument needs no bound at all.)
+    Lock contention is excluded the same way: `withJsonLock`'s `maxWaitMs` could DELAY a beat, but
+    a delay shifts a write rather than adding one, and `179.903` arrived on schedule — so the
+    extra write is an extra, not a displaced beat.
+    Since no sub-second-adjacent pair exists among the ten, all ten are distinct calls and the
+    backup cadence IS the call cadence: the upper bound closes rather than hanging.
   - **The two conclusions ride ONE observation.** "These ten came from a single instance" is
     inferred from the uniform +2, and "that instance did nothing else" from the same +2. Not
     circular — a second copy would have to interleave perfectly — but they are not two independent
@@ -287,10 +308,38 @@ caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the
 03:31→03:39 is **9** minutes, not 8; and the observed stamps carried two writes in one wall-clock
 minute, which a single `setInterval(60_000)` **cannot** produce — so "exactly" was contradicted by
 the data on its own line. A later draft then explained the doublet as "one supervisor beat landing
-inside a tick minute, 9 + 1 = 10". **That is also withdrawn**: it predicts ~0.33 doublets per
-200 s, and the measurement above shows one (47.39 s + 11.93 s filling a single 60 s slot). One
-observation neither confirms nor refutes a 600 s beat. **The doublet's source is UNIDENTIFIED.**
-A second writer exists; which one, this card does not know.
+inside a tick minute, 9 + 1 = 10". That was withdrawn as unsupported — it predicts ~0.33 doublets
+per 200 s and one was observed, which neither confirms nor refutes a 600 s beat. **It was the
+right answer reached by the wrong instrument, and the doublet is now IDENTIFIED — by reading the
+PAYLOAD instead of the filenames.**
+
+> **THE DOUBLET IS THE SUPERVISOR BEAT. Measured 2026-09-10 ~07:0x, in-band.** Every backup is a
+> copy of the file's previous contents, so the ten backups are a time series of the document
+> itself. Parsing them (window `012605`-`012623`, 0454-0502 UTC) instead of just their names:
+>
+> | ctr | stamp | `reauth-needed.seen` | `cookie-leg-stuck.seen` | Δ |
+> |---|---|---|---|---|
+> | 12609 | 0456 | 2457 | 237 | reauth **+1** |
+> | 12611 | 0457 | 2458 | 237 | reauth **+1** |
+> | **12613** | **0457** | **2458** | **238** | **reauth +0, cookie +1** |
+> | 12615 | 0458 | 2459 | 238 | reauth **+1** |
+>
+> **The doublet's second write bumped a DIFFERENT alert code and left the tick's own code
+> untouched.** `deliverAlerts` writes the findings its caller hands it, so a write that advances
+> `cookie-leg-stuck` while `reauth-needed` stands still came from a different producer — and
+> `cookie-leg-stuck` is the code this repo already attributes to the supervisor beat
+> (`alert-delivery.ts:180-188`, the TRDD-W6PHZFC9 antiphase incident). That is a discriminating
+> observation, not a rate coincidence: a second tick beat would have bumped `reauth-needed`.
+>
+> **Two corroborations from the same table.** `cookie-leg-stuck.seen` advances exactly ONCE in the
+> window while `reauth-needed.seen` advances nine times — 1:9 against the 600 s / 60 s ratio of
+> `SUPERVISOR_INTERVAL_MS` to the tick; and lifetime, 2463 : 238 ≈ **10.35 : 1**.
+>
+> **This also replaces the mtime watch as the cadence instrument.** `lastSeenAt` is written by the
+> beat itself, so the tick period is readable straight out of the payload with no filesystem
+> timing in the path: consecutive deltas **60, 61, 60, 59, 60, 60, 60, 60 s**. The sub-second
+> `stat` watch that produced `0 · 60.153 · 120.579 · 167.972 · 179.903` remains the independent
+> confirmation, and the two agree.
 
 Also withdrawn: the earlier claim that `server-tick.ts:32` importing `deliverAlerts` implicated
 the tick. `server-supervisor.ts:25` imports the same symbol — an import shared by both candidates
@@ -423,12 +472,8 @@ from the mechanism. Deriving it:
 > `min_uptime`. The restart would STOP the beat this card measured rather than fix it.
 >
 > (An earlier draft argued from pm2's restart ordering. The conclusion does not need it, so it is
-> gone rather than labelled. The general form — *labelling an unverified claim is disclosure when
-> the argument needs it and retention when it does not; delete it and see whether the conclusion
-> weakens* — belongs in `.claude/rules/lessons-verification.md` and is **not there yet**: that
-> file is at 98059 B against its 98304 B cap, so an entry costs a relocation into
-> `.claude/rules-reference/lessons-verification-full.md` first. Recorded here as the open item,
-> rather than cited as if it had been filed.)
+> gone rather than labelled. See the open items for the lesson that belongs in
+> `lessons-verification.md`.)
 >
 > **The one piece of general pm2 knowledge the argument DOES need, kept and labelled:**
 > `pm2 reload` is not a safer verb here. Zero-downtime reload requires **cluster** mode, and this
@@ -439,10 +484,11 @@ from the mechanism. Deriving it:
 > **THE RETRY TUNING MAKES THE OUTAGE WORSE, NOT BETTER, AND A DRAFT CALLED THAT DIFFERENCE
 > IMMATERIAL.** It is the most owner-actionable thing measured here:
 >
-> | | at `max_restarts: 10` — **the repo comment's claim** (`ecosystem.config.js:78-80`), not measured here, and it describes the PRIOR setting rather than asserting a pm2 default | this app (row 5, MEASURED) |
-> |---|---|---|
-> | a deterministic boot throw | "budget in ~10 seconds and pm2 then STOPPED TRYING FOREVER" → **`errored`**, a visible terminal state | ~4 attempts/min at the backoff cap → the 10000 budget is **~42 h** away |
-> | what the owner sees | a stopped app, monitorable | **~42 h of silent flapping** before it reaches `errored` |
+> The tuning trades a visible fast-fail for **~42 h of flapping before the app reaches `errored`**
+> — i.e. it never reaches it inside any window an owner would notice. (A draft made this a
+> two-row table whose left column was borrowed from the same `ecosystem.config.js` comment the
+> paragraph below impeaches, asking the reader to trust a source three lines above being told it
+> is unreliable. The finding lives entirely in the measured right-hand side, so the table is gone.)
 >
 > `ecosystem.config.js:76-88` tuned for "keep the job going no matter what interruption happened",
 > and for a TRANSIENT that is right. This scenario is the other kind — a boot-time throw that can
@@ -604,6 +650,18 @@ also lands TRDD-RE9AVNJF (`5aa945c1`, `48e839b6` touched `tick.ts` and `slots.ts
 runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_MODEL_FALLBACK`
 is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to
 settle box 6 given that no runtime surface prints either number.
+
+OPEN ITEMS not owned by the owner, carried so they are not lost:
+- A lesson for `.claude/rules/lessons-verification.md`, **not yet filed** because that file is at
+  its size cap and an entry requires relocating one into `.claude/rules-reference/` first:
+  *labelling an unverified claim is honest disclosure when the argument NEEDS it and retention
+  when it does not — delete the claim and see whether the conclusion weakens.* Earned here by the
+  pm2 restart-ordering clause, which survived deletion untouched.
+- A second, from this card's own instrument failures: **a `diff` of two files that no longer
+  exist reports them IDENTICAL** when the parser's stderr is discarded — `json.tool` errored on
+  two pruned backups, `diff` compared two empty streams, and the answer was the strongest
+  possible confirmation of exactly the wrong thing. Positive-control file EXISTENCE before
+  diffing anything under a rotating retention.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

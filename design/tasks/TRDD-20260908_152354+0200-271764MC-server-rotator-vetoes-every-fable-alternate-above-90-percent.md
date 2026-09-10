@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:17:58+0200
+updated: 2026-09-10T07:23:28+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -159,7 +159,8 @@ reading.
 > (`alert-delivery.ts:170-176`), and — the part that makes it UNCONDITIONAL — **`data.updatedAt =
 > nowS` at `:206` sits outside both loops**, so the serialization differs on every call even when
 > the findings set is EMPTY. `:453-455` can never fire. A raw diff of two consecutive backups
-> shows exactly `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call writes,
+> shows exactly `seen 2460→2461`, `lastSeenAt`/`updatedAt` +60 s, nothing else. Every call that
+> reaches the mutator writes,
 > full stop — a draft hedged this to "while a finding is live", which `:206` makes unnecessary and
 > which would have left the ten backups enumerating only the beats that happened to find something.
 >
@@ -167,8 +168,13 @@ reading.
 > too, because a review asked for it and an early return on an empty findings set is the obvious
 > guard to write.** There is none: `deliverAlerts` (`alert-delivery.ts:146`) runs `nowS`, `log`,
 > `owns`, `delivered = []`, then straight into `try {` → `alertsFile()` → `readJson` → `prior` →
-> `toNotify` → `live` → `await updateJson(...)` at `:166`, with no return in between. Two
-> independent corroborations: the suite calls `deliverAlerts([], …)` as a real delivery
+> `toNotify` → `live` → `await updateJson(...)` at `:166`, with no return in between. **That is
+> sound for `return` and incomplete for control flow** — everything from `alertsFile()` on sits
+> inside the `try {`, and a throw there also leaves before `:166`. It does not matter, and the
+> reason is worth stating rather than eliding: a throwing call is **a call with no write**, and
+> the direction the conclusion needs is *write ⇒ call*, so a throw only ever SUBTRACTS writes.
+> The precise claim is therefore: no `return` prevents a call from reaching the mutator; a throw
+> would, and that cannot manufacture a backup. Two independent corroborations: the suite calls `deliverAlerts([], …)` as a real delivery
 > (`tests/unit/oauth-alert-delivery.test.ts:127`, `:201`), and `server-supervisor.ts:99-107`
 > documents its own call as "CALLED ON EVERY BEAT, INCLUDING THE ALL-CLEAR", explicitly ungated
 > because gating it on `findings.length > 0` once disabled the resolution half of the system.
@@ -229,7 +235,9 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   processes finds exactly **two** ai-maestro `server.mjs` processes, 24806 and 24895 (a third hit
   is an unrelated codex MCP `server.mjs`). There is no other candidate, and `pm2-out.log` is that
   managed process's own stdout.
-- **MEASURED, not argued: a 60 s-cadence writer is running.** 200 s watch on
+- **MEASURED, not argued: a 60 s-cadence writer is running** — and like the payload window
+  below, this is a claim about ITS OWN 200 s, never about regularity over the counter's 44 h
+  lifetime, which the 93% rate check leaves open. 200 s watch on
   `active-alerts.json` (python `os.stat`, positive control passed), 2026-09-10 06:04-06:08 local.
   Read as ABSOLUTE OFFSETS from the first sample rather than as gaps — a review's correction, and
   it reads STRONGER than the draft it replaces: **0 · 60.153 · 120.579 · 167.972 · 179.903**.
@@ -360,25 +368,58 @@ PAYLOAD instead of the filenames.**
 > `alert-delivery.ts:6` and `:189` are comments, leaving `supervisor.ts:204` (a registry) and
 > `:268` (the emission)).
 >
-> **Two earlier sourcings of this same conclusion were wrong, in the same direction — each cited
-> something ADJACENT to the emission instead of the emission.** Round 4 argued it from
-> `alert-delivery.ts:180-188`, a comment about the August TRDD-W6PHZFC9 antiphase incident; a
-> comment about a fixed bug is not a producer registry. Round 5 replaced that with
-> `TICK_ALERT_PREFIXES` (`server-tick.ts:47`) called a "declared namespace" — **also wrong, and
-> wrong in a way its own name warned about.** That constant has exactly ONE use site,
-> `ownsTickAlert` at `:52`, which is passed as `owns:` at `:259` — the REAP filter. It constrains
-> what the beat DELETES from `active-alerts.json`, never what it EMITS, which is the whole point
-> of the TRDD-W6PHZFC9 fix. Its docstring (`:43-47`) does assert correspondence with the builder
-> and points at "the `const code` expression in `runOneTick`" — but a docstring asserting a
-> correspondence is not the correspondence. Reading the expression it points at is what produced
-> the row above, and that source is strictly stronger than either draft: exhaustive by
-> construction rather than by claim. A draft also wrote "a second tick beat would have bumped
+> **Three things the "only emission" half rests on, each now measured, because a draft rested it
+> on a grep with ZERO RECALL:**
+>
+> - `grep -n 'deliver(' server-tick.ts` → **one hit, `:265`**. That is the exhaustiveness check.
+>   A draft instead cited `grep -n "code:"`, which returned four hits — a signature, a type, a
+>   comment, a parameter annotation — and **not one of them was an emission**. It could not have
+>   been: the builder is `const code = …` and the call is `deliver([{ code, message: … }])`, using
+>   shorthand, so neither line contains the token `code:`. The needle scored **0/1 on the class it
+>   was cited to enumerate**, and its four confident hits made that look like a survey. Confirmed
+>   by re-running it against the two lines in isolation: 0 matches. (This is this card's own
+>   filed lesson — *one construct has two syntactic forms and a needle that knows one reports the
+>   other as ABSENT* — firing on the card one round after it was filed.)
+> - `grep -rn deliverAlerts` over `lib app services scripts tests` → exactly **two production call
+>   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. A draft left `server.mjs` — the
+>   file that imports the rotator at runtime — outside that scan. Now scanned: **zero**
+>   `deliverAlerts`, zero `deliverImpl`; its only rotator import is `startOauthRotatorTick` at
+>   `:1995`.
+> - `deps.deliverImpl` (`:258`) lets a caller replace delivery outright, so "the tick hands
+>   `deliverAlerts` a one-element array" needs production to take the `??` default. **Measured,
+>   not inferred from the idiom:** `deliverImpl` has 12 occurrences repo-wide — the type at
+>   `:133`, the `??` at `:258`, and **ten in tests**. No production caller supplies one. Reasoning
+>   from what a `??`-default usually means would have been the same move that failed twice below.
+>
+> **Two earlier sourcings of this same conclusion were wrong, and they were TWO DIFFERENT
+> ERRORS** — a draft called them "wrong in the same direction, each citing something adjacent to
+> the emission", which is a description invented afterwards, loose enough to fit anything near
+> the file, and whose rhetorical work is to make a third guess read as a converging series.
+> Round 4 argued it from `alert-delivery.ts:180-188`, a comment about the August TRDD-W6PHZFC9
+> antiphase incident: **prose cited as if it were code**. Round 5 replaced that with
+> `TICK_ALERT_PREFIXES` (`server-tick.ts:47`) called a "declared namespace": **the wrong code
+> object — a FILTER, cited for a question about EMISSION** — and wrong in a way its own name
+> warned about. That constant has exactly ONE use site, `ownsTickAlert` at `:52`, which is passed
+> as `owns:` at `:259` — the REAP filter. It constrains what the beat DELETES from
+> `active-alerts.json`, never what it EMITS, which is the whole point of the TRDD-W6PHZFC9 fix.
+> The two errors share only that review caught both.
+>
+> Its docstring (`:43-47`) asserts correspondence with the builder and names "the `const code`
+> expression in `runOneTick`". **Both halves of that are worth stating: a docstring is a good
+> POINTER and a bad WARRANT.** It could not settle the question, and it is what led to the answer
+> — reading the expression it names is what produced the row above, and that source is strictly
+> stronger than either draft: an expression that CONSTRUCTS the value beats a constant that does
+> not constrain it. A draft kept only the "bad warrant" half, which teaches the reader to skip
+> the thing that got you there. A draft also wrote "a second tick beat would have bumped
 > `reauth-needed`", which assumed the conclusion; the emission sites make it unnecessary.
 >
 > **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
 > reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. cookie: 143 229 s ÷
 > 600 s = 239 expected, **238 observed (99.6%)**. Two independent confirmations, each of one beat
-> against its own nominal period. (A draft instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
+> against its own nominal period — **and confirmations of the period's SCALE only, silent on its
+> REGULARITY.** With the restart story withdrawn (below), reauth's 7% shortfall is unexplained,
+> so the same number cannot also be read as corroborating clean 60 s deltas; it says ~60 s is the
+> right order and says nothing about whether the beat is evenly spaced over 44 h. (A draft instead cited the lifetime ratio 2463:238 ≈ 10.35:1 as
 > matching 10:1. Withdrawn: the two codes start 4.2 h apart, and correcting for that moves the
 > expectation to ~11:1 — **away** from the observation, so the apparent match was an artefact of
 > not correcting. reauth's 93% is ~175 beats short over 44 h. **A draft added "consistent with
@@ -724,8 +765,20 @@ of this block:
   relocated verbatim from `.claude/rules/lessons-verification.md` into
   `.claude/rules-reference/lessons-verification-full.md` under their own headings. All four are
   the lowest-recurrence class the budget rule names — one completed campaign, dense in its own
-  R-numbers and gate ids. Freed 1610 B; the file went 98059 → 97819 B against the 98304 cap after
-  the three new entries landed. `tests/governance/lessons-file-budget.test.ts` 3/3.
+  R-numbers and gate ids. **Four, where the chore was written as "relocate ONE entry", is forced
+  by arithmetic and not scope creep:** three lessons at ~400-500 B each need ~1200 B+ freed
+  against 245 B of headroom, and one entry yields ~400-500 B. Freed 1610 B; the file went
+  98059 → 97819 B against the 98304 cap after the three new entries landed.
+  `tests/governance/lessons-file-budget.test.ts` 3/3. **Remaining headroom is 485 B**, so the
+  next one or two lessons re-trigger this same chore — it is deferred, not retired. These went
+  to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
+  absent from symptom search; that is a choice, not a default.
+- **A process finding against round 6's own commit, recorded because it is the kind that
+  repeats:** `6db8377d` landed the card AND `.claude/rules/lessons-verification.md` — a file
+  injected into every turn of every session here — in ONE commit. Backing out the attribution
+  change would mean untangling it from a global rules change with a far wider blast radius, so
+  by this project's own two-revert test that was two changes. The work was correctly scoped and
+  the COMMIT was not. Round 7 touches the card only.
 - **DONE — lesson 1** (`## Claims about the codebase`): labelling an unverified claim is
   disclosure only when the conclusion still needs it — delete the claim and see whether the
   conclusion weakens; if it does not, the label is retention dressed as honesty.

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:47:32+0200
+updated: 2026-09-10T02:51:03+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -24,30 +24,19 @@ priority: 1
 **CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
 BOTH the owner's.
 
-**NOT DEPLOYED — the deploy needs BOTH `yarn build` AND `pm2 restart`.** The running pid is
-`tsx server.mjs` from 2026-09-05 11:16; `efb6a509` landed 09-08 15:40, so the process predates the
-fix. A restart alone is not enough, and this is measured IN THE BUNDLE rather than inferred from
-source: `.next/server/app/api/statusline/ingest/route.js` (Sep-5 11:15) contains the string
-`aimaestro.oauth-rotator.lastTickAttemptMs`, so `server-tick.ts` IS compiled into that route, and
-`.next/server/chunks/3242.js` still holds `ROTATOR_SCOPED_SWITCH_AT",90)`. Both needles are STRING
-LITERALS, which is exactly why they are the right ones — a minifier renames bindings; it does not
-rewrite a literal it keeps. So `runOneTick` scoring **0** hits across `.next/server` establishes
-nothing: it is a binding, and the very route that calls it is one of the files that scored zero.
-That the compiled route calls it, rather than merely importing the gate beside it, is settled by
-history and not by the chunk: `git log -S runOneTick -- app/api/statusline/ingest/route.ts` returns
-one commit, `39bc5cad` (2026-08-02) — but the fact that actually closes it is that the file LAST
-CHANGED 2026-08-02 16:35, over a month before the Sep-5 11:15 build, so nothing touched it in
-between and today's source IS that build's source for this file. (The pickaxe alone would not have
-sufficed: `-S` counts occurrence-COUNT changes, so a remove-and-reintroduce nets to zero and never
-lists. `-G` was run too, same single commit.) Nor is the call shakeable: the guards above it,
-`:176` `tickAttemptAllowed()` and `:188` `isNearLimit()`, branch on RUNTIME values, which no
-bundler can fold — a called function CAN be eliminated when the branch is statically dead
-(`process.env.NODE_ENV`), just not this one. And the two bundle facts do join: `ROTATOR_SCOPED_SWITCH_AT`
-matched exactly ONE file in all of `.next/server`, so there is a single copy of the threshold and
-any path reading it reads that 90. What is still conditional is only whether the route is REACHED
-— it ticks when something POSTs to `/api/statusline/ingest` and `:176`/`:188` let it through. Which copy wins on a given beat is
-unknown and deliberately not analysed here (`fd6ad062` … `9edc3d40`); running both commands
-removes the question.
+**NOT DEPLOYED — run BOTH `yarn build` AND `pm2 restart`.** The pid is `tsx server.mjs` from
+2026-09-05 11:16 and `efb6a509` landed 09-08 15:40, so the process predates the fix. A restart
+alone is not enough: the Sep-5 bundle still carries the old default — `ROTATOR_SCOPED_SWITCH_AT",90)`
+in `.next/server/chunks/3242.js`, the ONLY file in `.next/server` that matches, so it is the one
+copy — and `.next/server/app/api/statusline/ingest/route.js` carries the tick machinery
+(`aimaestro.oauth-rotator.lastTickAttemptMs`). So a stale-bundle tick CAN run at 90 beside the
+restarted one, conditional only on something POSTing to `/api/statusline/ingest` and `:176`/`:188`
+letting it through. Which copy wins on a given beat is unknown and deliberately not analysed here.
+
+*The method behind each fact above — which needles, why, and five rounds of getting it wrong — is
+in `fd6ad062` … `25968956`. It is deliberately NOT restated here: this block is read first for
+operational state, and by the fifth round the provenance had grown to five times the length of the
+decision it supports, which is exactly what the first cut existed to remove.*
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
@@ -55,25 +44,17 @@ no options — so Change 2 changes nothing observable, and the Problem section's
 sweep independently declares scoped exhaustion at 90" describes a lane that is not running. The
 tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
-**BOX 6 HAS NO RUNTIME SURFACE.** Measured repo-wide across EVERY file type with NO `--include`
-filter (that flag silently fails to filter on some greps, so a filtered sweep proves nothing):
-`SAFE_SCOPED` and `SCOPED_SWITCH_AT_PCT` occur in exactly TWO source files — `tick.ts` and
-`model-fallback.ts` — plus one test. No `.mjs`, no `services/`, no `scripts/`, no component;
-positive control `governanceTitle` matched 1200 files, so the sweep reached the tree. **Seven
-sites**, not the five an earlier draft claimed: `tick.ts:276`, `:532`, `:625` are comparisons;
-`:56` is a plain import, not a re-export; `model-fallback.ts:169` defines 97 as `export const`, so
-it is inert for the CURRENT importer set rather than by construction; **`tick.ts:107` defines 95 as
-`const SAFE_SCOPED = 95` with NO `export`** — module-private, so nothing outside `tick.ts` can
-reach 95 at all, which is the strongest fact on this paragraph and three drafts omitted it; and
-`:212` is the sole ASSIGNMENT (`const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT`).
-That local does not escape: `threshold` appears exactly once below `:212`, in
-`input.scopedPct >= threshold`, and one appearance leaves no room for a logger, a throw, a closure
-or a write back onto `input`. Corroborating, the four returns are `{act: false, skip: '<literal>'}`
-three times and `{act: true, actions: […]}` once (agentId, name, commandKey, escapeFirst,
-confirmAfterMs, dueAtMs) — no interpolated string; `planModelFallback` was read END TO END, not
-grepped. So box 6 cannot be settled by reading a number off the running system, build or no build
-— it needs the source, or restating as a behavioural check (94 accepted, 96 vetoed), which is
-itself not on demand because the scoped percentages are consumption-driven.
+**BOX 6 HAS NO RUNTIME SURFACE.** Every use of `SAFE_SCOPED` and `SCOPED_SWITCH_AT_PCT` is a
+COMPARISON or a DEFINITION — never an argument, never interpolated. Seven sites, the complete set
+over a repo-wide sweep of every file type: `tick.ts:107` defines 95 and `model-fallback.ts:169`
+defines 97; `tick.ts:56` imports (a plain import, not a re-export); `:276`, `:532`, `:625` compare;
+and `model-fallback.ts:212` is the sole ASSIGNMENT, whose local appears exactly once below it —
+`input.scopedPct >= threshold` — leaving no room for a logger, a throw, a closure or a write back.
+Separately, neither literal `95` nor `97` occurs in any log or response string, and nothing but
+these two files calls `pctEnv('ROTATOR_SCOPED_SWITCH_AT', …)`. So box 6 cannot be settled by
+reading a number off the running system, build or no build — it needs the source, or restating as
+a behavioural check (94 accepted, 96 vetoed), itself not on demand because the scoped percentages
+are consumption-driven.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the

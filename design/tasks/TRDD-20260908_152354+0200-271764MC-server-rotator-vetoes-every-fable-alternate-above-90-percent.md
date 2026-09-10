@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:44:46+0200
+updated: 2026-09-10T07:49:53+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -401,12 +401,25 @@ PAYLOAD instead of the filenames.**
 >
 > **And the counter spacing CANNOT decide it either — measured, against a draft that said it
 > could.** Both `keepBackup` (`json-io.ts:275`) and the tmp name (`:472`) `++` the SAME
-> `_atomicWriteCounter`, and both sit inside the retry loop, so one retried call consumes 4 and
-> lays its two BACKUPS at *n* and *n+2* — byte-for-byte the spacing two single-attempt calls
-> produce (`n`, `n+1` tmp; `n+2`, `n+3` tmp). The observed 12611 → 12613 → 12615 is therefore
-> consistent with BOTH readings, and the discarded tmp files are `rm`-ed on the retry path, so
-> nothing on disk records the attempt count. Round 9's file-vs-content split is not a redundant
-> answer to a question the data had closed; it is the ONLY thing that closes it.
+> `_atomicWriteCounter`, and both sit inside the retry loop, so **each attempt consumes 2 and a
+> call's backups are spaced 2 apart however many attempts it made** — byte-for-byte the spacing
+> separate single-attempt calls produce (`n`, `n+1` tmp; `n+2`, `n+3` tmp). The observed
+> 12611 → 12613 → 12615 is therefore consistent with BOTH readings, and with a twice-retried
+> single call as well (`maxRetries` is 3, `:396`), so the indistinguishability is total rather
+> than confined to one retry. The discarded tmp files are `rm`-ed on the retry path, so nothing
+> on disk records the attempt count. Round 9's file-vs-content split is not a redundant answer to
+> a question the data had closed; it is the ONLY thing that closes it.
+>
+> **The one observable that WOULD have discriminated does not exist, and the code comment claims
+> it does.** A 200 ms backoff separates a retry's two backups where 60 s separates two beats', so
+> a sub-second timestamp in the backup filename would settle the doublet outright. `keepBackup`'s
+> stamp is `new Date().toISOString()…slice(0, 15)` (`:269`) — 15 characters is `YYYY-MM-DD_HHMM`,
+> **minute precision**. The comment two lines below it says *"The stamp is second-precision"* and
+> reasons about ordering "a burst inside one second"; the expression it describes cuts four
+> characters earlier than that. Verified against the 10 surviving `aim-bak` files on disk, every
+> one of the form `…aim-bak-2026-09-09_2321-24895-000021`. The doublet's own backups are pruned
+> (`BACKUP_KEEP`; zero `active-alerts` backups survive), so this cannot be re-measured on the
+> original artifacts either way — but the format alone forecloses it for any future doublet.
 >
 > **Three things the "only emission" half rests on, each now measured, because a draft rested it
 > on a grep with ZERO RECALL. The warrant is the THREE TOGETHER, not any one of them** — a draft
@@ -504,43 +517,43 @@ PAYLOAD instead of the filenames.**
 > It does not disturb the doublet (it is still the tick module's emission, so still prefixed) and
 > it does not reopen `deliverImpl` (also called with NO arguments, so `deps` is `{}` there too).
 >
-> **THE ATTEMPT FLOOR IS 60 s, AND IT COSTS THE CARD ITS CADENCE INFERENCE.**
-> `TICK_ATTEMPT_FLOOR_MS = 60_000` (`server-tick.ts:152`); `tickAttemptAllowed(nowMs, floorMs)`
-> is `nowMs - lastTickAttemptMs() >= floorMs` (`:175-177`). **The floor equals the timer period**,
-> so the observed 59-61 s spacing has TWO sufficient causes and the nine writes cannot separate
-> them: a 60 s timer, or a floor clamping any producer to 60 s. Every earlier round read that
-> spacing as measuring the timer. It does not. `evidence-must-discriminate` names exactly this —
-> an observation both hypotheses predict cannot tell them apart, and a control is all it can be.
+> **THE ATTEMPT FLOOR DOES NOT GATE THE TIMER — round 10 claimed it did, and that claim is
+> WITHDRAWN.** `TICK_ATTEMPT_FLOOR_MS = 60_000` (`server-tick.ts:152`) equals the timer period,
+> and round 10 read that coincidence as a second sufficient cause of the observed 59-61 s
+> spacing — which would have made the nine writes a control rather than a measurement and voided
+> round 9's cadence warrant. One grep refutes it. `tickAttemptAllowed` has **exactly one reader**
+> in the tree: `app/api/statusline/ingest/route.ts:176`. The timer never asks. What the timer
+> does is `stampTickAttempt()` at the TOP of `runOneTick` (`:189`, called unconditionally before
+> every gate) — it **writes** the floor and never **reads** it, and the code says so in as many
+> words: *"The timer's own beats advance it too, which is what makes 60 s a floor for the whole
+> subsystem instead of for the push-trigger alone."* The floor exists to stop an ingest POST from
+> firing a beat the timer had already covered. It cannot clamp the timer, so the timer is the
+> only thing the 59-61 s spacing can be measuring. **Round 9's three-part warrant stands intact.**
 >
-> **What survives:** the declared default (`?? 60_000`) with `startOauthRotatorTick()` taking it
-> unmodified at `server.mjs:1996` is now the ONLY evidence for the timer's period; the windows
-> are CONSISTENT with it and do not independently measure it. Round 9's three-part warrant is
-> two parts and a control. The card had this backwards in both directions across two rounds —
-> round 8 called the windows mere confirmations of the declaration, round 9 called the
-> declaration mere agreement with the windows, and the truth is the first with the reason the
-> second was reaching for now gone.
+> **This is the `TICK_ALERT_PREFIXES` error, third instance, on the same file** — a constant's
+> NAME and VALUE reasoned from without reading its use sites. Round 6 made it on the constant at
+> `:47` and wrote the lesson; round 10 made it on the constant at `:152`. The tell both times was
+> a coincidence that looked like a mechanism (a prefix list that matches the emitted codes; a
+> floor that matches the period), and both times the refutation was one grep for the readers. The
+> two round-10 findings that SURVIVED are the two that came from reading a call path.
 >
-> **The two-processes argument survives the floor but not the LOCK.** The floor is
-> PROCESS-LOCAL — `Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')` on `globalThis`
-> (`:163-169`), no file, no lock — so it cannot clamp two processes to a shared 60 s, and a draft
-> feared it could. But `withTickLock` returns null when the lock is held rather than queueing, so
-> the losing process's beat is DROPPED and writes nothing. Two live timers therefore still look
-> like one, and the honest claim is narrower than round 9's: *the windows rule out a second live
-> timer whose beats both reach `deliverAlerts`.* Near-zero phase (both processes started by one
-> `pm2 restart`) is not excluded either.
+> **What the floor DOES buy, which is the opposite of what round 10 said about the residual.**
+> Because every timer beat stamps, an ingest beat can only pass `tickAttemptAllowed` in a window
+> the timer has already MISSED. So ingest cannot inflate the expected write count above the
+> single-producer figure — it can only backfill gaps. The 93% denominator is therefore sound, and
+> the 175-beat shortfall is a MINIMUM: some of the writes that did land may be ingest covering
+> for a timer that missed. Round 10's "the denominator is now unknown too" was wrong in
+> direction, and its `setInterval`-jitter candidate for the missing beats dies with the floor —
+> a beat the timer never submits to the floor cannot be refused by it.
 >
-> **A fourth candidate for the 175 missing beats, and the residual's DENOMINATOR is now unknown
-> too.** `setInterval` jitter can put a beat marginally under 60 s after the previous attempt,
-> where the floor refuses it — a call that never attempts a write, which is neither of the two
-> throw-path cases enumerated above. And ingest-triggered beats would raise the expected count
-> above the single-producer figure the 93% was computed against. The card computed a residual
-> against a one-producer model it has now disproved: not merely the cause is undetermined, the
-> expectation is.
->
-> **The identification is caller-independent**, which is worth stating rather than re-deriving:
-> it is a property of the EMISSION (the ternary at `:257`), not of the trigger, and both callers
-> reach that same emission with `deps = {}`. No caller of `runOneTick` can forge a supervisor
-> code.
+> **The two-processes narrowing SURVIVES, and it rests on the lock, not the floor.**
+> `withTickLock` returns null when the lock is held rather than queueing, so a losing process's
+> beat is DROPPED and writes nothing. Two live timers therefore still look like one, and the
+> honest claim is narrower than round 9's: *the windows rule out a second live timer whose beats
+> both reach `deliverAlerts`.* Near-zero phase (both processes started by one `pm2 restart`) is
+> not excluded either. (The floor is per-process — `Symbol.for` is keyed in the cross-realm
+> registry, which `:154-162` explains is there to unify the TWO MODULE COPIES inside one FULL-mode
+> process, not two processes — but with neither timer reading it, that is now beside the point.)
 >
 > **The same read closes the `deliverImpl` question STRUCTURALLY**, replacing round 7's
 > token-absence argument. `runOneTick(deps: RunOneTickDeps = {})` (`:199`) is called at `:323` as
@@ -931,22 +944,30 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
   declared namespace and its docstring asserts the correspondence; its one use site is the reap
   filter. Read who calls it before deriving anything from it.
 
-**Round 10 ran as the rule allows: two test-1/test-2 findings written above, everything else
-listed here and not written.**
+**Round 11 exists because round 10 shipped a false headline, and it is the round the stopping
+rule was written for: one claim withdrawn (test 1), one gap closed by measurement (test 2), and
+everything else listed below unwritten.** Round 10's own closing line claimed it "ran as the rule
+allows" while carrying a paragraph that said of itself that it was *"worth stating rather than
+re-deriving"* — an admission of failing all three tests, in the same block as the compliance
+claim. That paragraph is struck, as is round 10's two-round historiography of the card's earlier
+cadence errors. This is the round-8-item-3 failure repeating, and a self-certification of
+compliance is worth nothing next to the artifact.
 
 ### unreviewed residue
 
-- The 175-beat reauth shortfall now has a **fourth** candidate and no denominator: `setInterval`
-  jitter landing a beat marginally inside the 60 s floor is a call that never attempts a write,
-  and ingest-triggered beats would raise the expectation above the single-producer figure the
-  93% was computed against. Unmeasured; both directions.
 - `withTickLock`'s drop-vs-queue behaviour is read from the null return, not driven. The
   narrowed two-processes claim above rests on it.
 - Whether the two live `server.mjs` processes started at near-zero phase (one `pm2 restart`) is
   not measured, and near-zero phase is the case the windows cannot exclude.
-- The observed 60 s has two sufficient causes and no experiment here separates them. Separating
-  them needs a run with the floor lowered, which is a change to the running server.
-- Nothing in rounds 5-10 moved the operational finding, which has been unchanged since round 1.
+- The 175-beat shortfall still has no measured cause; it is now a MINIMUM rather than a point
+  estimate, since ingest beats can only backfill windows the timer missed.
+- The ingest path's own beats are unmeasured: `isNearLimit` gates them, and nothing here counts
+  how often it passed over the 44 h.
+- The `keepBackup` stamp comment (`json-io.ts:270`) is wrong about its own expression. That is a
+  defect in `json-io.ts`, not in the rotator, and belongs in its own card rather than here.
+- Nothing in rounds 5-11 moved the operational finding, which has been unchanged since round 1.
+- No claim in rounds 5-11 is pinned by a test. Every one is a reading of a running system, so
+  "measured" here never means "guarded against regression".
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

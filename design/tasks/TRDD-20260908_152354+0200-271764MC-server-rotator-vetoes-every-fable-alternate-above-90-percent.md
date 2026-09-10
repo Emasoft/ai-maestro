@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:23:28+0200
+updated: 2026-09-10T07:28:37+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -178,9 +178,28 @@ reading.
 > (`tests/unit/oauth-alert-delivery.test.ts:127`, `:201`), and `server-supervisor.ts:99-107`
 > documents its own call as "CALLED ON EVERY BEAT, INCLUDING THE ALL-CLEAR", explicitly ungated
 > because gating it on `findings.length > 0` once disabled the resolution half of the system.
-> (This direction is the weaker of the two anyway — the conclusion needs *every write corresponds
-> to a call*, and an early return would only remove writes that never happened. But the card
-> asserted the stronger claim, so the stronger claim is what got measured.)
+> **A draft justified this with "a throw only SUBTRACTS writes, and the conclusion needs
+> write ⇒ call". That is right for ONE of the two things this card infers from the backups and
+> WRONG for the other, and it was introduced by the fix for the previous defect.** The card runs
+> two arguments off the same series:
+>
+> - **The identification** — backup `12613` exists and shows `cookie +1` — needs *write ⇒ call*.
+>   A throw writes nothing, so it cannot have produced `12613`. The draft's reasoning holds here.
+> - **The cadence** — nine writes, eight deltas, all 59-61 s — needs the CONVERSE, *call ⇒
+>   write*: every beat that ran left a backup. **A swallowed throw breaks exactly this.** If beat
+>   N throws in `alertsFile()` and beat N+1 succeeds, no backup is written for N, the observed
+>   delta is 120 s, and it reads as one interval. Both call sites `.catch(() => {})`, so such a
+>   throw is invisible by construction.
+>
+> What actually rules that out is **the DATA, not a direction argument**: all eight deltas read
+> 59-61 s, so no beat was lost anywhere inside that window — a skipped beat would show as a
+> ~120 s delta and there is none. A wrong reason is worse than the hedge it replaced, because it
+> reads as settled.
+>
+> **And it adds a third candidate for the 175 missing beats**, alongside restarts (withdrawn) and
+> "a beat that never reaches `deliverAlerts`": a beat that reaches it and throws inside it. The
+> rate-check paragraph names two; there are three, and none is distinguished by anything measured
+> here.
 >
 > **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
@@ -377,9 +396,14 @@ PAYLOAD instead of the filenames.**
 >   been: the builder is `const code = …` and the call is `deliver([{ code, message: … }])`, using
 >   shorthand, so neither line contains the token `code:`. The needle scored **0/1 on the class it
 >   was cited to enumerate**, and its four confident hits made that look like a survey. Confirmed
->   by re-running it against the two lines in isolation: 0 matches. (This is this card's own
->   filed lesson — *one construct has two syntactic forms and a needle that knows one reports the
->   other as ABSENT* — firing on the card one round after it was filed.)
+>   by re-running it against the two lines in isolation: 0 matches. **A review fork caught this,
+>   not I.** A draft closed the bullet with "this card's own filed lesson firing one round after
+>   it was filed" — struck, because naming a failure as an instance of a known pattern makes it
+>   read as handled and it was not. The uncomfortable finding is the other one: the lesson (*one
+>   construct has two syntactic forms and a needle that knows one reports the other as ABSENT*)
+>   had been filed into a file injected on EVERY TURN, and one round later I wrote a needle keyed
+>   on one syntactic form. **That is evidence about the lesson, not about this card** — a lesson
+>   in the always-injected file did not fire at the moment of need.
 > - `grep -rn deliverAlerts` over `lib app services scripts tests` → exactly **two production call
 >   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. A draft left `server.mjs` — the
 >   file that imports the rotator at runtime — outside that scan. Now scanned: **zero**
@@ -429,6 +453,28 @@ PAYLOAD instead of the filenames.**
 > deltas. Those coexist only if the misses are CLUSTERED (restarts) rather than spread (a beat
 > that sometimes does not reach `deliverAlerts`). Nothing here distinguishes them; the shortfall
 > stands bare, and the cadence claim is scoped to the window that was measured.)
+>
+> **THE PERIOD IS DECLARED IN THE SOURCE, and six rounds measured what could have been read.**
+> `startOauthRotatorTick` (`server-tick.ts:320-326`): `const intervalMs = opts.intervalMs ??
+> 60_000`, feeding `setInterval(() => { void runOneTick().catch(() => {}) }, intervalMs)`; the
+> options interface (`:309-312`) declares exactly one field, `intervalMs?: number`, documented
+> "Default 60000 — the janitor daemon's cadence". **60 s is the beat, by declaration.** Both
+> windows below are therefore CONFIRMATIONS of a declared constant, not the sole basis for it —
+> which is what they are worth, and it is more than the card had been claiming for them. This is
+> the same error as `TICK_ALERT_PREFIXES`, third instance: the answer was in the file, unread,
+> while evidence adjacent to it was argued over.
+>
+> **The same read closes the `deliverImpl` question STRUCTURALLY**, replacing round 7's
+> token-absence argument. `runOneTick(deps: RunOneTickDeps = {})` (`:199`) is called at `:323` as
+> `runOneTick()` — **no arguments** — and `StartOauthRotatorTickOptions` carries no field but
+> `intervalMs`, so there is no route from `opts` to `deps` at all, not even a spread. `deps` is
+> `{}` on the production path and `deps.deliverImpl` is `undefined` by construction, not merely
+> by grep. (Round 7 claimed "no production caller supplies one" on the strength of "no source
+> file outside tests contains the token" — a weaker and different claim, and exactly the
+> substitution that went wrong in rounds 4 and 5. The seam's own docstring at `:129-133` says it
+> exists "so a test can assert the alert REACHED a channel".) The residual needle a review named
+> is also clean: `grep -n '\bdeliver\b' server-tick.ts` → three hits, a comment at `:41`, the
+> binding at `:258`, the call at `:265` — no alias, no `.call`, no passing the value elsewhere.
 >
 > **The tick period is NINE writes, not ten** — the identification pays for itself here by letting
 > the interloper be excluded from the arithmetic instead of averaged into it. Consecutive
@@ -773,12 +819,21 @@ of this block:
   next one or two lessons re-trigger this same chore — it is deferred, not retired. These went
   to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
   absent from symptom search; that is a choice, not a default.
-- **A process finding against round 6's own commit, recorded because it is the kind that
-  repeats:** `6db8377d` landed the card AND `.claude/rules/lessons-verification.md` — a file
-  injected into every turn of every session here — in ONE commit. Backing out the attribution
-  change would mean untangling it from a global rules change with a far wider blast radius, so
-  by this project's own two-revert test that was two changes. The work was correctly scoped and
-  the COMMIT was not. Round 7 touches the card only.
+
+STOPPING RULE for this STATE block, adopted after two consecutive reviews faulted the accretion
+and a third proposed the test. A further round is warranted ONLY if it (1) removes a claim whose
+evidence does not support it, (2) closes a gap by measurement, or (3) changes what the owner
+would do. **Nothing has met (3) since round 1** — the operational finding has been actionable
+and unchanged throughout, and every round has pushed it further down a longer document. A fix
+that only changes how an already-correct claim is WORDED fails all three and belongs in a commit
+message. Round 8 shipped two items under (1) — the throw-path justification, which was a wrong
+claim introduced by the previous round's fix — and (2) — the declared interval and the
+structural closure of `deps`. **Round 9 is not to be run as an edit pass**: record any further
+review findings as a list under one `unreviewed residue` heading and leave them there unless one
+meets (1), (2) or (3). Round 6's commit-hygiene finding (it bundled this card with the
+always-injected rules file, failing the two-revert test) lived here for one round and is struck
+under this rule — it is in `e4219dbf`'s message, which is where people who read commits will
+find it.
 - **DONE — lesson 1** (`## Claims about the codebase`): labelling an unverified claim is
   disclosure only when the conclusion still needs it — delete the claim and see whether the
   conclusion weakens; if it does not, the label is retention dressed as honesty.

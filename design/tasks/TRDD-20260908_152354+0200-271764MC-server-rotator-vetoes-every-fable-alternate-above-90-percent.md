@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:41:57+0200
+updated: 2026-09-10T06:50:25+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -89,16 +89,27 @@ match. The observed counter is **23**. No pruning argument is needed — the POS
 not a per-refresh statusline feed, whatever else it is.
 
 **The step-of-2 in the counters is explained, and the explanation corrects a claim a draft of this
-block made.** `_atomicWriteCounter` is incremented in FIVE places in `json-io.ts` — once for the
-backup name (`:275`) and once for each tmp path (`:472`, `:539`, `:584`) — so a write that both
-builds a tmp and finds bytes to back up consumes **two**. That is path-dependent, not a constant:
-the three tmp sites are in different functions, and a first-ever write has nothing to copy aside.
-What the ten consecutive step-2 backups support is weaker still, and the walk-back has to go one
-step further than the previous draft took it: conceding that per-write counter cost is
-path-dependent **removes the ability to map counter values to a write count at all** without
-knowing which paths ran — which is precisely the unknown. So "nothing else used THAT module
-instance over those 4.5 days" survives only as *the values are consistent with that, under an
-unstated assumption about the write path*. It is not evidence, and nothing above rests on it.
+block made — and a later draft then got the COUNT of those places wrong.** `_atomicWriteCounter`
+is incremented in **FOUR** places in `json-io.ts` (`++` sites: `:275`, `:472`, `:539`, `:584`) —
+once for the backup name and once for each of three tmp paths. A draft said FIVE while
+enumerating four beside it; the fifth is the declaration (`:103`) or the test setter (`:111`),
+neither of which increments.
+
+**The per-path cost is NOT an unknown — it was read, and it is fixed per function.** Mapping the
+four sites onto their enclosing functions settles it:
+
+| function | sites it consumes | per call |
+|---|---|---|
+| `updateJson` (`:368`) | `keepBackup`→`:275`, then tmp `:472` | **+2** when the file exists; **+1** on a first-ever write (nothing to copy aside) |
+| `restoreRawSnapshot` (`:529`) | tmp `:539` | **+1** — but **+0** on its `raw === null` branch, which deletes instead of writing |
+| `saveJsonSafe` (`:550`) | tmp `:584` | **+1** |
+
+So per-write cost is path-dependent ACROSS functions and constant WITHIN one. A draft withdrew
+too far here — it concluded that path-dependence "removes the ability to map counter values to a
+write count at all without knowing which paths ran, which is precisely the unknown". It was not
+an unknown; it was an unread file. What the withdrawal keeps is narrower and still right: "nothing
+else used THAT module instance over those 4.5 days" is about the long statusline window, where
+several callers on several paths could produce the same values, and nothing above rests on it.
 (`settings.json`'s counter 56 is EVEN, which fits a different instance with a different offset and
 does not fit a code-level parity rule; that datum is why the stronger claim was withdrawn.) And the
 counter is **per MODULE INSTANCE, not process-global** as a draft said — several module copies is
@@ -114,8 +125,21 @@ So the counter bounds nothing process-wide and is not relied on above.
 **SIDE FINDING, and the most operationally significant thing here: the oauth-rotator subsystem is
 DEMONSTRABLY EXECUTING inside pid 24895 — i.e. inside the stale Sep-5 bundle.** The same pid holds
 10 backups of `~/.claude/plugins/data/ai-maestro-janitor-ai-maestro-plugins/oauth-rotator/active-alerts.json`
-at counters 12423-12441, stamped Sep 10 03:31 through 03:39 UTC — **ten writes in eight minutes**,
-i.e. roughly one a minute, right now. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
+at counters 12423-12441, stamped Sep 10 03:31 through 03:39 UTC — ten writes spanning **nine
+consecutive minute-labels, i.e. ~8 minutes elapsed** — roughly one a minute, live at the time of
+reading.
+
+> **THAT WINDOW IS GONE, AND THE "8 vs 9 MINUTES" CHURN BELOW IS AN ARTEFACT OF NOT SAYING WHICH
+> WAS MEANT.** `BACKUP_KEEP = 10` (`lib/json-io.ts:151`) and `keepBackup` prunes to it on every
+> write, so the ten backups are a sliding window and the 03:31-03:39 set has been overwritten —
+> the original measurement is no longer re-checkable. Two drafts then argued 8 against 9 without
+> either stating its unit; 03:39 − 03:31 is **8 minutes elapsed** across **9 distinct minute
+> labels**, and both numbers were right about different things.
+>
+> **Re-measured 2026-09-10 06:4x, and the property REPLICATES on a fresh window:** the ten
+> surviving backups are `0437`(×2), `0438`…`0445` at counters **012567 → 012585**, step **+2**,
+> uniform, no gaps — same shape, same doublet-in-one-minute, same 8-elapsed/9-labels span. So the
+> cadence claim does not rest on a single unrepeatable read. **A draft attributed those writes to the `.next` bundle — "`lib/*.ts` is bundled into `.next`, so
 it is stale-bundle code running live". WRONG, and backwards on the mechanism.** `server.mjs:1995`
 and `:2010` reach the rotator by **runtime `await import('./lib/oauth-rotator/server-tick.ts')` and
 `server-supervisor.ts`** — under `tsx` those are transpiled from SOURCE, never served from `.next`.
@@ -200,20 +224,36 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   dir: grepping the janitor plugin tree for `active-alerts` matches only TRDD docs and memory
   pages, no code.
 - **The counter tells us LESS than a draft claimed, and re-derives what the pid already gave.**
-  The backup counters step **+2 uniformly across all ten, doublet included**
-  (…012479 → 012481 → 012483…), so all ten writes share one counter — a second bundle copy would
-  have to coincidentally sit at 012481. But `alert-delivery` is imported by BOTH `server-tick.ts`
-  and `server-supervisor.ts`, and both reach the SAME `json-io` instance in the same bundle, so
-  "same module instance" **cannot discriminate the tick from the supervisor or any other
-  in-process caller**. So this does NOT narrow the interloper's source, and the previous draft
-  presenting it as a constraint on that was an over-read.
+  The backup counters step **+2 uniformly across all ten, doublet included**, so all ten writes
+  share one counter — a second bundle copy would have to coincidentally land mid-sequence.
+  (A draft illustrated this with `…012479 → 012481 → 012483…`, which is in **neither** the
+  12423-12441 window it was attached to **nor** the re-measured 012567-012585 one: a number
+  carried across from a third, intermediate read. The illustration is dropped rather than
+  re-sourced — the property is stated for the window it is measured on, above.)
+  But `alert-delivery` is imported by BOTH `server-tick.ts` and `server-supervisor.ts`, and both
+  reach the SAME `json-io` instance in the same bundle, so "same module instance" **cannot
+  discriminate the tick from the supervisor or any other in-process caller**. So this does NOT
+  narrow the interloper's source, and the draft presenting it as a constraint on that was an
+  over-read.
   **One residue is NOT re-derived from the pid, and a later draft over-corrected by saying it
-  was.** The step is +2 with **no gaps at all** across the ten, so this module instance performed
-  **no other `json-io` write, to any file, in those nine minutes** — the counter is shared across
-  every file the instance writes, so a write to some other path would have consumed a value and
-  left a gap. The pid stamp cannot say that: it says who wrote THESE ten, not what else that
-  writer did. It is a small fact and it is a real one — it is what rules out the alternative that
-  the interloper came from the same module doing unrelated work on a different file.
+  was — but its first repair overstated the residue, and only reading `json-io.ts` settles which
+  version is true.** The traced per-function costs are in the table above, and they give the
+  exact claim:
+  - Every json-io **write** path consumes at least one counter value (`updateJson` +2, or +1 on a
+    create; `restoreRawSnapshot` +1; `saveJsonSafe` +1). So a write to ANY other file, on ANY
+    path, would have consumed a value and broken the +2 run.
+  - Therefore: **this module instance performed no other json-io write, to any file, across the
+    window** — which the pid stamp cannot say, since it identifies who wrote THESE ten and not
+    what else that writer did. That is the residue, and it is what rules out the interloper being
+    the same module doing unrelated work on a different path.
+  - Two exclusions the claim does NOT cover, both from the same read: `restoreRawSnapshot`'s
+    `raw === null` branch **deletes** and consumes **+0**, so a delete is invisible to this
+    argument; and a write that consumes values and then FAILS (the staleness gate at `:476-480`
+    discards the tmp) is counted as consumption, so "no gaps" excludes other *attempts*, which is
+    a superset of writes and therefore only strengthens the exclusion.
+  A draft called the +2 an interpretation that presupposed the very counter→write mapping this
+  block had disclaimed. That objection was right about the earlier text and is refuted by the
+  trace: on `updateJson` with an existing file the cost is fixed at two, not assumed to be.
 
 **THE ARITHMETIC AND THE CADENCE ARGUMENT THAT PRECEDED THIS WERE BOTH WRONG, and the review
 caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the tick exactly":
@@ -309,6 +349,13 @@ from the mechanism. Deriving it:
 > loader returned DEFAULTS over a missing `version` field, which is the one outcome that flips the
 > verdict to "does not throw". A stop box is the last place a facsimile is acceptable.)
 >
+> **How to read the table.** Rows 3, 4 and 4b were **EXECUTED** — code was run and its output
+> recorded. Rows 1, 2 and 5 are **READS** of live state (`pm2 jlist`, the process env, the script's
+> last line) plus a short inference from it, and the inference is named in the row. Nothing in the
+> table is general knowledge about pm2 or Node; where the argument needs such knowledge it is
+> below the table and labelled there. (An earlier version hedged one row's own result cell, which
+> teaches a reader to discount the whole table — the distinction belongs here, once.)
+>
 > | # | link | how it was settled | result |
 > |---|---|---|---|
 > | 1 | pm2 re-reads the working tree | `pm_exec_path` = `scripts/start-with-ssh.sh`, whose last line is `exec "$TSX_BIN" server.mjs` from the project root | the modified file **ships** |
@@ -316,7 +363,7 @@ from the mechanism. Deriving it:
 > | 3 | `loadGovernance()` surfaces the record | read `lib/governance.ts:117-127`: returns defaults only when `version !== 1`; the file's `version` **is** `1` | gate passes |
 > | 4 | the predicate itself | **EXECUTED**: `tsx -e "getDevTokenStatus()"` → `{"enabled":true,"issued":true,…}` | predicate **true** |
 > | 4b | **the GUARD itself** | **EXECUTED with a negative control**: `NODE_ENV=production … assertDevModeAbsentInProduction()` → **THREW** (`FATAL: a dev-mode login token is present (enabled=true, issued=true)…`); same call with `NODE_ENV` unset → **returned normally** | guard **fires** |
-> | 5 | pm2's SETTINGS for a boot throw | `pm2 jlist`: `exec_mode: fork_mode`, `autorestart: true`, `max_restarts: 10000`, `min_uptime: 10000` ms, `exp_backoff_restart_delay: 1000`, `restart_delay: null` | **crash-loop** (see the ordering caveat below — the settings are measured, pm2's *behaviour* under them is not) |
+> | 5 | pm2's retry SETTINGS | `pm2 jlist`: `exec_mode: fork_mode`, `autorestart: true`, `max_restarts: 10000`, `min_uptime: 10000` ms, `exp_backoff_restart_delay: 1000` | tuned to **retry effectively forever**, never fast-fail |
 >
 > Row 4b exists because row 4 was not enough, and a review said so: executing
 > `getDevTokenStatus()` runs the guard's INPUT, not the guard. This round's whole thesis is
@@ -344,26 +391,48 @@ from the mechanism. Deriving it:
 > `issued` is "tokenHash present at the right length", `PATCH {enabled:false}` leaves `issued`
 > true and the guard still fires. Only a revoke clears both.
 >
-> So `pm2 restart ai-maestro` re-imports the modified `server.mjs` and throws before
-> `app.prepare()`. What follows from that mixes two kinds of claim, and a draft ran them together
-> inside a box framed as measurement — so they are separated here:
+> So `pm2 restart ai-maestro` re-imports the modified `server.mjs`, throws before `app.prepare()`,
+> and the server does not come back. It crash-loops, every attempt well under the 10 s
+> `min_uptime`. The restart would STOP the beat this card measured rather than fix it.
 >
-> - **MEASURED** — row 5 above, straight from `pm2 jlist`.
-> - **GENERAL pm2 BEHAVIOUR, asserted, not established by anything on this card**: that `restart`
->   stops the old process *before* starting the new one, and does not roll back to the previously
->   running code when the new boot fails. It is true of pm2, and R1-R6 do not show it — row 5
->   gives the config and says nothing about ordering. Reaching for `reload` as the safer verb does
->   not change the outcome: pm2's zero-downtime reload needs **cluster** mode, and this app is
->   `exec_mode: fork_mode` (measured), where `reload` degrades to a restart.
+> (A draft supported that with "`restart` kills the old process BEFORE starting the new one, and
+> does not roll back". A review then asked for it to be labelled as unmeasured; it is **deleted**
+> instead, which is the better answer to the same finding. The conclusion never used it — a
+> `restart` kills the old process whichever order it works in, and a crash-loop *is* the
+> observation that no rollback happened — so labelling it would have kept an unverified sentence
+> alive inside a stop box for nothing. **The test for the difference is mechanical: remove the
+> claim and see whether the conclusion weakens. Labelling is honest disclosure when it does;
+> retention when it does not.**)
 >
-> Under those settings the throw is a crash-loop, every attempt well under the 10 s `min_uptime`.
-> It does NOT promptly land in `errored`, and a draft that said "until it lands in `errored`"
-> implied a bound it never computed: `exp_backoff_restart_delay: 1000` grows the gap toward what
-> `ecosystem.config.js:84-87` calls a ~15 s cap (the repo's claim about pm2, not a measurement
-> here), so at ~4 attempts/min the 10000-restart budget is roughly **two days** away. For the
-> owner the difference is immaterial — the server is DOWN either way, and the restart would STOP
-> the beat this card measured rather than fix it. (Down-vs-up does not depend on `autorestart`;
-> that flag decides only *crash-loop vs stopped*.)
+> **The one piece of general pm2 knowledge the argument DOES need, kept and labelled:**
+> `pm2 reload` is not a safer verb here. Zero-downtime reload requires **cluster** mode, and this
+> app is `exec_mode: fork_mode` (row 5, measured), where `reload` degrades to a restart. An owner
+> reaching for it gets the identical outcome. This one is load-bearing precisely because it
+> forecloses the alternative action the owner is most likely to take.
+>
+> **THE RETRY TUNING MAKES THE OUTAGE WORSE, NOT BETTER, AND A DRAFT CALLED THAT DIFFERENCE
+> IMMATERIAL.** It is the most owner-actionable thing measured here:
+>
+> | | pm2 default (`max_restarts: 10`) | this app (row 5) |
+> |---|---|---|
+> | a deterministic boot throw | budget gone in seconds → **`errored`**, a visible terminal state | ~4 attempts/min at the backoff cap → the 10000 budget is **~42 h** away |
+> | what the owner sees | a stopped app, monitorable | **~2 days of silent flapping**, never reaching `errored` |
+>
+> `ecosystem.config.js:76-88` tuned for "keep the job going no matter what interruption happened",
+> and for a TRANSIENT that is right. This scenario is the other kind — a boot-time throw that can
+> never clear on its own — where the resilience buys nothing and the lost fast-fail visibility
+> costs the outage its only alarm.
+>
+> **Whose number is whose, since this paragraph mixes three sources.** The ~15 s cap and the
+> "~4 restarts/min" are the REPO's own claims about pm2 (`ecosystem.config.js:85` and `:86`), not
+> measurements taken here. `exp_backoff_restart_delay: 1000` and `max_restarts: 10000` are
+> MEASURED (row 5). Only the multiplication is mine — 10000 ÷ 4/min = 2500 min ≈ **42 h** — and it
+> is a **ceiling**, because 4/min is the rate *at* the cap and the early cycles are faster, so the
+> true figure is somewhat under. The same comment's next sentence (`:87-88`) says the budget is
+> "effectively never reached in a machine's lifetime": **that half is false**, and this
+> multiplication is what shows it. Citing the comment for the cap while quietly overturning its
+> neighbour would be selective, so it is said out loud. (Down-vs-up does not depend on
+> `autorestart` at all; that flag decides only *crash-loop vs stopped*.)
 >
 > **Unblocking it is an OWNER decision, and both routes are:** revoke the dev token
 > (`DELETE /api/auth/dev-token` — `PATCH {enabled:false}` is NOT enough, confirmed above), or

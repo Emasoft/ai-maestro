@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:03:07+0200
+updated: 2026-09-10T02:08:34+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -24,39 +24,39 @@ priority: 1
 **CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
 BOTH the owner's.
 
-**NOT DEPLOYED — the bundle still CONTAINS the old constant, read directly 2026-09-10.**
+**NOT DEPLOYED — measured 2026-09-10 from the bundle's own bytes.**
 `.next/server/chunks/3242.js` carries `ROTATOR_SCOPED_SWITCH_AT",90)` — the pre-`efb6a509`
-default, verbatim — and that chunk is reachable from
-`.next/server/app/api/oauth-rotator/status/route.js`. Corroborating dates: the running pid is
-`tsx server.mjs` started 2026-09-05 11:16, `BUILD_ID` (the build stamp) is the same minute, and
-the route chunk is 11:15:30, all before `efb6a509` at 2026-09-08 15:40. `.next`'s own dir mtime
-of 2026-09-07 15:12 is an ENTRY TOUCH, not a build — do not read it as one.
+default — and `grep -o` printed exactly ONE line across `.next/server`, so no `,97` form
+coexists there. That chunk is declared in `status/route.js.nft.json`, Next's own dependency
+trace. Control: an unrelated needle (`governanceTitle`) matches 33 files in the same tree, so
+the grep reaches it broadly. Dates corroborate: `BUILD_ID` is 2026-09-05 11:16:04, written 34s
+AFTER the route chunk — which is why it is the build stamp — and `efb6a509` is 2026-09-08 15:40.
+`.next`'s own dir mtime of 09-07 is NOT a build stamp: a dir mtime moves on any entry
+add/remove/rename, and what touched it is unknown.
 
-**BOTH halves of `efb6a509` are runtime-loaded, so `pm2 restart` alone deploys the whole fix.**
-`server.mjs:1995` → runtime `await import('./lib/oauth-rotator/server-tick.ts')` → that file's
+**`pm2 restart` alone deploys the WHOLE fix.** `efb6a509` changed exactly two source files
+(`tick.ts`, `model-fallback.ts`; the other two in the stat are tests), and both sit in the tick's
+runtime closure: `server.mjs:1995` → `await import('./lib/oauth-rotator/server-tick.ts')` → its
 `:29` imports `runTick` from `./tick` → `tick.ts:56` is a VALUE import of `SCOPED_SWITCH_AT_PCT`
-and `ACCOUNT_HEADROOM_PCT` from `./model-fallback`, the commit's OTHER changed file. tsx
-transpiles that whole closure at boot. Say it precisely: `tick.ts` **is** compiled into `.next`
-(the routes import it), so "the tick is not bundled" would be false — what is true is that the
-tick does not RUN the bundled copy.
+and `ACCOUNT_HEADROOM_PCT` from `./model-fallback`. The back-edge, `model-fallback.ts:27`, is
+`import type`, so there is no runtime cycle. Precisely: `tick.ts` **is** compiled into `.next`
+(the routes import it) — what is true is that the tick does not RUN the bundled copy.
 
-**THE HAZARD A RESTART-ONLY CREATES, and it lands on box 6.** After `pm2 restart` without a
-build, ONE process holds TWO copies of these constants: the tick's (97, tsx-resolved) and the
-routes' (90, from the Sep-5 bundle). So **box 6 must NOT be confirmed from
-`/api/oauth-rotator/status` or the dashboard** unless the build is run too — they serve chunk
-3242 and would read the stale 90, and the owner would conclude the fix did not land. Confirm
-from the tick's own SCOPED-WALL log line, or build as well. At least these FIVE route files are
-bundle-served and need the build (an earlier draft said three):
-`app/api/oauth-rotator/{status,reauth/start,reauth/complete}/route.ts`,
-`app/api/statusline/ingest/route.ts`, `app/api/governance/password/invalidate/route.ts`.
+**THE HAZARD — and it defeats box 6's confirmation, which is the part that matters.** After a
+restart without a build, one process holds TWO module registries: Node's ESM loader under tsx
+(post-fix, read from disk) and webpack's own registry inside the bundle (pre-fix). Same file,
+two instances, two values. So **there is NO runtime way to confirm 95 and 97 after a
+restart-only.** `/api/oauth-rotator/status` and the dashboard read the bundle and would show 90.
+The tick's SCOPED-WALL line does not substitute: its `wallDesc` is
+`${scWorst.model}=${Math.round(scWorst.percent)}%`, an OBSERVED percentage and never a
+threshold, and it prints only when the wall fires. **Box 6 therefore needs `yarn build` too**;
+with it, the status route is the right place to look. Four bundle-served importers need that
+build — `app/api/oauth-rotator/{status,reauth/start,reauth/complete}/route.ts` and
+`app/api/statusline/ingest/route.ts`. (`governance/password/invalidate` names the rotator only
+in a comment; an earlier draft counted it by string match and said five.)
 
-**CORRECTION, recorded rather than overwritten.** An earlier draft of this block declined to
-content-grep the bundle, reasoning that `efb6a509` adds no string literal and a bare `95` is a
-useless needle. The second half is right and worth keeping; the generalisation from it was
-wrong. The env-var NAME sits immediately beside the changed default, is a stable literal that
-survives minification, and grepping it produced the direct evidence above — strictly better than
-the date inference it replaced. Positive control: `ROTATOR_SCOPED_ACCOUNT_HEADROOM` matches 1
-file, so the grep does reach the tree.
+Two earlier drafts of this block gave confirmation advice that was wrong in opposite directions
+— first the status route, then the SCOPED-WALL line. Both are in git with their reasoning.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the
@@ -67,9 +67,9 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the build/restart hold (box 5), then confirm 95 and 97
-(box 6) — **not from the status route** unless you `yarn build` too; the hazard paragraph above
-is the reason. `pm2 restart` alone deploys this card's whole fix, and also TRDD-RE9AVNJF's
-(`5aa945c1`, `48e839b6` changed `tick.ts` and `slots.ts` — the same runtime chain, measured).
+(box 6). `pm2 restart` alone deploys this card's whole fix — and TRDD-RE9AVNJF's (`5aa945c1`,
+`48e839b6` touched `tick.ts` and `slots.ts`, the same runtime chain) — but **box 6 needs
+`yarn build` as well**, because nothing at runtime shows those two numbers without it.
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

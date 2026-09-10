@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:16:45+0200
+updated: 2026-09-10T06:23:43+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -160,28 +160,48 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   pid,ppid,lstart,command` settles it: `24806 ← 10551` is `node .../.bin/tsx server.mjs` (the
   launcher wrapper) and `24895 ← 24806` is `node --require tsx/preflight.cjs --import
   tsx/loader.mjs server.mjs` — the process actually executing the server, booted 11:16:27, which
-  spawns esbuild at 11:16:51, the same second as the startup line above. Backup pid, startup log
-  and boot time resolve to ONE process.
+  spawns esbuild at 11:16:51, the same second as the startup line above. Precisely: **24895 is
+  the worker child of the pm2-managed process 24806**, and is the process executing `server.mjs`
+  (a draft compressed this to "24895 is the pm2-managed server", which pm2 would dispute — it
+  manages 24806). The timestamp agreement is CORRELATION, not identity: the log line carries no
+  pid. What licenses the attribution is a sweep that had not been done — `ps -eo …` over **898**
+  processes finds exactly **two** ai-maestro `server.mjs` processes, 24806 and 24895 (a third hit
+  is an unrelated codex MCP `server.mjs`). There is no other candidate, and `pm2-out.log` is that
+  managed process's own stdout.
 - **MEASURED, not argued: a 60 s-cadence writer is running.** 200 s watch on
   `active-alerts.json` (python `os.stat`, positive control passed), 2026-09-10 06:04-06:08 local.
   Read as ABSOLUTE OFFSETS from the first sample rather than as gaps — a review's correction, and
   it reads STRONGER than the draft it replaces: **0 · 60.153 · 120.579 · 167.972 · 179.903**.
-  Four of the five sit on a ~60.2 s grid to within 0.7 s (0, 60.2, 120.4, 180.6); **167.972 is a
-  lone interloper that does not disturb the grid**. So this is not "a doublet filling a slot" (the
-  previous framing, now withdrawn) — it is a free-running 60 s timer plus one extra write.
+  Against a **60.0 s** grid the residuals are **0 · +0.153 · +0.579 · −0.097**, max **0.579 s**.
+  (A draft used 60.2 s, taken from averaging the first two gaps; 60.0 fits better — max 0.697
+  against 0.579 — so the draft's own arithmetic understated its finding.) **167.972 is 12 s off
+  the nearest grid point, ~20× the residual scale**, so discarding it is separation, not
+  curve-fitting. Honest statement: four of five writes fit a 60.0 s grid within 0.6 s; the fifth
+  is an interloper that does not disturb it. Not "a doublet filling a slot" (withdrawn).
   `SUPERVISOR_INTERVAL_MS` is **600_000**, predicting 0-1 writes in that window: **the supervisor
   alone is excluded by rate.**
-- **No writer outside the process, and the interloper is inside it too.** Every mtime change maps
-  1:1 to a `lib/json-io.ts` backup stamped pid 24895 — the watch's writes at 04:05/04:06/04:07/
-  04:07 UTC against backups `0405, 0406, 0407, 0407`, doublet included. And the janitor daemon
-  does NOT write this file despite living in its data dir: grepping the janitor plugin tree for
-  `active-alerts` matches only TRDD docs and memory pages, no code.
-- **The counter constrains the interloper's ORIGIN, and a previous draft threw this away.** The
-  backup counters step **+2 uniformly across all ten, the doublet included**
-  (…012479 → 012481 → 012483…). A write from a different module copy would carry that copy's own
-  counter and break the run. So the interloper came from the **same module instance** as the grid
-  writes. That is a weak but real constraint, and the blanket counter walk-back below is about
-  COUNTING writes, not about this.
+- **The stronger cadence instrument is the BACKUP STAMPS, not the watch** — nine consecutive
+  one-per-minute stamps `0403…0411` plus one doublet beats four intervals, and a draft leaned on
+  the weaker one.
+- **No writer outside the process, over the observed window.** Each mtime change in the 200 s
+  watch has a matching `lib/json-io.ts` backup stamped pid 24895 (writes at
+  04:05/04:06/04:07/04:07 UTC against backups `0405, 0406, 0407, 0407`). Stated as a **window
+  observation, n=4** — not the universal "no writer outside the process" a draft claimed. Note
+  the match is coarser than it looks: the two writes 12 s apart both land in the single minute
+  `0407`, so this is minute-resolution agreement, not a true 1:1. The logic is still the right
+  shape — a non-`json-io` writer (a python one, say) would move mtime with no backup at all.
+  Separately, the janitor daemon does NOT write this file despite it living in the janitor's data
+  dir: grepping the janitor plugin tree for `active-alerts` matches only TRDD docs and memory
+  pages, no code.
+- **The counter tells us LESS than a draft claimed, and re-derives what the pid already gave.**
+  The backup counters step **+2 uniformly across all ten, doublet included**
+  (…012479 → 012481 → 012483…), so all ten writes share one counter — a second bundle copy would
+  have to coincidentally sit at 012481. But `alert-delivery` is imported by BOTH `server-tick.ts`
+  and `server-supervisor.ts`, and both reach the SAME `json-io` instance in the same bundle, so
+  "same module instance" **cannot discriminate the tick from the supervisor or any other
+  in-process caller**. It excludes a different process or a different bundle copy — exactly what
+  the pid stamp already excluded. So this does NOT narrow the interloper's source, and the
+  previous draft presenting it as a constraint on that was an over-read.
 
 **THE ARITHMETIC AND THE CADENCE ARGUMENT THAT PRECEDED THIS WERE BOTH WRONG, and the review
 caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the tick exactly":
@@ -203,7 +223,7 @@ the summary sentence must not borrow the measurement's confidence for them. Brok
 | component of "the tick is firing on the old threshold" | status |
 |---|---|
 | a 60 s-cadence writer exists in pid 24895 | **MEASURED** (grid above) |
-| pid 24895 is the pm2-managed ai-maestro server | **MEASURED** (`ps` parentage) |
+| pid 24895 is the worker child of pm2-managed 24806, executing `server.mjs` | **MEASURED** (`ps` parentage + 898-process sweep finding no other instance) |
 | the supervisor is not that writer | **MEASURED** (rate) |
 | the janitor daemon is not that writer | **MEASURED** (no code, wrong pid) |
 | the writer is `runOneTick` specifically | **INFERRED** — best remaining candidate, not proven |
@@ -224,7 +244,11 @@ the two checks above — it has no code that writes this file, and every write c
 pid. Corrected claim: **the janitor daemon is excluded as a WRITER by evidence, not by being
 unimaginable as a 60 s timer.** Also in the card's favour, and previously unstated: the
 `.aim-bak-` naming is ai-maestro's own `json-io.ts` convention, so whatever produced these
-backups is a Node process running ai-maestro code — which is independent evidence against a
+backups is a Node process running ai-maestro code. **This is NOT independent of the pid**, as a
+draft claimed: the naming and the pid are two fields of the same filename, emitted by the same
+`json-io.ts:275` call, so they stand or fall together — and the naming alone does not exclude a
+SECOND ai-maestro Node process, which was the surviving alternative. Only the pid field, plus the
+898-process sweep above, does that. Kept as corroboration against a
 Python janitor writer.
 
 **Two caveats the reads do NOT close.** First, `deliverAlerts` performs exactly **one**
@@ -266,32 +290,63 @@ from the mechanism. Deriving it:
 > assertDevModeAbsentInProduction()
 > ```
 >
-> **Its precondition is MET on this machine right now** (measured 2026-09-10 06:14):
+> **Its precondition is MET here, and every link is now EXECUTED or READ — not reimplemented.**
+> (A review's sharpest finding was that an earlier draft of this box computed the verdict by
+> re-writing the predicate in python against the raw JSON, while `loadGovernance()` — the function
+> that actually feeds it — went unopened. This project has a recorded incident where exactly that
+> loader returned DEFAULTS over a missing `version` field, which is the one outcome that flips the
+> verdict to "does not throw". A stop box is the last place a facsimile is acceptable.)
 >
-> | check | value |
-> |---|---|
-> | live process `NODE_ENV` (`ps eww -p 24895`) | `production` |
-> | `~/.aimaestro/governance.json` → `devModeLogin.enabled` | `true` |
-> | `devModeLogin.tokenHash` | 64-char string, present (`createdAt` 2026-08-21) |
-> | `lib/dev-mode-token.ts:174-183` verdict | **THROWS** |
+> | # | link | how it was settled | result |
+> |---|---|---|---|
+> | 1 | pm2 re-reads the working tree | `pm_exec_path` = `scripts/start-with-ssh.sh`, whose last line is `exec "$TSX_BIN" server.mjs` from the project root | the modified file **ships** |
+> | 2 | `NODE_ENV` in the process pm2 STARTS | pm2's **cached** env (`pm2 jlist` → `pm2_env.NODE_ENV`), not just the running process | `production` |
+> | 3 | `loadGovernance()` surfaces the record | read `lib/governance.ts:117-127`: returns defaults only when `version !== 1`; the file's `version` **is** `1` | gate passes |
+> | 4 | the predicate itself | **EXECUTED**: `tsx -e "getDevTokenStatus()"` → `{"enabled":true,"issued":true,…}` | predicate **true** |
+> | 5 | pm2's behaviour on a boot throw | `pm2 jlist`: `autorestart: true`, `max_restarts: 10000`, `min_uptime: 10000` ms | **crash-loop** |
 >
-> So `pm2 restart ai-maestro` today re-imports the modified `server.mjs`, throws at boot, and the
-> server does **not** come back — no tick, no route, nothing. The restart would STOP the beat this
-> card just measured, not fix it.
+> Link 2 deserves its reason stated rather than assumed: `ps eww -p 24895` reads the environment
+> pm2 APPLIED at the last start, and a plain `pm2 restart` replays that same cache — so it is
+> evidence about the right process. It would break only if the cache had been mutated since (an
+> env edit followed by `pm2 save`).
+>
+> `HASH_HEX_LEN` (= 64, `lib/dev-mode-token.ts:48`) turns out to be **immaterial**: the guard is
+> `status.enabled || status.issued`, and `enabled` alone is `true`. An earlier draft put the
+> hash length in the table as though it were load-bearing.
+>
+> **And our own read confirms the error message's advice, which the draft merely quoted.** Since
+> `issued` is "tokenHash present at the right length", `PATCH {enabled:false}` leaves `issued`
+> true and the guard still fires. Only a revoke clears both.
+>
+> So `pm2 restart ai-maestro` re-imports the modified `server.mjs`, throws before `app.prepare()`,
+> and — because `pm2 restart` (fork mode, not `reload`) kills the old process BEFORE starting the
+> new one, and does not roll back — the server does not come back. Under `autorestart` it
+> crash-loops, every attempt well under the 10 s `min_uptime`, until it lands in `errored`. The
+> restart would STOP the beat this card measured, not fix it. (This conclusion holds whether or
+> not `autorestart` is set; the flag decides *crash-loop vs stopped*, not *down vs up*.)
 >
 > **Unblocking it is an OWNER decision, and both routes are:** revoke the dev token
-> (`DELETE /api/auth/dev-token` — note `PATCH {enabled:false}` is explicitly NOT enough, per the
-> guard's own message), or resolve box 5 of TRDD-7IJ08EUV (commit it, or set the change aside).
-> Nothing here does either.
+> (`DELETE /api/auth/dev-token` — `PATCH {enabled:false}` is NOT enough, confirmed above), or
+> resolve box 5 of TRDD-7IJ08EUV. Nothing here does either.
+>
+> **IF THE COMMAND HAS ALREADY BEEN RUN** — the line this box was missing, and the cheapest one on
+> the card: `git stash push server.mjs && pm2 restart ai-maestro` restores service immediately
+> without touching the owner's decision (the change is preserved in the stash, not discarded).
 
 **The decomposition, with that gate cleared:** if only the tick matters — the half now measured to
 be beating every 60 s — **`pm2 restart` alone is sufficient for the tick chain**, no build
 required. `yarn build` is needed only for the ingest route, whose hazard remains unmeasured
-(below). The scope check behind "sufficient" is the tick's IMPORT CLOSURE, not its directory (an
-earlier draft checked only `lib/oauth-rotator/`, which is the wrong scope — `tick.ts` reaches
-`@/lib/json-io`, `@/lib/statusline-store`, `../ecosystem-constants`, `../janitor-chore-stamp`).
-None of the three modified files is in that closure; `server.mjs` is not in it either, but it is
-the ENTRY POINT, which is why the box above applies regardless.
+(below).
+
+**The scope argument, corrected twice.** A first draft checked only `lib/oauth-rotator/` — the
+wrong scope, since `tick.ts` reaches outside it. A second called its replacement an "IMPORT
+CLOSURE" when it was a depth-1 grep over two files, demonstrably incomplete (`./alert-delivery`
+imports `@/lib/json-io`, which never appeared in the list) and blind to dynamic `await import()`.
+**Neither was needed.** The modified set is `CLAUDE.md` (markdown), `scripts/aimaestro-governance.sh`
+(shell), and `server.mjs` (the ENTRY POINT, which *imports* the tick rather than being imported by
+it). None of the three can appear in a TypeScript import closure at any depth, by file type. That
+retires the depth question outright — and it is why the stop box above applies regardless: the
+entry point is not in the closure, but it is what the restart executes.
 
 **This contradicts a documented project rule, deliberately, and here is the boundary.**
 `CLAUDE.md` states flatly that `lib/*.ts` is bundled into `.next` and needs `yarn build`. That

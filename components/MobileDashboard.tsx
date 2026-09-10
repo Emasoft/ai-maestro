@@ -177,8 +177,8 @@ export default function MobileDashboard({
           `overflow: hidden` — safe here, but it takes TWO steps to say so and the first alone
           proves nothing. (1) Every pane TRACKS main's height rather than adding to it: three are
           `absolute inset-0`, the empty state is `h-full`. (2) The two panes whose content can be
-          arbitrarily long carry their own scroller — `MobileWorkTree:354` and
-          `MobileHostsList:252`, both `flex-1 overflow-y-auto`. Step 1 is only about each pane's
+          arbitrarily long carry their own scroller — the `flex-1 overflow-y-auto` list div in
+          `MobileWorkTree` and in `MobileHostsList`. Step 1 is only about each pane's
           BOX; without step 2 a long list would overflow its own box and main would clip it. */}
       <RotatorReauthBanner />
 

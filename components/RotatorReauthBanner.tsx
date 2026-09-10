@@ -52,10 +52,9 @@ export default function RotatorReauthBanner() {
         const data = (await response.json()) as RotatorStatus
         if (!cancelled) setStatus(data)
       } catch {
-        // Same shape as the `!response.ok` branch above, and it fails the same way: a network
-        // error from the first poll on leaves `status` at its initial null forever, which renders
-        // as silence. "Keep the last known state" only describes the case where a poll already
-        // succeeded — it is not a fallback, it is the absence of one.
+        // Same shape as the `!response.ok` branch above: a fallback to the prior state — and on
+        // first load the prior state is null, so it retains nothing. A network error from the
+        // first poll on leaves `status` at its initial null forever, which renders as silence.
       }
     }
 

@@ -95,5 +95,8 @@
       }
     ]
   },
-  "spinnerTipsEnabled": false
+  "spinnerTipsEnabled": false,
+  "worktree": {
+    "baseRef": "head"
+  }
 }

@@ -127,10 +127,10 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 **The dashboard has TWO arms, and `app/page.tsx` early-returns the mobile one** — around `:671`,
 `if (isMobile) { return (<TerminalProvider key="mobile-dashboard"><MobileDashboard …/></TerminalProvider>) }`.
 Every banner mounted below that return (`MigrationBanner`, `TmuxKeychainAlarmBanner`,
-`RotatorReauthBanner`) is therefore **DESKTOP-ONLY**: those are `React.createElement` calls sitting
-after a `return`, so they never run on a phone. A fleet-level alarm copied from its siblings' mount
-site ships silent on mobile and looks correct in review — the file reads as one component, nothing
-type-checks it, and no test pins the reachability (the last paragraph says what IS pinned).
+`RotatorReauthBanner`) is therefore **DESKTOP-ONLY**: that JSX sits after a `return`, so it never
+renders on a phone. A fleet-level alarm copied from its siblings' mount site ships silent on mobile
+and looks correct in review — the file reads as one component, nothing type-checks it, and no test
+pins the reachability (the last paragraph says what IS pinned).
 
 **A second mount inside `components/MobileDashboard.tsx` is the fix** — a direct child of the
 mobile root, above `<main>`. Three things about that root are worth knowing first:
@@ -143,9 +143,10 @@ mobile root, above `<main>`. Three things about that root are worth knowing firs
 - What the banner DOES cost is `<main>`'s height, and `<main>` is `overflow: hidden`. That is safe,
   measured in two steps: every pane TRACKS main's height rather than adding to it (three are
   `absolute inset-0`; the empty state is `h-full`), and the two panes whose content can be
-  arbitrarily long carry their own scroller — `MobileWorkTree:354` and `MobileHostsList:252`, both
-  `flex-1 overflow-y-auto` inside a `flex flex-col h-full` root. Without that second step the
-  first proves nothing: a pane's BOX matching main's box says nothing about its CONTENT fitting.
+  arbitrarily long carry their own scroller — the `flex-1 overflow-y-auto` list div in
+  `MobileWorkTree` and in `MobileHostsList`, inside a `flex flex-col h-full` root. Without that
+  second step the first proves nothing: a pane's BOX matching main's box says nothing about its
+  CONTENT fitting.
 
 **Nothing pins either mount by default.** Component tests render the banner directly, so deleting
 either mount line leaves them all green. `tests/unit/rotator-reauth-banner-mounts.test.ts` is the

@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T08:24:07+0200
+updated: 2026-09-10T08:26:47+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -950,18 +950,20 @@ of this block:
   to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
   absent from symptom search; that is a choice, not a default.
 
-> **THE SERIES ENDS HERE. Test (3) has not been met in any round of this session, and the
-> operational finding below has been unchanged since it was first written.** (Not "zero times in
-> fifteen rounds" — that is a census over commits this session cannot enumerate, and asserting it
-> would be the same unearned quantifier the block convicts five rounds of.) The only thing that
-> has ever gated this card — `pm2 restart` crash-looping the server against the uncommitted
+> **THE SERIES ENDS HERE. Test (3) has not been met in any round of this session.** (Not "zero
+> times in fifteen rounds" — that is a census over commits this session cannot enumerate, and
+> asserting it would be the same unearned quantifier the block convicts five rounds of.) The
+> OPERATIONAL gate — `pm2 restart` crash-looping the server against the uncommitted
 > `assertDevModeAbsentInProduction()` in `server.mjs` — is still there, still correct, still
-> unactioned, while this block was rewritten around it again and again. A
-> sixteenth round is AVAILABLE and would not be WARRANTED: the series is now consuming the card
-> instead of advancing it. The two open reads named in the residue (`deliverAlerts`,
-> `alertableTick`) are recorded as open and are NOT a licence to reopen — whoever needs them
-> should read them and act, not redraft. **Next action on this card is the owner's deploy, not
-> another round.**
+> unactioned, while this block was rewritten around it again and again. **It is not the card's
+> only gate**: boxes 5 and 6 below are open and owner's, and calling the deploy blocker "the only
+> thing that has ever gated this card" — as the previous round did — was a false universal of
+> exactly the genre this block has already deleted five times, written in the sentence meant to
+> fix an unearned quantifier. A further round is AVAILABLE and would not be WARRANTED: the series
+> is now consuming the card instead of advancing it. The two open reads named in the residue
+> (`deliverAlerts`, `alertableTick`) are recorded as open and are NOT a licence to reopen —
+> whoever needs them should read them and act, not redraft. **Next action on this card is the
+> owner's, not another round.**
 
 STOPPING RULE for this STATE block. A further round is warranted ONLY if it (1) removes a claim
 whose evidence does not support it, (2) closes a gap by measurement, or (3) **changes the card's

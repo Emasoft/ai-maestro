@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-05T10:21:21+0200
+updated: 2026-09-10T09:40:52+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -25,6 +25,7 @@ labels: [security, impersonation, agent-auth]
 external-refs: [TRDD-EVO7T245, TRDD-7YRXXKE8]
 approval-judge:  manager 
 approval-datetime: 2026-09-05T10:21:21+0200
+implementation-commits: [048476cf]
 ---
 
 ## Problem
@@ -55,10 +56,33 @@ which converts an unforgeable design into a forgeable one through an ordinary bu
 
 ## Acceptance
 
-- [ ] Walk-failure behaviour is specified and implemented as a refusal.
-- [ ] The refusal is covered by a test that a fallback would redden.
-- [ ] Legitimate detached callers enumerated, each with its non-heuristic path.
-- [ ] A comment at the refusal site stating WHY no fallback may be added, citing this card.
+- [x] Walk-failure behaviour is specified and implemented as a refusal. INVESTIGATED first
+  (grep across lib/, services/, app/api/, server.mjs, `services/headless-router.ts` — no
+  pid-ancestry-based identity resolution exists anywhere in the codebase; agent auth is
+  AID_AUTH-bearer-token-based, delivered via `tmux new-session -e` and inherited through
+  fork/exec, immune to reparenting). Per the card's own "then this card constrains the one
+  that gets written": added `lib/identity-walk.ts::walkToPane` — a pure, dependency-injected
+  choke point with three explicit refusal reasons (`severed`, `unreadable`, `hop-limit`) and
+  no branch that resolves identity any other way. Not wired to a caller (none needs it yet);
+  it exists so a future caller cannot bypass the fail-closed contract.
+- [x] The refusal is covered by a test that a fallback would redden.
+  `tests/security/identity-walk-fail-closed.test.ts`. Verified by neuter: changed the
+  `severed` return in `walkToPane` to `{ ok: true, panePid: pid, hops }` (the exact
+  forgeable-fallback shape this card forbids) — exactly the "a severed chain refuses…" test
+  went red (`expected false, got true`), the other 4 tests (incl. the positive control) stayed
+  green, then reverted. `bash scripts/with-node.sh npx vitest run
+  tests/security/identity-walk-fail-closed.test.ts` — 5/5 pass post-revert.
+- [x] Legitimate detached callers enumerated, each with its non-heuristic path. Enumerated in
+  `lib/identity-walk.ts` file header: (1) `scripts/aimaestro-statusline-capture.sh`'s detached
+  ingest fork — needs no agent identity, gated by `lib/peer-address.mjs::isConsolePeer`
+  (kernel-reported loopback origin, not a forgeable identity claim); (2) any hook/detector
+  subprocess/heartbeat daemon an agent's `claude` forks inherits AID_AUTH/AIMAESTRO_AGENT from
+  the tmux session env set at `-e` time, before it exists — valid independent of the forking
+  process's survival; (3) no existing caller derives identity from a live pid chain, so there
+  is nothing to migrate onto the walk today.
+- [x] A comment at the refusal site stating WHY no fallback may be added, citing this card.
+  `lib/identity-walk.ts` — the `walkToPane` docstring plus an inline comment at each of the
+  three refusal return statements, all citing TRDD-9JUEJFY3.
 
 ## Approval log
 

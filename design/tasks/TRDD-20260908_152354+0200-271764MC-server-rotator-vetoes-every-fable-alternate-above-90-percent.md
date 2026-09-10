@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:53:10+0200
+updated: 2026-09-10T05:33:29+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -35,8 +35,57 @@ letting it through. Which copy wins on a given beat is unknown and deliberately 
 
 *The method behind each fact above — which needles, why, and five rounds of getting it wrong — is
 in `fd6ad062` … `25968956`. It is deliberately NOT restated here: this block is read first for
-operational state. One measurement was never taken and would settle whether the second-tick hazard
-is live or theoretical — does anything actually POST to `/api/statusline/ingest` on this box?*
+operational state.*
+
+**THE MISSING MEASUREMENT IS NOW TAKEN, AND IT WENT THE OTHER WAY: THE ROUTE *IS* BEING REACHED
+ON THE LIVE STALE-BUNDLE SERVER.** The trigger condition the paragraph above names is **MET**, by
+a POSTer that is not the configured statusline and has not been identified.
+
+> **A first draft of this section said the opposite** — "nothing POSTs, the hazard is NOT LIVE",
+> attributing the store's writes to the test suite on the strength of a fixture-shaped payload and
+> recent mtimes. That was wrong, and the refutation was sitting inside the filenames I had already
+> listed: `abc123.json.aim-bak-<stamp>-24895-<counter>` embeds **`process.pid`**
+> (`lib/json-io.ts:275`), and **`ps -p 24895` is the live `tsx server.mjs` started Sat Sep 5
+> 11:16:27** — the very stale-bundle pid this card is about. A vitest run writes under its own
+> short-lived pid, never that one. The inference was "fixture data therefore tests"; the datum was
+> a pid.
+
+**What the writes show.** Eleven writes across five days (Sep 5 12:55/13:04/13:07/19:50/20:00/21:29,
+Sep 9 14:25, Sep 10 01:16/01:21/01:21, plus the live file at Sep 10 01:21) — **every one under pid
+24895**. That cadence is occasional, not the 3-second statusline refresh, which is part of why the
+POSTer is still unidentified. The backup counters run 5, 7, 9 … 23, a uniform step of **2**;
+`_atomicWriteCounter` is process-global across every backed-up write, so the step implies exactly
+one other backed-up write between each — unexplained here, and NOT relied on for any claim above.
+
+**What is still NOT established, and must not be read into this:** reaching the route is not the
+same as the stale tick FIRING. `app/api/statusline/ingest/route.ts:176` is a gate that can return
+early, and nothing here measures whether it did. The hazard's *precondition* moved from unknown to
+met; the hazard itself remains unmeasured.
+
+**What survived from the wrong draft** — these checks were sound and are unaffected, and together
+they say the POSTer is not the obvious candidate:
+
+- The route's only caller in this repo is `scripts/aimaestro-statusline.sh:162`, and that script
+  is **not** the configured statusline: `~/.claude/settings.json` runs
+  `agentlenspro statusline --inner '… .venv/bin/python3 ~/.claude/statusline.py'`.
+- Neither half of that live chain names the route — `statusline.py` matches `statusline/ingest`
+  **0** times, and the AgentlensPro repo (`/opt/homebrew/bin/agentlenspro` →
+  `Code/AgentlensPro/standalone/cli.js`) matches it in **0** files against a positive control of
+  **1026** files that do mention `statusline`.
+- The store (`~/.aimaestro/statusline-state/`, i.e. `statuslineStateDir()`) holds exactly one
+  session — `abc123.json` — plus its `.aim-bak-*` copies, every one 665 bytes.
+
+**The payload is fixture-shaped, and that is the open puzzle rather than the answer.**
+`sessionId: "abc123"`, `usedPercentage: 23.5`, `resetsAtMs: 1738425600000` (a Feb-2025 constant)
+— `abc123` is also the id used across ten-plus files under `tests/`. Fixture-shaped content
+arriving *through the live server's own pid* means someone is POSTing test-shaped data at the
+running server, not that a test wrote the file directly. Who, is unidentified.
+
+**What this changes for box 5:** the deploy needs both `yarn build` and `pm2 restart`, and the
+build is now the load-bearing half rather than a precaution — a restart alone leaves a route that
+is demonstrably being hit still serving the Sep-5 bundle. It does not lift the hold, which remains
+the owner's, and it adds a question that is also theirs: **what is POSTing to
+`/api/statusline/ingest`?**
 
 **IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
 `fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
@@ -68,7 +117,9 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the hold (box 5) and run **both** `yarn build` and
-`pm2 restart` — a restart alone can leave a second tick running at 90 from the stale bundle. The same deploy
+`pm2 restart` — a restart alone can leave a second tick running at 90 from the stale bundle, and
+that route is now measured to be REACHED on the live pid (see above), so the build is the
+load-bearing half. The same deploy
 also lands TRDD-RE9AVNJF (`5aa945c1`, `48e839b6` touched `tick.ts` and `slots.ts`, the same
 runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_MODEL_FALLBACK`
 is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to

@@ -90,9 +90,15 @@ not a per-refresh statusline feed, whatever else it is.
 
 **The step-of-2 in the counters is explained, and the explanation corrects a claim a draft of this
 block made.** `_atomicWriteCounter` is incremented in FIVE places in `json-io.ts` — once for the
-backup name (`:275`) and once for each tmp path (`:472`, `:539`, `:584`) — so one write consumes
-**two** counters. Nothing is interleaving. And the counter is **per MODULE INSTANCE, not
-process-global** as a draft said: the same pid 24895 carries `~/.claude/settings.json` at counter
+backup name (`:275`) and once for each tmp path (`:472`, `:539`, `:584`) — so a write that both
+builds a tmp and finds bytes to back up consumes **two**. That is path-dependent, not a constant:
+the three tmp sites are in different functions, and a first-ever write has nothing to copy aside.
+What the ten consecutive step-2 backups support is the narrower claim that **nothing else used THAT
+module instance** over those 4.5 days — not a property of the code. (`settings.json`'s counter 56 is
+EVEN, which fits a different instance with a different offset and does not fit a code-level parity
+rule; that datum is why the stronger claim is withdrawn.) And the counter is **per MODULE INSTANCE,
+not process-global** as a draft said — either several module copies or a reset via the exported
+`_setAtomicWriteCounterForTests` (`:111`); either way it bounds nothing process-wide: the same pid 24895 carries `~/.claude/settings.json` at counter
 **56** stamped Sep 5 13:03 UTC while the statusline set is still at counter **23** on Sep 9 23:21
 UTC. A single monotonic counter cannot do that; Next.js bundling gives several copies of the module.
 So the counter bounds nothing process-wide and is not relied on above.
@@ -119,10 +125,38 @@ itself, and this same block had already proved the process runs more than one mo
 - That makes **two** candidate tick paths, not one: the `server.mjs` timer (runtime source) and the
   ingest route (`.next` bundle). The "second tick" this block worries about is the second of those.
 
-**Still NOT established, and the caveat is unchanged:** none of this shows `runOneTick` firing.
-`deliverAlerts` is imported by BOTH `server-tick.ts:32` and `server-supervisor.ts:25`, so a write
-to `active-alerts.json` does not say which one ran, and the supervisor is documented as alert-only.
-What is shown is that the rotator subsystem is not dormant in a process whose code predates the fix.
+**THE CAVEAT IS NOW LIFTED, AND IT INVERTS: `runOneTick` IS FIRING, ABOUT ONCE A MINUTE, RIGHT
+NOW.** Two earlier drafts said "this does NOT show `runOneTick` firing". It does — four reads,
+none of which had been done:
+
+- **The gate is per-BEAT, not at startup.** `server.mjs:1995` is in a bare `try`, not an `if`; its
+  comment says "Safe to start UNCONDITIONALLY … checked INSIDE each beat". `server-tick.ts:221` is
+  `if (!enabledCheck()) return`, inside the beat, and `:100`'s `oauthTickEnabled` re-resolves the
+  path via `statePath()` on **every call**. So the flag's state on Sep 5 is irrelevant; only its
+  state NOW matters, and this block already confirms it is PRESENT.
+- **The beat calls the tick.** `server-tick.ts:320-325`: `setInterval(() => { void runOneTick()… },
+  intervalMs)`.
+- **The cadence discriminates, and it was sitting in the data unused.** Tick interval defaults to
+  **60_000 ms**; `SUPERVISOR_INTERVAL_MS` is **600_000**. The observed `active-alerts.json` writes
+  are 10 in 8 minutes — **a 10-minute supervisor beat cannot produce that**, and ~1/min is the tick
+  exactly. The "either one could have written it" caveat was true of the importers and false of the
+  cadence.
+
+**So the live process is running `runOneTick` every 60 s against Sep-5-transpiled `tick.ts` — i.e.
+with the OLD 90 threshold, right now.** That is the strongest operational statement on this card.
+
+**AND IT SPLITS THE DEPLOY INSTRUCTION BY PATH — derived, not asserted.** Three drafts framed the
+build three ways ("load-bearing half" → "identically required" → "unchanged") and none derived it
+from the mechanism. Deriving it:
+
+| path | how its code is loaded | what fixes it |
+|---|---|---|
+| the tick (`server-tick.ts` → `tick.ts`) | runtime `await import()` under `tsx`, transpiled from SOURCE at boot | **`pm2 restart` ALONE** — the re-exec re-imports current source and picks up `efb6a509` |
+| the ingest route | the `.next` bundle | **`yarn build` first**, then the restart |
+
+Both are still needed to fix everything, so "run BOTH" stands unchanged as the instruction. What
+changes is why: the restart is what fixes the beat that is demonstrably running, and the build is
+what fixes the route. Neither substitutes for the other.
 
 **What is still NOT established, and must not be read into this:** reaching the route is not the
 same as the stale tick FIRING. `app/api/statusline/ingest/route.ts:176` is a gate that can return

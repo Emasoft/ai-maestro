@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:09:59+0200
+updated: 2026-09-10T06:16:45+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -133,8 +133,12 @@ itself, and this same block had already proved the process runs more than one mo
 - That makes **two** candidate tick paths, not one: the `server.mjs` timer (runtime source) and the
   ingest route (`.next` bundle). The "second tick" this block worries about is the second of those.
 
-**THE CAVEAT IS NOW LIFTED, AND IT INVERTS: a 60 s-cadence writer IS running in the live process,
-RIGHT NOW.** Two earlier drafts said "this does NOT show `runOneTick` firing". Three reads plus —
+**THE CAVEAT IS NOW LIFTED, AND IT INVERTS: a 60 s-cadence writer was running in pid 24895
+throughout 2026-09-10 05:55-06:11 local.** (The adverb "RIGHT NOW" is deliberately gone. This card
+has already been bitten by that tense twice — the 03:31-03:39 window had slid to 03:51-03:59 by
+the next look, and three earlier drafts each carried a now-claim that decayed. A committed
+document carries the WINDOW; the reader compares it to their own clock.) Two earlier drafts said
+"this does NOT show `runOneTick` firing". Three reads plus —
 after an adversarial review correctly ruled the reads insufficient — one live MEASUREMENT:
 
 - **The gate is per-BEAT, not at startup.** `server.mjs:1995` is in a bare `try`, not an `if`; its
@@ -146,15 +150,38 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   intervalMs)`.
 - **The timer really was armed at boot** — not inferred from the bare `try`, read from the log it
   emits: `logs/pm2-out.log` carries `[Startup] OAuth-rotator tick timer started` at
-  **2026-09-05 11:16:51**, matching pid 24895's boot, and `OAuth-rotator tick init failed` appears
-  **0** times. (The review named this as the cheapest available discriminator, and it had been
-  skipped in favour of reasoning about the `try`.)
+  **2026-09-05 11:16:51**, and `OAuth-rotator tick init failed` appears **0** times in
+  `logs/pm2-error.log`. That zero is POSITIVE-CONTROLLED (a review caught it unguarded, in a
+  session where three instruments had already failed): the file is 110 603 lines, last written
+  2026-09-10 06:12:33, and contains 12 `[Startup]` lines and **11 812** `oauth` mentions. The
+  grep reaches the file; the absence is real.
+- **Which process, measured rather than presumed.** pm2 reports pid **24806**; every backup
+  filename carries **24895**. An earlier draft called that "the child, presumably". `ps -eo
+  pid,ppid,lstart,command` settles it: `24806 ← 10551` is `node .../.bin/tsx server.mjs` (the
+  launcher wrapper) and `24895 ← 24806` is `node --require tsx/preflight.cjs --import
+  tsx/loader.mjs server.mjs` — the process actually executing the server, booted 11:16:27, which
+  spawns esbuild at 11:16:51, the same second as the startup line above. Backup pid, startup log
+  and boot time resolve to ONE process.
 - **MEASURED, not argued: a 60 s-cadence writer is running.** 200 s watch on
-  `active-alerts.json` (python `os.stat`, positive control passed), 2026-09-10 06:04-06:08 local:
-  **4 writes**, inter-write gaps **60.15 s · 60.43 s · 47.39 s · 11.93 s**. Two consecutive gaps
-  within half a second of 60_000 ms are a `setInterval(60_000)` signature. Tick interval defaults
-  to **60_000 ms**; `SUPERVISOR_INTERVAL_MS` is **600_000**, which predicts 0-1 writes in that
-  window. **The supervisor alone is excluded by rate**; the tick is the only 60 s timer identified.
+  `active-alerts.json` (python `os.stat`, positive control passed), 2026-09-10 06:04-06:08 local.
+  Read as ABSOLUTE OFFSETS from the first sample rather than as gaps — a review's correction, and
+  it reads STRONGER than the draft it replaces: **0 · 60.153 · 120.579 · 167.972 · 179.903**.
+  Four of the five sit on a ~60.2 s grid to within 0.7 s (0, 60.2, 120.4, 180.6); **167.972 is a
+  lone interloper that does not disturb the grid**. So this is not "a doublet filling a slot" (the
+  previous framing, now withdrawn) — it is a free-running 60 s timer plus one extra write.
+  `SUPERVISOR_INTERVAL_MS` is **600_000**, predicting 0-1 writes in that window: **the supervisor
+  alone is excluded by rate.**
+- **No writer outside the process, and the interloper is inside it too.** Every mtime change maps
+  1:1 to a `lib/json-io.ts` backup stamped pid 24895 — the watch's writes at 04:05/04:06/04:07/
+  04:07 UTC against backups `0405, 0406, 0407, 0407`, doublet included. And the janitor daemon
+  does NOT write this file despite living in its data dir: grepping the janitor plugin tree for
+  `active-alerts` matches only TRDD docs and memory pages, no code.
+- **The counter constrains the interloper's ORIGIN, and a previous draft threw this away.** The
+  backup counters step **+2 uniformly across all ten, the doublet included**
+  (…012479 → 012481 → 012483…). A write from a different module copy would carry that copy's own
+  counter and break the run. So the interloper came from the **same module instance** as the grid
+  writes. That is a weak but real constraint, and the blanket counter walk-back below is about
+  COUNTING writes, not about this.
 
 **THE ARITHMETIC AND THE CADENCE ARGUMENT THAT PRECEDED THIS WERE BOTH WRONG, and the review
 caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the tick exactly":
@@ -170,19 +197,48 @@ Also withdrawn: the earlier claim that `server-tick.ts:32` importing `deliverAle
 the tick. `server-supervisor.ts:25` imports the same symbol — an import shared by both candidates
 cannot select between them. What settles it is the rate, not the import.
 
-**So the live process is running a 60 s beat against Sep-5-transpiled code, right now.** The
-`tick.ts`-specific half — that it is `runOneTick` reaching `tick.ts`, **with the OLD 90
-threshold** — is NOT measured here: the 90 value is INHERITED from an earlier session's read, and
-`tick.ts`'s membership in the runtime-import chain is inferred from `server-tick.ts`'s, not read.
-An earlier draft called this "the strongest operational statement on this card"; it is in fact the
-measured part plus two unmeasured ones, so that label inverted the confidence ordering.
+**So pid 24895 ran a 60 s beat over that window.** Everything beyond that is a separate claim, and
+the summary sentence must not borrow the measurement's confidence for them. Broken out:
 
-One additional caveat the reads do NOT close: `deliverAlerts` performs exactly **one** `updateJson`
-per call (no retry loop, no per-alert write — the backoff gates only the human notification), so
-write-count is a fair proxy for call-count. But the tick's call sits inside the `alertable` branch
-at `server-tick.ts:259`, **not** on every beat. ~1 write/min therefore means the alertable
-condition is holding on essentially every beat — consistent with the fleet being stuck, but a
-narrower claim than "the tick writes every 60 s".
+| component of "the tick is firing on the old threshold" | status |
+|---|---|
+| a 60 s-cadence writer exists in pid 24895 | **MEASURED** (grid above) |
+| pid 24895 is the pm2-managed ai-maestro server | **MEASURED** (`ps` parentage) |
+| the supervisor is not that writer | **MEASURED** (rate) |
+| the janitor daemon is not that writer | **MEASURED** (no code, wrong pid) |
+| the writer is `runOneTick` specifically | **INFERRED** — best remaining candidate, not proven |
+| the `alertable` condition holds every beat | **UNVERIFIED PREMISE** the inference needs |
+| `tick.ts` rides the runtime-tsx chain | **INHERITED** — inferred from `server-tick.ts`, not read |
+| the constant is still **90** | **INHERITED** from an earlier session's read |
+| the process runs `tsx` in FULL mode | **INHERITED** |
+
+An earlier draft called the composite "the strongest operational statement on this card". It is
+the measured part plus four weaker ones, so that label inverted the confidence ordering — which
+is the same defect, in the same place, that the round before it was corrected for.
+
+**"THE TICK IS THE ONLY 60 s TIMER IDENTIFIED" WAS WRONG ON ITS FACE, and the refutation is in the
+line the claim cites.** `server-tick.ts:310-311` reads *"Default 60000 — the janitor daemon's
+cadence"*: the tick's interval was chosen to MATCH another 60 s actor, so a 60 s grid cannot
+select between them by cadence alone. What excludes the janitor daemon here is not cadence but
+the two checks above — it has no code that writes this file, and every write carries the server's
+pid. Corrected claim: **the janitor daemon is excluded as a WRITER by evidence, not by being
+unimaginable as a 60 s timer.** Also in the card's favour, and previously unstated: the
+`.aim-bak-` naming is ai-maestro's own `json-io.ts` convention, so whatever produced these
+backups is a Node process running ai-maestro code — which is independent evidence against a
+Python janitor writer.
+
+**Two caveats the reads do NOT close.** First, `deliverAlerts` performs exactly **one**
+`updateJson` per call (no retry loop, no per-alert write — the backoff gates only the human
+notification). But an earlier draft turned that into "write-count is a fair proxy for
+call-count", **which overreaches**: a backup is produced by `json-io.ts:275` on any
+write-with-backup to that path from ANY module, so the backups count *json-io writes to the file*,
+a SUPERSET of `deliverAlerts` calls. The one-write-per-call fact is about `deliverAlerts`; it is
+not a fact about the file. Second, the tick's call sits inside the `alertable` branch at
+`server-tick.ts:259`, **not** on every beat — so a clean 60 s grid with no dropped points is what
+an UNCONDITIONAL per-beat writer looks like, and what a conditional one looks like only if its
+condition never flickers. "The alertable condition holds on essentially every beat" is therefore
+an **additional premise the tick hypothesis must carry**, not something the measurement taught us.
+It is plausible (a stuck fleet is this card's premise) and it is unverified.
 
 **AND IT SPLITS THE DEPLOY INSTRUCTION BY PATH — derived, not asserted.** Three drafts framed the
 build three ways ("load-bearing half" → "identically required" → "unchanged") and none derived it
@@ -193,19 +249,49 @@ from the mechanism. Deriving it:
 | the tick (`server-tick.ts` → `tick.ts`) | runtime `await import()` under `tsx`, transpiled from SOURCE at boot | **`pm2 restart` ALONE** suffices |
 | the ingest route | the `.next` bundle | **`yarn build` first**, then the restart |
 
-**A restart deploys the WORKING TREE, not a commit** — and the tree is dirty at exactly the file
-this mechanism re-reads. `git status` carries `M server.mjs`, the runtime-loaded half, plus
-`M CLAUDE.md` and `M scripts/aimaestro-governance.sh`. So "`pm2 restart` picks up `efb6a509`"
-describes a commit-shaped deploy of a tree-shaped mechanism: the restart ships `efb6a509`
-**and** whatever is uncommitted in `server.mjs`. The conclusion for the tick chain still holds —
-nothing under `lib/oauth-rotator/` is modified — but the owner running that command gets more
-than the row names, and that is theirs to know before they run it.
+> ### ⛔ DO NOT RUN `pm2 restart` YET — IT WOULD CRASH THE SERVER, NOT DEPLOY THE FIX
+>
+> **A restart deploys the WORKING TREE, not a commit**, and the tree is dirty at exactly the file
+> the restart re-executes. Verified current (`git status --porcelain`, 2026-09-10 06:12, NOT the
+> stale session-start snapshot an earlier draft quoted): `M CLAUDE.md`, `M server.mjs`,
+> `M scripts/aimaestro-governance.sh`.
+>
+> The `server.mjs` diff was UNREAD when a previous draft wrote "`pm2 restart` ALONE suffices". Read
+> now, it is TRDD-7IJ08EUV box 5 — the change deliberately HELD uncommitted pending the operator's
+> dev-token decision — and it is a **fail-fast that runs before `app.prepare()`, deliberately with
+> no try/catch**:
+>
+> ```js
+> const { assertDevModeAbsentInProduction } = await import('./lib/dev-mode-token.ts')
+> assertDevModeAbsentInProduction()
+> ```
+>
+> **Its precondition is MET on this machine right now** (measured 2026-09-10 06:14):
+>
+> | check | value |
+> |---|---|
+> | live process `NODE_ENV` (`ps eww -p 24895`) | `production` |
+> | `~/.aimaestro/governance.json` → `devModeLogin.enabled` | `true` |
+> | `devModeLogin.tokenHash` | 64-char string, present (`createdAt` 2026-08-21) |
+> | `lib/dev-mode-token.ts:174-183` verdict | **THROWS** |
+>
+> So `pm2 restart ai-maestro` today re-imports the modified `server.mjs`, throws at boot, and the
+> server does **not** come back — no tick, no route, nothing. The restart would STOP the beat this
+> card just measured, not fix it.
+>
+> **Unblocking it is an OWNER decision, and both routes are:** revoke the dev token
+> (`DELETE /api/auth/dev-token` — note `PATCH {enabled:false}` is explicitly NOT enough, per the
+> guard's own message), or resolve box 5 of TRDD-7IJ08EUV (commit it, or set the change aside).
+> Nothing here does either.
 
-**The decomposition is the useful half, so state it rather than retreat to "run BOTH":** if only
-the tick matters — the half now measured to be beating every 60 s — **`pm2 restart` alone is
-sufficient**, no build required. `yarn build` is needed only for the ingest route, whose hazard
-remains unmeasured (below). Both together fix everything; the cheaper sufficient action for the
-urgent half exists and is the owner's to choose.
+**The decomposition, with that gate cleared:** if only the tick matters — the half now measured to
+be beating every 60 s — **`pm2 restart` alone is sufficient for the tick chain**, no build
+required. `yarn build` is needed only for the ingest route, whose hazard remains unmeasured
+(below). The scope check behind "sufficient" is the tick's IMPORT CLOSURE, not its directory (an
+earlier draft checked only `lib/oauth-rotator/`, which is the wrong scope — `tick.ts` reaches
+`@/lib/json-io`, `@/lib/statusline-store`, `../ecosystem-constants`, `../janitor-chore-stamp`).
+None of the three modified files is in that closure; `server.mjs` is not in it either, but it is
+the ENTRY POINT, which is why the box above applies regardless.
 
 **This contradicts a documented project rule, deliberately, and here is the boundary.**
 `CLAUDE.md` states flatly that `lib/*.ts` is bundled into `.next` and needs `yarn build`. That

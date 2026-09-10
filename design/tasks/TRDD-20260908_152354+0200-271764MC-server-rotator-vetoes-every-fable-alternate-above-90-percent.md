@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:28:37+0200
+updated: 2026-09-10T07:35:05+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -381,29 +381,41 @@ PAYLOAD instead of the filenames.**
 > | supervisor | `code: 'cookie-leg-stuck'` in a finding literal | `supervisor.ts:268` |
 >
 > `deliverAlerts` writes the findings its caller hands it, and the tick hands it a ONE-element
-> array built from that ternary. No branch of it can produce `cookie-leg-stuck`, so **a tick beat
-> cannot have produced that write**; the supervisor is the only site that emits the code
+> array built from that ternary. No branch of it can produce `cookie-leg-stuck`, so **no tick
+> emission can produce that CONTENT CHANGE**; the supervisor is the only site that emits the code
 > (`grep -rn cookie-leg-stuck lib` → 6 hits, of which `server-tick.ts:230`, `supervisor.ts:142`,
 > `alert-delivery.ts:6` and `:189` are comments, leaving `supervisor.ts:204` (a registry) and
 > `:268` (the emission)).
 >
-> **Three things the "only emission" half rests on, each now measured, because a draft rested it
-> on a grep with ZERO RECALL:**
+> **FILE vs CONTENT — the distinction a draft blurred, and it matters because of the retry
+> loop.** `updateJson`'s staleness retry `continue`s ABOVE `keepBackup` (measured earlier on this
+> card: +2 counter, two backup FILES from ONE call), and the 200 ms sleep keeps both inside one
+> minute stamp. So a single tick call that lost a staleness race to the supervisor would emit the
+> doublet's two files itself — observationally identical to two separate calls, and NOT excluded
+> by the adjacency argument, since under that reading the doublet IS the adjacent pair. A draft
+> wrote "a tick beat cannot have produced that write", which is false on the FILE reading. What
+> the emission sites license is the CONTENT claim, and it holds under both readings: whoever
+> wrote the file, the `cookie +1` recorded in it came from the supervisor, because no tick
+> emission can produce that code. Cadence is unaffected either way — a retry stamps `lastSeenAt`
+> once, on the attempt that lands.
 >
-> - `grep -n 'deliver(' server-tick.ts` → **one hit, `:265`**. That is the exhaustiveness check.
+> **Three things the "only emission" half rests on, each now measured, because a draft rested it
+> on a grep with ZERO RECALL. The warrant is the THREE TOGETHER, not any one of them** — a draft
+> called the `deliver(` grep "the exhaustiveness check" on its own, which overstates a needle
+> tuned to one syntactic form, the same fault one level up:
+>
+> - `grep -n 'deliver(' server-tick.ts` → **one hit, `:265`**. This BOUNDS the local's direct
+>   calls, and on its own it is blind to an alias or a `.call` — which is why the bare-identifier
+>   sweep below is part of the warrant and not a flourish.
 >   A draft instead cited `grep -n "code:"`, which returned four hits — a signature, a type, a
 >   comment, a parameter annotation — and **not one of them was an emission**. It could not have
 >   been: the builder is `const code = …` and the call is `deliver([{ code, message: … }])`, using
 >   shorthand, so neither line contains the token `code:`. The needle scored **0/1 on the class it
 >   was cited to enumerate**, and its four confident hits made that look like a survey. Confirmed
 >   by re-running it against the two lines in isolation: 0 matches. **A review fork caught this,
->   not I.** A draft closed the bullet with "this card's own filed lesson firing one round after
->   it was filed" — struck, because naming a failure as an instance of a known pattern makes it
->   read as handled and it was not. The uncomfortable finding is the other one: the lesson (*one
->   construct has two syntactic forms and a needle that knows one reports the other as ABSENT*)
->   had been filed into a file injected on EVERY TURN, and one round later I wrote a needle keyed
->   on one syntactic form. **That is evidence about the lesson, not about this card** — a lesson
->   in the always-injected file did not fire at the moment of need.
+>   not I.** (Two paragraphs analysing why the always-injected lesson failed to fire are struck
+>   from here: real, but a finding about the lessons system, not about a rotator veto — the same
+>   category as the commit-hygiene bullet struck last round. It is in `ba1e6a3b`'s message.)
 > - `grep -rn deliverAlerts` over `lib app services scripts tests` → exactly **two production call
 >   sites**, `server-tick.ts:259` and `server-supervisor.ts:110`. A draft left `server.mjs` — the
 >   file that imports the rotator at runtime — outside that scan. Now scanned: **zero**
@@ -458,11 +470,32 @@ PAYLOAD instead of the filenames.**
 > `startOauthRotatorTick` (`server-tick.ts:320-326`): `const intervalMs = opts.intervalMs ??
 > 60_000`, feeding `setInterval(() => { void runOneTick().catch(() => {}) }, intervalMs)`; the
 > options interface (`:309-312`) declares exactly one field, `intervalMs?: number`, documented
-> "Default 60000 — the janitor daemon's cadence". **60 s is the beat, by declaration.** Both
-> windows below are therefore CONFIRMATIONS of a declared constant, not the sole basis for it —
-> which is what they are worth, and it is more than the card had been claiming for them. This is
-> the same error as `TICK_ALERT_PREFIXES`, third instance: the answer was in the file, unread,
-> while evidence adjacent to it was argued over.
+> "Default 60000 — the janitor daemon's cadence". **And the call site takes the default:**
+> `server.mjs:1996` is `startOauthRotatorTick()`, no arguments.
+>
+> **A draft stopped one line short of that and wrote "60 s is the beat, by declaration", calling
+> the windows mere CONFIRMATIONS of it — which was the fourth instance of the very error that
+> paragraph names itself as the third instance of.** `?? 60_000` is a DEFAULT; a default is not a
+> running period until the call site is read, and the draft cited only the `import` line at
+> `:1995`, never the call at `:1996`. The dependency also ran backwards: the windows are what
+> MEASURED the live value; the declaration is what they agree with. The honest form is the
+> three-part one — *the declared default is 60 s, the call site overrides nothing, and two
+> independent windows measure the live value at 60 s.*
+>
+> **The windows still do work the declaration cannot**, which is the other half a draft gave
+> away: this card measured **two** live ai-maestro `server.mjs` processes (24806, 24895). Two
+> 60 s timers, phase-offset and serialized by the machine-wide `withTickLock`, would write at a
+> SUB-60 s rate. Observing 60 s rules that out; no reading of the source can.
+>
+> **And the timer is not the only production caller.** `grep -rn runOneTick` tree-wide (round 8
+> scoped it to `server-tick.ts` alone and so could not have seen this) finds a second:
+> `app/api/statusline/ingest/route.ts:190`, `void runOneTick().catch(() => {})` — an EVENT-driven
+> beat in a request path, gated by `tickAttemptAllowed()` (`:176`) and `isNearLimit` (`:188`).
+> It does not disturb the doublet (it is still the tick module's emission, so still prefixed) and
+> it does not reopen `deliverImpl` (also called with NO arguments, so `deps` is `{}` there too).
+> It does bear on cadence: the clean 60 s spacing means no ingest-triggered beat landed inside
+> that window, or the attempt floor gated every one that tried. That is a property of the window,
+> not of the beat in general.
 >
 > **The same read closes the `deliverImpl` question STRUCTURALLY**, replacing round 7's
 > token-absence argument. `runOneTick(deps: RunOneTickDeps = {})` (`:199`) is called at `:323` as
@@ -476,8 +509,11 @@ PAYLOAD instead of the filenames.**
 > is also clean: `grep -n '\bdeliver\b' server-tick.ts` → three hits, a comment at `:41`, the
 > binding at `:258`, the call at `:265` — no alias, no `.call`, no passing the value elsewhere.
 >
-> **The tick period is NINE writes, not ten** — the identification pays for itself here by letting
-> the interloper be excluded from the arithmetic instead of averaged into it. Consecutive
+> **The tick period is NINE writes, not ten.** A draft said "the identification pays for itself
+> here" — overstated by one notch: **the exclusion is forced by the DATA, not licensed by the
+> identification.** Differencing reauth's `lastSeenAt` across all ten backups yields a **0** at
+> the supervisor write; it announces itself, and any reader would drop it. The identification
+> EXPLAINS the zero, it is not needed to FIND it. Consecutive
 > `lastSeenAt` deltas across the nine tick writes: **60, 61, 60, 59, 60, 60, 60, 60 s**. Nine
 > writes give EIGHT deltas; eight are listed. **These are tick-to-tick only because the supervisor
 > write was excluded BEFORE differencing, which is exactly what the identification licenses** —
@@ -820,20 +856,24 @@ of this block:
   to a rules file (injected every turn, strong passive recall) and NOT to memgrep, so they are
   absent from symptom search; that is a choice, not a default.
 
-STOPPING RULE for this STATE block, adopted after two consecutive reviews faulted the accretion
-and a third proposed the test. A further round is warranted ONLY if it (1) removes a claim whose
-evidence does not support it, (2) closes a gap by measurement, or (3) changes what the owner
-would do. **Nothing has met (3) since round 1** — the operational finding has been actionable
-and unchanged throughout, and every round has pushed it further down a longer document. A fix
-that only changes how an already-correct claim is WORDED fails all three and belongs in a commit
-message. Round 8 shipped two items under (1) — the throw-path justification, which was a wrong
-claim introduced by the previous round's fix — and (2) — the declared interval and the
-structural closure of `deps`. **Round 9 is not to be run as an edit pass**: record any further
-review findings as a list under one `unreviewed residue` heading and leave them there unless one
-meets (1), (2) or (3). Round 6's commit-hygiene finding (it bundled this card with the
-always-injected rules file, failing the two-revert test) lived here for one round and is struck
-under this rule — it is in `e4219dbf`'s message, which is where people who read commits will
-find it.
+STOPPING RULE for this STATE block. A further round is warranted ONLY if it (1) removes a claim
+whose evidence does not support it, (2) closes a gap by measurement, or (3) **changes the card's
+operational recommendation or an acceptance box.** A wording change to an already-correct claim
+fails all three and belongs in a commit message.
+
+Test (3) was drafted as *"changes what the owner would do"* and is replaced: the owner has said
+nothing this session, so that phrasing asks for a prediction about a person and can be
+rationalised either way. The version above is a fact about the artifact. **Nothing has met it
+since round 1** — the operational finding has been actionable and unchanged throughout, and
+every round has pushed it further down a longer document.
+
+**The rule's first act was to be violated by the commit that carried it, and saying so is the
+only thing that keeps it from being decorative.** Round 8 presented four edits as compliant;
+its item 3 (an attribution and wording change) failed all three tests and shipped anyway. Round
+9 ships only test-1 and test-2 items and strikes two meta passages.
+
+**Round 10 is not to be run as an edit pass**: record further review findings as a list under
+one `unreviewed residue` heading unless one meets (1), (2) or (3).
 - **DONE — lesson 1** (`## Claims about the codebase`): labelling an unverified claim is
   disclosure only when the conclusion still needs it — delete the claim and see whether the
   conclusion weakens; if it does not, the label is retention dressed as honesty.

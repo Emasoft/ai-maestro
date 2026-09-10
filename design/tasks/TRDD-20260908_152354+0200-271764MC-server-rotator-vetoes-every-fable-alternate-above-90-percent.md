@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T07:49:53+0200
+updated: 2026-09-10T07:56:59+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -410,9 +410,12 @@ PAYLOAD instead of the filenames.**
 > on disk records the attempt count. Round 9's file-vs-content split is not a redundant answer to
 > a question the data had closed; it is the ONLY thing that closes it.
 >
-> **The one observable that WOULD have discriminated does not exist, and the code comment claims
-> it does.** A 200 ms backoff separates a retry's two backups where 60 s separates two beats', so
-> a sub-second timestamp in the backup filename would settle the doublet outright. `keepBackup`'s
+> **The one observable that MIGHT have discriminated does not exist, and the code comment claims
+> it does.** A retry's two backups are ~200 ms apart, so a sub-second stamp would SOMETIMES
+> separate them from a tick-plus-supervisor pair — only sometimes, because those are independent
+> writes that could themselves land milliseconds apart, and a draft wrote "would settle it
+> outright" against a two-tick-beat pair nobody proposed. Minute precision never separates them.
+> `keepBackup`'s
 > stamp is `new Date().toISOString()…slice(0, 15)` (`:269`) — 15 characters is `YYYY-MM-DD_HHMM`,
 > **minute precision**. The comment two lines below it says *"The stamp is second-precision"* and
 > reasons about ordering "a burst inside one second"; the expression it describes cuts four
@@ -470,7 +473,9 @@ PAYLOAD instead of the filenames.**
 > `reauth-needed`", which assumed the conclusion; the emission sites make it unnecessary.
 >
 > **Rate check — per counter, against its OWN `firstSeenAt`, which is the form that survives.**
-> reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)**. cookie: 143 229 s ÷
+> reauth: 158 267 s elapsed ÷ 60 s = 2638 expected, **2463 observed (93%)** — and 2638 is an
+> UPPER bound on attempts, not merely an estimate, because the attempt floor permits no more
+> (below), so the ~175 shortfall is a MINIMUM. cookie: 143 229 s ÷
 > 600 s = 239 expected, **238 observed (99.6%)**. Two independent confirmations, each of one beat
 > against its own nominal period — **and confirmations of the period's SCALE only, silent on its
 > REGULARITY.** With the restart story withdrawn (below), reauth's 7% shortfall is unexplained,
@@ -530,30 +535,34 @@ PAYLOAD instead of the filenames.**
 > firing a beat the timer had already covered. It cannot clamp the timer, so the timer is the
 > only thing the 59-61 s spacing can be measuring. **Round 9's three-part warrant stands intact.**
 >
-> **This is the `TICK_ALERT_PREFIXES` error, third instance, on the same file** — a constant's
-> NAME and VALUE reasoned from without reading its use sites. Round 6 made it on the constant at
-> `:47` and wrote the lesson; round 10 made it on the constant at `:152`. The tell both times was
-> a coincidence that looked like a mechanism (a prefix list that matches the emitted codes; a
-> floor that matches the period), and both times the refutation was one grep for the readers. The
-> two round-10 findings that SURVIVED are the two that came from reading a call path.
+> **Sourced, after a draft asserted it from a two-file grep.** Round 11 wrote "exactly one reader
+> in the tree" having run `grep -n` over two files; the tree-wide sweep it also issued errored
+> before printing, so the universal was unsourced at the moment it shipped — round 10 wrote a
+> universal where it had a coincidence, round 11 wrote one where it had a particular. The sweep
+> has now run: `grep -rn tickAttemptAllowed lib app services scripts server.mjs tests` → **11
+> hits — the definition, one import, ONE production reader (`route.ts:176`), and eight in
+> `tests/unit/oauth-rotator-tick-attempt-floor.test.ts`.** Nothing else in the tree reads it.
 >
-> **What the floor DOES buy, which is the opposite of what round 10 said about the residual.**
-> Because every timer beat stamps, an ingest beat can only pass `tickAttemptAllowed` in a window
-> the timer has already MISSED. So ingest cannot inflate the expected write count above the
-> single-producer figure — it can only backfill gaps. The 93% denominator is therefore sound, and
-> the 175-beat shortfall is a MINIMUM: some of the writes that did land may be ingest covering
-> for a timer that missed. Round 10's "the denominator is now unknown too" was wrong in
-> direction, and its `setInterval`-jitter candidate for the missing beats dies with the floor —
-> a beat the timer never submits to the floor cannot be refused by it.
+> **The residual argument is REPLACED by arithmetic, because the mechanism a draft proposed is
+> refuted by the project's own test.** Round 11 wrote that ingest "can only backfill windows the
+> timer MISSED", which equivocates: a window the timer NEVER FIRED IN, versus one where it fired
+> and wrote nothing. The 175 shortfall counts the second kind, and `stampTickAttempt()` runs
+> BEFORE the gates and before `withTickLock` — so a beat dropped by the lock, refused by the
+> flag, or thrown out still stamps, and ingest is locked out of exactly the windows under
+> investigation. `oauth-rotator-tick-attempt-floor.test.ts:67-76` pins this directly (*"stamps on
+> ENTRY even when the R16 gate is off and no work is done"*, then asserts `tickAttemptAllowed()`
+> is `false`), with a recorded three-mutation neuter run at `:110-130`. **What the denominator
+> actually rests on needs no mechanism:** nothing can attempt more often than the floor permits,
+> so expected ≤ elapsed/60, and the timer's own shortfall is ≥ 2638 − 2463 = 175 whatever ingest
+> did. The bound is sound; the story is withdrawn. Round 10's `setInterval`-jitter candidate dies
+> too — a beat the timer never submits to the floor cannot be refused by it.
 >
 > **The two-processes narrowing SURVIVES, and it rests on the lock, not the floor.**
 > `withTickLock` returns null when the lock is held rather than queueing, so a losing process's
 > beat is DROPPED and writes nothing. Two live timers therefore still look like one, and the
 > honest claim is narrower than round 9's: *the windows rule out a second live timer whose beats
 > both reach `deliverAlerts`.* Near-zero phase (both processes started by one `pm2 restart`) is
-> not excluded either. (The floor is per-process — `Symbol.for` is keyed in the cross-realm
-> registry, which `:154-162` explains is there to unify the TWO MODULE COPIES inside one FULL-mode
-> process, not two processes — but with neither timer reading it, that is now beside the point.)
+> not excluded either.
 >
 > **The same read closes the `deliverImpl` question STRUCTURALLY**, replacing round 7's
 > token-absence argument. `runOneTick(deps: RunOneTickDeps = {})` (`:199`) is called at `:323` as
@@ -944,14 +953,11 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
   declared namespace and its docstring asserts the correspondence; its one use site is the reap
   filter. Read who calls it before deriving anything from it.
 
-**Round 11 exists because round 10 shipped a false headline, and it is the round the stopping
-rule was written for: one claim withdrawn (test 1), one gap closed by measurement (test 2), and
-everything else listed below unwritten.** Round 10's own closing line claimed it "ran as the rule
-allows" while carrying a paragraph that said of itself that it was *"worth stating rather than
-re-deriving"* — an admission of failing all three tests, in the same block as the compliance
-claim. That paragraph is struck, as is round 10's two-round historiography of the card's earlier
-cadence errors. This is the round-8-item-3 failure repeating, and a self-certification of
-compliance is worth nothing next to the artifact.
+**No round certifies its own compliance here again.** Rounds 8, 10 and 11 each closed with a line
+claiming to have followed the stopping rule, and each was carrying an item that failed it; round
+11 struck round 10's self-certification and wrote its own in the same commit. The rule is checked
+against the artifact by whoever reads it next, and a round that needs to assert its compliance
+has already told you where to look.
 
 ### unreviewed residue
 
@@ -959,15 +965,29 @@ compliance is worth nothing next to the artifact.
   narrowed two-processes claim above rests on it.
 - Whether the two live `server.mjs` processes started at near-zero phase (one `pm2 restart`) is
   not measured, and near-zero phase is the case the windows cannot exclude.
-- The 175-beat shortfall still has no measured cause; it is now a MINIMUM rather than a point
-  estimate, since ingest beats can only backfill windows the timer missed.
+- The 175-beat shortfall has no measured cause, and THREE successive rounds attached a story to
+  it that was then withdrawn — restarts (round 9), jitter plus an unknown denominator (round 10),
+  ingest backfill (round 11). The card's own round-9 text named this failure when it withdrew the
+  first: *"an unmeasured story attached to a residual, and the kind that ends an investigation."*
+  The honest state is the bare number with the arithmetic bound above and no mechanism. **A
+  fourth story is not warranted; a measurement is.**
+- **A candidate OPERATIONAL finding, unmeasured, and deliberately not headlined:** a beat dropped
+  by `withTickLock` covered nothing and still stamps the floor, which then refuses the ingest
+  push-trigger for a full 60 s. The trigger exists to let a struggling fleet rotate SOONER, and
+  the stamp-before-gates comment justifies itself by "an ingest arriving just after a beat would
+  fire a second run the timer had already covered" — which is exactly what a dropped beat did not
+  do. This is the first thing in seven rounds that could touch the operational half, and it is a
+  READING, which is what rounds 10 and 11 each headlined and had to withdraw.
 - The ingest path's own beats are unmeasured: `isNearLimit` gates them, and nothing here counts
   how often it passed over the 44 h.
-- The `keepBackup` stamp comment (`json-io.ts:270`) is wrong about its own expression. That is a
-  defect in `json-io.ts`, not in the rotator, and belongs in its own card rather than here.
-- Nothing in rounds 5-11 moved the operational finding, which has been unchanged since round 1.
-- No claim in rounds 5-11 is pinned by a test. Every one is a reading of a running system, so
-  "measured" here never means "guarded against regression".
+- The `keepBackup` stamp comment (`json-io.ts:270`) is wrong about its own expression — a wrong
+  premise under a correct rule (padding matters across a MINUTE-wide burst, not a second-wide
+  one). A `json-io.ts` defect, not a rotator one. **No card owns it and none is being filed by
+  this round; it is being left, knowingly.**
+- Nothing in rounds 5-12 moved the operational finding, which has been unchanged since round 1.
+- The floor's own behaviour IS pinned, by `oauth-rotator-tick-attempt-floor.test.ts` with a
+  recorded neuter run. Every OTHER claim in rounds 5-12 is a reading of a running system, so
+  "measured" there never means "guarded against regression".
 
 COLUMN: `dev`, unchanged, and the owner's call. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.

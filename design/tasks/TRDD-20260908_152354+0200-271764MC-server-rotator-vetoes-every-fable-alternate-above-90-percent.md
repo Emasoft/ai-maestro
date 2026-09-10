@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T06:23:43+0200
+updated: 2026-09-10T06:41:57+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -180,9 +180,15 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   is an interloper that does not disturb it. Not "a doublet filling a slot" (withdrawn).
   `SUPERVISOR_INTERVAL_MS` is **600_000**, predicting 0-1 writes in that window: **the supervisor
   alone is excluded by rate.**
-- **The stronger cadence instrument is the BACKUP STAMPS, not the watch** — nine consecutive
-  one-per-minute stamps `0403…0411` plus one doublet beats four intervals, and a draft leaned on
-  the weaker one.
+- **The two instruments measure DIFFERENT properties — a draft's "the stamps are stronger" was an
+  over-correction that demoted the card's own mechanism evidence.** Nine consecutive one-per-minute
+  stamps `0403…0411` establish **RATE over 9 minutes**, on a larger sample. Only the sub-second
+  watch establishes **PERIODICITY** — and periodicity is exactly what distinguishes a
+  `setInterval(60_000)` from a cron-like per-minute trigger or a jittery 45-75 s writer, which
+  minute-resolution stamps cannot tell apart. Demoting the watch traded precision for sample count
+  without saying so. Both are needed: the stamps for rate, the watch for mechanism. A
+  least-squares fit over the four on-grid points puts the period at **60.0135 s** (intercept
+  0.139, max residual **0.413 s**) — within ~14 ms of 60.000.
 - **No writer outside the process, over the observed window.** Each mtime change in the 200 s
   watch has a matching `lib/json-io.ts` backup stamped pid 24895 (writes at
   04:05/04:06/04:07/04:07 UTC against backups `0405, 0406, 0407, 0407`). Stated as a **window
@@ -199,9 +205,15 @@ after an adversarial review correctly ruled the reads insufficient — one live 
   have to coincidentally sit at 012481. But `alert-delivery` is imported by BOTH `server-tick.ts`
   and `server-supervisor.ts`, and both reach the SAME `json-io` instance in the same bundle, so
   "same module instance" **cannot discriminate the tick from the supervisor or any other
-  in-process caller**. It excludes a different process or a different bundle copy — exactly what
-  the pid stamp already excluded. So this does NOT narrow the interloper's source, and the
-  previous draft presenting it as a constraint on that was an over-read.
+  in-process caller**. So this does NOT narrow the interloper's source, and the previous draft
+  presenting it as a constraint on that was an over-read.
+  **One residue is NOT re-derived from the pid, and a later draft over-corrected by saying it
+  was.** The step is +2 with **no gaps at all** across the ten, so this module instance performed
+  **no other `json-io` write, to any file, in those nine minutes** — the counter is shared across
+  every file the instance writes, so a write to some other path would have consumed a value and
+  left a gap. The pid stamp cannot say that: it says who wrote THESE ten, not what else that
+  writer did. It is a small fact and it is a real one — it is what rules out the alternative that
+  the interloper came from the same module doing unrelated work on a different file.
 
 **THE ARITHMETIC AND THE CADENCE ARGUMENT THAT PRECEDED THIS WERE BOTH WRONG, and the review
 caught both.** The earlier draft said "10 writes in 8 minutes, and ~1/min is the tick exactly":
@@ -303,35 +315,76 @@ from the mechanism. Deriving it:
 > | 2 | `NODE_ENV` in the process pm2 STARTS | pm2's **cached** env (`pm2 jlist` → `pm2_env.NODE_ENV`), not just the running process | `production` |
 > | 3 | `loadGovernance()` surfaces the record | read `lib/governance.ts:117-127`: returns defaults only when `version !== 1`; the file's `version` **is** `1` | gate passes |
 > | 4 | the predicate itself | **EXECUTED**: `tsx -e "getDevTokenStatus()"` → `{"enabled":true,"issued":true,…}` | predicate **true** |
-> | 5 | pm2's behaviour on a boot throw | `pm2 jlist`: `autorestart: true`, `max_restarts: 10000`, `min_uptime: 10000` ms | **crash-loop** |
+> | 4b | **the GUARD itself** | **EXECUTED with a negative control**: `NODE_ENV=production … assertDevModeAbsentInProduction()` → **THREW** (`FATAL: a dev-mode login token is present (enabled=true, issued=true)…`); same call with `NODE_ENV` unset → **returned normally** | guard **fires** |
+> | 5 | pm2's SETTINGS for a boot throw | `pm2 jlist`: `exec_mode: fork_mode`, `autorestart: true`, `max_restarts: 10000`, `min_uptime: 10000` ms, `exp_backoff_restart_delay: 1000`, `restart_delay: null` | **crash-loop** (see the ordering caveat below — the settings are measured, pm2's *behaviour* under them is not) |
+>
+> Row 4b exists because row 4 was not enough, and a review said so: executing
+> `getDevTokenStatus()` runs the guard's INPUT, not the guard. This round's whole thesis is
+> *execute, don't reimplement* — stopping one function short of the actual guard was the same
+> defect one layer in. The negative control is what makes 4b evidence rather than a coincidence:
+> it shows the throw is the `NODE_ENV` gate discriminating, not the call failing for an unrelated
+> reason. Row 4 is kept because it is the env-independent half and its `createdAt`
+> (`2026-08-21T16:39:34.400Z`) matches the raw file read byte-for-byte — which is what proves both
+> processes resolved the SAME file, and in this codebase that is not free: `rotatorRoot()`
+> resolves to the janitor plugin's data dir, not `~/.aimaestro`.
 >
 > Link 2 deserves its reason stated rather than assumed: `ps eww -p 24895` reads the environment
 > pm2 APPLIED at the last start, and a plain `pm2 restart` replays that same cache — so it is
 > evidence about the right process. It would break only if the cache had been mutated since (an
 > env edit followed by `pm2 save`).
 >
-> `HASH_HEX_LEN` (= 64, `lib/dev-mode-token.ts:48`) turns out to be **immaterial**: the guard is
-> `status.enabled || status.issued`, and `enabled` alone is `true`. An earlier draft put the
-> hash length in the table as though it were load-bearing.
+> `HASH_HEX_LEN` (= 64, `lib/dev-mode-token.ts:48`) is **immaterial to the CURRENT verdict** — the
+> guard is `status.enabled || status.issued` and `enabled` alone is `true` — but it is
+> **load-bearing for the PATCH claim below**, and a draft that flatly called it "immaterial"
+> over-corrected into a contradiction with its own next paragraph. If `tokenHash.length !== 64`
+> then `issued` is false, and after a `PATCH {enabled:false}` the guard would NOT fire, making
+> PATCH sufficient. Both claims need the constant; only one needs it today.
 >
 > **And our own read confirms the error message's advice, which the draft merely quoted.** Since
 > `issued` is "tokenHash present at the right length", `PATCH {enabled:false}` leaves `issued`
 > true and the guard still fires. Only a revoke clears both.
 >
-> So `pm2 restart ai-maestro` re-imports the modified `server.mjs`, throws before `app.prepare()`,
-> and — because `pm2 restart` (fork mode, not `reload`) kills the old process BEFORE starting the
-> new one, and does not roll back — the server does not come back. Under `autorestart` it
-> crash-loops, every attempt well under the 10 s `min_uptime`, until it lands in `errored`. The
-> restart would STOP the beat this card measured, not fix it. (This conclusion holds whether or
-> not `autorestart` is set; the flag decides *crash-loop vs stopped*, not *down vs up*.)
+> So `pm2 restart ai-maestro` re-imports the modified `server.mjs` and throws before
+> `app.prepare()`. What follows from that mixes two kinds of claim, and a draft ran them together
+> inside a box framed as measurement — so they are separated here:
+>
+> - **MEASURED** — row 5 above, straight from `pm2 jlist`.
+> - **GENERAL pm2 BEHAVIOUR, asserted, not established by anything on this card**: that `restart`
+>   stops the old process *before* starting the new one, and does not roll back to the previously
+>   running code when the new boot fails. It is true of pm2, and R1-R6 do not show it — row 5
+>   gives the config and says nothing about ordering. Reaching for `reload` as the safer verb does
+>   not change the outcome: pm2's zero-downtime reload needs **cluster** mode, and this app is
+>   `exec_mode: fork_mode` (measured), where `reload` degrades to a restart.
+>
+> Under those settings the throw is a crash-loop, every attempt well under the 10 s `min_uptime`.
+> It does NOT promptly land in `errored`, and a draft that said "until it lands in `errored`"
+> implied a bound it never computed: `exp_backoff_restart_delay: 1000` grows the gap toward what
+> `ecosystem.config.js:84-87` calls a ~15 s cap (the repo's claim about pm2, not a measurement
+> here), so at ~4 attempts/min the 10000-restart budget is roughly **two days** away. For the
+> owner the difference is immaterial — the server is DOWN either way, and the restart would STOP
+> the beat this card measured rather than fix it. (Down-vs-up does not depend on `autorestart`;
+> that flag decides only *crash-loop vs stopped*.)
 >
 > **Unblocking it is an OWNER decision, and both routes are:** revoke the dev token
 > (`DELETE /api/auth/dev-token` — `PATCH {enabled:false}` is NOT enough, confirmed above), or
 > resolve box 5 of TRDD-7IJ08EUV. Nothing here does either.
 >
 > **IF THE COMMAND HAS ALREADY BEEN RUN** — the line this box was missing, and the cheapest one on
-> the card: `git stash push server.mjs && pm2 restart ai-maestro` restores service immediately
-> without touching the owner's decision (the change is preserved in the stash, not discarded).
+> the card: `git stash push server.mjs && pm2 restart ai-maestro` restores service immediately.
+> Three things the first version of this line got wrong or left out:
+>
+> - **It is NOT "without touching the owner's decision".** Box 5 is held uncommitted *deliberately*,
+>   so the dirty tree IS the decision, and stashing mutates exactly that. Accurate: it **defers**
+>   the decision without **discarding** the change.
+> - **Name the trade.** After the stash the server comes back up with a live dev-mode login token
+>   present on a production build **and the guard gone** — precisely the condition box 5 exists to
+>   prevent. That is the right emergency choice (service now, security debt named), but it is a
+>   choice, not a free undo.
+> - **Recover it explicitly:** `git stash pop stash@{0}`, or reference it by message. A bare
+>   `git stash pop` takes the wrong entry when other stashes exist.
+>
+> RULE 0 is satisfied: `git stash` is among its named safe tools, nothing is destroyed, and this
+> is advice for the OWNER to run — not an action taken here.
 
 **The decomposition, with that gate cleared:** if only the tick matters — the half now measured to
 be beating every 60 s — **`pm2 restart` alone is sufficient for the tick chain**, no build
@@ -342,11 +395,35 @@ required. `yarn build` is needed only for the ingest route, whose hazard remains
 wrong scope, since `tick.ts` reaches outside it. A second called its replacement an "IMPORT
 CLOSURE" when it was a depth-1 grep over two files, demonstrably incomplete (`./alert-delivery`
 imports `@/lib/json-io`, which never appeared in the list) and blind to dynamic `await import()`.
-**Neither was needed.** The modified set is `CLAUDE.md` (markdown), `scripts/aimaestro-governance.sh`
-(shell), and `server.mjs` (the ENTRY POINT, which *imports* the tick rather than being imported by
-it). None of the three can appear in a TypeScript import closure at any depth, by file type. That
-retires the depth question outright — and it is why the stop box above applies regardless: the
-entry point is not in the closure, but it is what the restart executes.
+A third draft then said "none of the three can appear in a TypeScript import closure at any depth,
+**by file type**" — which sounds airtight and **answers a narrower question than the one that
+matters**. Two defects, and a review named both: "by file type" is not categorical (`.md`/`.sh`
+enter JS graphs routinely via raw/text loaders — it holds HERE because the runtime is `tsx`, which
+will not resolve them absent loader config, a fact about the runtime, not the extension); and an
+import closure **cannot see a shelled-out script**, while `server-tick.ts:26` imports
+`child_process` and one of exactly three modified files is a shell script. That is the most
+obvious runtime-dependency overlap on the board, and the file-type argument is structurally blind
+to it.
+
+**The honest form has TWO conjuncts, and both are now checked:**
+
+1. *No modified file is reachable by import.* `CLAUDE.md` is markdown, `aimaestro-governance.sh`
+   is shell, and `server.mjs` is the ENTRY POINT — it imports the tick rather than being imported
+   by it. (Also: "TypeScript import closure" was the wrong term for a graph rooted at an `.mjs`
+   file traversed by tsx.)
+2. *The tick execs and reads none of them at runtime* — **the conjunct no draft had checked.**
+   `grep -rn "aimaestro-governance" lib/oauth-rotator/` returns nothing, and that negative is
+   POSITIVE-CONTROLLED (a first attempt was not: its control also returned nothing, proving
+   nothing). The string appears in **9** files repo-wide — `install-agent-cli.sh`,
+   `scripts/aimaestro-{trdd,teams,governance,portfolio,continuity}.sh`, two unit tests — and in
+   **zero** files under `lib/`. Every spawn target in the whole rotator tree is accounted for:
+   `secret-tool` (`live.ts:110,203`), `unbrowse` (`reauth-drive.ts:118`), `pgrep -x claude`
+   (`server-tick.ts:113`), `powershell` (`safe-storage.ts:652,676`), plus `safe-storage`'s
+   parameterised keychain-CLI `argv[0]` sites. None is the governance script.
+
+So the modified shell script is outside the tick's effective dependency set by BOTH routes. The
+stop box above still applies regardless: the entry point is in neither closure, and it is what the
+restart executes.
 
 **This contradicts a documented project rule, deliberately, and here is the boundary.**
 `CLAUDE.md` states flatly that `lib/*.ts` is bundled into `.next` and needs `yarn build`. That

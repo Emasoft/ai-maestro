@@ -3,7 +3,7 @@ trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-09-04T17:35:09+0200
+updated: 2026-09-10T09:49:56+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -272,12 +272,12 @@ re-test by creating an agent.
 
 ## Acceptance
 
-- [ ] `lib/agent-workdir-policy.ts` exists as the single authority (`isAuthorizedAgentWorkdir` / `assertAuthorizedAgentWorkdir`), used by all 4+ call sites (createSession, boot-restore, browse-dir, ChangeFolder, importAgent).
-- [ ] E2E: a MAINTAINER agent adopting a repo genuinely outside `~/agents/` gets a starting tmux session (not just a registry write) — re-confirm on a fresh run.
+- [x] `lib/agent-workdir-policy.ts` exists as the single authority, used by all 5 call sites named in this box (createSession, boot-restore, browse-dir, ChangeFolder, importAgent) — 2026-09-10. Naming: the card said `isAuthorizedAgentWorkdir`; the shipped export is `checkAuthorizedAgentWorkdir` (RUNTIME verb — verifies against the registry) plus `checkAdoptableWorkdir` (CREATION verb — pure path policy, no agent exists yet). The two verbs are deliberately distinct (see the 2026-08-22 note above); folding them together would let an existing agent's adopted external folder authorize a NEW agent there. ChangeFolder (`element-management-service.ts` G01b) and `importAgent` (`agents-transfer-service.ts`) were the two CREATION-shaped sites still hand-rolling the `~/agents/` predicate inline — both now route through `checkAdoptableWorkdir(dir, false)`. `createSession`/`agent-runtime.ts`, `boot-restore-service.ts`, and `browse-dir/route.ts` already routed through `checkAuthorizedAgentWorkdir` (RUNTIME) before this pass. Verified: `grep -rn "agent-workdir-policy"` across the tree (excluding tests) shows 7 production call sites, listed in the implementer's report. **Deliberately NOT touched:** `CreateAgent`'s G03 gate family in `element-management-service.ts` (~3 remaining hand-rolled `agentsRoot` predicates in the ~10057-10672 range) — a distinct, larger duplicate-predicate cluster the card's own 2026-08-22 note flagged as "NOT ATTEMPTED HERE, deliberately", requiring its own focused pass with a neuter per site.
+- [ ] E2E: a MAINTAINER agent adopting a repo genuinely outside `~/agents/` gets a starting tmux session (not just a registry write) — re-confirm on a fresh run. **OWNER-SIDE**: requires a live server and real adoption; not attempted in this dispatch.
 - [x] Follow-up TRDD filed and landed for blocker (1): CreateAgent leaving an agent with zero role-plugins (R9.13 hard-reject or auto-assign). — TRDD-IXUV1XHD "CreateAgent returned 201 for agents that can never be woken", filed 2026-07-11 (~3h after this card), `column: complete`, implementation-commits [ce635c14]. Verified 2026-09-04.
-- [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug). — see the blocker-2 measurement below.
-- [ ] Boot-restore across a real server restart is proven end-to-end for an adopted agent, once blocker (2) is fixed.
-- [ ] `SCENARIOS_TESTS_RULES.md` Rule 0 / the scenario fixture rules permit an out-of-`~/agents/` fixture, so external adoption is scenario-testable going forward.
+- [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug). — filed: TRDD-963CTSUO; landed: open. Independent Tier-0 card, `column: planned`, no `parent-trdd:`/`derived:` (per 2026-09-10 review correction — blocker (2) is a pre-existing general bug this card waits ON, not an effect it opens). See `design/tasks/TRDD-20260910_094841+0200-963CTSUO-registry-status-sessions-not-updating.md`.
+- [ ] Boot-restore across a real server restart is proven end-to-end for an adopted agent, once blocker (2) is fixed. **OWNER-SIDE**: requires a live server and a real restart; not attempted in this dispatch, and blocked on TRDD-963CTSUO's finding.
+- [ ] `SCENARIOS_TESTS_RULES.md` Rule 0 / the scenario fixture rules permit an out-of-`~/agents/` fixture, so external adoption is scenario-testable going forward. **Wording proposed in report, owner applies** — 2026-09-10 review found the file's Rule 0 text labels an out-of-`~/agents/` import "a critical security bug", and loosening it is a governance edit above the implementer's tier; the exact proposed old-text/new-text/file:line diff is in the implementer's report rather than applied to the file.
 
 ## Notes and lessons learned
 

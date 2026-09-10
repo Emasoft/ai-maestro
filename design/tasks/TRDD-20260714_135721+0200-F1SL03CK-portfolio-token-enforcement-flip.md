@@ -3,7 +3,7 @@ trdd-id: F1SL03CK
 title: Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
 column: planned
 created: 2026-07-14T13:57:21+0200
-updated: 2026-08-22T21:34:57+0200
+updated: 2026-09-10T13:57:54+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -19,6 +19,7 @@ relevant-rules: [28, 29, 30, 31, 32, 34, 41]
 labels: [governance, security, portfolio, enforcement]
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/47]
 assignee: ai-maestro-hub-session
+implementation-commits: [b5e12d46934407918233da9c507a72857c101af3]
 ---
 
 # Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
@@ -207,13 +208,38 @@ gate it should have had:
       denials and leaves both grants green. Both restored byte-identical, `cmp`-verified
 - [x] `authorize` is NOT mocked in the route test — mocking a guard to prove the guard is a test
       that survives the guard's deletion
-- [ ] **`OPERATIONS_REQUIRING_TOKEN` flipped to the v1 set** (`CreateAgent: 'agent:create'`,
-      `CreateTeam: 'team:create'`) — **OWNER DECISION, see below**
+- [x] **`OPERATIONS_REQUIRING_TOKEN` flipped to the v1 set** (`CreateAgent: 'agent:create'`,
+      `CreateTeam: 'team:create'`) — landed at `lib/portfolio-check.ts:46-47`, commit
+      `b5e12d46934407918233da9c507a72857c101af3`. Map flip ONLY, per the coordinator's narrowed
+      scope for the implementation task (the `authorize('create-agent')` title-gate above was
+      already landed separately at `c9a25084` and is untouched by this commit). Verified:
+      `tsc --noEmit` 0 errors; `tests/unit/portfolio-check.test.ts` +
+      `tests/unit/portfolio-verify.test.ts` + `tests/services/portfolio-create-agent-authz.test.ts`
+      42/42 passing, including the rewritten no-op/bypass case (neutered: gating a genuinely
+      ungated op name reddened exactly that 1 test with the expected assertion error, 14 siblings
+      skipped, reverted to green — recorded inline in the test's own docstring).
 - [ ] standing `agent:create` mandates minted to existing COS agents BEFORE the flip is deployed
       (verification step 4; the answer to "does a COS create agents in normal operation" is YES per
-      R30.2, so this is required, not conditional)
-- [ ] `POST /api/agents` added to `security-registry.json` — still absent; belongs with the flip,
-      since that is when the route acquires a strict-path contract
+      R30.2, so this is required, not conditional) — **NOT ATTEMPTED in the F1SL03CK implementation
+      task (2026-09-10).** This is owner-side operational work on live agents (minting real
+      ledger-anchored mandates to whichever COS agents currently exist in the fleet), explicitly
+      out of scope for a code-only implementer per the task's own dispatch. The map flip above is
+      now landed in the worktree but **not yet merged/deployed**, so no live COS has been 403'd by
+      it yet — this box remains the deploy-blocking gate the STATE block and NEXT ACTION section
+      already named. Left open deliberately; not a failure of this task.
+- [x] `POST /api/agents` added to `security-registry.json` — classified `strict` at
+      `security-registry.json`'s `entries."POST_/api/agents"`, commit
+      `b5e12d46934407918233da9c507a72857c101af3`. Landed together with the flip (the route only
+      acquires a real strict-path contract once the token check above is active). Classification
+      only — no `requireSudoToken()` call was added to `app/api/agents/route.ts`'s POST handler;
+      the registry's own Rule 4 claim that "no code change needed" is misleading (confirmed via
+      `middleware.ts` and a `security-registry` consumer sweep: `lib/sudo-guard.ts` is the only
+      reader, invoked explicitly per-route, not automatically), and a disclosure comment saying so
+      was added in the same commit, right above the new entry. Surfaced (and disclosed, not fixed)
+      that `services/headless-router.ts`'s independent `POST /api/agents` reimplementation has
+      neither an `authorize()`/`decideAidTitle()` call nor delegation to the Next.js route — now
+      pinned in `tests/unit/headless-strict-route-authz-coverage.test.ts`'s `neither` snapshot,
+      which grew by exactly this one entry as that test's own docstring anticipates.
 
 ## NEXT ACTION — one decision for the OWNER
 
@@ -227,6 +253,18 @@ entirely operational.
 
 **Landing it while it cannot be deployed is its own hazard** — a breaking change sitting on the
 branch that someone else deploys. That is why it is not landed "ready to go".
+
+### Update — 2026-09-10T13:57:54+0200 — the OWNER decision was made; the flip is landed, not deployed
+
+The `## Approval log` below already records the 2026-08-21 APPROVED decision for this exact NEXT
+ACTION. A code-only implementation task (this session) then executed it: the map flip landed at
+`lib/portfolio-check.ts:46-47` and the registry classification at `security-registry.json`, both
+in commit `b5e12d46934407918233da9c507a72857c101af3` on worktree branch
+`worktree-agent-a2a0ae9093f41c20f` — **not yet merged into `main`, and not deployed**. The hazard
+this section names ("landing it while it cannot be deployed") is therefore still live in the
+narrow sense that matters: the code exists on a branch, but **nobody should merge/deploy it until
+the still-open acceptance box above (minting standing `agent:create` mandates to existing COS
+agents) is done**, which remains explicitly owner-side and was not attempted here.
 
 ## Adjacent finding, filed separately as `TRDD-CAVCTULL`
 

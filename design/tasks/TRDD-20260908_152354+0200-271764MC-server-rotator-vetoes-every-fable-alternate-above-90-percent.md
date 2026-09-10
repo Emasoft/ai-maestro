@@ -3,7 +3,7 @@ trdd-id: 271764MC
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200
-updated: 2026-09-10T02:23:15+0200
+updated: 2026-09-10T02:32:55+0200
 current-owner: governance-rules-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -24,59 +24,28 @@ priority: 1
 **CODE LANDED `efb6a509`** (2026-09-08 15:40). Boxes 1-4 and 7 closed. Boxes 5 and 6 are open and
 BOTH the owner's.
 
-**NOT DEPLOYED, and a restart ALONE is not enough — `yarn build` is needed too, because a
-bundled route runs a SECOND tick.** The running pid is `tsx server.mjs` from 2026-09-05 11:16;
-`efb6a509` landed 09-08 15:40; the bundle still carries the old default
-(`.next/server/chunks/3242.js` holds `ROTATOR_SCOPED_SWITCH_AT",90)`, one occurrence across
-`.next/server`, so no `,97` coexists there). `BUILD_ID` is the build stamp because `next build`
-writes it — its 09-05 date, 34s after the route chunk, only corroborates. `.next`'s own dir
-mtime of 09-07 is NOT a build stamp and what touched it is unknown.
+**NOT DEPLOYED — the deploy needs BOTH `yarn build` AND `pm2 restart`.** The running pid is
+`tsx server.mjs` from 2026-09-05 11:16 and `efb6a509` landed 09-08 15:40, so the process predates
+the fix. A restart alone is not enough: `app/api/statusline/ingest/route.ts:190` calls
+`runOneTick()` from the bundle, and the bundle still carries the old default
+(`.next/server/chunks/3242.js` holds `ROTATOR_SCOPED_SWITCH_AT",90)`) — so a second tick can run
+at 90 beside the restarted one. **Which of the two wins on a given beat is NOT recorded here on
+purpose:** five commits analysed it and got it wrong repeatedly, most recently by measuring the
+RUNTIME copy of the lock and symbol code to draw a conclusion about the BUNDLED copy — the same
+error this card documents. That analysis is in git (`fd6ad062` … `9edc3d40`); the deploy needs
+only the two commands.
 
-- **Runtime, fresh on restart.** `efb6a509` changed exactly two source files (the other two in
-  the stat are tests) and BOTH are runtime-imported: `server.mjs:1995` → the tick chain →
-  `tick.ts:56`, a value import of `SCOPED_SWITCH_AT_PCT` from `./model-fallback` (whose
-  back-edge `:27` is `import type`, so no runtime cycle); and `server.mjs:2041` →
-  `fleet-liveness-watchdog.ts`, the model-fallback SWEEP's only importer. tsx reads both from
-  disk, so Change 1 and Change 2 both land.
-- **Bundled, stale until built.** `app/api/statusline/ingest/route.ts:190` calls `runOneTick()`
-  from the Sep-5 bundle. The two tick paths DO serialise — the 60s attempt floor is
-  `Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')` on `globalThis` and the mutex is a
-  LOCKFILE at `path.join(globalStateDir(), 'oauth-rotator-server-tick.lock')` — and
-  `globalStateDir()` resolves to an absolute, home-or-env path, never a module-relative one, so
-  both registries name the same file. Neither mechanism splits. But whichever copy WINS then
-  runs with its OWN constants, so **after a restart-only the threshold in force depends on which
-  path ticked.** Not a coin flip: `runOneTick` calls `stampTickAttempt()` BEFORE its gates and
-  the 60s timer re-stamps continuously, so the route can only pass `:176`'s
-  `tickAttemptAllowed()` in the sliver between the floor expiring and the next beat — **the
-  timer almost always wins; the route runs at 90 on rare scheduling coincidence.** That is
-  rarer, and harder to reproduce, than the previous draft's flat "the route ticks at 90".
-  `yarn build` closes it; the restart alone does not.
+**IS `AIM_FLEET_MODEL_FALLBACK` ARMED?** If not, the model-fallback sweep lane is dormant —
+`fleet-liveness-watchdog.ts:344` gates the sweep on it and `server.mjs` starts the watchdog with
+no options — so Change 2 changes nothing observable, and the Problem section's "the fallback
+sweep independently declares scoped exhaustion at 90" describes a lane that is not running. The
+tick's own 95 (Change 1) is unaffected either way. The owner's to confirm.
 
-`tick.ts` IS compiled into `.next`; what is true is that the SERVER's tick does not RUN the
-bundled copy.
-
-**CHANGE 2 IS INERT UNLESS `AIM_FLEET_MODEL_FALLBACK=1` — traced end to end.** No caller
-overrides `scopedThresholdPct` (zero hits outside its own file), so the new default does take
-effect where it is read. But: `fleet-liveness-watchdog.ts:344` gates on
-`opts.modelFallbackEnabled ?? DEFAULT_MODEL_FALLBACK`; `server.mjs:2042` calls
-`startFleetLivenessWatchdog()` with NO arguments, so the option is undefined and the env-derived
-default (`:211`) decides; and `runModelFallbackSweep` is called INSIDE that gate, so with the
-leg off **the sweep does not run at all** — it does not even compute a verdict to log. Change 2
-then changes nothing observable. The leg is off deliberately (its comment: one switch must be
-watched end-to-end on a real pane before arming). **So the Problem section's "the fallback sweep
-independently declares scoped exhaustion at 90" describes a lane that is dormant unless you
-armed it** — the owner's to confirm.
-
-**BOX 6 IS NOT CONFIRMABLE BY OBSERVING THE SERVER, with or without a build.** Surveyed across
-`lib/` and `app/`: neither constant is logged, returned, or exposed by any route.
-`/api/oauth-rotator/status` carries only a comment naming the threshold. Every use is a
-comparison except `model-fallback.ts:212` (`const threshold = input.scopedThresholdPct ??
-SCOPED_SWITCH_AT_PCT`), and that local never escapes — every return below it is `{act, skip}`.
-Reach caveat: the grep was `--include=*.ts`, so `.tsx` components and `.next/static` are
-unsearched. Box 6 is therefore satisfiable by reading the source, or by BEHAVIOUR (94 accepted,
-96 vetoed) — but that check is **not on demand**: the scoped percentages are consumption-driven
-and unsettable, and the accept path does not log. Three drafts of this block have now named a
-confirmation surface without first checking it; this one is named as unverified, not as advice.
+**BOX 6 HAS NO RUNTIME SURFACE.** Neither 95 nor 97 is logged, returned, or exposed by any
+route; every use of both constants is a comparison. So box 6 cannot be settled by reading a
+number off the running system, build or no build — it needs the source, or restating as a
+behavioural check (94 accepted, 96 vetoed), which is itself not on demand because the scoped
+percentages are consumption-driven.
 
 Two side facts from the same read: the tick is **ENABLED** (`~/.aimaestro/oauth-rotator-tick.enabled`
 is PRESENT — tested by exact path, never a `*.flag` glob), and caveat (c) is re-confirmed on the
@@ -87,7 +56,7 @@ so the new defaults will not be inert.
 the source and carries its own qualifier (box 2's neuters were *not re-run*) — read it there.
 
 NEXT ACTION — **the OWNER's:** lift the hold (box 5) and run **both** `yarn build` and
-`pm2 restart` — a restart alone leaves the effective threshold nondeterministic. The same deploy
+`pm2 restart` — a restart alone leaves a second tick running at 90 from the stale bundle. The same deploy
 also lands TRDD-RE9AVNJF (`5aa945c1`, `48e839b6` touched `tick.ts` and `slots.ts`, the same
 runtime chain). Then two calls that are yours and not mine: whether `AIM_FLEET_MODEL_FALLBACK`
 is armed (if not, Change 2 is inert and the Problem section overstates the sweep), and how to
@@ -120,7 +89,7 @@ Quantified at the measured burn rate (~3 points / 9 minutes from the evidence tr
 (a) 95 is 5 points more conservative than the janitor's own detector, which treats a window as spent only at >= 100 — deliberate, for the hysteresis reason in Change 1.
 (b) UNVERIFIED premise for the USER's ruling: rotating accounts may itself force a prompt-cache cold start (org-scoped caches), in which case rotate-first buys Fable minutes rather than cache — not verified here.
 (c) pctEnv reads its env var at module load, so a pinned ROTATOR_SCOPED_SWITCH_AT in the live pm2 environment makes the new default inert until checked against `ps eww` on the running pid.
-(d) ~~lib/*.ts is bundled into .next, not live on pm2 restart alone — this fix needs `yarn build` + restart~~ — **CORRECTED 2026-09-10 by measurement; the STATE block carries it, including the split-brain hazard a restart-only creates.** The hold itself is unchanged and still stands (the dispatching session's write-scope constraint: no build/commit/push here).
+(d) ~~lib/*.ts is bundled into .next, not live on pm2 restart alone — this fix needs `yarn build` + restart~~ — the conclusion (`yarn build` + restart) survives, but not for this reason: `tick.ts` IS bundled, and what makes the build necessary is a BUNDLED ROUTE running a second tick. The STATE block carries the corrected version. The hold itself is unchanged and still stands (the dispatching session's write-scope constraint: no build/commit/push here).
 (e) out of scope: a race with the janitor's separate, manual, Fable-blind rotate_to.py rotation path — named only, not analyzed.
 
 ## Acceptance

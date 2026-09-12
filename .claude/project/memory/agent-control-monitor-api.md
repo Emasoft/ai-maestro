@@ -2,7 +2,7 @@
 name: agent-control-monitor-api
 description: "how does the janitor / a governance agent CONTROL or MONITOR another agent's Claude Code terminal — inject a command like /compact or /reload-plugins, read+answer an AskQuestion or permission menu, watch agent state (idle/busy/permission/hibernated), QUEUE a command until the agent is next idle/online, read an agent's full config (launch args / teams / github repo / docker clone / pending tasks), drive the terminal HTML side panel, or search/read/edit/approve/promote/archive a TRDD or kanban task — the API endpoints + the permanent aimaestro-*/amp-* script layer"
 ocd: 2026-07-09
-lmd: 2026-07-17
+lmd: 2026-09-13
 metadata:
   node_type: memory
   type: project
@@ -23,54 +23,79 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
 
 ## What ALREADY EXISTS (verified 2026-07-09)
 
+^GJG0WRQJ [desc:"the API route + gate that injects an arbitrary command or slash-command into an agent's terminal", keywords:"how_to_inject_a_command_into_an_agent_terminal send_a_slash_command_to_an_agent PATCH_api_agents_session_route commandKey_allowlist_agent-commands.ts requireIdle_409_when_busy authorize_send-command deprecated_sessions_command_route WS_term_PTY_bridge_raw_keystrokes", ocd:2026-07-09, lmd:2026-07-09]
 - **Inject any command / slash-command into an agent terminal** — `PATCH /api/agents/[id]/session`
   with `{command: "<literal text or /slash>"}` (arbitrary) or `{commandKey: "compact"|"reload-plugins"|…}`
   (allowlist in `lib/agent-commands.ts`). Gated on `requireIdle` (409 when busy) + `authorize('send-command')`.
   Also: deprecated `POST /api/sessions/[id]/command`; the WS `/term` PTY bridge writes raw keystrokes.
+
+^DMQTVZYU [desc:"how to read an agent's live state — the chat-state hook file, the 8-priority status ladder, and the cheap pane-status poll", keywords:"how_to_read_an_agents_live_state chat-state_hook_file_location getHookState_sessions-service agent-status.ts_priority_ladder exited_rate_limited_api_error_permission_waiting_active_idle_hibernated pane-status_cheap_tmux_poll status_WS_broadcast evaluateExitGate_subagent_safety_gate", ocd:2026-07-09, lmd:2026-07-09]
 - **Read live agent state** — the hook writes `~/.aimaestro/chat-state/<sha256(cwd)[:16]>.json`;
   `getHookState(workingDir)` (services/sessions-service.ts) returns `{status, notificationType, subagentCount}`;
   `lib/agent-status.ts` resolves the 8-priority ladder (exited/rate_limited/api_error/permission/waiting±subagents/
   active/idle/hibernated); `GET /api/sessions/[id]/pane-status` is the cheap tmux-only poll; the `/status` WS
   broadcasts activity. `lib/session-safe-state.ts evaluateExitGate` is the subagent-safety gate for stop/restart.
+
+^E9R6OR11 [desc:"the API route that returns an agent's full config record — launch string, title, workdir, hooks, github repo, docker deployment", keywords:"how_to_read_an_agents_full_config GET_api_agents_id_route program_programArgs_launch_string governanceTitle_workingDirectory_hooks githubRepo_maintainer_only deployment.cloud_docker_container agent_running_in_a_container", ocd:2026-07-09, lmd:2026-07-09]
 - **Full agent config** — `GET /api/agents/[id]` returns the whole Agent record: `program`+`programArgs`
   (the LAUNCH STRING), `governanceTitle`, `workingDirectory`, `hooks`, `githubRepo` (MAINTAINER-only),
   `deployment.cloud` (= the agent's OWN process running in a docker container).
+
+^391Z44G7 [desc:"today a permission prompt can only be answered with a hardcoded approve, not a real answer API", keywords:"how_to_answer_a_permission_prompt approve_a_permission_request agentprofile_approve_button hardcoded_y_no_real_answer_api answering_an_askquestion_not_yet_supported", ocd:2026-07-09, lmd:2026-07-09]
 - **Answer a permission prompt** — today only a hardcoded `y` (AgentProfile "Approve" → sends `y`).
+
+^QDPKK46L [desc:"the GitHub-Projects-backed kanban task CRUD API routes and their amp-kanban script wrappers", keywords:"kanban_task_crud_api how_to_create_move_archive_a_kanban_task GET_POST_api_teams_tasks PUT_DELETE_api_teams_tasks_taskId amp-kanban-list_create-task_move_archive.sh github_projects_backed_teams-service", ocd:2026-07-09, lmd:2026-07-09]
 - **Kanban task CRUD** — GitHub-Projects-backed via teams-service: `GET/POST /api/teams/[id]/tasks`,
   `PUT/DELETE /api/teams/[id]/tasks/[taskId]`; scripts `amp-kanban-{list,create-task,move,archive}.sh`.
+
+^3EN9JO36 [desc:"the permanent aimaestro-*/amp-*/aid-* script families and their three auth mechanisms", keywords:"what_script_families_exist aimaestro-agent.sh agent-*.sh_modules aimaestro-governance_teams_hook.sh amp-*.sh_29_scripts aid-*.sh_7_scripts AID_AUTH_bearer_agent-helper.sh per-agent_api-key_amp-helper.sh X-Sudo-Token_strict_routes base_url_localhost_23000", ocd:2026-07-09, lmd:2026-07-09]
 - **Script families** — `aimaestro-agent.sh` (+ `agent-*.sh` modules), `aimaestro-governance/teams/hook.sh`,
   `amp-*.sh` (×29), `aid-*.sh` (×7). Auth: `AID_AUTH` bearer (agent-helper.sh) / per-agent api-key
   (amp-helper.sh) / `X-Sudo-Token` for strict routes; base `http://localhost:23000`.
 
 ## What is BEING BUILT (TRDD-SCLSRS6E derived tasks)
 
+^M4JDTKOI [desc:"D1 — a persistent generic server-side command queue replacing the client-only restart-only useRestartQueue", keywords:"D1_command_queue_design server-side_command_queue lib_command-queue.ts POST_GET_DELETE_api_agents_queue useRestartQueue_client-only_restart-only persistent_command-queue_json fires_at_idle_prompt holds_or_wakes_hibernated_agents", ocd:2026-07-09, lmd:2026-07-09]
 - **D1 — server-side command QUEUE** (`lib/command-queue.ts`, `POST/GET/DELETE /api/agents/[id]/queue`):
   today's `useRestartQueue` is client-only, restart-only, in-memory, no hibernation. New = persistent
   (`~/.aimaestro/command-queue/<id>.json`), GENERIC (any command/commandKey), fires at `idle_prompt`+gate-pass,
   holds/optionally-wakes hibernated agents.
+
+^EL9H5BIF [desc:"D2 — surface a captured permission/AskQuestion prompt over the API and answer it by option key or free text", keywords:"D2_read_and_answer_askquestion GET_api_agents_prompt POST_prompt_answer hook_already_captures_permission_options chat-state_file AskUserQuestion_not_captured_yet D7_hook_enhancement answer_by_optionKey_or_free_text", ocd:2026-07-09, lmd:2026-07-09]
 - **D2 — read+answer AskQuestion/permission** (`GET /api/agents/[id]/prompt`, `POST …/prompt/answer`): the hook
   already CAPTURES permission options into the chat-state file, but no API exposes them and AskUserQuestion isn't
   captured yet (that half is the hook enhancement, D7, in the ai-maestro-plugin repo). New = surface the question
   + `options[]`, answer by `optionKey` or free `text`.
+
+^L48KI07S [desc:"D3 — one consolidated GET full config route merging base config, team lookup, github repo, docker detection, tasks, AID pubkey", keywords:"D3_consolidated_config_route GET_api_agents_id_full reverse_team_lookup normalized_githubRepo repo-uses-docker_detection lib_repo-docker-detect.ts docker-compose_Dockerfile_in_workdir agent_pending_tasks AID_pubkey", ocd:2026-07-09, lmd:2026-07-09]
 - **D3 — consolidated config** (`GET /api/agents/[id]/full`): base config + reverse team lookup + normalized
   `githubRepo` (from `/api/agents/[id]/repos` which scans the workdir) + **repo-uses-docker** detection
   (`lib/repo-docker-detect.ts` — docker-compose/Dockerfile in the workdir; distinct from agent-as-container) +
   agent→pending-tasks + AID pubkey.
+
+^T1HA9V8B [desc:"D4 — the planned HTML side panel: a new tab, a panel-content WebSocket, and a feedback callback channel for visualizer plugins", keywords:"D4_html_side_panel_design campaign_gate_G4_greenfield new_html_tab panel-content_websocket companionWss_voice_pattern POST_api_agents_panel action_open_close_refresh_set feedback_callback_channel visual-communicator_plugin render_html_or_live_site_in_panel", ocd:2026-07-09, lmd:2026-07-09]
 - **D4 — HTML side panel** (campaign gate G4; greenfield): a new `html` tab + a new panel-content WS (mirror the
   `companionWss` voice pattern) + `POST /api/agents/[id]/panel {action:open|close|refresh|set, html|url}` + a
   feedback callback channel. Lets visualizer plugins (visual-communicator) render HTML / a live site in-panel.
+
+^M0OI8Q6U [desc:"D5 — the planned TRDD task API for searching/editing/approving the design corpus, plus a trivial kanban task edit route", keywords:"D5_task_api_design api_trdd_route lib_trdd-store.ts search_read_edit_approve_promote_archive_a_trdd design_proposals_tasks_archived_refused_corpus git-mv-aware kanban_status_vs_trdd_column_two_parallel_state_machines TRDD_is_the_SSOT", ocd:2026-07-09, lmd:2026-07-09]
 - **D5 — task API** (`/api/trdd` + `lib/trdd-store.ts`): search/read/edit + lifecycle approve/promote/archive over
   the `design/{proposals,tasks,archived,refused}/*.md` corpus (git-mv-aware); plus the trivial kanban
   `GET /api/teams/[id]/tasks/[taskId]` + keyword search + full-field edit. NOTE: kanban `status` and TRDD
   `column:` are TWO PARALLEL state machines — keep the TRDD the SSOT.
+
+^JTW4LRG7 [desc:"D6 — the decoupling-layer script wrappers the janitor actually calls, wired into install-messaging.sh", keywords:"D6_script_wrappers_decoupling_layer aimaestro-session.sh_inject_slash_state_read-prompt_answer_queue aimaestro-agent.sh_config aimaestro-panel.sh aimaestro-trdd.sh amp-kanban-get_edit.sh install-messaging.sh what_the_janitor_actually_calls", ocd:2026-07-09, lmd:2026-07-09]
 - **D6 — script wrappers** (the decoupling layer): `aimaestro-session.sh` (inject/slash/state/read-prompt/
   answer/queue), `aimaestro-agent.sh config`, `aimaestro-panel.sh`, `aimaestro-trdd.sh`, `amp-kanban-get/edit.sh`
   — wired into `install-messaging.sh`. **This is what the janitor actually calls.**
+
+^LPURST1C [desc:"D7 — the cross-repo half of this epic lives in ai-maestro-plugin: dev-browser dependency + hook capture of AskUserQuestion", keywords:"D7_cross_repo_work ai-maestro-plugin_repo dev-browser_added_to_core_plugin_dependencies claude_auto_installs_plugin_deps ai-maestro-hook.cjs_enhancement capture_AskUserQuestion_text_and_choices", ocd:2026-07-09, lmd:2026-07-09]
 - **D7 — cross-repo** (Emasoft/ai-maestro-plugin): add dev-browser to the core plugin.json `dependencies` (Claude
   auto-installs plugin deps) + enhance `ai-maestro-hook.cjs` to capture AskUserQuestion text+choices.
 
 ## Gotchas
 
+^K072KPXG [desc:"classifying a new control route strict is only half the job — it must also be declared in one of three sudo-guard agent authority sets or every agent call 403s silently", keywords:"strict_route_declared_but_agent_still_gets_403 security-registry.json_strict_classification_incomplete lib_sudo-guard.ts_agent_branch requireAidTitle_fails_closed silent_403_reads_like_intent STRICT_AGENT_RULES agent-callable_mapped_to_AuthAction SYSTEM_OWNER_ONLY_STRICT_human_only AGENT_POLICY_PENDING_undecided_debt_ledger sudo-guard-strict-agent-coverage.test.ts", ocd:2026-07-09, lmd:2026-07-09]
 - New control routes (inject/answer/queue/panel/trdd-mutate) are destructive → classify **strict** in
   `security-registry.json`. Classifying strict is only HALF the job: the route must ALSO be declared on
   the agent branch of `lib/sudo-guard.ts`, or `requireAidTitle` fails closed and **every agent caller
@@ -78,18 +103,24 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   (agent-callable, mapped to an `AuthAction`), `SYSTEM_OWNER_ONLY_STRICT` (human-only), and
   `AGENT_POLICY_PENDING` (undecided debt ledger). `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
   fails the build if a strict route is in none of them.
+
+^S5G4XP65 [desc:"the self-drive exemption: an agent may drive its own panel/queue via send-command, but wake-agent is deliberately excluded so it can never reconfigure itself", keywords:"can_an_agent_control_its_own_panel_or_queue self-drive_vs_self-reconfigure USER_decision_TRDD-D3RP7KQZ SELF_DRIVE_ACTIONS_lib_authorization.ts send-command_hibernate-agent closed_exemption_to_universal_self-target_ban panel_queue_prompt-answer_map_to_send-command wake-agent_deliberately_absent sleeping_agent_cannot_wake_itself mechanical_membership_test_registry_record", ocd:2026-07-09, lmd:2026-07-09]
 - **An agent may DRIVE its own surface, never RECONFIGURE itself** (USER decision, TRDD-D3RP7KQZ, shipped
   `4e507bfd`+`11cd98a6`). `SELF_DRIVE_ACTIONS = {send-command, hibernate-agent}` in `lib/authorization.ts`
   is the closed exemption to the universal self-target ban; the panel / queue / prompt-answer trio all map
   to `send-command`, so an agent drives its own panel and queue. `wake-agent` is deliberately absent — a
   sleeping agent cannot wake itself. The mechanical membership test: nothing in the set writes the agent's
   registry record.[^3]
+
+^7MSY9HM2 [desc:"send-command is the wrong verb for refuse/cancel/veto because self-target is exempt — cancel must be gated on queue-entry OWNERSHIP instead", keywords:"why_send-command_cannot_gate_cancel refuse_cancel_veto_verb_needs_ownership_not_send-command DELETE_queue_entryId_ungated_by_self-drive a_member_could_delete_its_cos_queued_compact CommandQueueEntry.enqueuedBy taken_from_verified_auth_result_never_the_body missing_enqueuedBy_fails_closed agent_retracts_only_what_it_queued_itself cross-agent_cancel_still_goes_through_send-command_matrix", ocd:2026-07-09, lmd:2026-07-09]
 - **The self-drive exemption makes `send-command` INSUFFICIENT for any "refuse / cancel / veto" verb.**
   `DELETE …/queue/[entryId]` proved it: mapping cancel to `send-command` closes the cross-agent hole and
   leaves the governance-evasion one open, because self-target is exempt — a MEMBER could delete the
   `/compact` its COS queued for it. Cancel is decided by OWNERSHIP: `CommandQueueEntry.enqueuedBy` (taken
   from the verified auth result, never the body; missing ⇒ not yours, fail closed). An agent retracts only
   what it queued itself. Cross-agent cancel still goes through the `send-command` matrix.
+
+^3SGL3ZDG [desc:"a hibernated agent's queued command is never dropped — it drains at the next idle_prompt or wakes on --wake-first, and /janitor-arm is per-project not fleet-wide", keywords:"queued_command_to_a_hibernated_agent command_held_not_dropped drains_at_next_idle_prompt --wake-first_wakes_now janitor-arm_always_eventually_succeeds janitor-arm_is_PER-PROJECT CronCreate_heartbeat-armed-at.ts why_janitor-arm_must_be_delivered_into_each_agents_session there_is_no_fleet-wide_arm_command janitor-global-arm_is_not_this fan-out_across_fleet_needs_MANAGER_or_human", ocd:2026-07-09, lmd:2026-07-09]
 - **A hibernated agent is never waited on.** `queue` persists, so a command to a sleeping agent is HELD
   (never dropped) and drains at its next `idle_prompt`; `--wake-first` wakes it now. An enqueued
   `/janitor-arm` therefore always succeeds — armed now, or armed later. `/janitor-arm` is PER-PROJECT (its
@@ -97,16 +128,22 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   exactly why it must be delivered into each agent's own session rather than invoked centrally. It is NOT
   `/janitor-global-arm`, and no fleet-wide arm command exists.[^5] Fan-out across the fleet still needs
   MANAGER or the human, since `queue` maps to `send-command`.
+
+^YSOKRE3T [desc:"three separate routes can inject keystrokes into a terminal, and any new one reaching sendKeys must be wired into the send-command action first", keywords:"how_many_routes_can_type_into_an_agent_terminal three_terminal-injection_routes PATCH_session POST_queue_drains_into_pane POST_chat_sendKeys_literal_enter chat_route_was_unguarded_until_c7d9f8a7 all_three_now_carry_send-command before_adding_a_route_that_reaches_runtime.sendKeys_wire_the_action_first", ocd:2026-07-09, lmd:2026-07-09]
 - **There are THREE terminal-injection routes, not one.** `PATCH …/session`, `POST …/queue` (drains into
   the pane), and `POST …/chat` — the last ends in `sendKeys(msg, {literal:true, enter:true})` and was
   unguarded until `c7d9f8a7`. All three now carry `send-command`. Before adding any route that reaches
   `runtime.sendKeys`, wire the action first.[^4]
+
+^KHXU7I3H [desc:"middleware.ts authenticates every request globally but that is not authorization — enforceAuth discards the identity result, leaving several routes fully unauthorized", keywords:"authenticate_vs_authorize_in_this_codebase middleware.ts_authenticates_every_request_globally a_route_with_no_auth_call_is_still_authenticated_but_not_authorized enforceAuth_discards_the_result cannot_authorize_even_if_it_wanted_to five_agent-scoped_routes_authorize_nothing messages_messageId_any_agent_deletes_any_agents_amp_messages agent-route-authorization-coverage.test.ts TRDD-4Q7WMPZK", ocd:2026-07-09, lmd:2026-07-09]
 - `middleware.ts` authenticates EVERY request globally, so a route with no auth call is still
   authenticated. It is not authorized. `enforceAuth` is worse than it looks: it authenticates and
   **discards the result**, so a route using it *cannot* authorize even if it wanted to. As of
   `f56b79f2` five agent-scoped routes still authorize nothing; `messages/[messageId]` (any agent
   deletes any agent's AMP messages) is the sharp one remaining. Ledger:
   `tests/unit/agent-route-authorization-coverage.test.ts`; audit: TRDD-4Q7WMPZK.
+
+^4RHG64LM [desc:"the export route shipped an agent's private signing key (not its transcripts), enabling permanent impersonation — fixed to system-owner-only, GET included", keywords:"export_route_leaked_private_key GET_api_agents_export_shipped_ed25519_private_key exportAgentZip_archive.directory_getKeysDir private.pem_never_shared any_agent_token_to_any_agents_signing_key permanent_undetectable_impersonation fixed_f56b79f2_action_export-agent system-owner_only MANAGER_and_COS_denied headless_router_had_same_hole_no_auth_call danger_is_not_the_same_as_mutation guardrails_scanned_only_POST_PUT_PATCH_DELETE_missed_GET EXFIL_FUNCTIONS_dangerous-primitive-authorization.test.ts_scans_every_verb", ocd:2026-07-09, lmd:2026-07-09]
 - **`GET …/export` shipped the target's Ed25519 PRIVATE KEY**, not "its transcripts": `exportAgentZip`
   does `archive.directory(getKeysDir(id), 'keys')`, and `lib/amp-keys.ts` calls that `private.pem`
   "NEVER shared". Any agent token → any agent's signing key → forged, genuinely-valid AMP messages
@@ -115,10 +152,14 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   headless router had the same hole with *no* auth call. **Danger is not the same as mutation**: both
   guardrails scanned only `POST|PUT|PATCH|DELETE`, so a GET that exfiltrates was structurally
   invisible. `EXFIL_FUNCTIONS` in `dangerous-primitive-authorization.test.ts` now scans every verb.[^6]
+
+^X6L35CWX [desc:"a human using the script layer directly hits two friction points — no session-cookie support in get_auth_args, and a global 5-per-minute sudo-token mint bucket", keywords:"human_cannot_easily_use_the_script_layer script_wrappers_carry_no_session-cookie_support get_auth_args_reads_only_AID_AUTH human_gets_401 POST_api_auth_sudo-password global_5-per-60s_bucket successful_mints_consume_the_bucket 5_strict_ops_per_minute_machine-wide TRDD-X8R2HP9D", ocd:2026-07-09, lmd:2026-07-09]
 - The USER path is barely usable: the script wrappers carry no session-cookie support
   (`get_auth_args` reads only `AID_AUTH`, so a human gets 401), and `POST /api/auth/sudo-password` is a
   **global 5-per-60s bucket that successful mints consume** — 5 strict ops/minute machine-wide
   (TRDD-X8R2HP9D).
+
+^BDPHPIDS [desc:"the AskUserQuestion hook change is cross-project (ai-maestro-plugin repo), the HTML panel must honor no-nested-scrollbars, and related pages to read next", keywords:"where_does_the_hook_change_live ai-maestro-plugin_repo_cross-project_issue_or_pr html_panel_content_must_obey_no-nested-scrollbars_rule sandboxed_iframe_let_the_page_expand related_pages marketplace-plugin-registration dev-browser_cross-marketplace_dependency session-control-subagent-gate idle_subagent_safety_gate_the_queue_reuses", ocd:2026-07-09, lmd:2026-07-09]
 - The hook is in the **ai-maestro-plugin** repo, not here — its changes are cross-project (issue/PR).
 - HTML panel content must obey the no-nested-scrollbars rule (sandboxed iframe, let the page expand).
 - See also [[marketplace-plugin-registration]] (dev-browser cross-marketplace dependency shape) and

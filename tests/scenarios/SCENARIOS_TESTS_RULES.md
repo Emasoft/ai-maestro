@@ -1038,6 +1038,7 @@ v3.6.0 the strict routes are:
 
 | Route | Used by scenarios |
 |-------|-------------------|
+| `POST /api/agents` | Every scenario that creates an agent via the wizard — sudo modal on EACH creation (tokens are one-shot); scenario files lacking the sub-step are tracked in TRDD-F1SL03CK's STATE block |
 | `DELETE /api/agents/[id]` | Every scenario's cleanup phase |
 | `DELETE /api/teams/[id]` | SCEN-001, SCEN-002, SCEN-005, SCEN-009, SCEN-010, SCEN-014 |
 | `DELETE /api/agents/cemetery` | Cleanup phase of every scenario that deletes an agent |

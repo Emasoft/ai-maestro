@@ -8,6 +8,8 @@ import CreateAgentAnimation, { getPreviewAvatarUrl } from './CreateAgentAnimatio
 import type { Team } from '@/types/team'
 import type { AgentRole } from '@/types/agent'
 import type { RolePlugin } from '@/services/role-plugin-service'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 // Plugin compatibility is resolved dynamically via /api/agents/role-plugins
 
 // --- Types ---
@@ -134,6 +136,9 @@ interface AgentCreationWizardProps {
 // --- Component ---
 
 export default function AgentCreationWizard({ onClose, onComplete }: AgentCreationWizardProps) {
+  // TRDD-F1SL03CK EHT-2: POST /api/agents is strict since TRDD-F1SL03CK;
+  // sudoFetch pops the password modal and retries with X-Sudo-Token.
+  const { requestSudoToken } = useSudo()
   const [robotAvatarIndex] = useState(() => Math.floor(Math.random() * 55))
   const robotAvatarUrl = `/avatars/robots_${robotAvatarIndex.toString().padStart(2, '0')}.jpg`
 
@@ -428,7 +433,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       // Single call to CreateAgent AIO — replaces the old 4-step creation
       // Working directory: CreateAgent enforces ~/agents/<name>/ for non-AUTONOMOUS agents.
       // For AUTONOMOUS agents, workingDirectory is only sent if user chose an existing folder.
-      const response = await fetch('/api/agents', {
+      const response = await sudoFetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -447,7 +452,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
           // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
           githubRepo: selectedTitle === 'maintainer' ? githubRepo : undefined,
         }),
-      })
+      }, requestSudoToken)
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to create agent')

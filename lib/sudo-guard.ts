@@ -380,6 +380,10 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
 
   'DELETE /api/agents/[id]': { action: 'delete-agent', targetFromPathId: true },
   'POST /api/agents/[id]/transfer': { action: 'change-title', targetFromPathId: true },
+  // TRDD-F1SL03CK: route classified strict by the security-registry.json flip.
+  // 'create-agent' (lib/authorization.ts:67) already encodes R30.1/R30.2
+  // (MANAGER + COS); no targetFromPathId — the path carries no agent id.
+  'POST /api/agents': { action: 'create-agent' },
   // TRDD-I75EMTK0: the "New Session" R17 self-heal route. Same shape as the
   // agent-UUID-targeted routes above — [id] is the agent, not a session name.
   //
@@ -543,12 +547,15 @@ function extractPathId(pathname: string, pathTemplate: string): string | undefin
  *
  * NOTE (TRDD-1LX5LMBD): `POST /api/teams` is now BOTH strict AND in
  * STRICT_AGENT_RULES ('manage-team'), so its 'CreateTeam' entry below is no
- * longer dormant for the AGENT-caller title check — but `matchPortfolioToken`
- * itself still no-ops until `OPERATIONS_REQUIRING_TOKEN['CreateTeam']` is
- * populated (it ships `{}` — see portfolio-check.ts D2), so the PORTFOLIO
- * token requirement specifically remains OFF regardless. `POST /api/agents`
- * ('CreateAgent') is still absent from STRICT_AGENT_RULES, so that entry
- * stays fully dormant until it too is classified strict.
+ * longer dormant for the AGENT-caller title check.
+ *
+ * UPDATE (TRDD-F1SL03CK): `POST /api/agents` ('CreateAgent') is now BOTH
+ * strict AND declared in STRICT_AGENT_RULES ('create-agent'), so the
+ * AGENT-caller title check is live for it too. As of this TRDD,
+ * `OPERATIONS_REQUIRING_TOKEN` (portfolio-check.ts) populates BOTH
+ * `CreateAgent: 'agent:create'` and `CreateTeam: 'team:create'`, so the
+ * PORTFOLIO token requirement is now ON for delegated (COS-and-below)
+ * callers of both routes.
  */
 const STRICT_ROUTE_TO_PORTFOLIO_OP: Record<string, string> = {
   'POST /api/teams': 'CreateTeam',

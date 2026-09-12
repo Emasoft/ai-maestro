@@ -134,7 +134,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | GET | `/api/agents/role-plugins/status` |  | app/api/agents/role-plugins/status/route.ts | Role Plugin Status API |
 | POST | `/api/agents/role-plugins/sync-defaults` |  | app/api/agents/role-plugins/sync-defaults/route.ts | Sync Default Role Plugins API |
 | GET | `/api/agents` |  | app/api/agents/route.ts |  |
-| POST | `/api/agents` |  | app/api/agents/route.ts |  |
+| POST | `/api/agents` | strict | app/api/agents/route.ts |  |
 | POST | `/api/agents/startup` |  | app/api/agents/startup/route.ts |  |
 | GET | `/api/agents/startup` |  | app/api/agents/startup/route.ts |  |
 | GET | `/api/agents/unified` |  | app/api/agents/unified/route.ts |  |

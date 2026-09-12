@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import AgentCreationWizard from '@/components/AgentCreationWizard'
+import { SudoProvider } from '@/contexts/SudoContext'
 
 // The path is cwd-relative, which is a SECOND way of naming the component the
 // behavioural half imports through `@/` — nothing makes those two agree. The
@@ -57,7 +58,11 @@ describe('AgentCreationWizard — dismissal routes (TRDD-FY6I2MO2)', () => {
     let closed = 0
     let completed = 0
     render(
-      <AgentCreationWizard onClose={() => { closed++ }} onComplete={() => { completed++ }} />
+      // TRDD-F1SL03CK EHT-2: the wizard now calls useSudo() (sudoFetch on POST
+      // /api/agents); the real provider is required, no mock.
+      <SudoProvider>
+        <AgentCreationWizard onClose={() => { closed++ }} onComplete={() => { completed++ }} />
+      </SudoProvider>
     )
 
     const backdrop = screen.getByTestId('agent-creation-wizard')
@@ -71,7 +76,9 @@ describe('AgentCreationWizard — dismissal routes (TRDD-FY6I2MO2)', () => {
     let closed = 0
     let completed = 0
     render(
-      <AgentCreationWizard onClose={() => { closed++ }} onComplete={() => { completed++ }} />
+      <SudoProvider>
+        <AgentCreationWizard onClose={() => { closed++ }} onComplete={() => { completed++ }} />
+      </SudoProvider>
     )
 
     fireEvent.click(screen.getByTestId('wizard-close'))
@@ -82,7 +89,7 @@ describe('AgentCreationWizard — dismissal routes (TRDD-FY6I2MO2)', () => {
 
   it('clicking inside the panel does NOT dismiss (the backdrop guard is not global)', () => {
     let closed = 0
-    render(<AgentCreationWizard onClose={() => { closed++ }} onComplete={() => {}} />)
+    render(<SudoProvider><AgentCreationWizard onClose={() => { closed++ }} onComplete={() => {}} /></SudoProvider>)
 
     fireEvent.click(screen.getByText('New Agent Setup'))
 

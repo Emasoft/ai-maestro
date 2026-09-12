@@ -302,6 +302,16 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
     // Snapshot, not a rule. If this list shrinks because a route got fixed or
     // delegation was added, update it here — that direction is progress. If it
     // grows, that is the regression this test exists to catch.
+    //
+    // TRDD-F1SL03CK (2026-09-10): 'POST_/api/agents' joined this list the moment
+    // security-registry.json classified POST /api/agents as strict (the portfolio-
+    // token flip in lib/portfolio-check.ts activated its token check). This is the
+    // expected/documented growth path this test's own docstring calls out above —
+    // services/headless-router.ts's POST /api/agents handler (its own
+    // authenticateAgent()+CreateAgent() reimplementation) has no authorize()/
+    // decideAidTitle() call and does not delegate to the Next.js route, so it is
+    // genuinely unguarded there. Not fixed in this change — see security-registry.json's
+    // _comment for the disclosed, deliberately out-of-scope gap.
     expect(neither).toEqual([
       'DELETE_/api/agents/[id]',
       'DELETE_/api/agents/[id]/session',
@@ -311,6 +321,7 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
       'DELETE_/api/teams/[id]/orchestrator',
       'PATCH_/api/agents/[id]',
       'PATCH_/api/agents/[id]/session',
+      'POST_/api/agents',
       'POST_/api/agents/[id]/transfer',
       'POST_/api/agents/cemetery',
       'POST_/api/agents/import',

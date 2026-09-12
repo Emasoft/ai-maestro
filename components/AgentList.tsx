@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import type { Agent } from '@/types/agent'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 import {
   ChevronRight,
   Terminal,
@@ -193,6 +195,7 @@ export default function AgentList({
   hostErrors = {},
   onAgentCreated,
 }: AgentListProps) {
+  const { requestSudoToken } = useSudo()
   const [showWizardModal, setShowWizardModal] = useState(false)
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
   const createDropdownRef = useRef<HTMLDivElement>(null)
@@ -1553,7 +1556,10 @@ export default function AgentList({
                       onClick={async () => {
                         // UI-MIN-04 fix: surface errors instead of silently swallowing.
                         try {
-                          const resp = await fetch('/api/agents', {
+                          // TRDD-F1SL03CK EHT-2: POST /api/agents is strict since
+                          // TRDD-F1SL03CK; sudoFetch pops the password modal and
+                          // retries with X-Sudo-Token.
+                          const resp = await sudoFetch('/api/agents', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1568,7 +1574,7 @@ export default function AgentList({
                               allowExternalFolder: true,
                               createSession: false,
                             }),
-                          })
+                          }, requestSudoToken)
                           if (!resp.ok) {
                             const text = await resp.text().catch(() => '')
                             throw new Error(`HTTP ${resp.status}: ${text || 'revive failed'}`)

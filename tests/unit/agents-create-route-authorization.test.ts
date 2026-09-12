@@ -27,13 +27,24 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockAgentAuth, mockService } = vi.hoisted(() => ({
+const { mockAgentAuth, mockService, mockGuard } = vi.hoisted(() => ({
   mockAgentAuth: { authenticateFromRequest: vi.fn(), buildAuthContext: vi.fn(() => ({})) },
   mockService: { CreateAgent: vi.fn() },
+  // TRDD-F1SL03CK EHT-1: the route now also calls requireSudoToken (R32
+  // strict-route gate) before authorize(). That gate is a separate concern,
+  // covered by agents-create-route-sudo-gate.test.ts — stub it to "pass" so
+  // this file stays scoped to the authorize() decision it was written for.
+  mockGuard: { requireSudoToken: vi.fn(() => null) },
 }))
 
 vi.mock('@/lib/agent-auth', () => mockAgentAuth)
 vi.mock('@/services/element-management-service', () => mockService)
+// importOriginal, not a wholesale mock — a wholesale mock throws at module
+// load the day the route destructures a second export from this module.
+vi.mock('@/lib/sudo-guard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/sudo-guard')>()),
+  requireSudoToken: mockGuard.requireSudoToken,
+}))
 
 import { POST } from '@/app/api/agents/route'
 
@@ -57,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockAgentAuth.buildAuthContext.mockReturnValue({})
   mockService.CreateAgent.mockResolvedValue({ success: true, agentId: 'created-1' })
+  mockGuard.requireSudoToken.mockReturnValue(null)
 })
 
 describe('POST /api/agents — create-agent authorization', () => {

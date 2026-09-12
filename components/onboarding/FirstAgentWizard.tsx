@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { X, Check, AlertCircle, Terminal } from 'lucide-react'
 import CreateAgentAnimation from '../CreateAgentAnimation'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface FirstAgentWizardProps {
   onComplete: () => void
@@ -10,6 +12,9 @@ interface FirstAgentWizardProps {
 }
 
 export default function FirstAgentWizard({ onComplete, onCancel }: FirstAgentWizardProps) {
+  // TRDD-F1SL03CK EHT-2: POST /api/agents is strict since TRDD-F1SL03CK;
+  // sudoFetch pops the password modal and retries with X-Sudo-Token.
+  const { requestSudoToken } = useSudo()
   const [step, setStep] = useState<'name' | 'directory' | 'creating' | 'success'>('name')
   const [agentName, setAgentName] = useState('')
   const [workingDirectory, setWorkingDirectory] = useState('')
@@ -76,7 +81,7 @@ export default function FirstAgentWizard({ onComplete, onCancel }: FirstAgentWiz
         setAnimationProgress(40)
       }, 800)
 
-      const response = await fetch('/api/agents', {
+      const response = await sudoFetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,7 +89,7 @@ export default function FirstAgentWizard({ onComplete, onCancel }: FirstAgentWiz
           // workingDirectory auto-created as ~/agents/<name>/ by CreateAgent
           createSession: true,
         }),
-      })
+      }, requestSudoToken)
 
       if (!response.ok) {
         const data = await response.json()

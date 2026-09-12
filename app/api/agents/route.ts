@@ -3,6 +3,7 @@ import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
+import { requireSudoToken } from '@/lib/sudo-guard'
 import { internalError } from '@/lib/error-response'
 // Schema extracted to lib/ (TRDD-57EBNB72): Next.js route modules may only
 // export HTTP verbs/config, and the schema must be directly testable.
@@ -63,6 +64,15 @@ export async function POST(request: NextRequest) {
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
+
+    // TRDD-F1SL03CK EHT-1 — strict-route gate (R32 dual-path), same wiring as
+    // POST /api/teams below authenticateFromRequest: security-registry.json
+    // classifies `POST /api/agents` as strict, but nothing enforced it — a
+    // registry claim with no guard behind it. For a USER/system-owner caller
+    // this requires a fresh sudo token; for an AGENT caller it defers to
+    // requireAidTitle (STRICT_AGENT_RULES), never touching sudo tokens (R32.1).
+    const sudoErr = requireSudoToken(request, 'POST', '/api/agents')
+    if (sudoErr) return sudoErr
 
     // TRDD-F1SL03CK — AUTHORIZATION, not just authentication.
     //

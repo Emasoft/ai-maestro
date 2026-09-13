@@ -24,8 +24,8 @@ import { homedir } from 'os'
 
 const REAL_STATE = path.join(homedir(), '.aimaestro')
 
-function listing(): string[] {
-  if (!fs.existsSync(REAL_STATE)) return []
+function listing(root: string): string[] {
+  if (!fs.existsSync(root)) return []
   const out: string[] = []
   const walk = (dir: string, prefix: string) => {
     let entries: fs.Dirent[]
@@ -40,7 +40,7 @@ function listing(): string[] {
       if (e.isDirectory()) walk(path.join(dir, e.name), rel)
     }
   }
-  walk(REAL_STATE, '')
+  walk(root, '')
   return out.sort()
 }
 
@@ -49,25 +49,40 @@ function listing(): string[] {
  *
  * 1. A throw from a globalSetup teardown is a RUN-level error, not a test failure. Vitest
  *    exits non-zero, but the reporter line still says "N passed". Read the EXIT CODE, not
- *    the tally — a habit this session failed at three times.
+ *    the tally — a habit this session failed at three times. MEASURED 2026-09-13 on vitest
+ *    4.0.18: forcing the teardown to throw produced exit code 1, printed as a "Startup
+ *    Error" block, while the reporter line still read "13 passed".
  * 2. Expect a false positive eventually. The janitor heartbeat fires on a ~5-minute cadence
  *    and writes into this tree, so a long run can catch a legitimate daemon write. When it
- *    fires, check mtime provenance before blaming a test: the entry names tell you which
- *    corpus produced them, and a test's corpus is always under a temp root.
+ *    fires, check the triage sentence the thrown message itself carries (below) before
+ *    blaming a test.
  */
-export function setup() {
-  const before = new Set(listing())
+export function watchForLeaks(root: string) {
+  const before = new Set(listing(root))
   return () => {
-    const added = listing().filter((p) => !before.has(p))
+    const added = listing(root).filter((p) => !before.has(p))
     if (added.length === 0) return
     const shown = added.slice(0, 20).join('\n  ')
     throw new Error(
-      `TEST SUITE LEAKED into the developer's real state dir ${REAL_STATE}.\n` +
+      `TEST SUITE LEAKED into the developer's real state dir ${root}.\n` +
         `${added.length} new entr${added.length === 1 ? 'y' : 'ies'}:\n  ${shown}` +
         (added.length > 20 ? `\n  ...and ${added.length - 20} more` : '') +
         `\n\nA test wrote outside its temp fixtures. The usual cause is driving a real CLI\n` +
         `against a temp corpus: the binary resolves the state dir from $HOME, so the corpus\n` +
-        `is contained and the INDEX is not. Pass AIMAESTRO_STATE_DIR in the spawn env.`,
+        `is contained and the INDEX is not. Jail HOME in the child's spawn env instead\n` +
+        `(env: { ...process.env, HOME: <temp-jail-dir> }) — there is no AIMAESTRO_STATE_DIR\n` +
+        `override; one was added and deliberately reverted.\n\n` +
+        `If the listed names above do NOT look like a test corpus, check their mtimes before\n` +
+        `blaming a test — a background daemon writes into this tree too, and deleting this\n` +
+        `guard over one such write would leave a real leak undetected.`,
     )
   }
+}
+
+// vitest calls globalSetup with a GlobalSetupContext object as argument 0 — setup() must
+// stay zero-arg, or a `root` parameter with a default would silently receive that object
+// instead of a path. Hence the split: watchForLeaks(root) is the testable logic, setup()
+// is the thin real-state wrapper vitest actually invokes.
+export function setup() {
+  return watchForLeaks(REAL_STATE)
 }

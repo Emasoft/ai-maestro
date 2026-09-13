@@ -22,6 +22,21 @@ export const STATE_DIR_NAME = '.aimaestro'
 
 /** Absolute path to ~/.aimaestro */
 export function getStateDir(): string {
+  // TEST SEAM, and the reason it exists is measured rather than anticipated: the pillar
+  // CLIs write their index under this dir keyed by corpus, so a test driving a real CLI
+  // against a temp corpus writes into the DEVELOPER'S real ~/.aimaestro — a fresh mkdtemp
+  // path every run means a fresh key, so the directory grew monotonically and unseen.
+  // Measured 2026-09-13: 89 files in two hours from one suite, 259 accumulated.
+  //
+  // The override is env-driven because the leak happens in a SUBPROCESS: the tests spawn
+  // the real binaries, so nothing an in-process mock could do would reach it. A child
+  // inherits process.env, so one assignment in a global setup file contains both.
+  //
+  // Deliberately NOT a $HOME redirect, which would be smaller: the suite already carries a
+  // tripwire that reads the REAL ~/.claude to prove it is untouched, and moving HOME would
+  // silently make that guard vacuous — trading a visible leak for an invisible one.
+  const override = process.env.AIMAESTRO_STATE_DIR
+  if (override) return override
   return join(homedir(), STATE_DIR_NAME)
 }
 

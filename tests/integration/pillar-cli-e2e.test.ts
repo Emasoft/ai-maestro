@@ -32,8 +32,27 @@ const REAL_STATE = path.join(os.homedir(), '.aimaestro');
 const TMP_DIRS: string[] = [];
 
 function realStateListing(): string[] {
-  if (!fs.existsSync(REAL_STATE)) return [];
-  return fs.readdirSync(REAL_STATE).sort();
+  // RECURSIVE, and the shallow version is why this suite leaked for its whole life. A
+  // top-level readdir sees `pillar-index` — an entry that ALREADY EXISTS — so every file
+  // the pillar CLIs wrote inside it was invisible to the very guard watching the directory.
+  // Measured 2026-09-13: 89 files in two hours, 259 accumulated, while this test passed.
+  if (!fs.existsSync(REAL_STATE)) return []
+  const out: string[] = []
+  const walk = (dir: string, prefix: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${e.name}` : e.name
+      out.push(rel)
+      if (e.isDirectory()) {
+        try {
+          walk(path.join(dir, e.name), rel)
+        } catch {
+          // An unreadable subtree is not a leak signal; record the entry and move on.
+        }
+      }
+    }
+  }
+  walk(REAL_STATE, '')
+  return out.sort()
 }
 
 // Snapshot BEFORE any test in this file runs — nothing above this line touches
@@ -73,13 +92,27 @@ interface Result {
   err: string;
 }
 
+// Containment for the SUBPROCESSES this file spawns. The pillar CLIs write their index under
+// the ai-maestro state dir keyed by corpus, so driving a real binary against a temp corpus
+// wrote into the DEVELOPER'S real ~/.aimaestro — a fresh mkdtemp path each run hashes to a
+// fresh key, so the directory grew every run and never repeated. Measured 2026-09-13: 89
+// files in two hours from this suite alone, 259 accumulated.
+//
+// Scoped to THIS FILE rather than a global setup on purpose: a global override was tried
+// first and broke 13 tests that legitimately resolve the real state dir themselves. A
+// containment that redefines a path other tests assert on trades one silent wrong for
+// another.
+const STATE_JAIL = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-e2e-state-'))
+TMP_DIRS.push(STATE_JAIL)
+
 function run(
   cmd: string,
   args: string[],
   opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
 ): Result {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: opts.cwd, env: opts.env ?? process.env });
-  return { code: r.status, out: stripAnsi(r.stdout ?? ''), err: stripAnsi(r.stderr ?? '') };
+  const env = { ...(opts.env ?? process.env), AIMAESTRO_STATE_DIR: STATE_JAIL }
+  const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: opts.cwd, env })
+  return { code: r.status, out: stripAnsi(r.stdout ?? ''), err: stripAnsi(r.stderr ?? '') }
 }
 
 function mkDesignCorpus(): string {
@@ -495,7 +528,7 @@ describe.skipIf(!HAVE_MEMGREP)('memgrep (real CLI, real temp corpus)', () => {
 });
 
 describe('containment + write gate', () => {
-  it('29 · adds or removes no top-level entry in the developer real ~/.aimaestro', () => {
+  it('29 · writes NOTHING anywhere under the developer real ~/.aimaestro, at any depth', () => {
     // NON-VACUITY GUARD: realStateListing() returns [] when the dir is absent, so on a
     // fresh clone or a CI box the comparison below is [] vs [] — passing forever while
     // reading as safety. Measured 51 entries on this machine; assert it, don't assume.

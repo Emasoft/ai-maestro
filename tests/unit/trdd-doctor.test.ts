@@ -267,6 +267,30 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'STATUS-HOLDS-COLUMN-VALUE')).toContain('CCCCCCCC')
   })
 
+  it('SCOPE-CONTRADICTS-PATH — a card declaring `local` inside a PROJECT corpus', () => {
+    // The seeded DISAGREEMENT. It has to be seeded: on the live corpus all 347 cards
+    // declaring a scope say `project` and sit in the project tree, and all 22 local
+    // cards say `local` and sit in local trees — zero disagreements. A lint validated
+    // only against that population ships with no evidence it can fire at all.
+    // tmp here is an ordinary mkdtemp path, i.e. a PROJECT-shaped corpus.
+    write('tasks', 'TRDD-20260101_000000+0100-DDDDDDDD-x.md', good('DDDDDDDD', { scope: 'local' }))
+    expect(idsOf(lintCorpus(tmp), 'SCOPE-CONTRADICTS-PATH')).toContain('DDDDDDDD')
+  })
+
+  it('SCOPE-CONTRADICTS-PATH does NOT fire on an agreeing card', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-EEEEEEEE-x.md', good('EEEEEEEE', { scope: 'project' }))
+    expect(idsOf(lintCorpus(tmp), 'SCOPE-CONTRADICTS-PATH')).not.toContain('EEEEEEEE')
+  })
+
+  it('SCOPE-CONTRADICTS-PATH does NOT fire on ABSENCE — absent means project, and 312 of 659 cards omit it', () => {
+    // The failure that would make this lint useless on day one: treating a missing
+    // field as disagreement reports half the corpus, and a linter that cries about
+    // half the corpus gets routed around rather than fixed.
+    const noScope = good('FFFFFFFF').replace(/^scope:.*$/m, '')
+    write('tasks', 'TRDD-20260101_000000+0100-FFFFFFFF-x.md', noScope)
+    expect(idsOf(lintCorpus(tmp), 'SCOPE-CONTRADICTS-PATH')).not.toContain('FFFFFFFF')
+  })
+
   // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it carries a
   // DIFFERENT aspect, and the pillar specs already use it that way (`status: normative`). The
   // rule keyed on the FIELD NAME and was `autofixable`, so `trdd:fix` would have DELETED a

@@ -608,6 +608,40 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
+    // ---- SCOPE-CONTRADICTS-PATH (ai-maestro#163) ----
+    // The READER half of scope derivation. Until this existed the field had a correct
+    // writer and nothing that ever compared it to anything, which is the same amount of
+    // information as the hardcoded literal it replaced.
+    //
+    // ABSENCE IS LEGAL AND IS NOT A FINDING. The rule states that a missing `scope:`
+    // means project, and 312 of this repo's 659 cards omit it. A lint treating absence
+    // as disagreement would report half the corpus and be routed around within a day.
+    // Only a card that DECLARES a scope contradicting its own path is provably wrong.
+    //
+    // The path is authoritative, so the declared value is what gets flagged — never the
+    // other way round. This is the tripwire the migration needs: after cards move
+    // between scope roots, a stale `scope:` is the signal that a move did not land.
+    //
+    // NOT autofixable, deliberately. The repair is either "rewrite the field" or "move
+    // the file", and which one is right depends on whether the move or the field was
+    // the mistake — a judgement a fixer cannot make. Guessing here would be the
+    // STATUS-HOLDS-COLUMN-VALUE bug again: a tool deleting a legitimate value in the
+    // one place a tool must not guess.
+    const declaredScope = fmHas('scope') ? String(c.fm['scope']).trim() : ''
+    if (declaredScope) {
+      const actualScope = scopeOfDesignDir(c.filePath)
+      if (declaredScope !== actualScope) {
+        add({
+          rule: 'SCOPE-CONTRADICTS-PATH',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`scope: ${declaredScope}\` contradicts the card's own location, which is a ${actualScope} corpus. The PATH is authoritative (ai-maestro#163), so either the card moved and the field went stale, or the field was hand-written wrong. Not auto-repaired: rewriting the field and moving the file are both plausible fixes and only a human knows which move was intended.`,
+          autofixable: false,
+        })
+      }
+    }
+
     // ---- frontmatter DATETIME notation (TRDD-S13L6R9R) ----
     // The write side is fixed (`isoLocal()` is now the one stamp), but nothing PREVENTED
     // the drift for the weeks it ran, and a sixth write path would repeat it in silence.

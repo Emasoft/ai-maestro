@@ -273,12 +273,14 @@ export function isUserCorpusPath(p: string): boolean {
   // SHAPE, not mere presence: the segment alone names the groups CONTAINER, and a
   // container is not a corpus — minting there files cards one level above every group.
   //
-  // 'design' must appear somewhere AFTER the container, not at a fixed offset. The
-  // directive's form is <container>/<group>/design, but a group NAME is not established
-  // to be a single path segment (the registry's validator constrains only character 0),
-  // so pinning segs[i+2] would hardcode an invariant nothing guarantees — and it fails
-  // toward 'project', the one direction nothing downstream can detect.
-  return i >= 0 && segs.indexOf('design', i + 1) > i
+  // The search starts at i + 2, not i + 1, and the difference is a real hole rather
+  // than pedantry: from i + 1 a group literally NAMED 'design' satisfies the test at
+  // <container>/design, which is container-plus-group with no corpus under it. A test
+  // using a group called 'g' cannot see that, which is why the case is pinned below.
+  //
+  // 'design' is not required at a FIXED offset, because a group name is not established
+  // to be a single path segment — the registry's validator constrains only character 0.
+  return i >= 0 && segs.indexOf('design', i + 2) !== -1
 }
 
 

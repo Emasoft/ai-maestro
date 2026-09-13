@@ -56,6 +56,13 @@ describe('isUserCorpusPath', () => {
     expect(isUserCorpusPath('/home/x/.claude/projects/slug/design')).toBe(false)
   })
 
+  it('rejects a group literally NAMED design — container plus group, still no corpus', () => {
+    // The case a fixture using a group called 'g' cannot see. Searching for 'design'
+    // from i+1 would match the GROUP segment itself and call the container a corpus.
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/design')).toBe(false)
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/design/design')).toBe(true)
+  })
+
   it('rejects the groups CONTAINER — a container is not a corpus', () => {
     // <root>/<segment> alone has no <group> and no design/. Minting there would file
     // cards one level above every group. Inert while nothing emitted user scope;

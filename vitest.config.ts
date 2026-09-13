@@ -34,6 +34,7 @@ export default defineConfig({
     // The second entry is the same lesson one file over: a tripwire that must be CALLED protected
     // 6 of 385 suites, and the write it was built to catch arrived through one of the other 379.
     // A guard against an UNEXPECTED write is worth only what its adoption rate is, so it is global.
+    globalSetup: ['tests/setup/real-state-dir-untouched.ts'],
     setupFiles: [
       'tests/setup/janitor-control-containment.ts',
       'tests/setup/real-user-settings-untouched.ts',

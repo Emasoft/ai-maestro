@@ -20,6 +20,20 @@ import { describe, expect, it } from 'vitest'
 const REPO = path.resolve(__dirname, '..', '..')
 const INSTALLER = fs.readFileSync(path.join(REPO, 'install-messaging.sh'), 'utf-8')
 
+
+const LAUNCHER_SRC = fs.readFileSync(path.join(REPO, "scripts", "pillar-cli"), "utf-8")
+
+describe("the pillar CLI launcher gates its mutating verbs (ai-maestro#161)", () => {
+  it("refuses fix/edit outside this checkout unless AIM_PILLAR_ALLOW_WRITE=1", () => {
+    // Two installers used to disagree on this gate, and the one that anything actually
+    // installed (this file, above) had no gate at all — so the gate must live in the
+    // ONE shared implementation, not in an orphaned second installer nothing wires up.
+    // Fail-closed on the mutating token, not on flag-skipping: ai-maestro#161.
+    expect(LAUNCHER_SRC).toMatch(/\*" fix "\* \| \*" edit "\*/)
+    expect(LAUNCHER_SRC).toMatch(/AIM_PILLAR_ALLOW_WRITE/)
+  })
+})
+
 describe('the pillar CLI launcher', () => {
   it('exists, is executable, and is the ONE implementation behind every pillar name', () => {
     const launcher = path.join(REPO, 'scripts', 'pillar-cli')

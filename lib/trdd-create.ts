@@ -22,6 +22,7 @@ import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
 import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone } from '@/lib/trdd-vocabulary'
+import { corpusIdentity } from '@/lib/corpus-identity'
 import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
@@ -290,7 +291,14 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // `project-id:` stays project-only because the overlay forbids it on local and user
   // cards; those bind through host-id / created-by instead. So the pair rule survives
   // in the direction that carried the actual constraint.
-  const scope = scopeOfDesignDir(designDir)
+  // REALPATH AT THE WRITE SITE, which is here. The classifier is deliberately pure and
+  // uses path.resolve, which does NOT follow symlinks — defensible while its verdict was
+  // computed and discarded. This call PERSISTS the verdict into frontmatter, so a
+  // symlinked ancestor (dotfile managers do this routinely) would stamp `project` onto a
+  // local card permanently, and nothing downstream re-derives scope to catch it. The
+  // identity helper falls back to the resolved path when the dir does not exist yet, so a
+  // first mint into a fresh corpus still works.
+  const scope = scopeOfDesignDir(corpusIdentity(designDir))
   // projectId stays at FUNCTION scope: the return reports its `why` as a warning. It is
   // read only for project scope, so a local or user corpus no longer warns about a PRRD
   // it is not supposed to have.

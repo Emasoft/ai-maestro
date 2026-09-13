@@ -151,6 +151,7 @@ export function countDesignDividers(body: string): number {
 }
 
 import { SHIPPED } from './trdd-vocabulary'
+import { scopeOfDesignDir } from './pillar/kinds'
 
 /** A grep-first bool field is written `true`/`false` (bare or quoted). Anything else is undefined. */
 export function boolFieldValue(v: unknown): boolean | undefined {
@@ -1658,7 +1659,17 @@ export function fixCorpus(
           'assignee: main',
           'priority: 3',
           'task-type: feature',
-          'scope: project',
+          // DERIVED, not hardcoded. This block synthesizes frontmatter for a card that
+          // has none, so a literal `project` here stamps that claim onto a card sitting
+          // in a local or user corpus — the same defect the mint path carried until the
+          // previous commit, and the one place a repair could reintroduce it.
+          //
+          // Classifying from the card's own FILE path is deliberate and safe: the
+          // classifier scans path SEGMENTS, so a card at <corpus>/<zone>/<file> yields
+          // the same verdict as its corpus root would. That also means this is really a
+          // scope-of-any-path test; the name says designDir because that is its main
+          // caller, not because it requires one.
+          `scope: ${scopeOfDesignDir(c.filePath)}`,
           'min-approval-requirement: none',
           'parent-trdd: null',
           'npt: []',

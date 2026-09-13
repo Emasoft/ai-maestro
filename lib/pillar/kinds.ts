@@ -267,7 +267,14 @@ export const USER_SCOPE_SEGMENT = 'cross-projects-coordination'
  * already touches the filesystem and already handles ENOENT.
  */
 export function isUserCorpusPath(p: string): boolean {
-  return path.resolve(p).split(path.sep).includes(USER_SCOPE_SEGMENT)
+  const segs = path.resolve(p).split(path.sep)
+  const i = segs.indexOf(USER_SCOPE_SEGMENT)
+  // SHAPE, not mere presence. The segment alone names the groups CONTAINER, and a
+  // container is not a corpus: minting there files cards one level above every group.
+  // The form is <root>/<segment>/<group>/design[/<subdir>], so 'design' must sit two
+  // segments on. This was inert while nothing emitted user scope; once a mint persists
+  // the classification it becomes a false claim written to disk, so it is checked now.
+  return i >= 0 && segs[i + 2] === 'design'
 }
 
 

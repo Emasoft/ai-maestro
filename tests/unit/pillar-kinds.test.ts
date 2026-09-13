@@ -54,6 +54,16 @@ describe('isUserCorpusPath', () => {
     expect(isUserCorpusPath('/home/x/.claude/projects/slug/design')).toBe(false)
   })
 
+  it('rejects the groups CONTAINER — a container is not a corpus', () => {
+    // <root>/<segment> alone has no <group> and no design/. Minting there would file
+    // cards one level above every group. Inert while nothing emitted user scope;
+    // a persisted false claim once a mint can write it.
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination')).toBe(false)
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/g')).toBe(false)
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/g/design')).toBe(true)
+  })
+
+
   it('matches a whole path SEGMENT, not a substring', () => {
     // The discriminating case: a near-miss directory name must NOT pass. This is what
     // separates a segment test from an indexOf() and it is the assertion that would

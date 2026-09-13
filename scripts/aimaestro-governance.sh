@@ -348,7 +348,18 @@ cmd_invalidate_password() {
     fi
 
     printf 'Governance password: ' >&2
+    # TRDD-1HUKAYI6: `read -rs` alone races a pty's line discipline — under a pty
+    # wrapper (`script`, `expect`, most CI harnesses) a character written to the
+    # slave before `read`'s own tcsetattr(-ECHO) call can already have been echoed
+    # by the kernel driver, printing the password in cleartext into the caller's
+    # capture. `stty -echo` narrows that window as far as bash allows, and the
+    # trap guarantees the terminal is never left desynced (echo permanently off)
+    # if the read is interrupted.
+    stty -echo 2>/dev/null || true
+    trap 'stty echo 2>/dev/null || true' EXIT INT TERM
     read -rs password
+    stty echo 2>/dev/null || true
+    trap - EXIT INT TERM
     printf '\n' >&2
     [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
 
@@ -394,7 +405,14 @@ cmd_login() {
 
     if [ -t 0 ]; then
         printf 'Governance password: ' >&2
+        # TRDD-1HUKAYI6: same pty-echo race as cmd_invalidate_password above —
+        # disable echo explicitly and restore it via trap so an interrupted read
+        # never leaves the caller's terminal stuck with echo off.
+        stty -echo 2>/dev/null || true
+        trap 'stty echo 2>/dev/null || true' EXIT INT TERM
         read -rs password
+        stty echo 2>/dev/null || true
+        trap - EXIT INT TERM
         printf '\n' >&2
         [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
         # VIA STDIN, NOT `--arg` (fixed 2026-08-21). `--arg p "$password"` placed the secret

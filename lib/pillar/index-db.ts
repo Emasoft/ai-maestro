@@ -29,6 +29,8 @@ import Database from 'better-sqlite3'
  * new ladder step — editing an existing step means two machines that both report
  * the same `user_version` disagree about their shape, which no validate can detect.
  */
+import { corpusIdentity } from '@/lib/corpus-identity'
+
 export const SCHEMA_VERSION = 3
 
 export type IndexFaultCode =
@@ -273,14 +275,7 @@ export function indexPath(stateDir: string, corpusKey: string): string {
  * not get two indexes (the same trap that killed the git fast path in freshness.ts).
  */
 export function corpusKeyFor(corpusRoot: string): string {
-  const abs = path.resolve(corpusRoot)
-  let real = abs
-  try {
-    real = fs.realpathSync(abs)
-  } catch {
-    // Not yet on disk — the caller will fail on its own terms; keying off the
-    // unresolved path is still deterministic.
-  }
+  const real = corpusIdentity(corpusRoot)
   const slug =
     path
       .basename(path.dirname(real))

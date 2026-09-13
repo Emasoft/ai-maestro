@@ -216,8 +216,27 @@ export const PILLAR_KINDS: Record<PillarName, PillarKind> = {
  * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
  * `design/` changes one line rather than N literals that agree until they don't.
  */
-export function corpusRootFor(designDir: string, kind: PillarKind): string {
-  // `path.join(dir, '')` normalises to `dir`, so the zone-less TRDD case needs no
-  // branch — and a branch is where the two cases would eventually disagree.
-  return path.join(designDir, kind.corpusSubdir)
+export type CorpusScope = 'project' | 'local' | 'user'
+/**
+ * This pillar corpus root, given the projects `design/` dir (or, for a
+ * non-project scope, that same designDir value used as the reference point
+ * to derive the project root).
+ *
+ * The ONE place the mapping lives. Every caller that resolves a pillar root — the
+ * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
+ * `design/` changes one line rather than N literals that agree until they dont.
+ *
+ * scope defaults to project and is byte-identical to the pre-scope behaviour:
+ * `designDir` is joined with the kinds subdir, nothing else.
+ * scope local resolves to `<project-root>/.claude/local/design/<subdir>`
+ * (gitignored — ai-maestro#163), where project-root is derived from designDir
+ * (its parent directory) so every caller keeps passing the same designDir it
+ * already computes for project scope.
+ * scope user is not wired yet — it needs a cross-project GROUP id this
+ * function has no way to receive, so it fails fast rather than silently
+ * resolving the wrong tree.
+ */
+export function corpusRootFor(designDir: string, kind: PillarKind, scope: CorpusScope = "project"): string {
+  const base = scope === "local" ? path.join(path.dirname(designDir), ".claude", "local", "design") : designDir
+  return path.join(base, kind.corpusSubdir)
 }

@@ -14,16 +14,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { createHash } from 'crypto'
 import {
   KANBAN_INDEX_COLUMNS,
   UNKNOWN_COLUMN,
   buildKanbanIndex,
   corpusFingerprint,
+  defaultKanbanIndexPath,
   getKanbanIndex,
   isKanbanIndexStale,
   readKanbanIndex,
   writeKanbanIndex,
 } from '@/lib/kanban-index'
+import { corpusKeyFor } from '@/lib/pillar/index-db'
 import { DEFAULT_STATUSES } from '@/types/task'
 
 const ISO = '2026-07-10T05:00:00+0200'
@@ -253,5 +256,52 @@ describe('the real design/ corpus', () => {
 
   it('every row points at a file that exists — the row is a pointer, not the truth', () => {
     expect(index.rows.filter((r) => !fs.existsSync(r.filePath))).toEqual([])
+  })
+})
+
+
+describe('cross-module corpus identity — a symlinked design root is ONE corpus', () => {
+  it('agrees across the pillar key, the kanban index path, and staleness', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-symlink-'))
+    try {
+      const real = path.join(tmp, 'realproj', 'design')
+      fs.mkdirSync(real, { recursive: true })
+      const link = path.join(tmp, 'linkproj')
+      try {
+        fs.symlinkSync(path.join(tmp, 'realproj'), link)
+      } catch {
+        // Platform cannot symlink (e.g. unprivileged Windows) — nothing to assert.
+        return
+      }
+      const viaLink = path.join(link, 'design')
+
+      expect(corpusKeyFor(viaLink)).toBe(corpusKeyFor(real))
+      expect(defaultKanbanIndexPath(viaLink)).toBe(defaultKanbanIndexPath(real))
+
+      const index = buildKanbanIndex(real, ISO)
+      expect(isKanbanIndexStale(index, viaLink)).toBe(false)
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+})
+
+
+describe('defaultKanbanIndexPath is key-stable for a non-symlinked path', () => {
+  it('agrees with the old (resolve-only) key when no symlink is involved', () => {
+    // Zero corpora on this machine traverse a symlink (measured against every
+    // real design/ root found: 11/11 identical), so this pins that the common
+    // case is provably unaffected by routing the key through corpusIdentity.
+    // Built from an already-realpath'd base so the fixture itself has no symlink
+    // component to trip on (os.tmpdir() alone does, on macOS: /var -> /private/var).
+    const base = fs.realpathSync(os.tmpdir())
+    const dir = fs.mkdtempSync(path.join(base, 'kanban-keystable-'))
+    try {
+      expect(fs.realpathSync(dir)).toBe(path.resolve(dir))
+      const oldKey = createHash('sha256').update(path.resolve(dir)).digest('hex').slice(0, 16)
+      expect(defaultKanbanIndexPath(dir).includes(oldKey)).toBe(true)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

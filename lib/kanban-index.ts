@@ -29,6 +29,7 @@ import { DEFAULT_STATUSES } from '@/types/task'
 import { statePath } from '@/lib/ecosystem-constants'
 import { TRDD_ZONES, listTrddFiles, parseTrddFile, type TrddZone } from '@/lib/trdd-store'
 import { toGraphNode } from '@/lib/trdd-graph'
+import { corpusIdentity } from '@/lib/corpus-identity'
 
 /**
  * Column order for a rendered board. `DEFAULT_STATUSES` is the ratified 22-column
@@ -203,13 +204,13 @@ export function buildKanbanIndex(designDir: string, generatedAt: string): Kanban
  */
 export function isKanbanIndexStale(index: KanbanIndex, designDir: string): boolean {
   if (index.version !== INDEX_VERSION) return true
-  if (path.resolve(index.designDir) !== path.resolve(designDir)) return true
+  if (corpusIdentity(index.designDir) !== corpusIdentity(designDir)) return true
   return index.fingerprint !== corpusFingerprint(designDir)
 }
 
 /** The buffer's home — outside the corpus, so indexing a repo never dirties it. */
 export function defaultKanbanIndexPath(designDir: string): string {
-  const key = crypto.createHash('sha256').update(path.resolve(designDir)).digest('hex').slice(0, 16)
+  const key = crypto.createHash('sha256').update(corpusIdentity(designDir)).digest('hex').slice(0, 16)
   return statePath('kanban-index', `${key}.json`)
 }
 

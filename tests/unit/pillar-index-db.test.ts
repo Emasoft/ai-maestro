@@ -3,6 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import Database from 'better-sqlite3'
+import { createHash } from 'crypto'
 import {
   SCHEMA_VERSION,
   openIndex,
@@ -442,6 +443,20 @@ describe('corpusKeyFor — one index per corpus, and never inside it', () => {
     const file = indexPath(path.join(tmp, 'state'), corpusKeyFor(corpus))
     expect(file.startsWith(corpus)).toBe(false)
     expect(file.endsWith('.sqlite')).toBe(true)
+  })
+
+  it('is key-stable for a non-symlinked path — old (resolve-only) and new (resolve+realpath) hashes agree', () => {
+    // Zero corpora on this machine traverse a symlink (measured against every
+    // real design/ root found: 11/11 identical), so this pins that the common
+    // case is provably unaffected by routing corpusKeyFor through corpusIdentity.
+    // Built from an already-realpath'd base so the fixture itself has no symlink
+    // component to trip on (os.tmpdir() alone does, on macOS: /var -> /private/var).
+    const base = fs.realpathSync(tmp)
+    const corpus = path.join(base, 'plain', 'design')
+    fs.mkdirSync(corpus, { recursive: true })
+    expect(fs.realpathSync(corpus)).toBe(path.resolve(corpus))
+    const oldHash = createHash('sha256').update(path.resolve(corpus)).digest('hex').slice(0, 12)
+    expect(corpusKeyFor(corpus).endsWith(`-${oldHash}`)).toBe(true)
   })
 })
 

@@ -42,39 +42,41 @@ export interface SweepResult {
 
 /** One sweep over the hub corpus. Exported so a test can drive a beat without a timer. */
 export function runTrddWatchdogSweep(repoRoot: string = process.cwd()): SweepResult {
-  const designDir = path.join(repoRoot, 'design')
-  if (!fs.existsSync(path.join(designDir, 'tasks'))) {
+  const designDir = corpusRootFor(path.join(repoRoot, "design"), TRDD_KIND)
+  if (!fs.existsSync(path.join(designDir, "tasks"))) {
     return { ran: false, reason: `no design/tasks under ${repoRoot} — nothing to sweep` }
   }
   const doctor = lintCorpus(designDir)
   const watchdog = watchdogSweep(designDir)
   const scanned = doctor.scanned
   // Zero scanned is never clean — the CLI refuses too; here it is a skip with a reason.
-  if (scanned === 0) return { ran: false, reason: 'scanned 0 TRDDs — refusing to report a corpus it never read' }
+  if (scanned === 0) return { ran: false, reason: "scanned 0 TRDDs — refusing to report a corpus it never read" }
 
   const all = [...watchdog.findings, ...doctor.findings]
-  const errors = all.filter((f) => f.severity === 'error').length
-  const warnings = all.filter((f) => f.severity === 'warn').length
+  const errors = all.filter((f) => f.severity === "error").length
+  const warnings = all.filter((f) => f.severity === "warn").length
 
   // The report the MANAGER drains — gitignored reports/, per the agent-reports rule.
-  const dir = path.join(repoRoot, 'reports', 'trdd-watchdog')
+  const dir = path.join(repoRoot, "reports", "trdd-watchdog")
   fs.mkdirSync(dir, { recursive: true })
   const ts = new Date()
     .toISOString()
-    .replace(/[-:]/g, '')
-    .replace(/\..+/, 'Z')
+    .replace(/[-:]/g, "")
+    .replace(/\..+/, "Z")
   const reportPath = path.join(dir, `${ts}-d4-sweep.md`)
   const lines = [
     `# §D4 sweep — ${new Date().toISOString()}`,
-    '',
+    "",
     `${scanned} card(s) linted · ${watchdog.scanned} in the watchdog scan set · ${errors} error · ${warnings} warn`,
     `blind spots: ${watchdog.supersedeUnattributed} supersede line(s) unattributable, ${watchdog.commitFloorUnresolved} citing sha(s) unresolvable`,
-    '',
+    "",
     ...all.map((f) => `- ${f.severity.toUpperCase()} ${f.rule} ${f.id} — ${f.message}`),
   ]
-  fs.writeFileSync(reportPath, lines.join('\n') + '\n', 'utf8')
+  fs.writeFileSync(reportPath, lines.join("\n") + "\n", "utf8")
   return { ran: true, scanned, errors, warnings, reportPath }
 }
+
+import { corpusRootFor, TRDD_KIND } from "./pillar/kinds"
 
 function beat(log: (msg: string) => void): void {
   if (inFlight) return

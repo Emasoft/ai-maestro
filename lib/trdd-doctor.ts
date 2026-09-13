@@ -493,6 +493,15 @@ export function lintCorpus(designDir: string): DoctorReport {
   const { cards, unparsed, nodes } = loadCorpus(designDir)
   const findings: Finding[] = []
   const add = (f: Finding) => findings.push(f)
+  // Classified ONCE, from the walk root, never per card. A card found under this root
+  // is in this corpus by construction, so per-file classification would ask a path-shape
+  // question 659 times and get it wrong wherever a card's own path happens to carry a
+  // recognised segment for an unrelated reason — a vendored copy, a fixture written into
+  // a tmp tree, a checkout living under a .claude path. The blast radius of one such
+  // coincidence is every card in the corpus, not one, because they all declare the same
+  // scope. It also removes a cwd sensitivity: a relative --design-dir resolves against
+  // process.cwd(), so a per-card classify could answer differently from two directories.
+  const corpusScope = scopeOfDesignDir(designDir)
 
   for (const file of unparsed) {
     add({
@@ -629,7 +638,7 @@ export function lintCorpus(designDir: string): DoctorReport {
     // one place a tool must not guess.
     const declaredScope = fmHas('scope') ? String(c.fm['scope']).trim() : ''
     if (declaredScope) {
-      const actualScope = scopeOfDesignDir(c.filePath)
+      const actualScope = corpusScope
       if (declaredScope !== actualScope) {
         add({
           rule: 'SCOPE-CONTRADICTS-PATH',

@@ -201,6 +201,8 @@ public/avatars/*_enhanced.png
 .claude/settings.local.json
 .claude/worktrees/
 .claude/agent-memory/
+# Machine-private local-scope TRDD corpus (ai-maestro#163) — must never be committed
+.claude/local/
 .claude/rules/use-safe-delete.md
 CLAUDE.local.md
 

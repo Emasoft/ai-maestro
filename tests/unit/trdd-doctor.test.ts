@@ -66,6 +66,55 @@ function good(id: string, over: Record<string, string> = {}): string {
 const idsOf = (r: ReturnType<typeof lintCorpus>, rule: string) =>
   r.findings.filter((f) => f.rule === rule).map((f) => f.id)
 
+describe('SHIPPED excludes superseded -- a replaced blocker is not a shipped one (158-shipped-neuter-proof)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-shipped-'))
+  })
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('BLOCKER-RELEASED does not fire when the blocked-by id resolves to a superseded column', () => {
+    // Pins lib/trdd-doctor.ts:1103 (resolved.every((r) => SHIPPED.has(...))).
+    // SHIPPED excludes `superseded` (replaced, not shipped); TERMINAL_DONE
+    // wrongly includes it and would misreport this blocker as released.
+    write(
+      'archived',
+      'TRDD-20260101_000000+0100-E2E2E2E2-blocker.md',
+      good('E2E2E2E2', { column: 'superseded' }),
+    )
+    write(
+      'tasks',
+      'TRDD-20260101_000000+0100-E1E1E1E1-blocked.md',
+      good('E1E1E1E1', {
+        column: 'blocked',
+        'blocked-by': '[TRDD-E2E2E2E2]',
+        'pre-block-column': 'dev',
+      }),
+    )
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'BLOCKER-RELEASED')).not.toContain('E1E1E1E1')
+  })
+
+  it('readyQueue excludes a dev-column card whose order-edge blocker is superseded, not shipped', () => {
+    // Pins lib/trdd-doctor.ts:1380 (readyQueueFrom's isDone: !c || SHIPPED.has(c.column)).
+    // A `superseded` dependency must not count as done, so the dependent card
+    // must not be reported ready/next.
+    write(
+      'archived',
+      'TRDD-20260101_000000+0100-F2F2F2F2-blocker.md',
+      good('F2F2F2F2', { column: 'superseded' }),
+    )
+    write(
+      'tasks',
+      'TRDD-20260101_000000+0100-F1F1F1F1-dependent.md',
+      good('F1F1F1F1', { column: 'dev', 'blocked-by': '[TRDD-F2F2F2F2]' }),
+    )
+    const ids = readyQueue(tmp).map((c) => c.id)
+    expect(ids).not.toContain('F1F1F1F1')
+  })
+})
+
 describe('trdd-doctor — each rule can be made to FIRE', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))

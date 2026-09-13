@@ -84,6 +84,10 @@ export function normalizeTrddRef(ref: unknown): string {
   return String(ref).trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
 }
 
+export { SHIPPED }
+
+import { SHIPPED } from './trdd-vocabulary'
+
 /**
  * The two NON-LOCAL `blocked-by:` spellings (TRDD-PTFPGSLV). Each names a REAL blocker the
  * local graph cannot resolve — a GitHub issue, or a TRDD owned by another project's corpus —

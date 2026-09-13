@@ -66,6 +66,10 @@ export function isoLocal(d: Date = new Date()): { iso: string; stamp: string } {
   }
 }
 
+export { SHIPPED }
+
+import { SHIPPED } from './trdd-vocabulary'
+
 // Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
 // every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
 // shared seam fits is that trdd-store's own tests pass unchanged.
@@ -785,7 +789,7 @@ export function advanceColumn(
       } else {
         const stillOpen = refs.filter((ref) => {
           const blocker = findTrdd(designDir, ref)
-          return !blocker || !TERMINAL_DONE.has(blocker.column)
+          return !blocker || !SHIPPED.has(blocker.column)
         })
         if (stillOpen.length > 0) {
           return {
@@ -1159,9 +1163,9 @@ export function archiveTrdd(
       if (opts.clearBlocker) {
         clearBlockedBy = true
       } else {
-        const stillOpen = refs.filter((ref) => {
+const stillOpen = refs.filter((ref) => {
           const blocker = findTrdd(designDir, ref)
-          return !blocker || !TERMINAL_DONE.has(blocker.column)
+          return !blocker || !SHIPPED.has(blocker.column)
         })
         if (stillOpen.length > 0) {
           return {

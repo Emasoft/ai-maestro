@@ -102,6 +102,68 @@ updated: 2026-07-09T10:27:08+0200
   return file
 }
 
+it('advanceColumn out of blocked stays blocked when the sole blocker is superseded, not shipped', async () => {
+  // Pins lib/trdd-store.ts:792 (blockedByRefs(...).filter(!SHIPPED.has(...))).
+  // SHIPPED excludes `superseded` (replaced, not shipped); TERMINAL_DONE
+  // wrongly includes it and would let this card leave `blocked`.
+  writeTask('SUPR0001', 'the-replaced-blocker', 'superseded')
+  const id = 'SUPB0001'
+  writeTask(
+    id,
+    'the-blocked-task',
+    'blocked',
+    designDir,
+    'blocked-by: [TRDD-SUPR0001]\npre-block-column: dev\n',
+  )
+  const r = await advanceColumn(designDir, id, 'dev', { iso: ISO, approver: 'orch' })
+  expect(r.ok).toBe(false)
+  const t = findTrdd(designDir, id)!
+  expect(t.column).toBe('blocked')
+  expect(t.frontmatter['blocked-by']).not.toEqual([])
+})
+
+it('advanceColumn out of blocked clears blocked-by when the sole blocker is complete (positive control)', async () => {
+  // Positive control for the guard above: a `complete` blocker DOES count as
+  // shipped, so the card must actually clear. Proves the refusal in the
+  // sibling test is not merely "always blocked" no matter what.
+  writeTask('DONX0002', 'the-real-blocker', 'complete')
+  const id = 'CTRL0002'
+  writeTask(
+    id,
+    'the-blocked-task',
+    'blocked',
+    designDir,
+    'blocked-by: [TRDD-DONX0002]\npre-block-column: dev\n',
+  )
+  const r = await advanceColumn(designDir, id, 'dev', { iso: ISO, approver: 'orch' })
+  expect(r.ok).toBe(true)
+  const t = findTrdd(designDir, id)!
+  expect(t.column).toBe('dev')
+  expect(t.frontmatter['blocked-by']).toEqual([])
+})
+
+it('archiveTrdd out of blocked refuses to complete when the sole blocker is superseded, not shipped', async () => {
+  // Pins lib/trdd-store.ts:1168 -- the same SHIPPED-vs-TERMINAL_DONE
+  // distinction as advanceColumn, but on the archive path. The card needs a
+  // checked-off checklist so the terminal-column checklist gate (a SEPARATE
+  // rule) doesn't refuse first and mask the blocker-check swap under test.
+  writeTask('SUPR0003', 'the-replaced-blocker', 'superseded')
+  const id = 'SUPB0003'
+  const filePath = writeTask(
+    id,
+    'the-blocked-task',
+    'blocked',
+    designDir,
+    'blocked-by: [TRDD-SUPR0003]\npre-block-column: dev\n',
+  )
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  fs.writeFileSync(filePath, raw.replace('## Approval log', '## Acceptance\n\n- [x] done\n\n## Approval log'))
+  const r = await archiveTrdd(designDir, id, { approver: 'manager', state: 'complete', iso: ISO })
+  expect(r.ok).toBe(false)
+  const t = findTrdd(designDir, id)!
+  expect(t.column).toBe('blocked')
+})
+
 beforeEach(() => {
   designDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-store-'))
 })

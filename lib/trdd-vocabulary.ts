@@ -46,6 +46,14 @@ export const TERMINAL_DONE: ReadonlySet<string> = new Set([
   'superseded',
 ])
 
+
+// Cards that actually SHIPPED — a hold on a dependency clears only when the dependency
+// really landed. `superseded` is terminal but means the dependency was never satisfied,
+// so a card blocked by a superseded dependency must stay blocked.
+export const SHIPPED: ReadonlySet<string> = new Set([
+  'complete', 'completed', 'published', 'live',
+])
+
 /** The 22 ratified kanban columns, plus the lifecycle values that bracket them. */
 export const BRACKET_COLUMNS = ['proposal', 'planned', 'refused', 'completed', 'cancelled'] as const
 export const VALID_COLUMNS: readonly string[] = [...DEFAULT_STATUSES, ...BRACKET_COLUMNS]

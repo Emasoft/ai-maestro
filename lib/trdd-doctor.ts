@@ -150,6 +150,8 @@ export function countDesignDividers(body: string): number {
   return body.split('\n').filter((l) => l.trim() === '<!-- @trdd:design-body -->').length
 }
 
+import { SHIPPED } from './trdd-vocabulary'
+
 /** A grep-first bool field is written `true`/`false` (bare or quoted). Anything else is undefined. */
 export function boolFieldValue(v: unknown): boolean | undefined {
   if (v === true || v === 'true') return true
@@ -1098,7 +1100,7 @@ export function lintCorpus(designDir: string): DoctorReport {
         })
       } else {
         const resolved = blockedBy.map((b) => ({ id: b, card: byId.get(b)![0] }))
-        if (resolved.every((r) => TERMINAL_DONE.includes(r.card.column))) {
+if (resolved.every((r) => SHIPPED.has(r.card.column))) {
           const restore = String(c.fm['pre-block-column'] ?? '').trim()
           add({
             rule: 'BLOCKER-RELEASED',
@@ -1375,7 +1377,7 @@ export function readyQueueFrom(inputs: readonly ReadyInput[]): ReadyCard[] {
   const byId = new Map(inputs.map((c) => [c.id, c]))
   const isDone = (id: string) => {
     const c = byId.get(id)
-    return !c || TERMINAL_DONE.includes(c.column)
+    return !c || SHIPPED.has(c.column)
   }
 
   // How many OPEN cards each card would unblock if it were finished.

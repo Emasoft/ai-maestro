@@ -210,32 +210,11 @@ export const PILLAR_KINDS: Record<PillarName, PillarKind> = {
 }
 
 /**
- * This pillar's corpus root, given the project's `design/` dir.
- *
- * The ONE place the mapping lives. Every caller that resolves a pillar root — the
- * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
- * `design/` changes one line rather than N literals that agree until they don't.
+ * The three corpus scopes. The PATH is authoritative; a card's `scope:` field is a
+ * lint target when the two disagree (ai-maestro#163).
  */
 export type CorpusScope = 'project' | 'local' | 'user'
-/**
- * This pillar corpus root, given the projects `design/` dir (or, for a
- * non-project scope, that same designDir value used as the reference point
- * to derive the project root).
- *
- * The ONE place the mapping lives. Every caller that resolves a pillar root — the
- * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
- * `design/` changes one line rather than N literals that agree until they dont.
- *
- * scope defaults to project and is byte-identical to the pre-scope behaviour:
- * `designDir` is joined with the kinds subdir, nothing else.
- * scope local resolves to `<project-root>/.claude/local/design/<subdir>`
- * (gitignored — ai-maestro#163), where project-root is derived from designDir
- * (its parent directory) so every caller keeps passing the same designDir it
- * already computes for project scope.
- * scope user is not wired yet — it needs a cross-project GROUP id this
- * function has no way to receive, so it fails fast rather than silently
- * resolving the wrong tree.
- */
+
 /**
  * This pillar's corpus root, given a `design/` dir.
  *
@@ -250,23 +229,37 @@ export type CorpusScope = 'project' | 'local' | 'user'
  * deriving project-root as designDir's parent so every caller keeps passing the same
  * designDir it already computes for project scope.
  *
- * user — a PASSTHROUGH: resolves exactly as project does. This is a path resolver,
- * and when the caller has already named the corpus (an explicit --design-dir under
- * ~/.claude/cross-projects-coordination/<group>/design) there is no group to look
- * up. Access control is a layer up (ai-maestro#164).
+ * user — resolves like project, but ONLY for a designDir that is actually a
+ * cross-project corpus. This is a path resolver: when the caller has already named
+ * the corpus there is no group to look up, and refusing on that ground was a
+ * layering defect that made a valid scope unreachable by the tools that must write
+ * it. WHO may use a given group is access control, one layer up (ai-maestro#164),
+ * and is deliberately not checked here.
  *
- * THE OBLIGATION THIS PUTS ON CALLERS, stated here because this function cannot
- * check it: passing user with a PROJECT designDir silently files user-scope records
- * into the project corpus. Nothing here can tell the two apart — by the time
- * designDir arrives it has already been defaulted. A caller that accepts a
- * user-scope request WITHOUT an explicit corpus root must refuse it itself.
+ * WHAT IS CHECKED HERE, because this function CAN check it: that a user-scope
+ * request does not resolve onto a PROJECT corpus. Without it, user scope silently
+ * files cross-project records into whatever project the caller happened to default
+ * to — a plausible path, no error, and the single most damaging way this function
+ * can be wrong.
  *
- * This block previously claimed user scope 'fails fast rather than silently
- * resolving the wrong tree'. It never did: user falls through to designDir, and
- * the unit test beside it asserts 'no throw'. A false safety claim is worse than
- * none — it stops the next reader checking.
+ * An earlier version of this comment claimed user scope "fails fast rather than
+ * silently resolving the wrong tree". It never did: user fell through to designDir.
+ * The replacement then claimed "nothing here can tell the two apart", which was also
+ * too strong and is why the guard was deferred. Both are wrong in the same
+ * direction. This function cannot tell whether designDir was DEFAULTED — that needs
+ * a caller's knowledge — but it can always tell whether the resulting path IS a
+ * cross-project corpus, which is a property of the path alone. A segment test is
+ * used rather than a $HOME-anchored prefix so the check does not depend on where
+ * home sits.
  */
-export function corpusRootFor(designDir: string, kind: PillarKind, scope: CorpusScope = "project"): string {
-  const base = scope === "local" ? path.join(path.dirname(designDir), ".claude", "local", "design") : designDir
+export function corpusRootFor(designDir: string, kind: PillarKind, scope: CorpusScope = 'project'): string {
+  if (scope === 'user' && !path.resolve(designDir).split(path.sep).includes('cross-projects-coordination')) {
+    throw new Error(
+      `corpusRootFor: user scope resolved to ${path.resolve(designDir)}, which is not a ` +
+        `cross-project corpus (no 'cross-projects-coordination' segment). Refusing rather ` +
+        `than filing a user-scope record into a project corpus.`,
+    )
+  }
+  const base = scope === 'local' ? path.join(path.dirname(designDir), '.claude', 'local', 'design') : designDir
   return path.join(base, kind.corpusSubdir)
 }

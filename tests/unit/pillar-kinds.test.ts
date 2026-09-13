@@ -29,4 +29,19 @@ describe('corpusRootFor scope', () => {
       path.join(explicitUserDesignDir, 'specs'),
     )
   })
+
+  it('user scope REFUSES a project designDir rather than filing into the project corpus', () => {
+    // THE HAZARD the passthrough creates, and the reason the guard lives in the resolver
+    // rather than waiting for access control. Nothing at the call site distinguishes a
+    // DEFAULTED project designDir from an explicit user one, so the resolver checks the
+    // one property readable off the path alone: is this a cross-project corpus at all?
+    // Without it a user-scope write lands in whatever project the caller defaulted to,
+    // with a plausible path and no error — the silent-wrong-tree case.
+    expect(() => corpusRootFor('/repo/design', TRDD_KIND, 'user')).toThrow(
+      /not a cross-project corpus/,
+    )
+    expect(() => corpusRootFor('/repo/design', PRRD_KIND, 'user')).toThrow()
+    // A RELATIVE path must not sneak past: the check resolves before testing segments.
+    expect(() => corpusRootFor('design', SPEC_KIND, 'user')).toThrow()
+  })
 })

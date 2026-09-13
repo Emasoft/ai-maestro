@@ -501,6 +501,17 @@ export function lintCorpus(designDir: string): DoctorReport {
   // coincidence is every card in the corpus, not one, because they all declare the same
   // scope. It also removes a cwd sensitivity: a relative --design-dir resolves against
   // process.cwd(), so a per-card classify could answer differently from two directories.
+  // CONTAINMENT IS LEXICAL AND VERIFIED, not assumed: listDocuments joins the zone onto
+  // the root, readdirs it, and joins each name back on, so every card path this walk
+  // yields sits under designDir by construction. A runtime startsWith guard here would
+  // be dead code.
+  //
+  // The case that is NOT dead, and is decided here rather than left to chance: a zone
+  // that is itself a SYMLINK to a tree elsewhere. Classifying per card would realpath
+  // through it and answer by where the bytes live; classifying from the root answers by
+  // which corpus reaches the card. The second is the right question — a card in this
+  // corpus's archived/ is this corpus's card, wherever its storage happens to sit — and
+  // it is pinned by a test rather than left as an emergent property.
   const corpusScope = scopeOfDesignDir(designDir)
 
   for (const file of unparsed) {

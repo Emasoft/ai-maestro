@@ -291,6 +291,36 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'SCOPE-CONTRADICTS-PATH')).not.toContain('FFFFFFFF')
   })
 
+
+  it('SCOPE-CONTRADICTS-PATH classifies by the CORPUS, not by where a symlinked zone points', () => {
+    // The link target is deliberately LOCAL-shaped while the corpus root is project-
+    // shaped, so the two classifications genuinely disagree. A first version of this
+    // test pointed the link at an ordinary tmp dir — both sides answered 'project', and
+    // it would have passed with the hoist reverted. Same vacuity as an earlier symlink
+    // test in this repo: if the fixture cannot make the two answers differ, it pins
+    // nothing.
+    //
+    // Per-card classification would realpath through the link, see .claude/local/design,
+    // and flag the card. Classifying from the walk root answers by which corpus REACHES
+    // the card, which is the right question: a card in this corpus's tasks/ is this
+    // corpus's card, wherever its storage sits.
+    const awayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-away-'))
+    const away = path.join(awayRoot, '.claude', 'local', 'design', 'tasks')
+    fs.mkdirSync(away, { recursive: true })
+    const linked = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-linked-'))
+    for (const z of ['proposals', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(linked, z), { recursive: true })
+    }
+    fs.symlinkSync(away, path.join(linked, 'tasks'))
+    fs.writeFileSync(
+      path.join(away, 'TRDD-20260101_000000+0100-GGGGGGGG-x.md'),
+      good('GGGGGGGG', { scope: 'project' }),
+      'utf8',
+    )
+    expect(idsOf(lintCorpus(linked), 'SCOPE-CONTRADICTS-PATH')).not.toContain('GGGGGGGG')
+    fs.rmSync(awayRoot, { recursive: true, force: true })
+    fs.rmSync(linked, { recursive: true, force: true })
+  })
   // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it carries a
   // DIFFERENT aspect, and the pillar specs already use it that way (`status: normative`). The
   // rule keyed on the FIELD NAME and was `autofixable`, so `trdd:fix` would have DELETED a

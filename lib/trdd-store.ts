@@ -120,8 +120,10 @@ export type TrddResult =
 // when the custom Next.js server runs). Routes may point at another agent's
 // `<workdir>/design` instead.
 export function defaultDesignDir(): string {
-  return corpusRootFor(path.join(process.cwd(), "design"), TRDD_KIND)
+  return corpusRootFor(defaultDesignDirFor(), TRDD_KIND)
 }
+
+import { defaultDesignDirFor } from "./pillar/kinds"
 
 import { corpusRootFor } from "./pillar/kinds"
 

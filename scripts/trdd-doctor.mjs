@@ -16,6 +16,7 @@ import path from 'path'
 import process from 'process'
 
 const { lintCorpus, fixCorpus, readyQueue } = await import('../lib/trdd-doctor.ts')
+const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
 
@@ -39,7 +40,7 @@ const flagValue = (f) => {
 // `--design-dir` exists because the old `process.cwd()` assumption is silent when
 // wrong: run from anywhere but the repo root and you got a clean bill of health
 // for a corpus that was never there.
-const designDir = path.resolve(flagValue('--design-dir') ?? path.join(process.cwd(), 'design'))
+const designDir = path.resolve(flagValue('--design-dir') ?? defaultDesignDirFor())
 assertDesignDir(designDir)
 
 const C = {

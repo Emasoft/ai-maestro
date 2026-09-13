@@ -49,6 +49,8 @@ export function palette(useColour: boolean) {
   return { b: w('1'), d: w('2'), r: w('31'), g: w('32'), y: w('33'), c: w('36') }
 }
 
+import { defaultDesignDirFor } from './kinds'
+
 /**
  * One `--at-line N --expect X --replace Y` triple, and its repeats.
  *
@@ -157,7 +159,7 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
     const porcelain = porcelainIdx !== -1
     if (porcelain) rest = [...rest.slice(0, porcelainIdx), ...rest.slice(porcelainIdx + 1)]
 
-    const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
+    const designDir = path.resolve(designDirVal ?? defaultDesignDirFor())
     const root = corpusRootFor(designDir, kind)
 
     const limit = limitVal === undefined ? 50 : Number(limitVal)

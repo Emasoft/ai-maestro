@@ -28,6 +28,8 @@
 import fs from 'fs'
 import path from 'path'
 
+const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
+
 const [, , outDirArg, countArg, bodyKbArg] = process.argv
 if (!outDirArg || !countArg) {
   console.error('usage: gen-trdd-fixture.mjs <outDir> <count> [bodyKB=10]')
@@ -42,7 +44,7 @@ if (!Number.isInteger(count) || count < 1) {
   process.exit(2)
 }
 // A generator that can overwrite the real corpus is a generator that will.
-const realDesign = path.resolve(process.cwd(), 'design')
+const realDesign = path.resolve(defaultDesignDirFor())
 if (outDir === realDesign || outDir.startsWith(realDesign + path.sep)) {
   console.error(`gen-trdd-fixture: refusing to write inside the real corpus at ${realDesign}`)
   process.exit(2)

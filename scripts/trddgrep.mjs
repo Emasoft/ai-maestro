@@ -52,6 +52,7 @@ const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
 const { SHIPPED, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIELDS } =
   await import('../lib/trdd-graph.ts')
 const { readyQueueFrom } = await import('../lib/trdd-doctor.ts')
+const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
 
 const C = {
   b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -172,7 +173,7 @@ function bodySlice(body) {
   return bodyScope === 'design' ? lines.slice(i + 1).join('\n') : lines.slice(0, i).join('\n')
 }
 
-const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
+const designDir = path.resolve(designDirVal ?? defaultDesignDirFor())
 const argv = rest
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]

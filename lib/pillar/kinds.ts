@@ -211,6 +211,23 @@ export const PILLAR_KINDS: Record<PillarName, PillarKind> = {
 }
 
 /**
+ * The design/ directory basename, and the one place `cwd + "/design"` is computed.
+ *
+ * Measured: seven call sites independently re-derived this default —
+ * lib/pillar/cli.ts, lib/trdd-store.ts, scripts/pillars-lint.mjs, scripts/trdd-doctor.mjs,
+ * scripts/trdd-watchdog.mjs, scripts/gen-trdd-fixture.mjs, and scripts/pillar-cli (bash,
+ * cannot import this — its literal carries a comment pointing back here). Seven places
+ * that must agree about one fact could disagree silently; this is the one source of truth.
+ */
+export const DESIGN_DIRNAME = 'design'
+
+/** `<cwd>/design`, absolute. The default every CLI/script falls back to when no
+ *  `--design-dir` was given. */
+export function defaultDesignDirFor(cwd: string = process.cwd()): string {
+  return path.join(cwd, DESIGN_DIRNAME)
+}
+
+/**
  * The three corpus scopes. The PATH is authoritative; a card's `scope:` field is a
  * lint target when the two disagree (ai-maestro#163).
  */

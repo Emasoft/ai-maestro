@@ -29,6 +29,7 @@ process.on('uncaughtException', (err) => {
 })
 
 const { lintCorpus } = await import('../lib/trdd-doctor.ts')
+const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
 const { watchdogSweep } = await import('../lib/trdd-watchdog.ts')
 const { assertDesignDir } = await import('../lib/trdd-store.ts')
 
@@ -37,7 +38,7 @@ const flagValue = (f) => {
   const i = args.indexOf(f)
   return i >= 0 ? args[i + 1] : undefined
 }
-const designDir = path.resolve(flagValue('--design-dir') ?? path.join(process.cwd(), 'design'))
+const designDir = path.resolve(flagValue('--design-dir') ?? defaultDesignDirFor())
 assertDesignDir(designDir)
 
 const C = {

@@ -29,6 +29,7 @@ import path from 'path'
 import process from 'process'
 
 const { lintDag, DEPENDENCY_FIELDS } = await import('../lib/pillar/dag.ts')
+const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
 
 const C = {
   b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -54,7 +55,7 @@ const takeFlagValue = (name) => {
   argv.splice(i, 2)
   return v
 }
-const designDir = path.resolve(takeFlagValue('--design-dir') ?? path.join(process.cwd(), 'design'))
+const designDir = path.resolve(takeFlagValue('--design-dir') ?? defaultDesignDirFor())
 const asJson = argv.includes('--json')
 
 // Each pillar's root, and its own existence check. A pillar whose root is ABSENT is

@@ -534,3 +534,34 @@ describe('--porcelain — one TAB-separated record per line, path first', () => 
     expect(runCli('trddgrep.mjs', ['show', 'PORCCARD', '--porcelain', '--design-dir', path.join(fix, 'nowhere')]).status).toBe(2)
   })
 })
+
+
+describe("no --design-dir: resolves <cwd>/design by default", () => {
+  it("finds a card in <cwd>/design/tasks when no --design-dir is given", () => {
+    fs.mkdirSync(path.join(fix, "design", "tasks"), { recursive: true })
+    const card = path.join(fix, "design", "tasks", "TRDD-20260101_000000+0100-CWDCARD1-x.md")
+    fs.writeFileSync(card, [
+      "---", "trdd-id: CWDCARD1", "title: a cwd-default fixture card", "column: dev",
+      "created: 2026-01-01T00:00:00+0100", "updated: 2026-01-01T00:00:00+0100",
+      "current-owner: t", "task-type: bugfix", "---", "", "# a cwd-default fixture card", "body", "",
+    ].join("\n"), "utf-8")
+    // No --design-dir at all: the CLI must fall back to `<cwd>/design`, which is
+    // exactly the behaviour DESIGN_DIRNAME/defaultDesignDirFor now centralizes.
+    //
+    // `--import tsx` (bare) resolves the tsx PACKAGE against the child's cwd, so
+    // from a foreign cwd (not this repo) it dies ERR_MODULE_NOT_FOUND before the CLI
+    // ever runs (measured; scripts/pillar-cli's own comment records the same fact and
+    // works around it with an ABSOLUTE loader path). Every other spawn in this file
+    // dodges that by fixing cwd to REPO and passing --design-dir explicitly -- which is
+    // exactly why none of them exercises the default this test exists to pin. Mirror
+    // pillar-cli's fix: an absolute --import path plus TSX_TSCONFIG_PATH.
+    const tsxEntry = path.join(REPO, "node_modules", "tsx", "dist", "loader.mjs")
+    const r = spawnSync(process.execPath, ["--import", `file://${tsxEntry}`, path.join(REPO, "scripts", "trddgrep.mjs"), "show", "CWDCARD1", "--porcelain"], {
+      cwd: fix,
+      encoding: "utf-8",
+      env: { ...process.env, TRDD_DEBUG: "", NO_COLOR: "1", HOME: fakeHome, TSX_TSCONFIG_PATH: path.join(REPO, "tsconfig.json") },
+    })
+    expect(r.status).toBe(0)
+    expect((r.stdout ?? "").trim().split("\t")[0]).toBe(fs.realpathSync(card))
+  })
+})

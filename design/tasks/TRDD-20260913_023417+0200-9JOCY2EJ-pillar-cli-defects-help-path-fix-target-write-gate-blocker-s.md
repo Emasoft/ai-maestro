@@ -3,7 +3,7 @@ trdd-id: 9JOCY2EJ
 title: Pillar CLI defects - help path, fix target, write gate, blocker semantics
 column: dev
 created: 2026-09-13T02:34:17+0200
-updated: 2026-09-13T05:13:01+0200
+updated: 2026-09-13T15:44:25+0200
 current-owner: ai-maestro-0a
 created-by: ai-maestro-0a
 task-type: bugfix
@@ -16,7 +16,7 @@ mandated-by: none
 approved: true
 approval-judge: ai-maestro-0a
 approval-datetime: 2026-09-13T02:34:17+0200
-implementation-commits: [9c07ffcc2, b16d60e2b, ac94f564b, c81ebf203, 2126059aa, f4ba6fd41]
+implementation-commits: [9c07ffcc2, b16d60e2b, ac94f564b, c81ebf203, 2126059aa, f4ba6fd41, 2f35bb35b]
 ---
 
 # Pillar CLI defects - help path, fix target, write gate, blocker semantics

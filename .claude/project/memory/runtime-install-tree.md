@@ -2,7 +2,7 @@
 name: runtime-install-tree
 description: "where does ai-maestro store data on a host / what is in ~/.aimaestro / what is inside the ~/agents folder / where are plugins installed vs where is plugin source / is ~/ai-maestro the install tree / where does claude code store chat transcripts / where are AMP messages stored on disk / where are role-plugins vs custom-plugins vs core-plugins / what is verified vs legacy in the state dir"
 ocd: 2026-08-02
-lmd: 2026-09-05
+lmd: 2026-09-13
 metadata:
   node_type: memory
   type: reference
@@ -13,6 +13,7 @@ publish-globally: false
 
 # runtime-install-tree
 
+^BT8PGTZP [desc:"Runtime install tree is distinct from the source repo layout; verified paths are used by current code, legacy/unverified paths are present on disk but unconfirmed", keywords:"where_does_ai-maestro_store_data_on_a_host runtime_install_tree_vs_source_repo verified_vs_legacy_paths in_the_state_dir getStateDir_resolves_to_tilde_dot_aimaestro STATE_DIR_NAME_dot_aimaestro do_not_guess_paths_look_them_up confirm_before_relying_on_a_legacy_path ecosystem-constants_dot_ts", ocd:2026-08-02, lmd:2026-09-13]
 This is the **runtime install tree**: where AI Maestro actually stores data on each host,
 distinct from the source repo layout (see [[repo-file-structure]]). **Do not guess paths — look
 them up here.** Paths tagged `(verified)` are created/used by current code (`statePath()` /
@@ -20,6 +21,7 @@ them up here.** Paths tagged `(verified)` are created/used by current code (`sta
 `lib/ecosystem-constants.ts`); `(legacy/unverified)` = present on disk but not referenced by
 current code — confirm before relying on them.
 
+^I7SZR6CS [desc:"the ai-maestro dev repo is NOT the install tree; a packaged install has no tilde ai-maestro at all, only tilde .aimaestro and tilde agents stay at fixed home paths across any install method", keywords:"is_tilde_ai-maestro_the_install_tree no_tilde_ai-maestro_when_packaged fixed_home_paths_across_install_methods never_hardcode_tilde_ai-maestro_for_runtime_data resolve_app_paths_relative_to_install_dir getStateDir_tilde_dot_aimaestro tilde_agents_fixed_path host-level_tilde_dot_claude tilde_dot_agent-messaging tilde_dot_local_bin install-location_independence", ocd:2026-08-02, lmd:2026-09-13]
 > **Install-location independence (CRITICAL):** the **dev repo** `~/ai-maestro/` (see
 > [[repo-file-structure]]) is NOT the install tree. When AI Maestro ships as a package, there is
 > **no `~/ai-maestro/`** — the app code (`server.mjs`, `app/`, `services/`, `lib/`,
@@ -30,6 +32,7 @@ current code — confirm before relying on them.
 > does not own). Never hardcode `~/ai-maestro/...` for runtime data — resolve app paths relative
 > to the install dir, and data paths via `getStateDir()` (`~/.aimaestro`) and `~/agents/`.
 
+^C9HJYF57 [desc:"full layout of tilde .aimaestro/: registry.json, cemetery, sessions.json, governance.json, kanban-index, pillar-index, agent-shell-guard.sh, plus legacy/unverified paths", keywords:"what_is_in_tilde_dot_aimaestro where_is_registry_json_stored where_are_agent_sessions_stored where_is_governance_json_stored cemetery_soft-deleted_agent_archive kanban-index_derived_cache_safe_to_delete pillar-index_derived_cache_safe_to_delete agent-shell-guard_dot_sh_write_guard legacy_messages_dir_not_used_amp_lives_elsewhere where_are_amp_messages_stored_on_disk agents_never_hard-deleted_by_default", ocd:2026-08-02, lmd:2026-09-13]
 ## `~/.aimaestro/` — global per-host server state (`getStateDir()`)
 
 ```
@@ -97,6 +100,7 @@ current code — confirm before relying on them.
 └── messages.backup.<date>/       #   one-time migration backup of messages/
 ```
 
+^HBA7GFNG [desc:"layout of tilde agents/: per-agent working dirs plus role-plugins/custom-plugins/core-plugins SOURCE containers, distinct from the installed plugin cache", keywords:"what_is_inside_the_tilde_agents_folder agent_working_directory_location role-plugins_vs_custom-plugins_vs_core-plugins where_are_plugins_installed_vs_where_is_plugin_source R20.29_source_publishing_containers not_installed_plugins claude_local_scope_settings_local_json managed_gitignore_info_exclude reports_dev_docs_dev_scratch_folders is_tilde_agents_the_marketplace", ocd:2026-08-02, lmd:2026-09-13]
 ## `~/agents/` — agent working directories + LOCAL marketplace SOURCE
 
 > **R20.29:** the three `*-plugins/` dirs are plugin **SOURCE / publishing**
@@ -133,6 +137,7 @@ current code — confirm before relying on them.
 └── _dev/                         # dev scratch (gitignored)
 ```
 
+^71E2O25U [desc:"Claude Code's own store: chat transcripts under projects/<slug>, the plugin install target plugins/cache, and settings.json", keywords:"where_does_claude_code_store_chat_transcripts tilde_dot_claude_projects_slug_jsonl session-uuid_jsonl_transcript claude_resume_reads_the_transcript where_are_plugins_installed_for_claude plugins_cache_marketplace_plugin_path settings_json_user_scope_config chat_history_not_portable_today", ocd:2026-08-02, lmd:2026-09-13]
 ## `~/.claude/` — Claude Code's OWN store (NOT AI Maestro; AI Maestro reads/installs INTO it)
 
 ```
@@ -148,6 +153,7 @@ current code — confirm before relying on them.
 └── settings.local.json           # (per-dir) — for an agent workdir this lives at <workdir>/.claude/settings.local.json
 ```
 
+^QXT7HB1H [desc:"AMP client storage: host-level identity/config plus per-agent inbox/sent/archived mailboxes under tilde .agent-messaging/agents/<id>/messages/", keywords:"where_are_amp_messages_stored_on_disk tilde_dot_agent-messaging_layout host-level_amp_identity per-agent_amp_mailbox inbox_sent_archived_folders amp_config_json_identity_md_keys agent-messaging_registrations", ocd:2026-08-02, lmd:2026-09-13]
 ## `~/.agent-messaging/` — AMP client storage (host-level + per-agent)
 
 ```
@@ -157,6 +163,7 @@ current code — confirm before relying on them.
 └── agents/<id-or-name>/messages/{inbox,sent,archived}/  # per-agent AMP mailboxes
 ```
 
+^PD81BUST [desc:"installed CLI wrappers on PATH: aimaestro-agent.sh, ~28 amp-*.sh scripts, 5 aid-*.sh scripts, plus docs/graph/memory tools", keywords:"installed_cli_wrappers_location tilde_dot_local_bin aimaestro-agent_dot_sh_lifecycle_cli amp_star_dot_sh_messaging_cli aid_star_dot_sh_identity_cli docs_graph_memory_tools_cli install-messaging_dot_sh_places_these_scripts", ocd:2026-08-02, lmd:2026-09-13]
 ## `~/.local/bin/` — installed CLI wrappers (on PATH; placed by install-messaging.sh)
 
 - `aimaestro-agent.sh` (+ `agent-core/helper/session/plugin/skill/commands.sh` modules) — agent lifecycle CLI

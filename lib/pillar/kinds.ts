@@ -269,3 +269,40 @@ export const USER_SCOPE_SEGMENT = 'cross-projects-coordination'
 export function isUserCorpusPath(p: string): boolean {
   return path.resolve(p).split(path.sep).includes(USER_SCOPE_SEGMENT)
 }
+
+
+/**
+ * Which scope does this design dir denote?
+ *
+ * The NEAR-inverse of corpusRootFor, and the gap is load-bearing: corpusRootFor is
+ * NOT injective on the path. It maps '/repo/design' to a project root OR a local root
+ * depending on the SCOPE ARGUMENT, so no function of the path alone can undo it in
+ * general. What this classifies is a path that is ALREADY a resolved corpus root,
+ * which is what the CLI passes — it resolves an explicit --design-dir, or defaults to
+ * <cwd>/design, before any call reaches here. Handing it a project design dir and
+ * expecting 'local' back is a category error.
+ *
+ * TWO LOCAL LAYOUTS are recognised, and this is not future-proofing. The
+ * post-migration root is <project-root>/.claude/local/design (ai-maestro#163); the
+ * CURRENT root, holding all 22 local cards on this host today, is
+ * <home>/.claude/projects/<slug>/design. Recognising only the first would classify
+ * every existing local card as 'project' — writing the precise false claim this
+ * function exists to prevent, across the entire population rather than at the edges.
+ * Both stay until the migration has run and the old layout is empty.
+ *
+ * 'project' is the FALLBACK, deliberately, and it cannot be otherwise: project scope
+ * has no distinguishing shape. It is the COMPLEMENT of the other two, and the rule
+ * states that an absent scope means project. So this cannot 'fail closed' on an
+ * unrecognised path without inverting the model. That asymmetry is exactly why the
+ * lint matters more than the writer: a field derived from the path and never compared
+ * against it carries no information at all.
+ */
+export function scopeOfDesignDir(designDir: string): CorpusScope {
+  if (isUserCorpusPath(designDir)) return 'user'
+  const segs = path.resolve(designDir).split(path.sep)
+  for (let i = 0; i + 3 <= segs.length; i++) {
+    if (segs[i] === '.claude' && segs[i + 1] === 'local' && segs[i + 2] === 'design') return 'local'
+    if (segs[i] === '.claude' && segs[i + 1] === 'projects' && segs[i + 3] === 'design') return 'local'
+  }
+  return 'project'
+}

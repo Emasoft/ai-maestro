@@ -22,6 +22,7 @@ import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
 import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone } from '@/lib/trdd-vocabulary'
+import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
 
@@ -273,12 +274,35 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     `task-type: ${opts.taskType}`,
     `min-approval-requirement: ${minApproval}`,
   ]
-  // TRDD-8D9ZYZX9: the scope discriminator. Emitted as a PAIR — `scope: project`
-  // alone defaults anyway, but `project-id:` without it leaves the binding implicit,
-  // and the overlay's rule is stated over the pair. Both are omitted together when
-  // the PRRD cannot supply an id, so a card never claims a scope it cannot bind.
-  const projectId = readProjectId(designDir)
-  if ('id' in projectId) lines.push('scope: project', `project-id: ${projectId.id}`)
+  // TRDD-8D9ZYZX9: the scope discriminator, now DERIVED from the corpus the card is
+  // actually being minted into rather than asserted as a constant. The value was
+  // hardcoded `project` regardless of designDir, so a card minted into a local or user
+  // corpus claimed to be project-scoped — the one thing the field exists to deny.
+  //
+  // `scope:` is ALWAYS emitted, which changes the previous pair rule and is the point.
+  // Before, scope and project-id were written together or not at all, so an absent
+  // `scope:` meant two different things at once: "project by silence" and "the PRRD
+  // supplied no id, so this card is unbindable". No lint can separate those from one
+  // silence. Emitting scope unconditionally collapses the ambiguity — absence never
+  // occurs on a new card, and the unbindable case becomes independently visible as
+  // `scope: project` with no `project-id:`.
+  //
+  // `project-id:` stays project-only because the overlay forbids it on local and user
+  // cards; those bind through host-id / created-by instead. So the pair rule survives
+  // in the direction that carried the actual constraint.
+  const scope = scopeOfDesignDir(designDir)
+  // projectId stays at FUNCTION scope: the return reports its `why` as a warning. It is
+  // read only for project scope, so a local or user corpus no longer warns about a PRRD
+  // it is not supposed to have.
+  const projectId = scope === 'project' ? readProjectId(designDir) : null
+  if (scope !== 'project') {
+    // A non-project card ALWAYS declares its scope. That is what makes the omission
+    // below unambiguous: after derivation, an absent `scope:` can only mean project,
+    // because local and user never omit it.
+    lines.push(`scope: ${scope}`)
+  } else if (projectId && 'id' in projectId) {
+    lines.push('scope: project', `project-id: ${projectId.id}`)
+  }
   const assignee = (opts.assignee ?? (isMandate ? author : '')).trim()
   if (assignee && /[\r\n\u0000-\u001f:]/.test(assignee)) {
     throw new Error('assignee must be a one-line name without a colon')
@@ -310,5 +334,5 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   const tmp = `${file}.tmp`
   fs.writeFileSync(tmp, lines.join('\n'), 'utf8')
   fs.renameSync(tmp, file)
-  return { id, file, zone, column, ...('why' in projectId ? { warning: projectId.why } : {}) }
+  return { id, file, zone, column, ...(projectId && 'why' in projectId ? { warning: projectId.why } : {}) }
 }

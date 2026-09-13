@@ -3,6 +3,7 @@ import path from 'path'
 import {
   corpusRootFor,
   isUserCorpusPath,
+  scopeOfDesignDir,
   TRDD_KIND,
   SPEC_KIND,
   PRRD_KIND,
@@ -59,5 +60,34 @@ describe('isUserCorpusPath', () => {
     // redden if someone "simplified" it to a substring check.
     expect(isUserCorpusPath('/repo/cross-projects-coordination-backup/design')).toBe(false)
     expect(isUserCorpusPath('/repo/my-cross-projects-coordination/design')).toBe(false)
+  })
+})
+
+describe('scopeOfDesignDir', () => {
+  it('classifies a project corpus', () => {
+    expect(scopeOfDesignDir('/repo/design')).toBe('project')
+    expect(scopeOfDesignDir('/repo/design/specs')).toBe('project')
+  })
+
+  it('classifies BOTH local layouts — the current one and the post-migration one', () => {
+    // Post-migration (ai-maestro#163).
+    expect(scopeOfDesignDir('/repo/.claude/local/design')).toBe('local')
+    expect(scopeOfDesignDir('/repo/.claude/local/design/specs')).toBe('local')
+    // CURRENT layout, holding every local card that exists today. Recognising only the
+    // line above would classify all 22 of them as 'project' — writing the exact false
+    // claim this function exists to prevent, across the whole population.
+    expect(scopeOfDesignDir('/home/x/.claude/projects/-Users-x-repo/design')).toBe('local')
+    expect(scopeOfDesignDir('/home/x/.claude/projects/-Users-x-repo/design/tasks')).toBe('local')
+  })
+
+  it('classifies a user corpus', () => {
+    expect(scopeOfDesignDir('/home/x/.claude/cross-projects-coordination/g/design')).toBe('user')
+  })
+
+  it('does NOT mistake near-miss shapes for local', () => {
+    // .claude without local; local without .claude; projects without design.
+    expect(scopeOfDesignDir('/repo/.claude/design')).toBe('project')
+    expect(scopeOfDesignDir('/repo/local/design')).toBe('project')
+    expect(scopeOfDesignDir('/home/x/.claude/projects/slug/notes')).toBe('project')
   })
 })

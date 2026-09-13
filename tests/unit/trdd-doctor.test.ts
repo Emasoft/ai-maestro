@@ -30,6 +30,7 @@ import {
 } from '@/lib/trdd-doctor'
 import { frontmatterDay } from '@/lib/trdd-vocabulary'
 import { DEFAULT_STATUSES } from '@/types/task'
+import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 let tmp: string
 
@@ -292,18 +293,13 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   })
 
 
-  it('SCOPE-CONTRADICTS-PATH classifies by the CORPUS, not by where a symlinked zone points', () => {
-    // The link target is deliberately LOCAL-shaped while the corpus root is project-
-    // shaped, so the two classifications genuinely disagree. A first version of this
-    // test pointed the link at an ordinary tmp dir — both sides answered 'project', and
-    // it would have passed with the hoist reverted. Same vacuity as an earlier symlink
-    // test in this repo: if the fixture cannot make the two answers differ, it pins
-    // nothing.
-    //
-    // Per-card classification would realpath through the link, see .claude/local/design,
-    // and flag the card. Classifying from the walk root answers by which corpus REACHES
-    // the card, which is the right question: a card in this corpus's tasks/ is this
-    // corpus's card, wherever its storage sits.
+  it('a card whose BYTES escape the corpus is flagged, even though its scope agrees', () => {
+    // THE PRIVACY HOLE THIS CLOSES. scope encodes a privacy boundary — local means
+    // machine-private and never pushed — and privacy follows the STORAGE. Classifying
+    // from the walk root answers "which corpus reaches this card", which is right for
+    // membership and, alone, certifies a laundering path: symlink a local zone into a
+    // git-tracked project corpus, declare `scope: project`, and the scope rule passes it.
+    // An earlier version of this test asserted exactly that shape was FINE.
     const awayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-away-'))
     const away = path.join(awayRoot, '.claude', 'local', 'design', 'tasks')
     fs.mkdirSync(away, { recursive: true })
@@ -317,7 +313,20 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
       good('GGGGGGGG', { scope: 'project' }),
       'utf8',
     )
-    expect(idsOf(lintCorpus(linked), 'SCOPE-CONTRADICTS-PATH')).not.toContain('GGGGGGGG')
+
+    // FIXTURE DISCRIMINATOR, asserted rather than assumed. Twice this session I wrote a
+    // symlink test whose two hypotheses produced the same observable — once caught by a
+    // neuter that reddened nothing, once by asking before running. Stating it as a check
+    // means a future edit that repoints `away` at an ordinary tmp dir fails loudly here
+    // instead of going quietly vacuous.
+    expect(scopeOfDesignDir(away)).not.toBe(scopeOfDesignDir(linked))
+
+    const r = lintCorpus(linked)
+    // The scope field still AGREES with the corpus that reaches it — so the scope rule is
+    // silent, and that silence is exactly why the escape needs its own finding.
+    expect(idsOf(r, 'SCOPE-CONTRADICTS-PATH')).not.toContain('GGGGGGGG')
+    expect(idsOf(r, 'CARD-STORED-OUTSIDE-CORPUS')).toContain('GGGGGGGG')
+
     fs.rmSync(awayRoot, { recursive: true, force: true })
     fs.rmSync(linked, { recursive: true, force: true })
   })

@@ -152,6 +152,7 @@ export function countDesignDividers(body: string): number {
 
 import { SHIPPED } from './trdd-vocabulary'
 import { scopeOfDesignDir } from './pillar/kinds'
+import { corpusIdentity } from '@/lib/corpus-identity'
 
 /** A grep-first bool field is written `true`/`false` (bare or quoted). Anything else is undefined. */
 export function boolFieldValue(v: unknown): boolean | undefined {
@@ -513,6 +514,7 @@ export function lintCorpus(designDir: string): DoctorReport {
   // corpus's archived/ is this corpus's card, wherever its storage happens to sit — and
   // it is pinned by a test rather than left as an emergent property.
   const corpusScope = scopeOfDesignDir(designDir)
+  const corpusRealRoot = corpusIdentity(designDir)
 
   for (const file of unparsed) {
     add({
@@ -660,6 +662,38 @@ export function lintCorpus(designDir: string): DoctorReport {
           autofixable: false,
         })
       }
+    }
+
+    // ---- CARD-STORED-OUTSIDE-CORPUS (ai-maestro#163) ----
+    // The privacy half, and the reason the rule above is safe to classify from the root.
+    //
+    // `scope:` encodes a PRIVACY boundary — local means machine-private and never pushed —
+    // and privacy attaches to where the BYTES live, not to what can reach them. Classifying
+    // from the walk root answers "which corpus reaches this card", which is right for
+    // membership and, alone, blesses a laundering path: symlink a local zone into a
+    // git-tracked project corpus, declare `scope: project`, and the rule above certifies it.
+    // The machine-private cards are then reachable from a pushed tree, signed off by the
+    // check that exists to catch exactly that mismatch.
+    //
+    // This is the guard that closes it, and unlike a lexical containment check it is NOT
+    // dead code. listDocuments joins the zone onto the root, readdirs, and joins each name
+    // back on, so every card path is LEXICALLY under the root by construction — a
+    // startsWith on those strings can never fire. Comparing REALPATHS can: it fires exactly
+    // when a zone or a card is a symlink pointing out of the corpus, which is the laundering
+    // shape and nothing else.
+    //
+    // Not autofixable. The repair is to move the bytes or remove the link, and which one is
+    // right depends on where the card was meant to live — a judgement a fixer cannot make.
+    const realCard = corpusIdentity(c.filePath)
+    if (realCard !== corpusRealRoot && !realCard.startsWith(corpusRealRoot + path.sep)) {
+      add({
+        rule: 'CARD-STORED-OUTSIDE-CORPUS',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: `this card is reachable from the corpus but its bytes live at ${realCard}, outside it. A scope is a privacy boundary and privacy follows the storage, so a card symlinked in from another scope can declare the reached corpus's scope and be certified by SCOPE-CONTRADICTS-PATH. Move the file or remove the link; not auto-repaired, because which of those is right depends on where the card was meant to live.`,
+        autofixable: false,
+      })
     }
 
     // ---- frontmatter DATETIME notation (TRDD-S13L6R9R) ----

@@ -688,22 +688,23 @@ export function lintCorpus(designDir: string): DoctorReport {
     if (realCard !== corpusRealRoot && !realCard.startsWith(corpusRealRoot + path.sep)) {
       add({
         rule: 'CARD-STORED-OUTSIDE-CORPUS',
-        // `warn`, not `error`, and the difference is the corpus gate. This fires on where
-        // the BYTES sit — a sysadmin layout choice no card author controls. A corpus root
-        // symlinked into a synced volume or an external disk would flag every card in it,
-        // red-gating a corpus for a reason no card can fix, which is how a rule gets
-        // routed around rather than heeded. The sibling DATETIME rule makes the same call
-        // for the same stated reason: keeping a finding out of `error` is what keeps the
-        // zero-ERROR gate meaningful.
+        // `error`, and a WARN here was measured to be deletion. I demoted this to `warn`
+        // one commit ago reasoning that it still carried the signal — then checked, and
+        // `trddgrep validate` exits 0 with this finding present. It PRINTS it and gates on
+        // nothing. Only `--strict` counts warnings, and nothing invokes --strict by
+        // default, so a warn on a privacy boundary is a finding nobody's automation reads.
         //
-        // It is also defence in depth rather than a primary control: the laundering it
-        // catches needs an actor with write access to the project tree, who could commit
-        // the cards outright instead.
+        // The DATETIME rule beside this one IS correctly a warn, and citing it was the
+        // mistake: its own comment justifies the severity because both datetime dialects
+        // parse to a valid instant — no correctness consequence. Here the consequence is a
+        // privacy boundary, so the precedent's verdict does not transfer with its reasoning.
         //
-        // Measured before choosing: 0 symlinks across all 9 local corpora on this host, so
-        // nothing benign trips it here. That is ONE host, which is exactly why this is not
-        // an error yet. Promote when a fleet-wide survey shows the same.
-        severity: 'warn',
+        // The benign population this was demoted to protect is HYPOTHETICAL — a corpus
+        // symlinked into a synced volume. The measured one is zero: 0 symlinks across all
+        // 9 local corpora on this host. Blocking a real laundering path outranks sparing a
+        // user nobody has observed, and that user gets a loud, fixable error rather than a
+        // silent pass.
+          severity: 'error',
         id: c.id,
         filePath: c.filePath,
         message: `this card is reachable from the corpus but its bytes live at ${realCard}, outside it. A scope is a privacy boundary and privacy follows the storage, so a card symlinked in from another scope can declare the reached corpus's scope and be certified by SCOPE-CONTRADICTS-PATH. Move the file or remove the link; not auto-repaired, because which of those is right depends on where the card was meant to live.`,

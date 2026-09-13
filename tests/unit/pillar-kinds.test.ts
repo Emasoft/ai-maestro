@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import path from 'path'
+import fs from 'fs'
+import os from 'os'
 import {
   corpusRootFor,
   isUserCorpusPath,
@@ -99,5 +101,33 @@ describe('scopeOfDesignDir', () => {
     expect(scopeOfDesignDir('/repo/.claude/design')).toBe('project')
     expect(scopeOfDesignDir('/repo/local/design')).toBe('project')
     expect(scopeOfDesignDir('/home/x/.claude/projects/slug/notes')).toBe('project')
+  })
+})
+
+describe('scopeOfDesignDir — symlink normalisation', () => {
+  // THE DEFECT THIS PINS: the classifier fed two call sites (the mint and the doctor's
+  // repair path) that normalised differently — one realpathed, one did not. On a
+  // symlinked ancestor the SAME card classified 'local' through one and 'project'
+  // through the other, and the verdict is persisted to frontmatter, so the disagreement
+  // would have been written to disk. Normalisation now happens once, inside.
+  it('classifies through a symlink TO THE CORPUS ITSELF, where the string hides the shape', () => {
+    const real = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-scope-real-'))
+    const corpus = path.join(real, '.claude', 'local', 'design')
+    fs.mkdirSync(corpus, { recursive: true })
+    const linkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-scope-link-'))
+    // The link points AT the corpus, so the alias path contains none of the segments.
+    // A FIRST attempt at this test symlinked a PARENT instead, which left
+    // '.claude/local/design' sitting in the string after the link — resolve alone found
+    // it, the neuter reddened nothing, and the test proved only that string matching
+    // works. The symlink has to hide the shape or it discriminates nothing.
+    const alias = path.join(linkDir, 'aliased-design')
+    fs.symlinkSync(corpus, alias)
+
+    expect(scopeOfDesignDir(corpus)).toBe('local')
+    expect(alias.includes('.claude')).toBe(false) // the string genuinely hides it
+    expect(scopeOfDesignDir(alias)).toBe('local')
+
+    fs.rmSync(real, { recursive: true, force: true })
+    fs.rmSync(linkDir, { recursive: true, force: true })
   })
 })

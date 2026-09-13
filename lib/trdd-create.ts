@@ -22,7 +22,6 @@ import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
 import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone } from '@/lib/trdd-vocabulary'
-import { corpusIdentity } from '@/lib/corpus-identity'
 import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
@@ -298,7 +297,7 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // local card permanently, and nothing downstream re-derives scope to catch it. The
   // identity helper falls back to the resolved path when the dir does not exist yet, so a
   // first mint into a fresh corpus still works.
-  const scope = scopeOfDesignDir(corpusIdentity(designDir))
+  const scope = scopeOfDesignDir(designDir)
   // projectId stays at FUNCTION scope: the return reports its `why` as a warning. It is
   // read only for project scope, so a local or user corpus no longer warns about a PRRD
   // it is not supposed to have.

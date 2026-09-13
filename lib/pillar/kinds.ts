@@ -25,6 +25,7 @@
  */
 
 import path from 'path'
+import { corpusIdentity } from '@/lib/corpus-identity'
 
 export type PillarName = 'trdd' | 'prrd' | 'spec'
 
@@ -269,12 +270,15 @@ export const USER_SCOPE_SEGMENT = 'cross-projects-coordination'
 export function isUserCorpusPath(p: string): boolean {
   const segs = path.resolve(p).split(path.sep)
   const i = segs.indexOf(USER_SCOPE_SEGMENT)
-  // SHAPE, not mere presence. The segment alone names the groups CONTAINER, and a
-  // container is not a corpus: minting there files cards one level above every group.
-  // The form is <root>/<segment>/<group>/design[/<subdir>], so 'design' must sit two
-  // segments on. This was inert while nothing emitted user scope; once a mint persists
-  // the classification it becomes a false claim written to disk, so it is checked now.
-  return i >= 0 && segs[i + 2] === 'design'
+  // SHAPE, not mere presence: the segment alone names the groups CONTAINER, and a
+  // container is not a corpus — minting there files cards one level above every group.
+  //
+  // 'design' must appear somewhere AFTER the container, not at a fixed offset. The
+  // directive's form is <container>/<group>/design, but a group NAME is not established
+  // to be a single path segment (the registry's validator constrains only character 0),
+  // so pinning segs[i+2] would hardcode an invariant nothing guarantees — and it fails
+  // toward 'project', the one direction nothing downstream can detect.
+  return i >= 0 && segs.indexOf('design', i + 1) > i
 }
 
 
@@ -305,8 +309,16 @@ export function isUserCorpusPath(p: string): boolean {
  * against it carries no information at all.
  */
 export function scopeOfDesignDir(designDir: string): CorpusScope {
-  if (isUserCorpusPath(designDir)) return 'user'
-  const segs = path.resolve(designDir).split(path.sep)
+  // ONE normalisation, HERE, because every caller persists this verdict. The classifier
+  // was deliberately pure while its answer was computed and discarded; it now feeds both
+  // the mint and the doctor's repair path, and two callers normalising differently is
+  // not a risk of a bug, it IS one: the same card would classify 'local' through a
+  // realpathed root and 'project' through a raw file path. The identity helper falls
+  // back to the resolved path when the target does not exist, so a first mint into a
+  // fresh corpus still works.
+  const real = corpusIdentity(designDir)
+  if (isUserCorpusPath(real)) return 'user'
+  const segs = real.split(path.sep)
   for (let i = 0; i + 3 <= segs.length; i++) {
     if (segs[i] === '.claude' && segs[i + 1] === 'local' && segs[i + 2] === 'design') return 'local'
     if (segs[i] === '.claude' && segs[i + 1] === 'projects' && segs[i + 3] === 'design') return 'local'

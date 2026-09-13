@@ -3,7 +3,7 @@ trdd-id: 9JOCY2EJ
 title: Pillar CLI defects - help path, fix target, write gate, blocker semantics
 column: dev
 created: 2026-09-13T02:34:17+0200
-updated: 2026-09-13T05:07:27+0200
+updated: 2026-09-13T05:13:01+0200
 current-owner: ai-maestro-0a
 created-by: ai-maestro-0a
 task-type: bugfix
@@ -40,3 +40,22 @@ Umbrella for four bounded fixes, each with its own derived card. GitHub issues 1
 - [ ] 161 BYPASS (found 2026-09-13, live in 9c07ffcc2) — `trddgrep --design-dir <path> fix <id>` REPAIRED a file from /tmp with NO AIM_PILLAR_ALLOW_WRITE. Measured: seeded 2 autofixable defects in a corpus copy, ran the command from /tmp, output "REPAIRED 1 file(s)", lint went 2 errors to 0. The gate claims fix is disabled outside the checkout; --design-dir walks past it.
 - [x] VERIFIED 2026-09-13 first-hand: 159 help/--help/-h rc=0 from a corpus-less dir; 161 gate refuses trddgrep+prrdgrep edit (specgrep has no gate by design); 160 verb detection survives a preceding flag (fix requires a target, not the path); 160 selector narrows the WRITE — fix <id> changed EXACTLY 1 of 668 cards and left the second seeded defect intact.
 - [ ] 158 is UNPINNED — no test reddens on it (neuter of all 4 lib sites reddened zero tests) and it is inert on the live corpus; needs a synthetic corpus with a card blocked by a superseded blocker.
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-13
+
+**Issues 158/159/160/161/162 are LANDED and VERIFIED FIRST-HAND.** SHAs in implementation-commits. Suite at baseline 7 files/19 tests, failing-name set byte-identical, tsc 0.
+**NEXT ACTION: nothing here is workable without the USER.** Five decisions block it, listed as unticked boxes below. Do NOT start Phases 3/4 (scope migration, group access control) — those are gated on approving the Phase-0 security card G6EBLBIQ.
+**THIS CARD IS FIVE TASKS AND VIOLATES TRDD RULE 13 (one atomic task per card).** It cannot reach complete while any box is unticked (D4 step 5b), and three boxes wait on a human, so it will never close as shaped. Splitting it is the right repair; not done, recorded here so the next session does not mistake the stall for progress.
+**GOTCHAS measured this session, each after getting it wrong first:**
+- 158 is UNPINNED and INERT — a neuter of all 4 lib sites reddened ZERO tests, and the live corpus has 8 superseded cards with no incoming order edges. The ticked box means landed, not guaranteed.
+- The write gate does NOT fire when --design-dir is passed; target location is not inspected. Own card: TRDD-37LX5NKO. Not the 161 bug (that was verb misdetection, fixed).
+- rules/aimaestro/ is a FROZEN cross-repo set; dropping a file there reds aimaestro-overlay-filename-contract. Adding a member is a deliberate contract change.
+- rules/aimaestro/aimaestro-pillar-cli-usage.md is a COPY of ~/.claude/rules/three-pillars-tools-only.md, differing on 21 of ~84 lines. Neither is canonical. 160 just changed `fix` in one of them.
+**SUPERSEDED — do not act on these, they were wrong:**
+- "the file is plain in-repo documentation, not server-pushed" — false; ensureAgentRules seeds every .md in that directory.
+- "this overlay EXPANDS the IND base" — false; EXPANDS promises the base is never restated, and it is a copy.
+- "the red contract test settles where the file belongs" — no; its own name says an add is a deliberate contract change, i.e. an invitation to decide.
+
+
+
+

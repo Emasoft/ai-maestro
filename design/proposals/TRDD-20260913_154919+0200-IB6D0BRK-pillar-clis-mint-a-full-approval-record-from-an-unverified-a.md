@@ -29,7 +29,7 @@ Every one is a `+` line in that commit's diff. None existed beforehand.
 
 ## Why this matters
 
-This is the CLI-side twin of the defect TRDD-G6EBLBIQ was filed about: the approve and refuse ROUTES preferred a caller-supplied approver field over the derived auth identity, while the signed proof beside it was correctly derived. That was treated as a security defect and fixed in 25e5fc97.
+NOT a privilege boundary when run standalone, and an earlier draft of this card overstated it as "the CLI-side twin" of the route defect fixed in 25e5fc97. That framing does not transfer: the route case is remote-input-shaped, where a caller supplies the approver field over the network and the server prefers it over its own derived identity. The CLI runs AS the user, on the user machine, writing a file that same user can edit directly. What IS true, and is why this card stands: (1) the approval fields are unauthenticated BY CONSTRUCTION while the D4 watchdog is specified to read approval-judge when checking the mandate invariant, so a governance system cannot verify its own audit trail; (2) IN-HARNESS the boundary is real, since a registered agent holding the harness AID credential crosses one. Whether any code actually performs the D4 comparison is UNVERIFIED - read from the overlay rule prose, not from the implementation.
 
 The pillar CLIs derive no actor at all — a symbol search for group or identity handling in the tool implementation returns nothing, the launcher execs node with no identity plumbing, and the env verb self-reports mode=standalone.
 

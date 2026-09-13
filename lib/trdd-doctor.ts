@@ -688,7 +688,22 @@ export function lintCorpus(designDir: string): DoctorReport {
     if (realCard !== corpusRealRoot && !realCard.startsWith(corpusRealRoot + path.sep)) {
       add({
         rule: 'CARD-STORED-OUTSIDE-CORPUS',
-        severity: 'error',
+        // `warn`, not `error`, and the difference is the corpus gate. This fires on where
+        // the BYTES sit — a sysadmin layout choice no card author controls. A corpus root
+        // symlinked into a synced volume or an external disk would flag every card in it,
+        // red-gating a corpus for a reason no card can fix, which is how a rule gets
+        // routed around rather than heeded. The sibling DATETIME rule makes the same call
+        // for the same stated reason: keeping a finding out of `error` is what keeps the
+        // zero-ERROR gate meaningful.
+        //
+        // It is also defence in depth rather than a primary control: the laundering it
+        // catches needs an actor with write access to the project tree, who could commit
+        // the cards outright instead.
+        //
+        // Measured before choosing: 0 symlinks across all 9 local corpora on this host, so
+        // nothing benign trips it here. That is ONE host, which is exactly why this is not
+        // an error yet. Promote when a fleet-wide survey shows the same.
+        severity: 'warn',
         id: c.id,
         filePath: c.filePath,
         message: `this card is reachable from the corpus but its bytes live at ${realCard}, outside it. A scope is a privacy boundary and privacy follows the storage, so a card symlinked in from another scope can declare the reached corpus's scope and be certified by SCOPE-CONTRADICTS-PATH. Move the file or remove the link; not auto-repaired, because which of those is right depends on where the card was meant to live.`,

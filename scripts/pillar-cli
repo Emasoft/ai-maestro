@@ -98,11 +98,17 @@ export TSX_TSCONFIG_PATH="$ROOT/tsconfig.json"
 # names a corpus we pass their line through untouched; otherwise we point at THEIR
 # $PWD/design and let the tool's own exit 2 fire if it does not exist.
 #
-# THE ONE PROPERTY THAT MAKES IT USEFUL ELSEWHERE: `trddgrep.mjs:170` resolves the corpus
-# as `path.join(process.cwd(), 'design')` by default, and this launcher does not `cd`. So
-# the tool runs the CALLER's corpus, not ai-maestro's. If either of those ever changes,
-# this whole tool becomes one that silently reports ai-maestro's board to every project on
-# the host — which is worse than not shipping it, so both are asserted in the test.
+# THE ONE PROPERTY THAT MAKES IT USEFUL ELSEWHERE: every `$TOOL.mjs` this launcher can
+# invoke (trddgrep, and prrdgrep/specgrep via `runPillarCli`) resolves an absent
+# `--design-dir` to `defaultDesignDirFor()` (lib/pillar/kinds.ts: `path.join(cwd, 'design')`)
+# on its OWN, and this launcher does not `cd` and does not pass `--design-dir` itself. So
+# the tool runs the CALLER's corpus, not ai-maestro's — with no bash literal here that could
+# drift from the TS default (this launcher used to pass an explicit `$PWD/design`
+# and rely on a comment to keep it in sync by hand; that duplicate is gone, not merely
+# documented, because a duplicate a human must remember to update is the failure mode). If
+# the shared default ever changes, this whole tool becomes one that silently reports
+# ai-maestro's board to every project on the host — which is worse than not shipping it, so
+# both are asserted in the test.
 
 # ── 5. `fix`/`edit` are corpus-wide mutating verbs. Default them OFF outside this
 # checkout (github.com/Emasoft/ai-maestro#161: two installers used to disagree on this,
@@ -132,7 +138,6 @@ export TSX_TSCONFIG_PATH="$ROOT/tsconfig.json"
 # override — a far better trade than a silent hole.
 case " $* " in *" fix "* | *" edit "*) mutating=1 ;; *) mutating=0 ;; esac
 
-case " $* " in *" --design-dir "* | *" --design-dir="*) has_design_dir=1 ;; *) has_design_dir=0 ;; esac
 # Is the caller's cwd inside the ai-maestro checkout? Trailing slash on both sides so the
 # root itself matches (a shell `*` matches the empty string). This is a cwd-PREFIX
 # heuristic: a linked git worktree or a symlinked checkout compares as OUTSIDE and gets
@@ -148,7 +153,4 @@ if [ "$mutating" -eq 1 ] && [ "$inside" -eq 0 ] && [ "${AIM_PILLAR_ALLOW_WRITE:-
   exit 2   # 2 = COULD NOT RUN, never 1 — 1 means 'found findings' for these CLIs.
 fi
 
-if [ "$has_design_dir" -eq 1 ]; then
-  exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@"
-fi
-exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@" --design-dir "$PWD/design"
+exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@"

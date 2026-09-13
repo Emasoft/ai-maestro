@@ -106,6 +106,11 @@ function takeFlag(list, name) {
   return [value, [...list.slice(0, i), ...list.slice(i + 2)]]
 }
 
+// `--path <file>` — name a `fix` target by file path instead of id (TRDD-9JOCY2EJ).
+// Stripped here, like `--design-dir`, so it never reaches the unknown-option check below.
+let pathVal
+;[pathVal, rest] = takeFlag(rest, '--path')
+
 let designDirVal, limitVal, columnVal, minSeverityVal, ruleVal
 ;[designDirVal, rest] = takeFlag(rest, '--design-dir')
 ;[limitVal, rest] = takeFlag(rest, '--limit')
@@ -405,6 +410,51 @@ function reportVanished() {
   console.error(`trddgrep: ${vanished.length} file(s) vanished mid-scan and were skipped:`)
   for (const f of vanished.slice(0, 5)) console.error(`  · ${path.relative(process.cwd(), f)}`)
   if (vanished.length > 5) console.error(`  … and ${vanished.length - 5} more`)
+}
+
+// `fix` is intercepted HERE, before the switch (TRDD-9JOCY2EJ, issue 160): a target is
+// now required, and the whole-corpus batch caller keeps calling `fixCorpus` with no
+// selector, untouched. The old `case 'fix'` in the switch is dead code below.
+if (cmd === 'fix') {
+  if (!arg && !pathVal) {
+    console.error('trddgrep: fix requires a target — `trddgrep fix <id>` or `trddgrep fix --path <file>`')
+    process.exit(2)
+  }
+  const { fixCorpus, lintCorpus, loadCorpus } = await import('../lib/trdd-doctor.ts')
+  const dryRun = argv.includes('--dry-run')
+  const { cards: allCards } = loadCorpus(designDir)
+  let target
+  if (pathVal) {
+    const resolved = path.resolve(pathVal)
+    target = allCards.find((c) => path.resolve(c.filePath) === resolved)
+    if (!target) {
+      console.log(C.r(`\nno TRDD at path '${pathVal}'\n`))
+      process.exit(1)
+    }
+  } else {
+    const wantId = normalizeTrddRef(arg ?? '')
+    target = allCards.find((c) => c.id === wantId)
+    if (!target) {
+      console.log(C.r(`\nno TRDD with id '${arg}' in either root\n`))
+      process.exit(1)
+    }
+  }
+  const before = lintCorpus(designDir).findings.filter((f) => f.id === target.id)
+  const results = fixCorpus(designDir, { dryRun, selector: (c) => c.id === target.id })
+  if (results.length === 0) {
+    console.log(C.g(`nothing for \`fix\` to repair on ${target.id} — run \`trddgrep validate\``))
+    process.exit(0)
+  }
+  console.log(C.b(`\n${dryRun ? 'WOULD REPAIR' : 'REPAIRED'} ${results.length} file(s):\n`))
+  for (const r of results) {
+    const badge = r.bumped ? C.y('  [updated: bumped]') : C.d('  [mechanical]')
+    console.log(`  ${C.b(r.id)}  ${C.d(path.relative(process.cwd(), r.filePath))}${badge}`)
+    for (const c of r.changes) console.log(`      • ${c}`)
+  }
+  const after = dryRun ? before : lintCorpus(designDir).findings.filter((f) => f.id === target.id)
+  console.log(C.d(`\nlint(${target.id}) before: ${before.length} → after: ${after.length}`))
+  console.log(dryRun ? C.d('\n(dry run — nothing written)') : C.y('\nReview and commit.'))
+  process.exit(0)
 }
 
 const cards = []

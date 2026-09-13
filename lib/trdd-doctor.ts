@@ -1453,7 +1453,10 @@ export interface FixResult {
  * It will NOT invent a column. Every unknown column becomes `todo` — the honest answer
  * to "we do not know", and the only one that keeps the card visible.
  */
-export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: string } = {}): FixResult[] {
+export function fixCorpus(
+  designDir: string,
+  opts: { dryRun?: boolean; now?: string; selector?: (c: Card) => boolean } = {},
+): FixResult[] {
   const { cards } = loadCorpus(designDir)
   // `isoLocal()` replaces an inline `toISOString().replace(/\.\d+Z$/, '+0000')`. That
   // `.replace` existed BECAUSE the raw form is wrong here — it fixed the shape and left
@@ -1488,6 +1491,13 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
     // Broken frontmatter is a judgement call — which of the two `column:` lines is real
     // is not something a mechanical pass can know.
     if (c.parseError) continue
+    // NARROWING THE WRITE, NOT THE READ. `cards` above is the WHOLE corpus (`loadCorpus`)
+    // and `claimedBy` above is built over EVERY card, both unfiltered — the repairs below
+    // are partly CROSS-CARD (the `derived:` back-link needs every parent's `npt:`/`eht:`).
+    // `selector` only decides which card's repair, if any, is actually computed and
+    // written in THIS iteration. No `selector` (the whole-corpus batch callers) means
+    // every card is still eligible — today's whole-corpus behaviour, unchanged.
+    if (opts.selector && !opts.selector(c)) continue
 
     const changes: string[] = []
     let semantic = false
@@ -1714,6 +1724,9 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       //
       // `bodyClaimAgreesWithColumn` is the SAME predicate the lint uses, so `--fix` can never
       // repair a shape the lint did not report (the drift the sibling rule shipped with).
+      //
+      //
+      //
       //
       // ...AND NOT ON A FROZEN CARD (added TRDD-S13L6R9R, found by a blast-radius dry-run).
       // IND `trdd-design-tasks` step 12 freezes a terminal card's BODY, and grants exactly

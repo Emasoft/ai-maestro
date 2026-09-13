@@ -354,11 +354,21 @@ cmd_invalidate_password() {
     # by the kernel driver, printing the password in cleartext into the caller's
     # capture. `stty -echo` narrows that window as far as bash allows, and the
     # trap guarantees the terminal is never left desynced (echo permanently off)
-    # if the read is interrupted.
+    # if the read is interrupted. This narrows the race window; it does not close
+    # it — the pty can still echo a character before stty's tcsetattr lands.
+    #
+    # The trap is installed BEFORE `stty -echo` runs, and captures the terminal's
+    # ACTUAL prior state (`stty -g`) rather than assuming echo was on — a caller
+    # that already had echo off (nested prompt, unusual terminal) must not have it
+    # forced on by us. `trap - EXIT INT TERM` below resets to the default handler
+    # rather than restoring any handler this function's caller had installed; that
+    # is a known limitation of a simple push/pop with no handler stack.
+    local _stty_saved
+    _stty_saved="$(stty -g 2>/dev/null || true)"
+    trap 'if [ -n "$_stty_saved" ]; then stty "$_stty_saved" 2>/dev/null || true; else stty echo 2>/dev/null || true; fi' EXIT INT TERM
     stty -echo 2>/dev/null || true
-    trap 'stty echo 2>/dev/null || true' EXIT INT TERM
     read -rs password
-    stty echo 2>/dev/null || true
+    if [ -n "$_stty_saved" ]; then stty "$_stty_saved" 2>/dev/null || true; else stty echo 2>/dev/null || true; fi
     trap - EXIT INT TERM
     printf '\n' >&2
     [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
@@ -407,11 +417,17 @@ cmd_login() {
         printf 'Governance password: ' >&2
         # TRDD-1HUKAYI6: same pty-echo race as cmd_invalidate_password above —
         # disable echo explicitly and restore it via trap so an interrupted read
-        # never leaves the caller's terminal stuck with echo off.
+        # never leaves the caller's terminal stuck with echo off. Same limitations
+        # apply here: the trap is installed before stty -echo, restores the
+        # terminal's actual prior state (stty -g) rather than assuming echo was
+        # on, and `trap - EXIT INT TERM` resets to the default handler rather than
+        # any handler this function's caller had installed.
+        local _stty_saved
+        _stty_saved="$(stty -g 2>/dev/null || true)"
+        trap 'if [ -n "$_stty_saved" ]; then stty "$_stty_saved" 2>/dev/null || true; else stty echo 2>/dev/null || true; fi' EXIT INT TERM
         stty -echo 2>/dev/null || true
-        trap 'stty echo 2>/dev/null || true' EXIT INT TERM
         read -rs password
-        stty echo 2>/dev/null || true
+        if [ -n "$_stty_saved" ]; then stty "$_stty_saved" 2>/dev/null || true; else stty echo 2>/dev/null || true; fi
         trap - EXIT INT TERM
         printf '\n' >&2
         [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }

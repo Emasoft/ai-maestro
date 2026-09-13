@@ -36,8 +36,17 @@
 > FORBIDDEN line, the exit-code trichotomy — is AGENT-CONSUMED rule text, which is what the
 > `rules/` tree is for.
 
-`trddgrep`=TRDD cards · `prrdgrep`=PRRD · `specgrep`=specs. PRRD G12.1 (GOLDEN). No `kanban`
-CLI, board=`trddgrep`.
+`trddgrep`=TRDD cards · `prrdgrep`=PRRD · `specgrep`=specs. No `kanban` CLI, board=`trddgrep`.
+
+## ⚠ HARNESS-ONLY — enact ONLY inside the ai-maestro harness
+
+The governance mandate below is ENACTED ONLY when this Claude Code session is running inside the
+ai-maestro harness. **Outside it — an ordinary Claude Code session — IGNORE it**: use the CLIs
+purely as tools, with no PRRD-mandate obligation attached. Everything else in this file (the verb
+tables, flags, exit codes, corpus resolution, the FORBIDDEN line below) is CLI usage documentation
+and applies everywhere the tools are installed, harness or not.
+
+PRRD G12.1 (GOLDEN): tool-only access to TRDD/PRRD/spec files.
 
 **FORBIDDEN:** `cat sed awk head tail grep find less` · `Read`/`Edit`/`Write` tools · `sed -i perl -pi`
 heredoc/redirect.
@@ -107,8 +116,15 @@ act on. Never `cd` to retarget, pass `--design-dir`.
 LOCAL `~/.claude/projects/<slug>/design` · USER `<root>`.
 Unsure? `<tool> env` first.
 
-`AIM_PILLAR_ALLOW_WRITE=1` prefix lifts the gate on trddgrep/prrdgrep `fix`/`edit` ONLY —
-`new set append check-box move` are W, ungated. specgrep has no gate:
+`AIM_PILLAR_ALLOW_WRITE=1` prefix lifts the gate on trddgrep/prrdgrep/specgrep `fix`/`edit` ONLY —
+`new set append check-box move` are ungated W verbs on trddgrep. specgrep's only W verb is `edit`,
+so it is fully gated too. **prrdgrep is NOT: `add` (mint a PRRD rule, `add golden|silver "<text>"`)
+is a seventh verb the gate's `fix`/`edit` match does not see** — measured 2026-09-13, `prrdgrep add
+silver "test"` from outside the checkout reached the tool and failed on the missing corpus, with
+zero gate output. It is prrdgrep-only (`lib/pillar/cli.ts:256` refuses `add` for any other kind),
+which is why the sibling tools are unaffected. The GOLDEN tier is still protected — `add` has its
+own `--user` authority check at `:278` — so this is a write-gate gap, not an authority bypass.
+Both a gate-refusal and a tool failure exit 2; only the message tells them apart:
 
 `AIM_PILLAR_ALLOW_WRITE=1 trddgrep --design-dir <root> edit <id> --expect X --replace Y`
 

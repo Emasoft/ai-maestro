@@ -41,14 +41,14 @@ export async function POST(
     body = {}
   }
 
-  const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+  const designDir = resolveDesignDir(auth, typeof body.agentId === 'string' ? body.agentId : null)
 
   // TRDD-K2WJH7RF: refusing a proposal carries the SAME authority as approving
   // it — deciding is one gate, whichever way it goes. The sudo-guard deferred.
   // TRDD-6D6SQNI6: decision and write share one hold on the card.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'refuse', () =>
     refuseTrdd(designDir, id, {
-      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
+      approver: auth.agentId || 'user',
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       iso: isoLocal().iso,
     }),

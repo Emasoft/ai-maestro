@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   const list = (k: string) => (Array.isArray(body[k]) ? (body[k] as unknown[]).filter((x): x is string => typeof x === 'string') : undefined)
 
   try {
-    const designDir = resolveDesignDir(str('agentId') ?? null)
+    const designDir = resolveDesignDir(auth, str('agentId') ?? null)
     const result = createTrdd(designDir, {
       title: str('title') ?? '',
       taskType: str('taskType') ?? '',

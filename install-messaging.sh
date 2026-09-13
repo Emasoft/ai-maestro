@@ -800,11 +800,21 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     # Record the install root FIRST: the launcher needs to find the implementation and
     # this installer's own $SCRIPT_DIR is the one place that provably knows where it is.
     # Never hardcode ~/ai-maestro — packaged installs have no such directory.
+    #
+    # Under --repo, $SCRIPT_DIR is a `mktemp -d` scratch clone that is `rm -rf`'d on exit
+    # (see the EXIT trap above) — recording it would leave every pillar CLI pointing at a
+    # directory that no longer exists the moment this script returns. There is no
+    # persistent root to record in that case, so skip the recording and warn instead;
+    # a stale/absent file is a debuggable "not installed", a path into thin air is not.
     echo ""
     print_info "Installing pillar CLIs (3-pillar corpus tools, usable in ANY project)..."
     mkdir -p ~/.local/share/aimaestro
-    printf '%s\n' "$SCRIPT_DIR" > ~/.local/share/aimaestro/install-root
-    print_success "Recorded install root: $SCRIPT_DIR"
+    if [ -n "${_clone_dir:-}" ]; then
+        print_warning "--repo install: not recording install-root ($SCRIPT_DIR is a temp clone, deleted on exit)"
+    else
+        printf '%s\n' "$SCRIPT_DIR" > ~/.local/share/aimaestro/install-root
+        print_success "Recorded install root: $SCRIPT_DIR"
+    fi
 
     if [ -f "$SCRIPT_DIR/scripts/pillar-cli" ]; then
         PILLAR_COUNT=0
@@ -826,6 +836,32 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
         fi
     else
         print_warning "scripts/pillar-cli missing — pillar CLIs not installed"
+    fi
+
+    # ── memgrep (the 4th pillar tool — the memory-system grepper) ────────────────
+    #
+    # memgrep is a Rust binary shipped as SOURCE inside the ai-maestro-janitor plugin
+    # (there is no scripts/memgrep.mjs, so the loop above cannot reach it). Fail-soft,
+    # like the code-analysis tooling below: a missing/failed build never aborts the
+    # ai-maestro install.
+    if command -v memgrep >/dev/null 2>&1; then
+        print_info "memgrep already installed: $(memgrep --version 2>/dev/null || echo present)"
+    elif ! command -v cargo >/dev/null 2>&1; then
+        print_warning "memgrep not installed — 'cargo' not found (install Rust: https://rustup.rs)"
+    else
+        _memgrep_src=""
+        for _jd in "$HOME"/.claude/plugins/cache/*/ai-maestro-janitor/*; do
+            if [ -f "$_jd/scripts/memgrep/Cargo.toml" ]; then
+                _memgrep_src="$_jd/scripts/memgrep"
+            fi
+        done
+        if [ -z "$_memgrep_src" ]; then
+            print_warning "memgrep not installed — ai-maestro-janitor plugin source not found (install it first)"
+        elif cargo install --path "$_memgrep_src" --locked >/dev/null 2>&1; then
+            print_success "Installed: memgrep"
+        else
+            print_warning "memgrep build failed (continuing)"
+        fi
     fi
 
     # Setup PATH

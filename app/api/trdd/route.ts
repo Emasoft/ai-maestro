@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const designDir = resolveDesignDir(sp.get('agentId'))
+  const designDir = resolveDesignDir(auth, sp.get('agentId'))
   const results = searchTrdds(designDir, {
     column: sp.get('column') || undefined,
     id: sp.get('id') || undefined,

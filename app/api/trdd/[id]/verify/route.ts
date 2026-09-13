@@ -37,7 +37,7 @@ export async function GET(
     }
 
     const agentId = request.nextUrl.searchParams.get('agentId')
-    const designDir = resolveDesignDir(agentId)
+    const designDir = resolveDesignDir(auth, agentId)
 
     const verdict = await verifyTrddDecision(designDir, id)
     if (!verdict) {

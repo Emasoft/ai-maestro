@@ -46,7 +46,7 @@ export async function POST(
     )
   }
 
-  const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+  const designDir = resolveDesignDir(auth, typeof body.agentId === 'string' ? body.agentId : null)
 
   // TRDD-K2WJH7RF. Two gates, and they are deliberately different in KIND:
   //
@@ -72,7 +72,7 @@ export async function POST(
   //     change the fields the decision reads between the two.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', () =>
     archiveTrdd(designDir, id, {
-      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
+      approver: auth.agentId || 'user',
       state: state as (typeof ARCHIVE_STATES)[number],
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,

@@ -574,7 +574,11 @@ function getHeader(req: IncomingMessage, name: string): string | null {
  */
 function forwardAuthHeaders(req: IncomingMessage, extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {}
-  for (const name of ['authorization', 'cookie', 'x-agent-id', 'x-sudo-token', 'x-aim-peer']) {
+  // x-aim-peer is NOT forwarded — the custom server deletes any inbound copy
+  // and re-stamps it from the socket's remote address (the console-presence
+  // signal). Forwarding a caller-supplied value would re-create a forgeable
+  // loopback identity.
+  for (const name of ['authorization', 'cookie', 'x-agent-id', 'x-sudo-token']) {
     const v = getHeader(req, name)
     if (v !== null) headers[name] = v
   }

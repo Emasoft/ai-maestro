@@ -23,7 +23,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid TRDD id (expected 8-char base36)' }, { status: 400 })
   }
 
-  const designDir = resolveDesignDir(request.nextUrl.searchParams.get('agentId'))
+  const designDir = resolveDesignDir(auth, request.nextUrl.searchParams.get('agentId'))
   const trdd = readTrdd(designDir, id)
   if (!trdd) {
     return NextResponse.json({ error: 'TRDD not found' }, { status: 404 })
@@ -76,7 +76,7 @@ export async function PATCH(
     edits[k] = v
   }
 
-  const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+  const designDir = resolveDesignDir(auth, typeof body.agentId === 'string' ? body.agentId : null)
 
   // TRDD-K2WJH7RF: `edit` is the mechanical column transition, EXEMPT from
   // approval — so the gate is OWNERSHIP, not tier: the card's assignee, its

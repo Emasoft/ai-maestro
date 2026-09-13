@@ -10,9 +10,19 @@ import { defaultDesignDir } from '@/lib/trdd-store'
  *
  * Pure lib→lib (getAgent from the registry) — no service dependency, no cycle.
  */
-export function resolveDesignDir(agentId: string | null): string {
-  if (agentId) {
-    const agent = getAgent(agentId)
+export function resolveDesignDir(
+  auth: { agentId?: string | null } | null,
+  requestedAgentId: string | null,
+): string {
+  // SECURITY: an authenticated AGENT (`auth.agentId` set) ALWAYS gets its own
+  // corpus — a caller-supplied `requestedAgentId` is ignored, so an agent can
+  // never point a request at another agent's design/ (and thereby at the
+  // frontmatter authorizeTrddVerb() trusts: min-approval, assignee, created-by).
+  // Only the system owner (auth.agentId absent) may target another project via
+  // requestedAgentId.
+  const effectiveAgentId = auth?.agentId || requestedAgentId
+  if (effectiveAgentId) {
+    const agent = getAgent(effectiveAgentId)
     if (agent?.workingDirectory) {
       return path.join(agent.workingDirectory, 'design')
     }

@@ -42,7 +42,7 @@ export async function POST(
     return NextResponse.json({ error: 'Body must include a target {column}' }, { status: 400 })
   }
 
-  const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+  const designDir = resolveDesignDir(auth, typeof body.agentId === 'string' ? body.agentId : null)
 
   // TRDD-K2WJH7RF: promotion IS the approval act, so it shares approve's rule —
   // same tier, same self-approval ban. Letting them diverge would make `promote`
@@ -52,7 +52,7 @@ export async function POST(
     advanceColumn(designDir, id, column, {
       iso: isoLocal().iso,
       note: typeof body.note === 'string' ? body.note : undefined,
-      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || undefined,
+      approver: auth.agentId || undefined,
     }),
   )
   if (outcome.denied) return outcome.denied

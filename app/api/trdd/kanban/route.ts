@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const auth = requireAuth(request)
   if (!auth.ok) return auth.error
 
-  const designDir = resolveDesignDir(request.nextUrl.searchParams.get('agentId'))
+  const designDir = resolveDesignDir(auth, request.nextUrl.searchParams.get('agentId'))
   const index = getKanbanIndex(designDir, new Date().toISOString())
 
   return NextResponse.json({

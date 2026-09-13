@@ -83,11 +83,14 @@ MCP server. That rule has no element-level exception, including the core plugin.
 |---|---|
 | **A — frozen CLI** (§2, 54 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
-| **C — operator/dev** (§4, 30 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
+| **C — operator/dev** (§4, 29 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-54 + 12 + 30 = **96**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+54 + 12 + 29 = **95**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 (2026-09-05: +4 — the PSS/CPV read-surface wrappers of TRDD-523V1N4I, Tier A §2.4.)
+(2026-09-13: -1 — retired `install-pillar-tooling.sh`, a tracked orphan whose generated
+per-CLI shims collided with `install-messaging.sh`'s `pillar-cli` copies at the same
+`~/.local/bin` paths; the query-surface guard it carried already lives in `scripts/pillar-cli`.)
 (Before 2026-08-27 this line read `50 + 12 + 28 = 90` while the table one row up said 29 and disk
 held 91 — three counts, no two agreeing, in the file whose own header warns that exact drift
 recurs. `tests/unit/script-manifest-announces-every-script.test.ts` checks the three §-headings
@@ -562,7 +565,7 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ---
 
-## 4. Tier C — operator / dev scripts (30) — **not** a plugin API
+## 4. Tier C — operator / dev scripts (29) — **not** a plugin API
 
 `install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too — but
 only **when that installer is re-run**. Nothing re-runs it and nothing checks, so being listed
@@ -578,7 +581,7 @@ Being on `PATH` does **not** make them a contract. A plugin must never call them
 | `migrate-r20-disk-layout.sh` · `index-all-agents.sh` · `heal-amp-addresses.sh` | one-shot migrations / maintenance (`heal-amp-addresses.sh` batch-applies the AMP address self-heal to every registered config — TRDD-17K0SHDQ W-A, ai-maestro#46; deliberately named OUTSIDE the frozen `amp-*` family so the manifest builder's by-construction discriminator keeps it out of the skill-facing contract. Exit `0` sweep completed · `2` could not run) |
 | `export-agent.sh` · `import-agent.sh` · `list-agents.sh` | operator equivalents of `aimaestro-agent.sh export/import/list` — **use the CLI subcommands instead** |
 | `test-amp-routing.sh` · `test-amp-cross-host.sh` · `test-amp-local-delivery-sig.sh` · `test-tailscale-access.sh` · `simulate-blackout.sh` | test suites |
-| `install-boot-persistence.sh` · `install-pillar-tooling.sh` · `setup-local-marketplaces.sh` · `distribute-tailscale-skill.sh` | installers / host setup (added 2026-08-05 — previously shipped and unannounced) |
+| `install-boot-persistence.sh` · `setup-local-marketplaces.sh` · `distribute-tailscale-skill.sh` | installers / host setup (added 2026-08-05 — previously shipped and unannounced) |
 | `sweep-external-blockers.sh` | **the stale-external-blocker re-check** (TRDD-8GBIQMEP). The board has no field for an external blocker, so an external wait lives only in prose and nothing re-checks it — this is the re-check. Read-only: greps `design/tasks/*.md` for issue refs in a BLOCKING context, resolves each via `gh issue view`, prints `card \| issue \| STATE`. Exit `0` every cited blocker still OPEN · `1` at least one CLOSED (a card holds a dead claim) · **`2` a ref could not be resolved** and nothing is CLOSED |
 | `check-script-drift.sh` | **the Tier-A deployment check** (TRDD-GFX57106). Compares every Tier-A script in §2 to its `~/.local/bin` copy: exit 0 clean · 1 drift (prints `STALE`/`MISSING <name>`) · 2 could-not-run, never conflated with clean. Exists because this manifest verifies itself as a DOCUMENT — every script announced, tier counts agreeing — and nothing verified it as a DEPLOYMENT, so three Tier-A CLIs sat on PATH advertising a retired 14-stage vocabulary. Run it before trusting an installed CLI; TRDD-GFX57106 is parked on it as a `blocker-probe:`. |
 | `aimaestro-check-decoupling.sh` | **the R23 compliance gate, made runnable.** Scans a plugin tree for direct `/api/` calls — code *and* `.md` prompts, since a SKILL telling an agent to `curl` is a bypass. Self-tests its own needle each run. Exit `0` clean · `1` findings · **`2` COULD NOT RUN** |

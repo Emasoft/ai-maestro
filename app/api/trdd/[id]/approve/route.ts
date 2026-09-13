@@ -47,7 +47,7 @@ export async function POST(
     body = {}
   }
 
-  const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+  const designDir = resolveDesignDir(auth, typeof body.agentId === 'string' ? body.agentId : null)
 
   // TRDD-K2WJH7RF: the real `manage-trdd` decision. The sudo-guard DEFERRED this
   // route (it will not read the task corpus), so this call is the only thing
@@ -67,7 +67,7 @@ export async function POST(
     const approvalToken = await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval')
 
     const result = await promoteTrdd(designDir, id, {
-      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
+      approver: auth.agentId || 'user',
       rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
       iso: isoLocal().iso,
       approvalToken,

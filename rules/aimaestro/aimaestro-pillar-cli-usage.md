@@ -7,8 +7,14 @@
 > `lib/trdd-doctor.ts` in THIS repo. A copy pinned outside the repo (USER scope) drifts from the
 > tools the moment either moves, with no signal that it drifted. Versioning the rules alongside the
 > code they describe is the fix. `~/.claude/rules/three-pillars-tools-only.md` is the
-> janitor-shipped IND base for this subject; this overlay EXPANDS it, and is versioned alongside
-> the tools it describes.
+> janitor-shipped GLOBAL COPY of these rules; this is the in-repo copy, versioned with the tools.
+>
+> **They are two COPIES, not a base and an overlay, and which one wins is not yet decided.**
+> Measured 2026-09-13: the two differ on 21 of ~84 lines — this header, the `scripts/pillar-cli`
+> gate paragraph (#161), and the `help`-without-a-corpus correction (#159). Everything else is
+> byte-identical. Do NOT describe this file as EXPANDING the other: that word is the sibling
+> overlays' contract and it promises the base is never restated, which is false here. Resolving
+> the duplication is tracked on `TRDD-9JOCY2EJ` and needs the janitor repo.
 >
 > **Why `rules/aimaestro/` — this file is one of the server-distributed overlays.** An earlier
 > draft of this header said the opposite; the seeder refutes it. `ensureAgentRules`
@@ -16,11 +22,13 @@
 > `readdir` plus an `.endsWith('.md')` filter at `:115`, and seeds them into each registered agent
 > workdir's `.claude/rules/`. The directory's membership is pinned by
 > `tests/unit/aimaestro-overlay-filename-contract.test.ts`: a file dropped here without a matching
-> contract change reds the suite, which is how this one was caught. It was then added to
+> contract change reds the suite; that is how this one surfaced. It was then added to
 > `EXPECTED_OVERLAY_SET` by USER ruling 2026-09-13, on the grounds that the CLIs it governs are
 > installed on PATH host-wide, so an agent holding only the unversioned copy cannot track the tools
 > as they move. Like `aimaestro-agent-rules.md`, this file is deliberately NOT in that test's
-> `CROSS_REPO_CONTRACT` list — no janitor IND rule cites it by name.
+> `CROSS_REPO_CONTRACT` list. Seeded copies land mode `0444` (`RULE_FILE_MODE`) and are restored
+> to the shipped bytes whenever they differ, so they cannot drift — the drift the first paragraph
+> warns about is the UNMANAGED global copy, not these.
 >
 > `docs/` was the other candidate: `docs/SCRIPT-MANIFEST.md` documents scripts for a HUMAN reader
 > (what a script does, when to run it) and never carries agent-facing constraints like a

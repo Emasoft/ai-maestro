@@ -44,9 +44,12 @@ const CROSS_REPO_CONTRACT: ReadonlyArray<{ overlay: string; citedByJanitorIndBas
 // guarded by agent-operating-rules.test.ts); it is pinned here only so the SET is
 // exact — an accidental add/remove is caught too. Changing this list is a
 // deliberate act, not a rebase.
-// Two members are deliberately absent from CROSS_REPO_CONTRACT above, because no janitor IND
-// rule cites them by name: 'aimaestro-agent-rules.md' and 'aimaestro-pillar-cli-usage.md'.
-// The frozen set is therefore a proper superset of the contract, by design.
+// The frozen set is a proper SUPERSET of CROSS_REPO_CONTRACT above, and the two lists are
+// decided independently -- do NOT infer one from the other. 'aimaestro-pillar-cli-usage.md' was
+// added here by USER ruling 2026-09-13 (see that file's header) with no contract entry; and,
+// measured the same day, 'aimaestro-manager-approval-defaults.md' sits IN the contract while no
+// janitor global rule under ~/.claude/rules/ cites it by name. So contract membership is not a
+// function of 'is it cited', and neither list explains the other.
 const EXPECTED_OVERLAY_SET: readonly string[] = [
   'aimaestro-agent-rules.md',
   'aimaestro-kanban-multiagent.md',

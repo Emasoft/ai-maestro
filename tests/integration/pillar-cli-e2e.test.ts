@@ -442,6 +442,13 @@ describe.skipIf(!HAVE_SPECGREP)('specgrep (real CLI, real temp corpus)', () => {
   it('24 · does NOT find a bullet-form clause (pins the parser contract)', () => {
     const design = mkSpecCorpus();
     const r = run('specgrep', ['--design-dir', design]);
+    // POSITIVE CONTROL, load-bearing: without these two lines the assertion below
+    // passes on EMPTY output — i.e. on specgrep never running at all. Proven by a
+    // launcher neuter (spawn a nonexistent binary): this test was 1 of only 2 that
+    // survived, because `not.toContain` cannot tell "parser correctly skipped it"
+    // from "no output was produced".
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('DUM-10');
     expect(r.out).not.toContain('DUM-01');
   });
 

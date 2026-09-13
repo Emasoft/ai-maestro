@@ -129,6 +129,10 @@ function mkSpecCorpus(): string {
       '',
       '- **DUM-01** — bullet form clause (should NOT be found)',
       '',
+      // Deliberately AFTER the bullet: test 24 asserts this one, so passing requires
+      // having traversed PAST the bullet line rather than stopping at the first match.
+      '`DUM-20` **second clause** — proves the parser continued past the bullet',
+      '',
     ].join('\n')
   );
   return design;
@@ -442,13 +446,17 @@ describe.skipIf(!HAVE_SPECGREP)('specgrep (real CLI, real temp corpus)', () => {
   it('24 · does NOT find a bullet-form clause (pins the parser contract)', () => {
     const design = mkSpecCorpus();
     const r = run('specgrep', ['--design-dir', design]);
-    // POSITIVE CONTROL, load-bearing: without these two lines the assertion below
-    // passes on EMPTY output — i.e. on specgrep never running at all. Proven by a
-    // launcher neuter (spawn a nonexistent binary): this test was 1 of only 2 that
-    // survived, because `not.toContain` cannot tell "parser correctly skipped it"
-    // from "no output was produced".
+    // POSITIVE CONTROL, load-bearing: without it the assertion below passes on EMPTY
+    // output — i.e. on specgrep never running at all, since `not.toContain` cannot
+    // tell "the parser correctly skipped it" from "no output was produced".
+    //
+    // It asserts DUM-20 and NOT DUM-10 on purpose. DUM-10 sits BEFORE the bullet in
+    // the fixture, so a first-match-only parser that never reached the bullet would
+    // satisfy it and leave the contract unexercised while the test stayed green.
+    // DUM-20 sits AFTER the bullet, so finding it proves the parser traversed past
+    // the bullet and rejected it. Test 23 owns the DUM-10 claim; keep them disjoint.
     expect(r.code).toBe(0);
-    expect(r.out).toContain('DUM-10');
+    expect(r.out).toContain('DUM-20');
     expect(r.out).not.toContain('DUM-01');
   });
 
@@ -487,7 +495,15 @@ describe.skipIf(!HAVE_MEMGREP)('memgrep (real CLI, real temp corpus)', () => {
 });
 
 describe('containment + write gate', () => {
-  it('29 · never touches the developer real ~/.aimaestro state dir across this whole file', () => {
+  it('29 · adds or removes no top-level entry in the developer real ~/.aimaestro', () => {
+    // NON-VACUITY GUARD: realStateListing() returns [] when the dir is absent, so on a
+    // fresh clone or a CI box the comparison below is [] vs [] — passing forever while
+    // reading as safety. Measured 51 entries on this machine; assert it, don't assume.
+    expect(BEFORE_SUITE_STATE.length).toBeGreaterThan(0);
+    // The TITLE states the narrow claim deliberately. This is a one-level, names-only
+    // comparison: it catches a top-level entry appearing or vanishing, NOT a mutation
+    // inside one — a corrupted agents/registry.json changes no top-level name. Calling
+    // it "never touches" would record the guard stronger than its evidence.
     expect(realStateListing()).toEqual(BEFORE_SUITE_STATE);
   });
 

@@ -1,9 +1,9 @@
 ---
 trdd-id: G6EBLBIQ
 title: TRDD corpus selection is caller-supplied rather than caller-derived
-column: dev
+column: human_review
 created: 2026-09-13T02:34:07+0200
-updated: 2026-09-13T15:46:51+0200
+updated: 2026-09-13T15:50:58+0200
 current-owner: ai-maestro-0a
 created-by: ai-maestro-0a
 task-type: security
@@ -14,6 +14,9 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-09-13T15:44:25+0200
 implementation-commits: [25e5fc97e, 91b06b30b]
+unblock-when: [decision: is an empty or non-string agentId reachable through any of the ten routes - if unreachable the hardening stands as defence-in-depth and the card closes]
+blocked-by: []
+pre-block-column: dev
 ---
 
 # TRDD corpus selection is caller-supplied rather than caller-derived

@@ -39,6 +39,131 @@ function write(zone: string, name: string, content: string) {
   fs.writeFileSync(path.join(dir, name), content, 'utf8')
 }
 
+
+describe('fixCorpus neighbourhoodOf — the reference neighbourhood, depth 1', () => {
+  // Fixture: P claims T, A, B, C as npt children (each parent-trdd: P) — every one of the
+  // four carries the SAME seeded autofixable defect, DERIVED-FLAG-MISSING (the only
+  // reference-consistency rule with an actual autofix today). A references T via
+  // `blocked-by:`; T references B via `blocked-by:`; C references nothing and is
+  // referenced by nothing — it is the unrelated control.
+  function writeCard(dir: string, id: string, extra: Record<string, string> = {}) {
+    const fields: Record<string, string> = {
+      'trdd-id': id,
+      title: `card ${id}`,
+      column: 'dev',
+      created: '2026-09-01T00:00:00+0000',
+      updated: '2026-09-01T00:00:00+0000',
+      'current-owner': 'main',
+      assignee: 'main',
+      priority: '3',
+      'task-type': 'feature',
+      scope: 'project',
+      'min-approval-requirement': 'none',
+      'parent-trdd': 'PPPPPPPP',
+      npt: '[]',
+      eht: '[]',
+      'blocked-by': '[]',
+      ...extra,
+    }
+    const fm = [
+      '---',
+      ...Object.entries(fields).map(([k, v]) => `${k}: ${v}`),
+      '---',
+      '',
+      `# TRDD-${id} — card ${id}`,
+      '',
+    ].join('\n')
+    fs.writeFileSync(path.join(dir, `TRDD-20260901_000000+0000-${id}-card.md`), fm, 'utf8')
+  }
+
+  function makeFixture(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-phase6-'))
+    fs.mkdirSync(path.join(dir, 'tasks'), { recursive: true })
+    const tasks = path.join(dir, 'tasks')
+    // The parent — no defect of its own.
+    fs.writeFileSync(
+      path.join(tasks, 'TRDD-20260901_000000+0000-PPPPPPPP-parent.md'),
+      [
+        '---',
+        'trdd-id: PPPPPPPP',
+        'title: parent',
+        'column: dev',
+        'created: 2026-09-01T00:00:00+0000',
+        'updated: 2026-09-01T00:00:00+0000',
+        'current-owner: main',
+        'assignee: main',
+        'priority: 3',
+        'task-type: feature',
+        'scope: project',
+        'min-approval-requirement: none',
+        'parent-trdd: null',
+        'npt: [TTTTTTTT, AAAAAAAA, BBBBBBBB, CCCCCCCC]',
+        'eht: []',
+        'blocked-by: []',
+        '---',
+        '',
+        '# TRDD-PPPPPPPP — parent',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    writeCard(tasks, 'TTTTTTTT', { 'blocked-by': '[BBBBBBBB]' }) // target — references B
+    writeCard(tasks, 'AAAAAAAA', { 'blocked-by': '[TTTTTTTT]' }) // references the target
+    writeCard(tasks, 'BBBBBBBB', {}) // referenced BY the target
+    writeCard(tasks, 'CCCCCCCC', {}) // unrelated — no path to/from the target
+    return dir
+  }
+
+  it('repairs the target, the card referencing it, and the card it references — and leaves an unrelated card byte-identical', () => {
+    const dir = makeFixture()
+    const tasks = path.join(dir, 'tasks')
+    const before: Record<string, string> = {}
+    for (const id of ['TTTTTTTT', 'AAAAAAAA', 'BBBBBBBB', 'CCCCCCCC']) {
+      before[id] = fs.readFileSync(fs.readdirSync(tasks).map((f) => path.join(tasks, f)).find((f) => f.includes(id))!, 'utf8')
+    }
+    const results = fixCorpus(dir, { neighbourhoodOf: 'TTTTTTTT' })
+    const fixedIds = new Set(results.map((r) => r.id))
+    expect(fixedIds.has('TTTTTTTT')).toBe(true)
+    expect(fixedIds.has('AAAAAAAA')).toBe(true)
+    expect(fixedIds.has('BBBBBBBB')).toBe(true)
+    expect(fixedIds.has('CCCCCCCC')).toBe(false)
+    const cPath = fs.readdirSync(tasks).map((f) => path.join(tasks, f)).find((f) => f.includes('CCCCCCCC'))!
+    expect(fs.readFileSync(cPath, 'utf8')).toBe(before['CCCCCCCC'])
+    for (const id of ['TTTTTTTT', 'AAAAAAAA', 'BBBBBBBB']) {
+      const p = fs.readdirSync(tasks).map((f) => path.join(tasks, f)).find((f) => f.includes(id))!
+      expect(fs.readFileSync(p, 'utf8')).not.toBe(before[id])
+      expect(/^derived: true$/m.test(fs.readFileSync(p, 'utf8'))).toBe(true)
+    }
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('restricts a neighbour to reference-consistency repairs only — a non-reference-consistency defect on the referencing card is untouched, while the target gets both', () => {
+    const dir = makeFixture()
+    const tasks = path.join(dir, 'tasks')
+    // Give the TARGET and its referencing neighbour (A) a second, non-reference-consistency
+    // autofixable defect: a missing title (the H1 lift). Both cards' `title:` is present here
+    // (`writeCard` always sets it), so instead seed the uppercase-id defect, which is purely
+    // local and has no cross-card meaning at all.
+    const tPath = fs.readdirSync(tasks).map((f) => path.join(tasks, f)).find((f) => f.includes('TTTTTTTT'))!
+    const aPath = fs.readdirSync(tasks).map((f) => path.join(tasks, f)).find((f) => f.includes('AAAAAAAA'))!
+    for (const p of [tPath, aPath]) {
+      const text = fs.readFileSync(p, 'utf8').replace(/^trdd-id: .*$/m, 'trdd-id: tttttttt')
+      fs.writeFileSync(p, text, 'utf8')
+    }
+    const results = fixCorpus(dir, { neighbourhoodOf: 'TTTTTTTT' })
+    const tResult = results.find((r) => r.filePath === tPath)
+    const aResult = results.find((r) => r.filePath === aPath)
+    expect(tResult?.changes.some((c) => c.includes('UPPERCASE'))).toBe(true)
+    expect(tResult?.changes.some((c) => c.includes('derived:'))).toBe(true)
+    // A is a neighbour, not the target: its uppercase-id defect (local-only) stays unrepaired,
+    // but its derived-flag defect (reference-consistency) is still fixed.
+    expect(aResult?.changes.some((c) => c.includes('UPPERCASE'))).toBeFalsy()
+    expect(aResult?.changes.some((c) => c.includes('derived:'))).toBe(true)
+    expect(/^trdd-id: tttttttt$/m.test(fs.readFileSync(aPath, 'utf8'))).toBe(true)
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+})
+
 /** A well-formed v2 TRDD. Every fixture below is this, minus exactly one thing. */
 function good(id: string, over: Record<string, string> = {}): string {
   const fm: Record<string, string> = {

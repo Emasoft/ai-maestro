@@ -1448,6 +1448,89 @@ export interface FixResult {
 }
 
 /**
+ * Card-to-card reference fields — depth-1 edges for the neighbourhood fixer below
+ * (TRDD reference-consistency, Phase 6). `relevant-rules` is deliberately excluded: it
+ * points at PRRD rules, not TRDD cards, so it plays no part in this graph.
+ */
+const CARD_REFERENCE_FIELDS = ['blocked-by', 'npt', 'eht', 'parent-trdd', 'supersedes', 'superseded-by'] as const
+
+/**
+ * `unblock-when: [<pred>, ...]` predicates of kind `trdd:` are also card references (the
+ * IND base rule, `trdd-design-tasks.md`). Every other kind (`issue:`, `file:`, `log:`,
+ * `date:`, `decision:`) names something that is not a TRDD card, so it is excluded here.
+ * Accepts both the string form (`"trdd: TRDD-XXXXXXXX"`) and an object form (`{ trdd: '...' }`)
+ * — the grammar is not yet pinned in this codebase, so both are read defensively.
+ */
+function unblockWhenTrddRefs(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  const out: string[] = []
+  for (const pred of v) {
+    if (typeof pred === 'string') {
+      const m = pred.match(/^\s*trdd\s*:\s*(.+?)\s*$/i)
+      if (m) out.push(normalizeTrddRef(m[1]))
+    } else if (pred && typeof pred === 'object' && typeof (pred as Record<string, unknown>).trdd === 'string') {
+      out.push(normalizeTrddRef((pred as Record<string, unknown>).trdd as string))
+    }
+  }
+  return out.filter(Boolean)
+}
+
+/** Every card `c` references, over `CARD_REFERENCE_FIELDS` plus `unblock-when: [trdd: …]`. */
+function cardReferences(c: Card): string[] {
+  const out: string[] = []
+  for (const field of CARD_REFERENCE_FIELDS) out.push(...refList(c.fm[field]))
+  out.push(...unblockWhenTrddRefs(c.fm['unblock-when']))
+  return out
+}
+
+/**
+ * The rule codes a neighbourhood repair (`fixCorpus`'s `neighbourhoodOf`) is allowed to
+ * apply to a card OTHER than the one it was asked to fix. Reference-consistency findings
+ * are the ones whose fact is partly owned by ANOTHER card — repairing them can require
+ * touching that other card. Every other autofixable finding (a date re-spelling, a missing
+ * title, …) is local to its own card and stays target-only.
+ *
+ * Membership in this set is the WHOLE test, checked at each repair's own site — never a
+ * per-rule judgement call, or "minimize intervention" has no enforceable meaning.
+ */
+export const REFERENCE_CONSISTENCY_RULES: ReadonlySet<string> = new Set([
+  // derived/parent back-link (npt:/eht: <-> derived:/derived-kind:/parent-trdd:)
+  'DERIVED-FLAG-MISSING',
+  'GRAPH-TWO-PARENTS',
+  'GRAPH-KIND-MISMATCH',
+  'GRAPH-PARENT-MISMATCH',
+  'GRAPH-CHILD-DERIVED-FALSE',
+  'GRAPH-PARENT-IS-DERIVED',
+  'GRAPH-UNCLAIMED',
+  'GRAPH-DEPTH1',
+  // dangling reference (npt:/eht:/parent-trdd:/blocked-by: naming a card that does not exist)
+  'GRAPH-CHILD-MISSING',
+  'GRAPH-UNKNOWN-BLOCKER',
+  // blocker resolution (blocked-by: vs. the blocker's own column)
+  'BLOCKER-UNRESOLVED',
+  'BLOCKER-RELEASED',
+  // supersede attribution (superseded-by: naming a card that does not exist)
+  'DANGLING-REF',
+])
+
+/**
+ * The target card, plus every card that references it, plus every card it references —
+ * DEPTH 1 ONLY, over `CARD_REFERENCE_FIELDS` (+ `unblock-when` `trdd:` predicates). This is
+ * the write scope `fixCorpus`'s `neighbourhoodOf` narrows to: "broad but only for updating
+ * cards referencing or referenced by the target card" (the owner's ruling on issue 160).
+ */
+export function referenceNeighbourhood(cards: readonly Card[], targetId: string): Set<string> {
+  const target = normalizeTrddRef(targetId)
+  const neighbours = new Set<string>([target])
+  const byId = new Map<string, Card>()
+  for (const c of cards) byId.set(c.id, c)
+  const targetCard = byId.get(target)
+  if (targetCard) for (const ref of cardReferences(targetCard)) neighbours.add(ref)
+  for (const c of cards) if (cardReferences(c).includes(target)) neighbours.add(c.id)
+  return neighbours
+}
+
+/**
  * Repair the mechanical defects. Returns what it changed; writes nothing when `dryRun`.
  *
  * It will NOT invent a column. Every unknown column becomes `todo` — the honest answer
@@ -1455,7 +1538,7 @@ export interface FixResult {
  */
 export function fixCorpus(
   designDir: string,
-  opts: { dryRun?: boolean; now?: string; selector?: (c: Card) => boolean } = {},
+  opts: { dryRun?: boolean; now?: string; selector?: (c: Card) => boolean; neighbourhoodOf?: string } = {},
 ): FixResult[] {
   const { cards } = loadCorpus(designDir)
   // `isoLocal()` replaces an inline `toISOString().replace(/\.\d+Z$/, '+0000')`. That
@@ -1479,6 +1562,17 @@ export function fixCorpus(
     }
   }
 
+  // NEIGHBOURHOOD NARROWING (Phase 6, TRDD reference-consistency): `neighbourhoodOf`
+  // narrows the write to the target's depth-1 reference neighbourhood
+  // (`referenceNeighbourhood`, defined above `fixCorpus` in this file) — the target, every
+  // card that references it, and every card it references. On a card that is NOT the
+  // target, only a reference-consistency repair may run (checked against
+  // `REFERENCE_CONSISTENCY_RULES` at that repair's own site, below); every OTHER repair is
+  // gated `if (isTarget)`. No `neighbourhoodOf` (every caller today) leaves `isTarget`
+  // always true, so today's whole-corpus behaviour is unchanged.
+  const neighbourhoodTarget = opts.neighbourhoodOf ? normalizeTrddRef(opts.neighbourhoodOf) : null
+  const neighbourhood = neighbourhoodTarget ? referenceNeighbourhood(cards, neighbourhoodTarget) : null
+
   for (const c of cards) {
     // NEVER autofix a card whose frontmatter did not PARSE (TRDD-5XJWR473). Such a card
     // arrives with every field reading as absent, so each "missing field" repair below
@@ -1498,6 +1592,8 @@ export function fixCorpus(
     // written in THIS iteration. No `selector` (the whole-corpus batch callers) means
     // every card is still eligible — today's whole-corpus behaviour, unchanged.
     if (opts.selector && !opts.selector(c)) continue
+    if (neighbourhood && !neighbourhood.has(c.id)) continue
+    const isTarget = !neighbourhoodTarget || c.id === neighbourhoodTarget
 
     const changes: string[] = []
     let semantic = false
@@ -1539,215 +1635,229 @@ export function fixCorpus(
     const hasFm = /^---\r?\n/.test(text)
 
     // A file with no frontmatter at all: build one from the H1 + git.
+    // TARGET-ONLY (Phase 6): a frontmatter-less card carries no reference field at all, so
+    // it can never legitimately be a neighbour — but if `opts.selector` alone selects it,
+    // keep this repair local, same as every other non-reference-consistency repair below.
     if (!hasFm) {
-      const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
-      const created = gitFirstCommitDate(c.filePath) ?? stamp
-      const id = normalizeTrddRef(path.basename(c.filePath).replace(/^TRDD-(?:\d{8}_\d{6}[+-]\d{4}-)?/, '').slice(0, 8))
-      const fm = [
-        '---',
-        `trdd-id: ${id}`,
-        `title: ${title.replace(/:/g, ' —')}`,
-        // A card with NO frontmatter can prove nothing about its own approval, so the
-        // helper lands it at `backburner` (3P-TRDD-11). It used to be hard-coded `todo`,
-        // which since 3.0.0 would assert both "approved" and "designed" about a file whose
-        // fields we are inventing in this very block.
-        `column: ${defaultColumnForMissing(c.fm)}`,
-        `created: ${created}`,
-        `updated: ${stamp}`,
-        'current-owner: main',
-        'assignee: main',
-        'priority: 3',
-        'task-type: feature',
-        'scope: project',
-        'min-approval-requirement: none',
-        'parent-trdd: null',
-        'npt: []',
-        'eht: []',
-        'blocked-by: []',
-        'implementation-commits: []',
-        '---',
-        '',
-      ].join('\n')
-      text = fm + text
-      // SEMANTIC: the card asserted nothing structured before and now asserts a whole field
-      // set, a `column:` among them. (The generated block stamps `updated:` itself above,
-      // so the bump below is a no-op replace on the line this branch just wrote.)
-      record('semantic', `added a full frontmatter (was: none) — column=${defaultColumnForMissing(c.fm)} per the uncertainty law`)
-    } else {
-      // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
-      //
-      // MECHANICAL, and the distinction is the entire point: this CONVERTS the instant the
-      // card already holds (`isoLocal` takes the parsed Date) rather than stamping `now`.
-      // The same instant, re-spelled — which is the canonical mechanical repair described
-      // in `record`'s own contract, and why the bump below stays off. Stamping `now` here
-      // would be TRDD-R6R9XHZI a second time: a format pass rewriting the board's sort key
-      // into an artefact of when someone last ran the fixer.
-      //
-      // Conversion truncates to the second (the mandated format has no sub-second slot).
-      // Accepted and stated rather than discovered — measured 2026-08-22, re-derive with
-      // the two greps in TRDD-S13L6R9R: of 1383 frontmatter datetime lines, exactly 25
-      // carry milliseconds, and they are precisely the off-format ones this repairs. So
-      // no conforming value loses precision, because none of them ever had any.
-      for (const [field, value] of Object.entries(c.fm)) {
-        const dt = offFormatDatetime(value)
-        if (!dt || !dateFieldRepairable(field, c.column)) continue
-        const line = new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:.*$`, 'm')
-        if (!line.test(text)) continue
-        const converted = isoLocal(dt).iso
-        text = text.replace(line, `${field}: ${converted}`)
-        record('mechanical', `${field}: re-spelled from a UTC-\`Z\` instant to the mandated local offset (${converted}) — same instant`)
-      }
-
-      // A COLUMN VALUE sitting in the `status:` field.
-      //
-      // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it
-      // carries a DIFFERENT aspect, and the pillar specs already use it that way
-      // (`status: normative`). Both branches below used to key on the FIELD NAME, which made
-      // this fixer a DESTROYER of a legitimate field:
-      //
-      //   (a) with a column present it DELETED the `status:` line whatever it held, so a
-      //       `status: normative` vanished silently;
-      //   (b) with no column it REWROTE `status: X` into `column: <mapped>`, and the
-      //       `?? 'todo'` swallowed every unmapped value — converting a field into a
-      //       different field with an invented value. Worse than a delete: the original is
-      //       unrecoverable and the card now asserts a state nobody chose.
-      //
-      // So both branches now require the VALUE to be a recognised pipeline state. That is
-      // the only shape we can PROVE is v1 residue. A `status:` holding anything else is the
-      // field doing its own job and is left untouched — a fixer must never guess.
-      const status = c.fm['status']
-      const statusRaw = status === undefined ? '' : String(status).trim()
-      const statusKey = statusRaw.toLowerCase()
-      const mappedFromV1 = V1_STATUS_TO_COLUMN[statusKey]
-      const statusIsPipelineState = isPipelineStateValue(statusRaw)
-
-      if (statusIsPipelineState && c.column) {
-        // (a) redundant pipeline state alongside a live column → drop it. Never let the
-        // dead spelling overwrite the live one.
-        const agrees = mappedFromV1 === c.column || statusKey === c.column
-        text = text.replace(/^status:.*\n/m, '')
-        record(
-          // The two sub-cases are NOT the same kind of repair, which is why the verdict is
-          // computed rather than fixed. AGREES: the card said one state twice and now says it
-          // once — the assertion set is unchanged. DISAGREES: the card was making TWO competing
-          // pipeline claims and one is now gone; `column:` was always the authoritative one, but
-          // deleting a claim is still a change to what the card says, and a reader should see
-          // the card as recently touched.
-          agrees ? 'mechanical' : 'semantic',
-          agrees
-            ? `dropped \`status: ${statusRaw}\` (a column value, redundant — \`column: ${c.column}\` already says it)`
-            : `dropped \`status: ${statusRaw}\`; KEPT \`column: ${c.column}\` (both held a pipeline state and disagreed — the v2 state machine wins)`,
-        )
-      } else if (statusIsPipelineState) {
-        // (b) the pipeline state is only in `status:` → migrate it to its own field. Safe
-        // ONLY because the value is a recognised state; no default, no guess.
-        const mapped = mappedFromV1 ?? statusKey
-        text = text.replace(/^status:.*$/m, `column: ${mapped}`)
-        // SEMANTIC, though the VALUE is unchanged: no consumer reads `status:` for a pipeline
-        // position, so before this repair the card was column-less to every reader and to the
-        // board. It joins the board here, which is a pipeline claim it was not making.
-        record('semantic', `status: ${statusRaw} → column: ${mapped} (a column value in the wrong field)`)
-      }
-      // A `status:` whose value is NOT a pipeline state is deliberately left alone.
-      //
-      // Missing column. The condition is `!statusIsPipelineState`, NOT `status === undefined`:
-      // a card carrying a legitimate `status: normative` and no column must still GET a
-      // column, exactly like a card carrying no status at all. Keying on the field's mere
-      // presence would leave it column-less forever, because branch (b) above no longer
-      // fires for it — the two conditions have to be complements or the card falls through
-      // both. Adding the missing field is not repurposing the other one: `status:` survives.
-      if (!c.column && !statusIsPipelineState) {
-        // INSERT only when there is genuinely no `column:` KEY.
-        //
-        // `c.column` is falsy for TWO different shapes: "no key at all", and "the key is
-        // there with an EMPTY value" (`column:` parses to `column: null`, which yields ''
-        // and NO parseError, so the `if (c.parseError) continue` guard above cannot see
-        // it). Blind-inserting into the second shape writes a SECOND `column:` line, and
-        // js-yaml then throws `duplicated mapping key` — the card becomes permanently
-        // UNPARSEABLE, drops off the board, and is un-fixable by that same guard, which
-        // keys on the PRE-fix state and so can never see damage this pass just caused.
-        // A repairer that manufactures the corruption it screens for is the worst case.
-        const hasColumnKey = /^column:/m.test(text)
-        // 3P-TRDD-11 / PRRD G11.1 — ONE definition of the fallback, shared with the lint
-        // message above so `--fix` can never repair a shape the report did not describe.
-        const fallbackColumn = defaultColumnForMissing(c.fm)
-        const next = hasColumnKey
-          ? text.replace(/^column:.*$/m, `column: ${fallbackColumn}`)
-          : text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: ${fallbackColumn}`)
-        // Report only a repair that ACTUALLY LANDED. The push used to be unconditional,
-        // so a card whose frontmatter carries no `trdd-id:` line (the anchor) had its
-        // replace no-op while `--fix` still claimed the repair, still bumped `updated:`,
-        // and still wrote — so the card stayed column-less, the claim repeated every run,
-        // and its board sort key floated to the top forever. `--fix` never converged.
-        if (next !== text) {
-          text = next
-          // SEMANTIC, and the clearest case: this INVENTS a pipeline state nobody chose. The
-          // card now claims a column on the doctor's authority, and that must be visible.
-          record('semantic', `column: ${fallbackColumn} (was missing — the uncertainty law)`)
-        }
-      }
-      // uppercase the id
-      if (c.fm['trdd-id'] && !/^[A-Z0-9]{8}$/.test(String(c.fm['trdd-id']))) {
-        const short = normalizeTrddRef(String(c.fm['trdd-id']).slice(0, 8))
-        text = text.replace(/^trdd-id:.*$/m, `trdd-id: ${short}`)
-        // MECHANICAL: ids are matched case-insensitively everywhere (`normalizeTrddRef`, the
-        // `-iname` lookups), so this re-spells an identity without changing it.
-        record('mechanical', `trdd-id → ${short} (8-char UPPERCASE base36)`)
-      }
-      // title from H1
-      if (!c.title) {
+      if (isTarget) {
         const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
-        if (title) {
-          // Same two-shapes hazard as `column:` above — an empty `title:` parses to null,
-          // so inserting would produce a duplicate key and an unparseable card.
-          const hasTitleKey = /^title:/m.test(text)
-          const line = `title: ${title.replace(/:/g, ' —')}`
-          const next = hasTitleKey
-            ? text.replace(/^title:.*$/m, line)
-            : text.replace(/^(trdd-id:.*)$/m, `$1\n${line}`)
+        const created = gitFirstCommitDate(c.filePath) ?? stamp
+        const id = normalizeTrddRef(path.basename(c.filePath).replace(/^TRDD-(?:\d{8}_\d{6}[+-]\d{4}-)?/, '').slice(0, 8))
+        const fm = [
+          '---',
+          `trdd-id: ${id}`,
+          `title: ${title.replace(/:/g, ' —')}`,
+          // A card with NO frontmatter can prove nothing about its own approval, so the
+          // helper lands it at `backburner` (3P-TRDD-11). It used to be hard-coded `todo`,
+          // which since 3.0.0 would assert both "approved" and "designed" about a file whose
+          // fields we are inventing in this very block.
+          `column: ${defaultColumnForMissing(c.fm)}`,
+          `created: ${created}`,
+          `updated: ${stamp}`,
+          'current-owner: main',
+          'assignee: main',
+          'priority: 3',
+          'task-type: feature',
+          'scope: project',
+          'min-approval-requirement: none',
+          'parent-trdd: null',
+          'npt: []',
+          'eht: []',
+          'blocked-by: []',
+          'implementation-commits: []',
+          '---',
+          '',
+        ].join('\n')
+        text = fm + text
+        // SEMANTIC: the card asserted nothing structured before and now asserts a whole field
+        // set, a `column:` among them. (The generated block stamps `updated:` itself above,
+        // so the bump below is a no-op replace on the line this branch just wrote.)
+        record('semantic', `added a full frontmatter (was: none) — column=${defaultColumnForMissing(c.fm)} per the uncertainty law`)
+      }
+    } else {
+      // TARGET-ONLY (Phase 6): every repair from here through the body-state-claim drop is
+      // local to THIS card alone — it reads and writes nothing on any other card, so on a
+      // neighbour it would be intervention the plan does not ask for.
+      if (isTarget) {
+        // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
+        //
+        // MECHANICAL, and the distinction is the entire point: this CONVERTS the instant the
+        // card already holds (`isoLocal` takes the parsed Date) rather than stamping `now`.
+        // The same instant, re-spelled — which is the canonical mechanical repair described
+        // in `record`'s own contract, and why the bump below stays off. Stamping `now` here
+        // would be TRDD-R6R9XHZI a second time: a format pass rewriting the board's sort key
+        // into an artefact of when someone last ran the fixer.
+        //
+        // Conversion truncates to the second (the mandated format has no sub-second slot).
+        // Accepted and stated rather than discovered — measured 2026-08-22, re-derive with
+        // the two greps in TRDD-S13L6R9R: of 1383 frontmatter datetime lines, exactly 25
+        // carry milliseconds, and they are precisely the off-format ones this repairs. So
+        // no conforming value loses precision, because none of them ever had any.
+        for (const [field, value] of Object.entries(c.fm)) {
+          const dt = offFormatDatetime(value)
+          if (!dt || !dateFieldRepairable(field, c.column)) continue
+          const line = new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:.*$`, 'm')
+          if (!line.test(text)) continue
+          const converted = isoLocal(dt).iso
+          text = text.replace(line, `${field}: ${converted}`)
+          record('mechanical', `${field}: re-spelled from a UTC-\`Z\` instant to the mandated local offset (${converted}) — same instant`)
+        }
+
+        // A COLUMN VALUE sitting in the `status:` field.
+        //
+        // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it
+        // carries a DIFFERENT aspect, and the pillar specs already use it that way
+        // (`status: normative`). Both branches below used to key on the FIELD NAME, which made
+        // this fixer a DESTROYER of a legitimate field:
+        //
+        //   (a) with a column present it DELETED the `status:` line whatever it held, so a
+        //       `status: normative` vanished silently;
+        //   (b) with no column it REWROTE `status: X` into `column: <mapped>`, and the
+        //       `?? 'todo'` swallowed every unmapped value — converting a field into a
+        //       different field with an invented value. Worse than a delete: the original is
+        //       unrecoverable and the card now asserts a state nobody chose.
+        //
+        // So both branches now require the VALUE to be a recognised pipeline state. That is
+        // the only shape we can PROVE is v1 residue. A `status:` holding anything else is the
+        // field doing its own job and is left untouched — a fixer must never guess.
+        const status = c.fm['status']
+        const statusRaw = status === undefined ? '' : String(status).trim()
+        const statusKey = statusRaw.toLowerCase()
+        const mappedFromV1 = V1_STATUS_TO_COLUMN[statusKey]
+        const statusIsPipelineState = isPipelineStateValue(statusRaw)
+
+        if (statusIsPipelineState && c.column) {
+          // (a) redundant pipeline state alongside a live column → drop it. Never let the
+          // dead spelling overwrite the live one.
+          const agrees = mappedFromV1 === c.column || statusKey === c.column
+          text = text.replace(/^status:.*\n/m, '')
+          record(
+            // The two sub-cases are NOT the same kind of repair, which is why the verdict is
+            // computed rather than fixed. AGREES: the card said one state twice and now says it
+            // once — the assertion set is unchanged. DISAGREES: the card was making TWO competing
+            // pipeline claims and one is now gone; `column:` was always the authoritative one, but
+            // deleting a claim is still a change to what the card says, and a reader should see
+            // the card as recently touched.
+            agrees ? 'mechanical' : 'semantic',
+            agrees
+              ? `dropped \`status: ${statusRaw}\` (a column value, redundant — \`column: ${c.column}\` already says it)`
+              : `dropped \`status: ${statusRaw}\`; KEPT \`column: ${c.column}\` (both held a pipeline state and disagreed — the v2 state machine wins)`,
+          )
+        } else if (statusIsPipelineState) {
+          // (b) the pipeline state is only in `status:` → migrate it to its own field. Safe
+          // ONLY because the value is a recognised state; no default, no guess.
+          const mapped = mappedFromV1 ?? statusKey
+          text = text.replace(/^status:.*$/m, `column: ${mapped}`)
+          // SEMANTIC, though the VALUE is unchanged: no consumer reads `status:` for a pipeline
+          // position, so before this repair the card was column-less to every reader and to the
+          // board. It joins the board here, which is a pipeline claim it was not making.
+          record('semantic', `status: ${statusRaw} → column: ${mapped} (a column value in the wrong field)`)
+        }
+        // A `status:` whose value is NOT a pipeline state is deliberately left alone.
+        //
+        // Missing column. The condition is `!statusIsPipelineState`, NOT `status === undefined`:
+        // a card carrying a legitimate `status: normative` and no column must still GET a
+        // column, exactly like a card carrying no status at all. Keying on the field's mere
+        // presence would leave it column-less forever, because branch (b) above no longer
+        // fires for it — the two conditions have to be complements or the card falls through
+        // both. Adding the missing field is not repurposing the other one: `status:` survives.
+        if (!c.column && !statusIsPipelineState) {
+          // INSERT only when there is genuinely no `column:` KEY.
+          //
+          // `c.column` is falsy for TWO different shapes: "no key at all", and "the key is
+          // there with an EMPTY value" (`column:` parses to `column: null`, which yields ''
+          // and NO parseError, so the `if (c.parseError) continue` guard above cannot see
+          // it). Blind-inserting into the second shape writes a SECOND `column:` line, and
+          // js-yaml then throws `duplicated mapping key` — the card becomes permanently
+          // UNPARSEABLE, drops off the board, and is un-fixable by that same guard, which
+          // keys on the PRE-fix state and so can never see damage this pass just caused.
+          // A repairer that manufactures the corruption it screens for is the worst case.
+          const hasColumnKey = /^column:/m.test(text)
+          // 3P-TRDD-11 / PRRD G11.1 — ONE definition of the fallback, shared with the lint
+          // message above so `--fix` can never repair a shape the report did not describe.
+          const fallbackColumn = defaultColumnForMissing(c.fm)
+          const next = hasColumnKey
+            ? text.replace(/^column:.*$/m, `column: ${fallbackColumn}`)
+            : text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: ${fallbackColumn}`)
+          // Report only a repair that ACTUALLY LANDED. The push used to be unconditional,
+          // so a card whose frontmatter carries no `trdd-id:` line (the anchor) had its
+          // replace no-op while `--fix` still claimed the repair, still bumped `updated:`,
+          // and still wrote — so the card stayed column-less, the claim repeated every run,
+          // and its board sort key floated to the top forever. `--fix` never converged.
           if (next !== text) {
             text = next
-            // MECHANICAL: the title was already IN the document, as the H1. This lifts it into
-            // frontmatter — the same denormalization repair as the `derived:` back-link below.
-            record('mechanical', 'title lifted from the H1')
+            // SEMANTIC, and the clearest case: this INVENTS a pipeline state nobody chose. The
+            // card now claims a column on the doctor's authority, and that must be visible.
+            record('semantic', `column: ${fallbackColumn} (was missing — the uncertainty law)`)
           }
         }
-      }
+        // uppercase the id
+        if (c.fm['trdd-id'] && !/^[A-Z0-9]{8}$/.test(String(c.fm['trdd-id']))) {
+          const short = normalizeTrddRef(String(c.fm['trdd-id']).slice(0, 8))
+          text = text.replace(/^trdd-id:.*$/m, `trdd-id: ${short}`)
+          // MECHANICAL: ids are matched case-insensitively everywhere (`normalizeTrddRef`, the
+          // `-iname` lookups), so this re-spells an identity without changing it.
+          record('mechanical', `trdd-id → ${short} (8-char UPPERCASE base36)`)
+        }
+        // title from H1
+        if (!c.title) {
+          const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
+          if (title) {
+            // Same two-shapes hazard as `column:` above — an empty `title:` parses to null,
+            // so inserting would produce a duplicate key and an unparseable card.
+            const hasTitleKey = /^title:/m.test(text)
+            const line = `title: ${title.replace(/:/g, ' —')}`
+            const next = hasTitleKey
+              ? text.replace(/^title:.*$/m, line)
+              : text.replace(/^(trdd-id:.*)$/m, `$1\n${line}`)
+            if (next !== text) {
+              text = next
+              // MECHANICAL: the title was already IN the document, as the H1. This lifts it into
+              // frontmatter — the same denormalization repair as the `derived:` back-link below.
+              record('mechanical', 'title lifted from the H1')
+            }
+          }
+        }
 
-      // A body state claim that AGREES with `column:` → drop the duplicate line (3P-TRDD-10).
-      //
-      // Only the agreeing case is derivable. A DISAGREEING claim is left byte-for-byte alone:
-      // which of the two states is true is a judgement — four of this corpus's cards say
-      // `column: complete` beside `**Status:** Not started` and either could be the truth —
-      // and picking one silently is how a tool loses work. The lint reports it; nothing here
-      // touches it.
-      //
-      // `bodyClaimAgreesWithColumn` is the SAME predicate the lint uses, so `--fix` can never
-      // repair a shape the lint did not report (the drift the sibling rule shipped with).
+        // A body state claim that AGREES with `column:` → drop the duplicate line (3P-TRDD-10).
+        //
+        // Only the agreeing case is derivable. A DISAGREEING claim is left byte-for-byte alone:
+        // which of the two states is true is a judgement — four of this corpus's cards say
+        // `column: complete` beside `**Status:** Not started` and either could be the truth —
+        // and picking one silently is how a tool loses work. The lint reports it; nothing here
+        // touches it.
+        //
+        // `bodyClaimAgreesWithColumn` is the SAME predicate the lint uses, so `--fix` can never
+        // repair a shape the lint did not report (the drift the sibling rule shipped with).
+        //
+        //
+        //
+        //
       //
       //
       //
       //
       // ...AND NOT ON A FROZEN CARD (added TRDD-S13L6R9R, found by a blast-radius dry-run).
-      // IND `trdd-design-tasks` step 12 freezes a terminal card's BODY, and grants exactly
-      // one exception for a body line: it "MAY be removed" when it FALSELY, MACHINE-VERIFIABLY
-      // CONTRADICTS the terminal `column:`. This branch admits only the AGREEING case — so its
-      // freeze behaviour was precisely INVERTED: it deleted the lines the freeze protects and
-      // left alone the ones the freeze permits removing. Measured on this corpus: 3 archived
-      // cards would have had a body line dropped by a `--fix` run whose stated purpose was a
-      // date re-spelling. A frozen card's body is not ours to tidy; the lint still reports it.
-      const frozen = TERMINAL_DONE.includes(c.column)
-      if (!frozen && c.bodyStateClaim && bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)) {
-        const stripped = removeBodyStateClaimLine(text)
-        if (stripped !== null) {
-          text = stripped
-          // MECHANICAL by construction: the guard above admits ONLY the agreeing case, so what
-          // is removed is a duplicate of a fact `column:` already carries. The disagreeing case
-          // is left byte-for-byte alone and never reaches here.
-          record(
-            'mechanical',
-            `dropped the body's \`Status: ${c.bodyStateClaim.slice(0, 40)}\` line (a second copy of \`column: ${c.column}\`, free to go stale)`,
-          )
+        // IND `trdd-design-tasks` step 12 freezes a terminal card's BODY, and grants exactly
+        // one exception for a body line: it "MAY be removed" when it FALSELY, MACHINE-VERIFIABLY
+        // CONTRADICTS the terminal `column:`. This branch admits only the AGREEING case — so its
+        // freeze behaviour was precisely INVERTED: it deleted the lines the freeze protects and
+        // left alone the ones the freeze permits removing. Measured on this corpus: 3 archived
+        // cards would have had a body line dropped by a `--fix` run whose stated purpose was a
+        // date re-spelling. A frozen card's body is not ours to tidy; the lint still reports it.
+        const frozen = TERMINAL_DONE.includes(c.column)
+        if (!frozen && c.bodyStateClaim && bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)) {
+          const stripped = removeBodyStateClaimLine(text)
+          if (stripped !== null) {
+            text = stripped
+            // MECHANICAL by construction: the guard above admits ONLY the agreeing case, so what
+            // is removed is a duplicate of a fact `column:` already carries. The disagreeing case
+            // is left byte-for-byte alone and never reaches here.
+            record(
+              'mechanical',
+              `dropped the body's \`Status: ${c.bodyStateClaim.slice(0, 40)}\` line (a second copy of \`column: ${c.column}\`, free to go stale)`,
+            )
+          }
         }
       }
 
@@ -1757,7 +1867,15 @@ export function fixCorpus(
       // claimants means a genuine lineage bug; writing the flag would hide it.
       const claims = claimedBy.get(c.id) ?? []
       const parentField = normalizeTrddRef(String(c.fm['parent-trdd'] ?? '').replace(/^TRDD-/i, ''))
-      if (c.fm['derived'] !== true && claims.length === 1 && parentField === claims[0].parent) {
+      // REFERENCE-CONSISTENCY (Phase 6): allowed on a neighbour too, because the fact this
+      // repairs — the child's `derived:` flag — is partly owned by the PARENT card, not
+      // only by this one. `DERIVED-FLAG-MISSING` is in `REFERENCE_CONSISTENCY_RULES`.
+      if (
+        (isTarget || REFERENCE_CONSISTENCY_RULES.has('DERIVED-FLAG-MISSING')) &&
+        c.fm['derived'] !== true &&
+        claims.length === 1 &&
+        parentField === claims[0].parent
+      ) {
         const kind = claims[0].kind
         text = /^derived:/m.test(text)
           ? text.replace(/^derived:.*$/m, 'derived: true')

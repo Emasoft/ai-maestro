@@ -414,7 +414,10 @@ function reportVanished() {
 
 // `fix` is intercepted HERE, before the switch (TRDD-9JOCY2EJ, issue 160): a target is
 // now required, and the whole-corpus batch caller keeps calling `fixCorpus` with no
-// selector, untouched. The old `case 'fix'` in the switch is dead code below.
+// selector, untouched. `cmd` is a const (:177) and the switch below dispatches on that same
+// const at top level, so this intercept — whose every branch exits — made the switch's old
+// `case 'fix'` unreachable. That dead case is now DELETED; proven first by placing a throw as
+// its first statement and finding it never fired across 42 trddgrep tests and both CLI paths.
 if (cmd === 'fix') {
   if (!arg && !pathVal) {
     console.error('trddgrep: fix requires a target — `trddgrep fix <id>` or `trddgrep fix --path <file>`')
@@ -964,44 +967,6 @@ switch (cmd) {
     process.exit(rank[v.state] ?? 2)
   }
 
-  // ---- the mechanical repair half. `lint` ADVERTISED `[--fix]` and this tool had no
-  // way to do it: the badge pointed at `yarn trdd:fix`, a repo-local script that an agent
-  // in another project cannot run. A tool that names a remedy it cannot perform is worse
-  // than one that names none — the reader stops looking. TRDD-217AYEOT.
-  case 'fix': {
-    const { fixCorpus } = await import('../lib/trdd-doctor.ts')
-    const dryRun = argv.includes('--dry-run')
-    const results = fixCorpus(designDir, { dryRun })
-    if (results.length === 0) {
-      // NARROWED (TRDD-I8UC56GZ): this used to read "every TRDD already carries a valid
-      // frontmatter", which is a claim about the CORPUS made by a tool that only knows what
-      // IT repairs. 82 cards carried a deprecated field the whole time it printed that line.
-      // `validate` is the verb that answers the corpus question; say so instead of implying it.
-      console.log(C.g('nothing for `fix` to repair — run `trddgrep validate` for the findings it does not own'))
-      process.exit(0)
-    }
-    console.log(C.b(`\n${dryRun ? 'WOULD REPAIR' : 'REPAIRED'} ${results.length} file(s):\n`))
-    for (const r of results) {
-      // Say whether the card's SORT KEY moved. The board is read in `updated:` order, so a
-      // reader has to be able to tell a repair that reordered it from one that did not —
-      // and a run reporting no bump at all is the cheap proof it was purely mechanical
-      // (TRDD-R6R9XHZI).
-      const badge = r.bumped ? C.y('  [updated: bumped — semantic]') : C.d('  [mechanical — updated: untouched]')
-      console.log(`  ${C.b(r.id)}  ${C.d(path.relative(process.cwd(), r.filePath))}${badge}`)
-      for (const c of r.changes) console.log(`      • ${c}`)
-    }
-    const bumpedCount = results.filter((r) => r.bumped).length
-    console.log(
-      bumpedCount === 0
-        ? C.g(`\nall ${results.length} repair(s) were MECHANICAL — no \`updated:\` changed, so the board order is untouched`)
-        : C.y(`\n${bumpedCount} of ${results.length} file(s) had a SEMANTIC repair — their \`updated:\` moved and the board reordered`),
-    )
-    // COMMIT BEFORE ANY `git mv`: a zone move stages the rename from the blob already in
-    // the index, so a content edit made first stays UNSTAGED at the new path.
-    console.log(dryRun ? C.d('\n(dry run — nothing written)') : C.y('\nReview the diff, then COMMIT THE CONTENT BEFORE any `git mv`.'))
-    console.log()
-    process.exit(0)
-  }
 
   // ---- AT LINE N REPLACE X WITH Y, the USER-specified transaction (TRDD-D7KVF4HQ).
   //

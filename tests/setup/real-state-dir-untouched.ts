@@ -22,11 +22,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { homedir } from 'os'
 
-// homedir() is deliberately NOT read at module load. A module-level const freezes whatever
-// the FIRST importing process saw, and this module is imported twice over: by vitest's main
-// process for globalSetup, and by a worker for the unit test that verifies it. Two setupFiles
-// in this repo already redirect per-worker environment state, so an import-time snapshot could
-// bind the guard to one home while the test asserting the binding runs against another.
+const REAL_STATE = path.join(homedir(), '.aimaestro')
 
 function listing(root: string): string[] {
   if (!fs.existsSync(root)) return []
@@ -88,5 +84,5 @@ export function watchForLeaks(root: string) {
 // instead of a path. Hence the split: watchForLeaks(root) is the testable logic, setup()
 // is the thin real-state wrapper vitest actually invokes.
 export function setup() {
-  return watchForLeaks(path.join(homedir(), '.aimaestro'))
+  return watchForLeaks(REAL_STATE)
 }

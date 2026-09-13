@@ -105,6 +105,13 @@ describe('watchForLeaks', () => {
   // that returned a no-op closure. The control proves this fixture CAN produce the forbidden
   // string, so the second assertion's silence means "setup ignored the argument" rather than
   // "nothing was detectable here in the first place".
+  //
+  // WHAT THE CONTROL DOES NOT COVER: it is itself a watchForLeaks closure, so it certifies
+  // watchForLeaks is live — not setup(). Replace setup()'s body with `() => {}` and leave
+  // watchForLeaks alone: the control still throws, `message` is still '', and this test still
+  // passes. The neuter that WAS run probed a different mutation (setup honouring argument 0).
+  // Proving the dead-setup case needs the real state dir to change during the test, which is
+  // the one thing this guard exists to forbid, so it stays covered by review rather than a test.
   it('ignores its first argument, because vitest passes a GlobalSetupContext there', () => {
     const decoy = mkFixture()
     const teardown = (setup as unknown as (x: string) => () => void)(decoy)

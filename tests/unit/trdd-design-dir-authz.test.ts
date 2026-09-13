@@ -21,6 +21,31 @@ const ATTACKER_WORKDIR = '/agents/attacker'
 const VICTIM_AGENT_ID = 'victim-agent'
 const VICTIM_WORKDIR = '/agents/victim'
 
+
+
+describe("resolveDesignDir -- gap hardening (empty-string agentId, registry miss)", () => {
+  it("an authenticated caller with an EMPTY-STRING agentId is never granted owner power, even naming a real agent", () => {
+    const auth = { agentId: "" }
+    const dir = resolveDesignDir(auth, VICTIM_AGENT_ID)
+    expect(dir).toBe("/server/own/design")
+    expect(dir).not.toBe(VICTIM_WORKDIR + "/design")
+  })
+
+  it("an authenticated agent whose registry entry is GONE falls to the default corpus, never to requestedAgentId", () => {
+    const auth = { agentId: "gone-agent" }
+    const dir = resolveDesignDir(auth, VICTIM_AGENT_ID)
+    expect(dir).toBe("/server/own/design")
+    expect(dir).not.toBe(VICTIM_WORKDIR + "/design")
+  })
+
+  it("an authenticated caller with a NON-STRING agentId is never granted owner power, even naming a real agent", () => {
+    const auth = { agentId: 123 as unknown as string }
+    const dir = resolveDesignDir(auth, VICTIM_AGENT_ID)
+    expect(dir).toBe("/server/own/design")
+    expect(dir).not.toBe(VICTIM_WORKDIR + "/design")
+  })
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAgent).mockImplementation((id: string) => {

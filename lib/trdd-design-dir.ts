@@ -14,17 +14,33 @@ export function resolveDesignDir(
   auth: { agentId?: string | null } | null,
   requestedAgentId: string | null,
 ): string {
-  // SECURITY: an authenticated AGENT (`auth.agentId` set) ALWAYS gets its own
-  // corpus — a caller-supplied `requestedAgentId` is ignored, so an agent can
-  // never point a request at another agent's design/ (and thereby at the
+  // SECURITY: an authenticated AGENT (`auth.agentId` a non-empty string) ALWAYS
+  // gets its own corpus — a caller-supplied `requestedAgentId` is ignored, so an
+  // agent can never point a request at another agent's design/ (and thereby at the
   // frontmatter authorizeTrddVerb() trusts: min-approval, assignee, created-by).
-  // Only the system owner (auth.agentId absent) may target another project via
-  // requestedAgentId.
-  const effectiveAgentId = auth?.agentId || requestedAgentId
-  if (effectiveAgentId) {
-    const agent = getAgent(effectiveAgentId)
+  // Only the system owner (auth null, or auth.agentId null/undefined — a TRUE
+  // absence of identity) may target another project via requestedAgentId.
+  //
+  // Owner is reachable ONLY from a true absence of identity: auth === null, or
+  // agentId null/undefined. A PRESENT but malformed agentId (empty string, or a
+  // non-string that crossed a JSON boundary) is a caller who IS authenticated
+  // but carries no usable identity — it must get the default corpus, never
+  // owner power and never a requested corpus.
+  if (auth != null && auth.agentId != null) {
+    const id = typeof auth.agentId === "string" ? auth.agentId : ""
+    if (id === "") {
+      return defaultDesignDir()
+    }
+    const agent = getAgent(id)
     if (agent?.workingDirectory) {
-      return path.join(agent.workingDirectory, 'design')
+      return path.join(agent.workingDirectory, "design")
+    }
+    return defaultDesignDir()
+  }
+  if (requestedAgentId) {
+    const agent = getAgent(requestedAgentId)
+    if (agent?.workingDirectory) {
+      return path.join(agent.workingDirectory, "design")
     }
   }
   return defaultDesignDir()

@@ -102,15 +102,42 @@ interface Result {
 // first and broke 13 tests that legitimately resolve the real state dir themselves. A
 // containment that redefines a path other tests assert on trades one silent wrong for
 // another.
-const STATE_JAIL = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-e2e-state-'))
-TMP_DIRS.push(STATE_JAIL)
+const STATE_JAIL = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-e2e-home-'))
+// DELIBERATELY NOT in TMP_DIRS: afterEach empties that list, so jailing HOME there made
+// test 01 pass and every later test fail in ~11ms against a DELETED home directory. The
+// jail must outlive per-test cleanup; it is an ordinary mkdtemp path and the OS reclaims it.
+// The jail must be a COMPLETE fake home, not a partial one. The CLI shim resolves the
+// ai-maestro install from `${XDG_DATA_HOME:-$HOME/.local/share}/aimaestro/install-root`,
+// so redirecting HOME without seeding that file makes every binary exit 2 with "no
+// ai-maestro install recorded" — measured, 27 tests red. Copying the real pointer keeps
+// the CLIs finding the same repo source while their STATE lands in the jail.
+{
+  const realRoot = path.join(
+    process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share'),
+    'aimaestro',
+    'install-root',
+  )
+  const jailed = path.join(STATE_JAIL, '.local', 'share', 'aimaestro')
+  fs.mkdirSync(jailed, { recursive: true })
+  if (fs.existsSync(realRoot)) fs.copyFileSync(realRoot, path.join(jailed, 'install-root'))
+}
 
 function run(
   cmd: string,
   args: string[],
   opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
 ): Result {
-  const env = { ...(opts.env ?? process.env), AIMAESTRO_STATE_DIR: STATE_JAIL }
+  // HOME is redirected for the CHILD ONLY. The pillar CLIs resolve the ai-maestro state
+  // dir from $HOME, so without this a binary driven against a temp corpus writes its index
+  // into the DEVELOPER'S real ~/.aimaestro — a fresh mkdtemp corpus each run hashes to a
+  // fresh key, so the directory grew every run and never repeated.
+  //
+  // Scoped to spawnSync's env, which is what makes it safe. The suite carries a tripwire
+  // that reads the REAL ~/.claude to prove it is untouched, and that runs IN THIS PROCESS —
+  // a child's HOME cannot reach it. An earlier fix added a production env var for this and
+  // was reverted: it gave any caller a one-line redirect of the agent registry, governance
+  // titles and AID tokens, which is a governance bypass bought to make a test tidy.
+  const env = { ...(opts.env ?? process.env), HOME: STATE_JAIL }
   const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: opts.cwd, env })
   return { code: r.status, out: stripAnsi(r.stdout ?? ''), err: stripAnsi(r.stderr ?? '') }
 }

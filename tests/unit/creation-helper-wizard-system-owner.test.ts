@@ -150,6 +150,14 @@ const MEMBER = { agentId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', governanceTitl
 const MANAGER = { agentId: 'cccccccc-3333-4333-8333-cccccccccccc', governanceTitle: 'manager', teamId: null }
 const OWNER = { agentId: undefined, governanceTitle: undefined, teamId: null }
 
+import { beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+
+let ORIGINAL_HOME: string | undefined
+let TMP_HOME: string
+
 /** route dir -> [http method to import, a request the route would otherwise act on] */
 const ROUTES: { dir: string; method: 'POST' | 'GET'; url: string; body?: unknown }[] = [
   { dir: 'cleanup', method: 'POST', url: 'http://localhost/api/agents/creation-helper/cleanup', body: {} },
@@ -194,6 +202,21 @@ async function call(r: (typeof ROUTES)[number]) {
   const handler = mod[r.method]
   return handler(req(r.url, r.method, r.body))
 }
+
+beforeAll(() => {
+  ORIGINAL_HOME = process.env.HOME
+  TMP_HOME = mkdtempSync(join(tmpdir(), 'aim-home-'))
+  process.env.HOME = TMP_HOME
+})
+
+afterAll(() => {
+  if (ORIGINAL_HOME === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = ORIGINAL_HOME
+  }
+  rmSync(TMP_HOME, { recursive: true, force: true })
+})
 
 describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-only', () => {
   beforeEach(() => {

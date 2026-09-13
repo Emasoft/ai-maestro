@@ -3,7 +3,7 @@ trdd-id: 3AUQ2CL9
 title: creation-helper wizard test writes the developer real haephestos workdir
 column: todo
 created: 2026-09-05T20:42:22+0200
-updated: 2026-09-13T04:18:27+0200
+updated: 2026-09-13T04:28:53+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -22,7 +22,7 @@ implementation-commits: [b14d7f2ea]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-13
 
-CODE LANDED at b14d7f2ea. The card is NOT done: two boxes unmet, one measured by a test that could not have failed. A move to complete was REFUSED by the checklist gate, correctly.
+CODE LANDED at b14d7f2ea. The card is NOT done: two boxes unmet, and the third measured by a test that could not have failed.
 
 WHAT LANDED: the creation-helper system-owner test redirects HOME to a real mkdtemp for that one file, via beforeAll/afterAll. Production code unchanged. Proven by four mtime readings of the file the route writes: unchanged with the fix, MOVED with the override neutered, unchanged after restore. That neuter is also the attribution evidence -- it is what establishes this test is the writer. Earlier reasoning from janitor heartbeat timestamps was worthless: a fire spawns background work that runs for minutes afterwards, so comparing an instant to two fire times excludes nothing.
 

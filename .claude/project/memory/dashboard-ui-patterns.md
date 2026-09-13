@@ -124,7 +124,7 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 
 
 ^ATOM-KT97-MNIH [desc: "app/page.tsx early-returns MobileDashboard, so a banner mounted beside MigrationBanner/TmuxKeychainAlarmBanner is DESKTOP-ONLY — mount it in both arms, and nothing pins that by default", keywords: banner_only_shows_on_desktop mobile_dashboard_banner_missing added_a_banner_and_the_phone_does_not_show_it two_dashboard_arms isMobile_early_return MobileDashboard_mount fleet-level_banner global_banner_surface where_do_I_mount_a_dashboard_banner app/page.tsx_banner flex-shrink-0_inert banner_shrinks_main deleting_the_mount_leaves_tests_green RotatorReauthBanner TmuxKeychainAlarmBanner MigrationBanner, trdd: TRDD-CVQJNW3A, ocd: 2026-09-10, lmd: 2026-09-10]
-**The dashboard has TWO arms, and `app/page.tsx` early-returns the mobile one** — around `:671`,
+**The dashboard has TWO arms, and `app/page.tsx` early-returns the mobile one** — at the `if (isMobile)` early return:
 `if (isMobile) { return (<TerminalProvider key="mobile-dashboard"><MobileDashboard …/></TerminalProvider>) }`.
 Every banner mounted below that return (`MigrationBanner`, `TmuxKeychainAlarmBanner`,
 `RotatorReauthBanner`) is therefore **DESKTOP-ONLY**: that JSX sits after a `return`, so it never

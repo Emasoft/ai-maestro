@@ -236,6 +236,36 @@ export type CorpusScope = 'project' | 'local' | 'user'
  * function has no way to receive, so it fails fast rather than silently
  * resolving the wrong tree.
  */
+/**
+ * This pillar's corpus root, given a `design/` dir.
+ *
+ * The ONE place the mapping lives. Every caller that resolves a pillar root — the
+ * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
+ * `design/` changes one line rather than N literals that agree until they don't.
+ *
+ * project (default) — byte-identical to the pre-scope behaviour: designDir joined
+ * with the kind's subdir, nothing else.
+ *
+ * local — <project-root>/.claude/local/design/<subdir> (gitignored, ai-maestro#163),
+ * deriving project-root as designDir's parent so every caller keeps passing the same
+ * designDir it already computes for project scope.
+ *
+ * user — a PASSTHROUGH: resolves exactly as project does. This is a path resolver,
+ * and when the caller has already named the corpus (an explicit --design-dir under
+ * ~/.claude/cross-projects-coordination/<group>/design) there is no group to look
+ * up. Access control is a layer up (ai-maestro#164).
+ *
+ * THE OBLIGATION THIS PUTS ON CALLERS, stated here because this function cannot
+ * check it: passing user with a PROJECT designDir silently files user-scope records
+ * into the project corpus. Nothing here can tell the two apart — by the time
+ * designDir arrives it has already been defaulted. A caller that accepts a
+ * user-scope request WITHOUT an explicit corpus root must refuse it itself.
+ *
+ * This block previously claimed user scope 'fails fast rather than silently
+ * resolving the wrong tree'. It never did: user falls through to designDir, and
+ * the unit test beside it asserts 'no throw'. A false safety claim is worse than
+ * none — it stops the next reader checking.
+ */
 export function corpusRootFor(designDir: string, kind: PillarKind, scope: CorpusScope = "project"): string {
   const base = scope === "local" ? path.join(path.dirname(designDir), ".claude", "local", "design") : designDir
   return path.join(base, kind.corpusSubdir)

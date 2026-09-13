@@ -49,7 +49,7 @@ import process from 'process'
 
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
-const { TERMINAL_DONE, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIELDS } =
+const { SHIPPED, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIELDS } =
   await import('../lib/trdd-graph.ts')
 const { readyQueueFrom } = await import('../lib/trdd-doctor.ts')
 
@@ -214,6 +214,8 @@ const KNOWN_FLAGS = new Set([
   '--dry-run',     // fix
   '--design-body',    // show | search — stripped above; listed so acceptance is not
   '--no-design-body', // a function of which filter ran first
+  '--help',        // help short-circuits before the corpus assertion — issue 159
+  '-h',            // -h never hits this check (no -- prefix) but is listed defensively
 ])
 // `new` and `move` join `edit` in the exemption for the same stated reason: a MUTATING
 // verb must never IGNORE a token, and an allowlist can only ever ignore. Each rejects
@@ -299,6 +301,21 @@ if (ruleFilter && ruleFilter.size === 0) {
 /** Findings this run is willing to SHOW — the corpus itself is never narrowed. */
 const filterFindings = (findings) =>
   findings.filter((f) => SEVERITY_RANK[f.severity] >= minSeverityRank && (!ruleFilter || ruleFilter.has(f.rule)))
+
+// Issue 159: help/--help/-h must work with no design/ corpus present. Probe the corpus
+// ourselves before the unconditional gate below; on failure print a short banner and exit 0
+// instead of erroring. When a corpus genuinely exists this is a no-op and the real
+// switch-case 'help' block further down still renders the full banner as before.
+if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
+  try {
+    assertDesignDir(designDir)
+  } catch {
+    console.log('trddgrep - query, CREATE, MOVE AND validate the TRDD corpus (offline; no server)')
+    console.log('Run this from inside a project with a design/ corpus for the full command reference,')
+    console.log('or pass --design-dir <path>.')
+    process.exit(0)
+  }
+}
 
 // `env` is EXEMPT, and this is the one exemption that matters: it is the verb whose whole
 // job is to explain what this tool concluded about where it is running, so gating it on a
@@ -439,7 +456,7 @@ async function loadGraph() {
 }
 const done = (id) => {
   const c = byId.get(id)
-  return !c || TERMINAL_DONE.has?.(c.column) || [...TERMINAL_DONE].includes(c.column)
+  return !c || SHIPPED.has(c.column)
 }
 /**
  * The edges that impose ORDER: this card cannot proceed until those do.

@@ -92,16 +92,33 @@ describe('watchForLeaks', () => {
   // setup() is what vitest registers, and vitest calls globalSetup with a GlobalSetupContext as
   // argument 0 — so a `root` parameter with a default would silently bind that object instead of
   // a path. `setup.length` CANNOT pin this: a defaulted parameter does not count toward it, so an
-  // arity assertion passes against the exact bug it names (measured 2026-09-13, by neuter). The
-  // decoy below does discriminate. Correct code ignores the argument and watches REAL_STATE, so
+  // arity assertion passes against the exact bug it names (measured 2026-09-13, by neuter).
+  //
+  // The decoy discriminates: correct code ignores the argument and watches the real state dir, so
   // the write into `decoy` is invisible and nothing names it; buggy code watches `decoy` and the
-  // thrown message contains its path. Asserting on the ABSENCE of the decoy path rather than on
-  // silence is deliberate — the real state dir is live, and a daemon write during these
-  // milliseconds would throw with REAL_STATE paths, which must not fail this test.
+  // thrown message contains its path. Asserting the ABSENCE of the decoy path rather than silence
+  // is deliberate — the real state dir is live, and a daemon write during these milliseconds
+  // would throw with real-state paths, which must not fail this test.
+  //
+  // The POSITIVE CONTROL is what stops that absence assertion being vacuous. `not.toContain` is
+  // satisfied by an empty string, so without a control it would also pass against a watchForLeaks
+  // that returned a no-op closure. The control proves this fixture CAN produce the forbidden
+  // string, so the second assertion's silence means "setup ignored the argument" rather than
+  // "nothing was detectable here in the first place".
   it('ignores its first argument, because vitest passes a GlobalSetupContext there', () => {
     const decoy = mkFixture()
     const teardown = (setup as unknown as (x: string) => () => void)(decoy)
+    const control = watchForLeaks(decoy)
     fs.writeFileSync(path.join(decoy, 'leak.sqlite'), '')
+
+    let controlMessage = ''
+    try {
+      control()
+    } catch (err) {
+      controlMessage = (err as Error).message
+    }
+    expect(controlMessage).toContain(decoy)
+
     let message = ''
     try {
       teardown()

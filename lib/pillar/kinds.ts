@@ -226,40 +226,46 @@ export type CorpusScope = 'project' | 'local' | 'user'
  * with the kind's subdir, nothing else.
  *
  * local — <project-root>/.claude/local/design/<subdir> (gitignored, ai-maestro#163),
- * deriving project-root as designDir's parent so every caller keeps passing the same
+ * deriving project-root as designDir's parent, so every caller keeps passing the same
  * designDir it already computes for project scope.
  *
- * user — resolves like project, but ONLY for a designDir that is actually a
- * cross-project corpus. This is a path resolver: when the caller has already named
- * the corpus there is no group to look up, and refusing on that ground was a
- * layering defect that made a valid scope unreachable by the tools that must write
- * it. WHO may use a given group is access control, one layer up (ai-maestro#164),
- * and is deliberately not checked here.
+ * user — resolves like project. When the caller has already named the corpus there is
+ * no group to look up, and refusing on that ground was a layering defect that made a
+ * valid scope unreachable by the tools that must write it. WHO may use a given group
+ * is access control, one layer up (ai-maestro#164).
  *
- * WHAT IS CHECKED HERE, because this function CAN check it: that a user-scope
- * request does not resolve onto a PROJECT corpus. Without it, user scope silently
- * files cross-project records into whatever project the caller happened to default
- * to — a plausible path, no error, and the single most damaging way this function
- * can be wrong.
- *
- * An earlier version of this comment claimed user scope "fails fast rather than
- * silently resolving the wrong tree". It never did: user fell through to designDir.
- * The replacement then claimed "nothing here can tell the two apart", which was also
- * too strong and is why the guard was deferred. Both are wrong in the same
- * direction. This function cannot tell whether designDir was DEFAULTED — that needs
- * a caller's knowledge — but it can always tell whether the resulting path IS a
- * cross-project corpus, which is a property of the path alone. A segment test is
- * used rather than a $HOME-anchored prefix so the check does not depend on where
- * home sits.
+ * NOTE ON A GUARD THAT WAS HERE AND IS DELIBERATELY GONE. A version of this function
+ * threw when a user-scope request resolved onto a non-user path. It was correct and it
+ * was unreachable: the throw fires on a scope->path call, no caller passes 'user', and
+ * the work that will create such callers has not landed. Its docstring was wrong three
+ * times running, in the same direction, which is evidence of an unsettled contract
+ * rather than a careless author — the shape of a user corpus is a decision that belongs
+ * with groups (ai-maestro#164), not ahead of them. The KNOWLEDGE it carried survives as
+ * isUserCorpusPath below, which is pure and which the scope classifier actually uses.
+ * Re-introduce the throw in the commit that adds the first real `scope: 'user'` caller,
+ * where it can be tested against a path something reaches.
  */
 export function corpusRootFor(designDir: string, kind: PillarKind, scope: CorpusScope = 'project'): string {
-  if (scope === 'user' && !path.resolve(designDir).split(path.sep).includes('cross-projects-coordination')) {
-    throw new Error(
-      `corpusRootFor: user scope resolved to ${path.resolve(designDir)}, which is not a ` +
-        `cross-project corpus (no 'cross-projects-coordination' segment). Refusing rather ` +
-        `than filing a user-scope record into a project corpus.`,
-    )
-  }
   const base = scope === 'local' ? path.join(path.dirname(designDir), '.claude', 'local', 'design') : designDir
   return path.join(base, kind.corpusSubdir)
+}
+
+/** The path segment that marks a cross-project (user-scope) corpus. */
+export const USER_SCOPE_SEGMENT = 'cross-projects-coordination'
+
+/**
+ * Is this path a cross-project (user-scope) corpus?
+ *
+ * PURE and I/O-FREE, deliberately. The tempting move is to route this through the
+ * Step-0b corpus-identity helper so a symlinked corpus resolves to its true path — but
+ * that helper answers "are these two paths the SAME corpus?", an identity question, and
+ * it realpaths to do so. This is a CLASSIFICATION question, answerable from structure
+ * alone. Using the identity helper here would drag `fs` into the pillar layer's most
+ * depended-on module and make the verdict depend on whether the path exists yet, which
+ * is non-determinism for free: a brand-new group's first card would classify one way
+ * and every later call the other. Symlink-vs-realpath belongs at the WRITE site, which
+ * already touches the filesystem and already handles ENOENT.
+ */
+export function isUserCorpusPath(p: string): boolean {
+  return path.resolve(p).split(path.sep).includes(USER_SCOPE_SEGMENT)
 }

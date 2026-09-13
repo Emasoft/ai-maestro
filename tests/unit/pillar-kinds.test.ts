@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import path from 'path'
-import { corpusRootFor, TRDD_KIND, SPEC_KIND, PRRD_KIND } from '@/lib/pillar/kinds'
+import {
+  corpusRootFor,
+  isUserCorpusPath,
+  TRDD_KIND,
+  SPEC_KIND,
+  PRRD_KIND,
+} from '@/lib/pillar/kinds'
 
 describe('corpusRootFor scope', () => {
   it('project scope (default) is byte-identical to the pre-scope behaviour', () => {
@@ -20,7 +26,7 @@ describe('corpusRootFor scope', () => {
     )
   })
 
-  it('user scope resolves an already-explicit designDir identically to project scope (no group lookup, no throw)', () => {
+  it('user scope resolves an already-explicit designDir identically to project scope', () => {
     const explicitUserDesignDir = path.join(
       '/home/x', '.claude', 'cross-projects-coordination', 'my-group', 'design',
     )
@@ -29,19 +35,29 @@ describe('corpusRootFor scope', () => {
       path.join(explicitUserDesignDir, 'specs'),
     )
   })
+})
 
-  it('user scope REFUSES a project designDir rather than filing into the project corpus', () => {
-    // THE HAZARD the passthrough creates, and the reason the guard lives in the resolver
-    // rather than waiting for access control. Nothing at the call site distinguishes a
-    // DEFAULTED project designDir from an explicit user one, so the resolver checks the
-    // one property readable off the path alone: is this a cross-project corpus at all?
-    // Without it a user-scope write lands in whatever project the caller defaulted to,
-    // with a plausible path and no error — the silent-wrong-tree case.
-    expect(() => corpusRootFor('/repo/design', TRDD_KIND, 'user')).toThrow(
-      /not a cross-project corpus/,
-    )
-    expect(() => corpusRootFor('/repo/design', PRRD_KIND, 'user')).toThrow()
-    // A RELATIVE path must not sneak past: the check resolves before testing segments.
-    expect(() => corpusRootFor('design', SPEC_KIND, 'user')).toThrow()
+describe('isUserCorpusPath', () => {
+  // Hand-written literals on BOTH sides, never composed from corpusRootFor. A test that
+  // feeds one function the output of its partner asserts only that the two agree — it
+  // passes identically if both use the same WRONG segment, which is agreement, not
+  // correctness.
+  it('recognises a cross-project corpus path', () => {
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/g/design')).toBe(true)
+    expect(isUserCorpusPath('/home/x/.claude/cross-projects-coordination/g/design/specs')).toBe(true)
+  })
+
+  it('rejects project and local paths', () => {
+    expect(isUserCorpusPath('/repo/design')).toBe(false)
+    expect(isUserCorpusPath('/repo/.claude/local/design')).toBe(false)
+    expect(isUserCorpusPath('/home/x/.claude/projects/slug/design')).toBe(false)
+  })
+
+  it('matches a whole path SEGMENT, not a substring', () => {
+    // The discriminating case: a near-miss directory name must NOT pass. This is what
+    // separates a segment test from an indexOf() and it is the assertion that would
+    // redden if someone "simplified" it to a substring check.
+    expect(isUserCorpusPath('/repo/cross-projects-coordination-backup/design')).toBe(false)
+    expect(isUserCorpusPath('/repo/my-cross-projects-coordination/design')).toBe(false)
   })
 })

@@ -20,6 +20,26 @@ implementation-commits: [b14d7f2ea]
 
 # creation-helper wizard test writes the developer real haephestos workdir
 
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-13
+
+CODE LANDED at b14d7f2ea. The card is NOT done: two boxes unmet, one measured by a test that could not have failed. A move to complete was REFUSED by the checklist gate, correctly.
+
+WHAT LANDED: the creation-helper system-owner test redirects HOME to a real mkdtemp for that one file, via beforeAll/afterAll. Production code unchanged. Proven by four mtime readings of the file the route writes: unchanged with the fix, MOVED with the override neutered, unchanged after restore. That neuter is also the attribution evidence -- it is what establishes this test is the writer. Earlier reasoning from janitor heartbeat timestamps was worthless: a fire spawns background work that runs for minutes afterwards, so comparing an instant to two fire times excludes nothing.
+
+BOX 1 (routes resolve per call, or the test redirects HOME before first import): probably met, NOT verified. Nobody confirmed beforeAll runs before the route module is first imported.
+
+BOX 2 (a containment assertion exists in the test): NOT MET. Containment was proven by a measurement in a worker report under the gitignored reports tree. A proof that lives in a transcript guards nothing -- nothing re-runs it, so the next edit to that test can silently reintroduce the write. The box as literally worded is also near-vacuous AND reads the owner private filesystem state: snapshotting the real global agents directory asserts the absence of a side effect the override already prevents, and it must resolve the real HOME BEFORE the override or it snapshots the temp dir and asserts nothing. Prefer the positive inverse -- assert the written file EXISTS inside the temp home after the call. Deterministic, reads nothing private, fails loudly the moment the override breaks. Strike the box wording with that reason rather than silently ticking it.
+
+BOX 3 (full suite leaves the agent workdir root untouched, measured): MEASURED ZERO, MEASUREMENT WORTHLESS. A find over the workdir root after a full suite returned 0 files, and the instrument traverses (45 files against an older date). The flaw: that run had the fix ALREADY ACTIVE, so zero was guaranteed whether or not the route ever writes there. The cited positive control tested a different predicate than the one producing the zero. Nobody has checked that tree under the NEUTER.
+
+AND THE CONCERN IS REAL: the route carries an explicit policy comment reading "ALL operations inside the haephestos agent workdir, READ-ONLY outside" -- naming the very tree box 3 names. That is a COMMENT, so it establishes intent and not behaviour, and it may be stale; but it means box 3 was written by someone who knew about a write there, and it must be settled rather than waved off.
+
+WHY THE FIX PROBABLY COVERS IT ANYWAY: both writers derive from the single process.env.HOME read at line 106 of the ensure-persona route -- ensureHaephestosPermissions takes home as a PARAMETER rather than re-deriving it -- and os.homedir() consults $HOME first on POSIX, so a sibling path built that way is redirected too. Fix plausibly complete; measurement demonstrably incomplete.
+
+TWO TREES, do not conflate them. The dot-claude agents directory holds the Claude Code agent DEFINITION. The home-level agents directory holds the ai-maestro agent WORKDIR. Box 3 names the second. Measurements so far cover the first and the top level of dot-claude only.
+
+NEXT ACTION: read the ensure-persona route lines 21-130 and determine whether any constructible path reaches the agent workdir root -- that answers box 3 structurally, costs one read, mutates nothing. Then write the box-2 positive assertion inside the test.
+
 ## Approval log
 
 - 2026-09-05T20:42:22+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.

@@ -15,8 +15,17 @@
  * already dispatches on `basename $0` and looks for `$ROOT/scripts/<name>.mjs`, and
  * install-messaging.sh already loops `trddgrep prrdgrep specgrep` installing whichever
  * has an implementation. So this file EXISTING is the whole installation step.
+ *
+ * `REPO_ROOT` (ai-maestro#161 phase a) is the realpath of the parent of the `scripts/`
+ * dir THIS file lives in — computed here, in the entry point, and handed to
+ * `runPillarCli` rather than derived inside `lib/`, where the parent of `lib/pillar/`
+ * would be `lib/` and every write would refuse.
  */
+import { fileURLToPath } from 'url'
+import path from 'path'
+import fs from 'fs'
 const { PRRD_KIND } = await import('../lib/pillar/kinds.ts')
 const { runPillarCli } = await import('../lib/pillar/cli.ts')
 
-await runPillarCli(PRRD_KIND, process.argv.slice(2))
+const REPO_ROOT = fs.realpathSync.native(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
+await runPillarCli(PRRD_KIND, process.argv.slice(2), REPO_ROOT)

@@ -162,21 +162,21 @@ describe('the CLI verb — exit trichotomy with non-vacuity in the tool', () => 
   it('clean corpus → exit 0', async () => {
     writeCorpus()
     const exit = spyCli()
-    await runPillarCli(PRRD_KIND, ['lint', '--design-dir', designDir])
+    await runPillarCli(PRRD_KIND, ['lint', '--design-dir', designDir], dir)
     expect(exit).toHaveBeenCalledWith(0)
   })
 
   it('findings → exit 1 (and `validate` is the same verb)', async () => {
     writeCorpus({ prrd: CLEAN_PRRD + '- **S1.0** — duplicate number.\n' })
     const exit = spyCli()
-    await runPillarCli(PRRD_KIND, ['validate', '--design-dir', designDir])
+    await runPillarCli(PRRD_KIND, ['validate', '--design-dir', designDir], dir)
     expect(exit).toHaveBeenCalledWith(1)
   })
 
   it('EMPTY corpus → exit 2, never a clean 0 — zero documents means no rule looked', async () => {
     // The corpus ROOT exists (assertCorpusRoot passes) but holds no PRRD.md.
     const exit = spyCli()
-    await runPillarCli(PRRD_KIND, ['lint', '--design-dir', designDir])
+    await runPillarCli(PRRD_KIND, ['lint', '--design-dir', designDir], dir)
     expect(exit).toHaveBeenCalledWith(2)
     expect(exit).not.toHaveBeenCalledWith(0)
   })

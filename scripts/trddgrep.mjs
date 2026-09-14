@@ -46,6 +46,7 @@
 import fs from 'fs'
 import path from 'path'
 import process from 'process'
+import { fileURLToPath } from 'url'
 
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
@@ -53,6 +54,12 @@ const { SHIPPED, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIEL
   await import('../lib/trdd-graph.ts')
 const { readyQueueFrom } = await import('../lib/trdd-doctor.ts')
 const { defaultDesignDirFor } = await import('../lib/pillar/kinds.ts')
+const { writeRefusal } = await import('../lib/pillar/write-gate.ts')
+
+// ai-maestro#161 phase a — the realpath of the parent of the `scripts/` dir THIS file
+// lives in. Computed HERE, in the entry point, never inside `lib/` (from `lib/pillar/`
+// the parent would be `lib/` and every write would refuse).
+const REPO_ROOT = fs.realpathSync.native(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
 
 const C = {
   b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -177,6 +184,15 @@ const designDir = path.resolve(designDirVal ?? defaultDesignDirFor())
 const argv = rest
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]
+
+// TRDD write-gate (ai-maestro#161 phase a) — run as soon as `cmd` is known, so it
+// precedes both the `fix` intercept below and the verb switch. Keyed on WHERE THE
+// CALLER IS RUNNING FROM (`REPO_ROOT`), never on the corpus `--design-dir` points at.
+const writeMsg = writeRefusal('trddgrep', cmd, { cwd: fs.realpathSync.native(process.cwd()), root: REPO_ROOT })
+if (writeMsg) {
+  console.error(writeMsg)
+  process.exit(2)
+}
 
 // THE VERB MUST COME FIRST. `lib/pillar/cli.ts` strips the edit flags from anywhere before
 // it binds its verb; here `parseEditFlags` is a lazy import inside the `edit` case, so it

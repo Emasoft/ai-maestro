@@ -134,7 +134,7 @@ function takeFlag(list: string[], name: string): [string | undefined, string[]] 
  * observe it), but they are slow, and a fast in-process path is what makes it
  * affordable to cover every branch.
  */
-export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<never> {
+export async function runPillarCli(kind: PillarKind, argv: string[], checkoutRoot: string): Promise<never> {
   const C = palette(Boolean(process.stdout.isTTY) && !process.env.NO_COLOR)
   const tool = `${kind.name}grep`
 
@@ -176,6 +176,26 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
     const positional = withUser.filter((t) => t !== '--user')
     const cmd = positional[0] ?? 'list'
     const arg = positional[1]
+
+    // ai-maestro#161 phase a — the corpus write gate. Run ONCE, right after `cmd` is
+    // known and BEFORE the env/help exemption below and every verb branch, so `add`
+    // (prrdgrep) and `edit` (both) share this single call instead of two copies drifting.
+    // Keyed on WHERE THE CALLER IS RUNNING FROM (`checkoutRoot`), never on the corpus
+    // `--design-dir` points at — see `lib/pillar/write-gate.ts`.
+    const { writeRefusal } = await import('./write-gate')
+    // `tool` is always `${kind.name}grep` for one of the three registered kinds
+    // (trdd/prrd/spec) — the cast trusts that invariant, not user input; a future
+    // fourth kind whose name isn't in WRITE_VERBS would fail LOUD here (an unhandled
+    // key lookup, caught by this function's own catch as "could not run"), never
+    // silently permit a write.
+    const writeMsg = writeRefusal(tool as import('./write-gate').PillarWriteTool, cmd, {
+      cwd: fs.realpathSync.native(process.cwd()),
+      root: checkoutRoot,
+    })
+    if (writeMsg) {
+      console.error(writeMsg)
+      return process.exit(2)
+    }
 
     // `env` and `help` are EXEMPT from the corpus check, and the exemption is the
     // whole point of `env`: it explains what the tool concluded about where it is

@@ -2,7 +2,8 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { setup, watchForLeaks } from '../setup/real-state-dir-untouched'
+import { setup } from '../setup/real-state-dir-untouched'
+import { watchForLeaks } from '../helpers/real-state-roots'
 
 // WHAT THIS FILE DOES NOT COVER, stated because the filename over-promises: every test below
 // drives watchForLeaks() DIRECTLY against a fixture. Nothing here asserts that setup() — the
@@ -87,6 +88,13 @@ describe('watchForLeaks', () => {
     // expected value to the output.
     const listedLines = message.split('\n').filter((l) => /^\s\sleak-\d+\.txt$/.test(l))
     expect(listedLines.length).toBe(20)
+  })
+
+  it('ignores a new .DS_Store rather than reporting it as a leak', () => {
+    const root = mkFixture()
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, '.DS_Store'), '')
+    expect(teardown).not.toThrow()
   })
 
   // setup() is what vitest registers, and vitest calls globalSetup with a GlobalSetupContext as

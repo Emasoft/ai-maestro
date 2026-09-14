@@ -110,47 +110,12 @@ export TSX_TSCONFIG_PATH="$ROOT/tsconfig.json"
 # ai-maestro's board to every project on the host — which is worse than not shipping it, so
 # both are asserted in the test.
 
-# ── 5. `fix`/`edit` are corpus-wide mutating verbs. Default them OFF outside this
-# checkout (github.com/Emasoft/ai-maestro#161: two installers used to disagree on this,
-# and one of them — the only one anything actually installed — had no gate at all).
-#
-# The janitor asked for exactly this split and it is right: a plain repo with no MANAGER
-# and no approval chain should not get a mutating fixer by default, and `fix`/`edit` are
-# the verbs that rewrite frontmatter across a whole corpus.
-#
-# It is a DEFAULT, not a security boundary, and the difference is stated so nobody
-# mistakes it for one: anyone can still run the `.mjs` directly, and
-# AIM_PILLAR_ALLOW_WRITE=1 lifts it on purpose. The hazard being prevented is an
-# accidental corpus-wide rewrite in a project that never opted in, not an attacker.
-#
-# This gate covers only `fix`/`edit` — the two verbs already gated (differently, and one
-# of them not at all) by the two installers this port replaces. `new set append check-box
-# move` also mutate the corpus and are NOT gated here; scoping them is out of this port,
-# tracked on ai-maestro#161.
-#
-# DO NOT try to find the verb by skipping each flag's value token: the pillar CLIs' flag
-# sets differ and grow, so a wrapper enumerating "which flags take a value" gets it wrong
-# by OMISSION, and an omitted flag shifts the verb and defeats the gate SILENTLY — the
-# exact shape of bug this file exists to close (`--min-approval manager fix` bypassed an
-# earlier draft this way). Fail closed instead: arm the gate whenever `fix` or `edit`
-# appears as a standalone token anywhere in argv. This over-triggers on a contrived
-# `--rule fix`, costing a spurious refusal whose own message already names the deliberate
-# override — a far better trade than a silent hole.
-case " $* " in *" fix "* | *" edit "*) mutating=1 ;; *) mutating=0 ;; esac
-
-# Is the caller's cwd inside the ai-maestro checkout? Trailing slash on both sides so the
-# root itself matches (a shell `*` matches the empty string). This is a cwd-PREFIX
-# heuristic: a linked git worktree or a symlinked checkout compares as OUTSIDE and gets
-# refused even though it is "the same" checkout in spirit — the safe direction, but it
-# reads as the gate being broken rather than as the gate doing its job.
-inside=0
-case "$PWD/" in "$ROOT"/*) inside=1 ;; esac
-
-if [ "$mutating" -eq 1 ] && [ "$inside" -eq 0 ] && [ "${AIM_PILLAR_ALLOW_WRITE:-}" != "1" ]; then
-  echo "$TOOL: 'fix'/'edit' rewrite the corpus and are disabled outside the ai-maestro checkout." >&2
-  echo "  The query surface (board, next, why, show, lint, validate, env) works here." >&2
-  echo "  Deliberate? AIM_PILLAR_ALLOW_WRITE=1 $TOOL ..." >&2
-  exit 2   # 2 = COULD NOT RUN, never 1 — 1 means 'found findings' for these CLIs.
-fi
+# The write gate for `fix`/`edit` (and `add` where applicable) lives in NODE now
+# (lib/pillar/write-gate.ts), keyed on the VERB each tool itself parses from argv —
+# not on a bash token scan. A bash `case " $* " in *" fix "*)` scan here refused a plain
+# SEARCH containing the word "fix" or "edit" (`trddgrep "edit the rotator"`) and could not
+# see a mutating verb this launcher never enumerated (`prrdgrep add`) — ai-maestro#161.
+# Do NOT re-add an argv scan in this launcher: the gate belongs where the verb is actually
+# resolved, once, by the tool that parses it.
 
 exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@"

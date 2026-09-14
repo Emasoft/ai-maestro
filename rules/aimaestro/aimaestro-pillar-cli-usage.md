@@ -116,22 +116,24 @@ act on. Never `cd` to retarget, pass `--design-dir`.
 LOCAL `~/.claude/projects/<slug>/design` · USER `<root>`.
 Unsure? `<tool> env` first.
 
-`AIM_PILLAR_ALLOW_WRITE=1` prefix lifts the gate on trddgrep/prrdgrep/specgrep `fix`/`edit` ONLY —
-`new set append check-box move` are ungated W verbs on trddgrep. specgrep's only W verb is `edit`,
-so it is fully gated too. **prrdgrep is NOT: `add` (mint a PRRD rule, `add golden|silver "<text>"`)
-is a seventh verb the gate's `fix`/`edit` match does not see** — measured 2026-09-13, `prrdgrep add
-silver "test"` from outside the checkout reached the tool and failed on the missing corpus, with
-zero gate output. It is prrdgrep-only (`lib/pillar/cli.ts:256` refuses `add` for any other kind),
-which is why the sibling tools are unaffected. The GOLDEN tier is still protected — `add` has its
-own `--user` authority check at `:278` — so this is a write-gate gap, not an authority bypass.
-Both a gate-refusal and a tool failure exit 2; only the message tells them apart:
+The write gate lives in NODE (`lib/pillar/write-gate.ts::writeRefusal`), keyed on the VERB each
+tool has already parsed for itself — never a bash argv scan. `trddgrep fix|edit`, `prrdgrep
+edit|add`, and `specgrep edit` are refused when the caller's cwd is outside the ai-maestro
+checkout; every other verb on every tool (`new set append check-box move`, and any query verb)
+is ungated. Because the gate is asked AFTER the verb is resolved, a SEARCH whose text happens to
+contain "edit" or "fix" (`trddgrep "edit the rotator"`) is never mistaken for the verb — the old
+`scripts/pillar-cli` bash scan matched on argv text and both refused that search and missed
+`prrdgrep add` (ai-maestro#161). `AIM_PILLAR_ALLOW_WRITE=1` is the one escape hatch, checked
+first:
 
 `AIM_PILLAR_ALLOW_WRITE=1 trddgrep --design-dir <root> edit <id> --expect X --replace Y`
 
-The gate itself lives in `scripts/pillar-cli` (issue #161) — a single shared launcher installed
-under each pillar's name (`trddgrep`, `prrdgrep`, `specgrep`), NOT in the earlier
-`scripts/install-pillar-tooling.sh` per-CLI wrapper generator, which is orphaned (superseded, kept
-only as a fallback path — `install-messaging.sh` is the installer that ships `scripts/pillar-cli`).
+`scripts/pillar-cli` (issue #161) is still the single shared launcher installed under each
+pillar's name (`trddgrep`, `prrdgrep`, `specgrep`) — it now carries NO write gate of its own, by
+design; it locates the install, pins Node, and `exec`s the tool's own `.mjs`, which asks the node
+gate above. `scripts/install-pillar-tooling.sh` per-CLI wrapper generator remains orphaned
+(superseded, kept only as a fallback path — `install-messaging.sh` is the installer that ships
+`scripts/pillar-cli`).
 
 Exempt: git/wc/checksum/ls · `grep -rl` paths-only (`-rn`=read, forbidden) · PARSE/LINT-error
 card `cat`-able ("not found"=wrong id, "no TRDD corpus at"=wrong `--design-dir`).

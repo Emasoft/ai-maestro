@@ -579,7 +579,30 @@ describe('containment + write gate', () => {
         env,
       });
       expect(r.code).toBe(2);
-      expect(r.out + r.err).toContain('disabled outside the ai-maestro checkout');
+      // The NODE gate's wording (lib/pillar/write-gate.ts), not the retired bash argv
+      // scan's — the launcher (scripts/pillar-cli) carries no gate of its own as of
+      // ai-maestro#161 phase b, so this line is the only thing that would catch a
+      // regression reintroducing the old bash message.
+      expect(r.out + r.err).toContain("'edit' rewrites the corpus and is disabled outside the ai-maestro checkout");
+    }
+  );
+
+  it.skipIf(!HAVE_TRDDGREP)(
+    '31 · AIM_PILLAR_ALLOW_WRITE=1 lifts the refusal through the real installed launcher',
+    () => {
+      const design = mkDesignCorpus();
+      const id = createCard(design, 'Write Gate Allow Card');
+      const env = { ...process.env, AIM_PILLAR_ALLOW_WRITE: '1' };
+      const r = run(
+        'trddgrep',
+        ['--design-dir', design, 'edit', id, '--at-line', '1', '--expect', 'x', '--replace', 'x'],
+        { cwd: os.tmpdir(), env },
+      );
+      // Not asserting r.code === 0 here: `--expect x` may or may not match line 1 of a
+      // generated card, and that mismatch is a separate, legitimate exit-2. What this
+      // test pins is that the OVERRIDE itself worked - the refusal string must be ABSENT
+      // either way, because a request that clears the gate never reaches that message.
+      expect(r.out + r.err).not.toContain('disabled outside the ai-maestro checkout');
     }
   );
 });

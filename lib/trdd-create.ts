@@ -54,8 +54,16 @@ export function idTaken(id: string, roots: string[]): boolean {
     for (const zone of TRDD_ZONES) {
       const dir = path.join(root, zone)
       let entries: string[]
-      try { entries = fs.readdirSync(dir) } catch { continue }
-      // -iname semantics: case-insensitive, anywhere in the filename.
+      try {
+        entries = fs.readdirSync(dir)
+      } catch (err) {
+        // ENOENT (zone dir absent) is a legal "no cards here" — anything else
+        // (ENOTDIR, EACCES, ...) means we could not actually check this zone,
+        // and treating that as "empty" would let the mint hand out an id that
+        // is already taken there.
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw err
+      }
       if (entries.some((f) => f.toUpperCase().includes(needle))) return true
     }
   }

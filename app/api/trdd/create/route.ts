@@ -66,8 +66,11 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json(result, { status: 201 })
   } catch (err) {
-    // createTrdd throws only on caller mistakes (bad title/type/column) and the
-    // one loud RNG backstop — 400 is right for all of them; nothing was written.
+    // createTrdd throws on caller mistakes (bad title/type/column), on the loud RNG
+    // backstop, and on a zone it cannot read (a non-ENOENT error from idTaken). The
+    // first two are rightly 400. A filesystem fault is a server-side error and 400 is
+    // knowingly wrong for it; it stays 400 until this write path is reworked. Nothing is
+    // written in any of the three cases.
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 })
   }
 }

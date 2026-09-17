@@ -76,9 +76,13 @@ import { janitorControlDir } from './janitor-control'
  * (the TRDD-FXPV7L4D class), so never re-add the name here without restoring the work, or
  * vice versa. The janitor executes it again the moment it stops seeing the claim in the
  * liveness beat's `absorbed_chores`.
+ *
+ * `marketplace-refresh` LEFT this set on 2026-09-17 (duty retired), together with
+ * `RefreshAllMarketplaces` and its helpers — its argless `claude plugin marketplace update`
+ * walked all ~260 registered marketplaces every tick and generated the file churn that grew
+ * fseventsd to 27 GB. Same two-halves-of-one-change rule as `user-plugins-update` above.
  */
 export const ABSORBED_CHORES = [
-  'marketplace-refresh',
   'version-update',
   'oauth-rotator-supervisor',
   'oauth-rotator-tick',

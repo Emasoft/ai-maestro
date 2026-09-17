@@ -56,9 +56,10 @@ describe('currentCapabilities — advertises ONLY exact chore names the janitor 
       'oauth-rotator-supervisor',
     ])
   })
-  it('advertises marketplace-refresh + version-update only when the absorbed-duty scheduler runs (ai-maestro#102)', () => {
+  it('advertises version-update only when the absorbed-duty scheduler runs (ai-maestro#102)', () => {
+    // marketplace-refresh dropped 2026-09-17 (duty retired) — the scheduler ran both, now only
+    // version-update.
     expect(currentCapabilities({ ...noop, singletonChoresLive: () => true })).toEqual([
-      'marketplace-refresh',
       'version-update',
     ])
   })
@@ -133,8 +134,9 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
     // per-plugin loop was deleted, so publishing the claim would tell the janitor to yield a
     // chore nobody performs. The un-claim and the loop removal are one change — a re-add here
     // without the loop makes this beat lie in the FXPV7L4D direction.
+    // marketplace-refresh dropped 2026-09-17 (duty retired) — same FXPV7L4D-avoidance rule as
+    // the user-plugins-update note above.
     expect(readLiveness().absorbed_chores).toEqual([
-      'marketplace-refresh',
       'version-update',
       'oauth-rotator-supervisor',
       'oauth-rotator-tick',

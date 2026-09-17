@@ -1,5 +1,10 @@
 // The marketplace/plugin-update chore lock (TRDD-S5RUHJRP — Flock-D D4).
 //
+// The `RefreshAllMarketplaces` incident history below is archival: that duty (marketplace-refresh)
+// was retired 2026-09-17 (its argless `claude plugin marketplace update` walked all ~260
+// registered marketplaces every tick, growing fseventsd to 27 GB). This lock itself STAYS — it is
+// still used by `runAbsorbedDutyTickBody` (version-update), `runTick`, and `fleet-plugins-update.ts`.
+//
 // Serialises everything that mutates marketplaces or installed plugins — `claude plugin
 // marketplace update`, plugin installs/updates — so two server-family processes (the scheduled
 // tick and a "Run now" from another process, or a stray second server) can never run the CLI

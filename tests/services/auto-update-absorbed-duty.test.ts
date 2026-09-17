@@ -1,12 +1,16 @@
 /**
  * Tests for the absorbed-duty lane (ai-maestro#102, TRDD-5X3P79Q6): the
- * chores the janitor daemon ran unconditionally before this server absorbed
- * them — marketplace-refresh and version-update (self-update the janitor) —
- * must run regardless of `auto-update-settings.json`'s master `enabled`
- * toggle, gated ONLY on `isJanitorInstalledAndArmed()`.
+ * chore the janitor daemon ran unconditionally before this server absorbed
+ * it — version-update (self-update the janitor) — must run regardless of
+ * `auto-update-settings.json`'s master `enabled` toggle, gated ONLY on
+ * `isJanitorInstalledAndArmed()`.
  * (`user-plugins-update` was absorbed too until 2026-08-19, then RETURNED to
  * the janitor with its per-plugin loop deleted — TRDD-PE54D95Q AC6. The tests
- * below pin the absence of both halves: no loop, no claim stamp.)
+ * below pin the absence of both halves: no loop, no claim stamp.
+ * `marketplace-refresh` was absorbed too, then RETIRED 2026-09-17 — its
+ * argless `claude plugin marketplace update` walked all ~260 registered
+ * marketplaces every tick and generated the file churn that grew fseventsd
+ * to 27 GB; its mocks/assertions are dropped from this file along with it.)
  *
  * 0-IMPACT:
  *   - `runAbsorbedDutyTick` takes injected deps (`isJanitorInstalledAndArmed`),
@@ -26,11 +30,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const refreshAllMarketplaces = vi.fn(async () => ({ success: true }))
 const changePlugin = vi.fn(async (_agentId: unknown, _desired: unknown) => ({ success: true }))
 
 vi.mock('@/services/element-management-service', () => ({
-  RefreshAllMarketplaces: (...args: unknown[]) => (refreshAllMarketplaces as any)(...args),
   ChangePlugin: (...args: unknown[]) => (changePlugin as any)(...args),
 }))
 
@@ -44,7 +46,6 @@ vi.mock('@/lib/marketplace-lock', () => ({
 
 import {
   absorbedDutyIsOverdue,
-  describeRefreshCoverage,
   runAbsorbedDutyTick,
   runAbsorbedDutyTickNow,
   runAbsorbedDutyPoll,
@@ -87,11 +88,9 @@ let settingsDir = ''
 const SETTINGS = () => path.join(settingsDir, '.claude', 'settings.json')
 
 beforeEach(() => {
-  refreshAllMarketplaces.mockClear()
   withMarketplaceLockMock.mockClear()
   withMarketplaceLockMock.mockImplementation(async (fn: () => Promise<unknown>) => fn())
   changePlugin.mockClear()
-  refreshAllMarketplaces.mockResolvedValue({ success: true })
   changePlugin.mockResolvedValue({ success: true })
   priorControlDir = process.env.JANITOR_CONTROL_DIR
   controlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-chore-stamp-'))
@@ -113,7 +112,9 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
     // daemon it had suppressed. Every one read as dark for weeks while all ran hourly.
     await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
-    for (const chore of ['marketplace-refresh', 'version-update'] as const) {
+    // marketplace-refresh dropped 2026-09-17 (duty retired) — version-update is the only
+    // chore this lane still stamps.
+    for (const chore of ['version-update'] as const) {
       expect(readChoreStamp(chore), `${chore} left no stamp`).not.toBeNull()
     }
     // The un-claim half of TRDD-PE54D95Q AC6, checked at the FILE because the chore name has
@@ -127,7 +128,7 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
     // out, so every chore would report healthy including the ones that stop running.
     await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
-    const raw = fs.readFileSync(path.join(controlDir, 'marketplace-refresh.last-run.ts'), 'utf8')
+    const raw = fs.readFileSync(path.join(controlDir, 'version-update.last-run.ts'), 'utf8')
     const secs = Number(raw.trim())
     expect(Number.isInteger(secs)).toBe(true)
     expect(Math.abs(secs * 1000 - Date.now())).toBeLessThan(60_000)
@@ -139,7 +140,7 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
     // fresh while nothing ran.
     await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, settingsPath: SETTINGS() })
 
-    expect(readChoreStamp('marketplace-refresh')).toBeNull()
+    expect(readChoreStamp('version-update')).toBeNull()
   })
 })
 
@@ -150,25 +151,10 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
       settingsPath: SETTINGS(),
     })
     expect(entries).toEqual([])
-    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
     expect(changePlugin).not.toHaveBeenCalled()
   })
 
-  it('refreshes every marketplace in ONE argless call — the per-name loop is gone', async () => {
-    // COUNTING THE INVOCATIONS IS THE ASSERTION. The previous shape looped
-    // `UpdateMarketplace({ name })` once per registered marketplace — 275 processes and 275 git
-    // fetches per tick on this host — and a test asserting only "it succeeded" passes over that
-    // loop unchanged. So this pins the COUNT. (The reader that used to feed a per-name loop is
-    // gone from the deps entirely — the count is now the only thing left to pin.)
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
-
-    expect(refreshAllMarketplaces).toHaveBeenCalledTimes(1)
-    // Argless: the whole point is that no name narrows it. `RefreshAllMarketplaces` takes only an
-    // auth context, so a regression that reintroduced per-name filtering could not keep this shape.
-    expect(refreshAllMarketplaces.mock.calls[0]).toHaveLength(1)
-  })
-
-  it('is single-executor machine-wide — a tick whose lock is HELD refreshes nothing (AC3)', async () => {
+  it('is single-executor machine-wide — a tick whose lock is HELD does no work (AC3)', async () => {
     // THE HALF THAT SCALES INTO THE RATE LIMIT. One refresh per 3 h is only true if exactly one
     // executor performs it; a per-session implementation multiplies by the number of live
     // sessions (13 here) and by project count, which is the same per-instance-interval-against-a
@@ -185,24 +171,10 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     expect(entries).toEqual([])
-    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
     expect(changePlugin).not.toHaveBeenCalled()
     // And the lock was genuinely consulted — without this the assertions above would also pass
     // for a tick that simply never ran.
     expect(withMarketplaceLockMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('emits ONE summary row for the refresh, not one per marketplace', async () => {
-    // The reporting half of the same change: `lastRunSummary` used to fill with hundreds of rows
-    // because the loop emitted one entry per name. One operation ⇒ one row.
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
-    // The load-bearing half is the ABSENCE of the old shape: the loop emitted one
-    // `absorbed:marketplace:<name>` row per registered marketplace. Nothing may produce that
-    // shape any more. (Note the colon — `absorbed:marketplace-refresh` and
-    // `absorbed:marketplace-auto-update` both begin with `absorbed:marketplace`, so a
-    // startsWith on that prefix matches the two current rows and asserts nothing.)
-    expect(entries.filter(e => e.target.startsWith('absorbed:marketplace:'))).toHaveLength(0)
-    expect(entries.filter(e => e.target === 'absorbed:marketplace-refresh')).toHaveLength(1)
   })
 
   it('self-updates the janitor plugin specifically, at user scope', async () => {
@@ -229,18 +201,10 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     expect(pluginRows.map(e => e.target)).toEqual([`absorbed:${JANITOR}@${MARKETPLACE_NAME}`])
   })
 
-  it('a single failed candidate does not abort the rest of the tick', async () => {
-    // Was a per-NAME injection back when the refresh looped; the argless refresh has one outcome,
-    // so the failure is injected on that one call. The property under test is unchanged and is
-    // the one that matters: a chore that fails must not take the other chores down with it.
-    refreshAllMarketplaces.mockResolvedValue({ success: false, error: 'boom' } as never)
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
-
-    const failed = entries.find((e) => e.target === 'absorbed:marketplace-refresh')
-    expect(failed).toMatchObject({ status: 'failed', detail: 'boom' })
-    // The janitor self-update (a DIFFERENT chore) still ran despite the refresh failing.
-    expect(changePlugin).toHaveBeenCalled()
-  })
+  // "a single failed candidate does not abort the rest of the tick" was dropped 2026-09-17: it
+  // injected its failure into RefreshAllMarketplaces (marketplace-refresh, now retired). The
+  // property it pinned — one candidate's failure must not take the others down — is still
+  // covered by the test right below, which injects the failure into ChangePlugin instead.
 
   it('a thrown exception from one candidate is caught and recorded, never propagated', async () => {
     changePlugin.mockRejectedValueOnce(new Error('pipeline exploded'))
@@ -391,15 +355,9 @@ describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07), car
   })
 })
 
-/**
- * TRDD-FXPV7L4D — the refresh row must describe what was COVERED, not what the process exited.
- *
- * The two halves are deliberately complementary, and neither is sufficient alone: without the
- * all-advanced test, an implementation that reports failure unconditionally passes; without the
- * partial test, one that reports success unconditionally passes. Both were run against the
- * seeded-diff neuter (make `stale` always `[]`): only the partial half reds, which is what proves
- * that half is the one carrying the claim.
- */
+// The `describeRefreshCoverage` test block that used to follow was retired 2026-09-17 along with
+// the function itself (TRDD-FXPV7L4D's `marketplace-refresh` coverage classifier) — its duty was
+// removed for the fseventsd-churn reason recorded in the file header above.
 
 describe('runAbsorbedDutyPoll — a work-request flag skips the wait for the next overdue tick (ai-maestro#156)', () => {
   let tmpHome: string
@@ -443,54 +401,3 @@ describe('runAbsorbedDutyPoll — a work-request flag skips the wait for the nex
   })
 })
 
-describe('describeRefreshCoverage (TRDD-FXPV7L4D)', () => {
-  const m = (o: Record<string, string>) => new Map(Object.entries(o))
-
-  it('every stamp advanced — a clean success naming the total it actually checked', () => {
-    const before = m({ a: '2026-08-01T00:00:00.000Z', b: '2026-08-01T00:00:00.000Z' })
-    const after = m({ a: '2026-08-16T00:00:00.000Z', b: '2026-08-16T00:00:00.000Z' })
-    expect(describeRefreshCoverage(before, after)).toEqual({
-      ok: true,
-      detail: 'Refreshed all 2 registered marketplaces (one invocation)',
-    })
-  })
-
-  it('K stamps did not advance — not `ok`, counts both sides, and NAMES the laggards', () => {
-    const before = m({ a: 'T1', gone: 'T0', alsogone: 'T0' })
-    const after = m({ a: 'T2', gone: 'T0', alsogone: 'T0' })
-    const got = describeRefreshCoverage(before, after)
-    expect(got.ok).toBe(false)
-    expect(got.detail).toBe(
-      'Refreshed 1 of 3 registered marketplaces (one invocation); 2 did not advance: alsogone, gone',
-    )
-    // The old wording asserted the OPPOSITE of the truth; it must not survive anywhere.
-    expect(got.detail).not.toMatch(/every registered marketplace/)
-  })
-
-  it('caps the named laggards at 10 but always prints the count it hid', () => {
-    const names = Array.from({ length: 14 }, (_, i) => `mk${String(i).padStart(2, '0')}`)
-    const stamps = m(Object.fromEntries(names.map((n) => [n, 'T0'])))
-    const got = describeRefreshCoverage(stamps, new Map(stamps))
-    expect(got.ok).toBe(false)
-    expect(got.detail).toMatch(/Refreshed 0 of 14 /)
-    expect(got.detail).toMatch(/\(\+4 more not shown\)$/)
-    expect(got.detail).toContain('mk09')
-    expect(got.detail).not.toContain('mk10') // capped — and the +4 above is what says so
-  })
-
-  it('an entry absent from the BEFORE snapshot counts as advanced, not as a laggard', () => {
-    // A marketplace registered between the two reads has no prior stamp; treating a missing
-    // baseline as "did not move" would invent a failure on every newly-added marketplace.
-    const got = describeRefreshCoverage(m({}), m({ fresh: '2026-08-16T00:00:00.000Z' }))
-    expect(got).toEqual({ ok: true, detail: 'Refreshed all 1 registered marketplaces (one invocation)' })
-  })
-
-  it('an unreadable/empty registry reports coverage UNKNOWN — it never claims 0 of 0', () => {
-    // `readMarketplaceStamps` fails open, so an empty map is ambiguous by construction. Inventing
-    // a failure from a missing instrument is the mirror image of the bug this card fixes.
-    const got = describeRefreshCoverage(m({}), m({}))
-    expect(got.ok).toBe(true)
-    expect(got.detail).toMatch(/coverage UNKNOWN/)
-    expect(got.detail).not.toMatch(/0 of 0/)
-  })
-})

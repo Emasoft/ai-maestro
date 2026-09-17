@@ -1856,10 +1856,13 @@ async function startServer(handleRequest) {
     }
 
     // ── Absorbed-duty scheduler (ai-maestro#102, TRDD-5X3P79Q6) ─────────
-    // UNCONDITIONAL — never gated on the master toggle above. These
-    // chores (marketplace-refresh, version-update) were
-    // absorbed from the janitor daemon, which ran them whenever the janitor
-    // was installed+armed — no user-facing preference. Re-gating them behind
+    // UNCONDITIONAL — never gated on the master toggle above. This
+    // chore (version-update) was absorbed from the janitor daemon, which
+    // ran it whenever the janitor was installed+armed — no user-facing
+    // preference. (marketplace-refresh, the scheduler's other former duty,
+    // was retired 2026-09-17: its argless `claude plugin marketplace update`
+    // walked all ~260 registered marketplaces every tick and generated the
+    // file churn that grew fseventsd to 27 GB.) Re-gating them behind
     // this server's OWN opt-in toggle would silently revoke a consent the
     // user already gave the janitor. Each tick re-checks
     // isJanitorInstalledAndArmed() itself, so it self-heals in both

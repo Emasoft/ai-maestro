@@ -27,10 +27,10 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const refreshAllMarketplaces = vi.fn(async () => ({ success: true }))
+// marketplace-refresh duty retired 2026-09-17 — RefreshAllMarketplaces mock dropped along with
+// it; ChangePlugin (the version-update path) is the only absorbed-duty side effect left to mock.
 const changePlugin = vi.fn(async () => ({ success: true }))
 vi.mock('@/services/element-management-service', () => ({
-  RefreshAllMarketplaces: (...a: unknown[]) => (refreshAllMarketplaces as any)(...a),
   ChangePlugin: (...a: unknown[]) => (changePlugin as any)(...a),
 }))
 
@@ -93,7 +93,7 @@ describe('boot catch-up wiring', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     loadSettingsMock.mockReset()
-    refreshAllMarketplaces.mockClear()
+    changePlugin.mockClear()
   })
 
   afterEach(() => {
@@ -119,7 +119,7 @@ describe('boot catch-up wiring', () => {
 
     await vi.advanceTimersByTimeAsync(SETTLE + 1000)
     expect(loadSettingsMock).toHaveBeenCalled() // positive control: the branch was reached
-    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
+    expect(changePlugin).not.toHaveBeenCalled()
   })
 
   it('stop() clears the PENDING catch-up — a stopped scheduler must not tick after SIGTERM', async () => {
@@ -129,7 +129,7 @@ describe('boot catch-up wiring', () => {
 
     await vi.advanceTimersByTimeAsync(SETTLE * 2)
     expect(loadSettingsMock).not.toHaveBeenCalled()
-    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
+    expect(changePlugin).not.toHaveBeenCalled()
   })
 
   it('a settings read that THROWS does not prevent the repeating interval from being armed', async () => {
@@ -154,7 +154,7 @@ describe('interval poll (#34 phase-skew fix)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     loadSettingsMock.mockReset()
-    refreshAllMarketplaces.mockClear()
+    changePlugin.mockClear()
   })
 
   afterEach(() => {
@@ -195,6 +195,6 @@ describe('interval poll (#34 phase-skew fix)', () => {
 
     await vi.advanceTimersByTimeAsync(POLL + 1000)
     expect(loadSettingsMock).toHaveBeenCalled() // the poll consulted the stamp
-    expect(refreshAllMarketplaces).not.toHaveBeenCalled() // fresh stamp: no work — poll ≠ cadence
+    expect(changePlugin).not.toHaveBeenCalled() // fresh stamp: no work — poll ≠ cadence
   })
 })

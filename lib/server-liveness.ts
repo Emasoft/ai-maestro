@@ -82,8 +82,8 @@ export interface ServerLiveness {
  * So each pushed token is a chore name from `lib/janitor-chore-stamp.ts`, gated on the SAME predicate
  * that proves the chore is live right now:
  *   - `oauth-rotator-tick` / `oauth-rotator-supervisor` ← `oauthTickEnabled()` (the R16 flag file).
- *   - `marketplace-refresh` / `version-update` ← `isAbsorbedDutySchedulerRunning()` (one scheduler
- *     runs both; ai-maestro#102 / TRDD-5X3P79Q6).
+ *   - `version-update` ← `isAbsorbedDutySchedulerRunning()` (ai-maestro#102 / TRDD-5X3P79Q6;
+ *     the scheduler also ran `marketplace-refresh` until that duty was retired 2026-09-17).
  *   - `github-config-audit` ← `isGithubConfigAuditSchedulerRunning()`, `cache-prune` ←
  *     `isCachePruneSchedulerRunning()`, `fleet-plugins-update` ← `isFleetPluginsUpdateSchedulerRunning()`
  *     — each scheduler starts unconditionally at boot (server.mjs) and now exports its own
@@ -113,7 +113,8 @@ export function currentCapabilities(deps: {
     (() => activeAbsorbedChores().filter((c) => (CONDITIONAL_CHORES as readonly string[]).includes(c)))
   const caps: string[] = []
   if (oauthEnabled()) caps.push('oauth-rotator-tick', 'oauth-rotator-supervisor')
-  if (singletonChoresLive()) caps.push('marketplace-refresh', 'version-update')
+  // marketplace-refresh dropped 2026-09-17 (duty retired; see janitor-chore-stamp.ts).
+  if (singletonChoresLive()) caps.push('version-update')
   if (githubConfigAuditLive()) caps.push('github-config-audit')
   if (cachePruneLive()) caps.push('cache-prune')
   if (fleetPluginsUpdateLive()) caps.push('fleet-plugins-update')

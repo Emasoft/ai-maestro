@@ -275,7 +275,9 @@ export function startAbsorbedDutyScheduler(notifier?: FleetRestartNotifier): voi
   {
     const cadenceS = Math.floor(ABSORBED_DUTY_INTERVAL_MS / 1000)
     const boundS = Math.max(3 * cadenceS, cadenceS + 600)
-    declareChoreBounds({ 'marketplace-refresh': boundS, 'github-config-audit': boundS })
+    // marketplace-refresh dropped 2026-09-17 (duty retired) — declaring a bound for a chore we
+    // no longer run would make the janitor read "owned and healthy" over work nobody does.
+    declareChoreBounds({ 'github-config-audit': boundS })
   }
   scheduleAbsorbedDutyCatchUp()
 }
@@ -598,78 +600,15 @@ async function readRegistryMarketplaces(): Promise<Array<[string, unknown]>> {
   }
 }
 
-/**
- * `name -> lastUpdated` from the registry. Same file and same fail-open contract as
- * `readRegistryMarketplaces` above: an unreadable harness-owned file must not fail the tick.
- * An empty map is therefore AMBIGUOUS by construction (no marketplaces vs unreadable), which is
- * exactly why `describeRefreshCoverage` refuses to claim coverage from one — see TRDD-FXPV7L4D.
- */
-async function readMarketplaceStamps(): Promise<Map<string, string>> {
-  const stamps = new Map<string, string>()
-  try {
-    const p = path.join(os.homedir(), '.claude', 'plugins', 'known_marketplaces.json')
-    const parsed: unknown = JSON.parse(await fs.readFile(p, 'utf8'))
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return stamps
-    for (const [name, e] of Object.entries(parsed as Record<string, unknown>)) {
-      const lu = e !== null && typeof e === 'object' && !Array.isArray(e)
-        ? (e as Record<string, unknown>).lastUpdated
-        : undefined
-      stamps.set(name, typeof lu === 'string' ? lu : '')
-    }
-  } catch {
-    return stamps
-  }
-  return stamps
-}
-
-/** Cap on named laggards. The count of the rest is ALWAYS printed, so the cap cannot read as
- *  completeness — a silent truncation is the failure this whole card is about. */
-const REFRESH_LAGGARDS_SHOWN = 10
-
-/**
- * What the argless `claude plugin marketplace update` ACTUALLY covered, from the registry stamps
- * either side of it — never from its exit code.
- *
- * TRDD-FXPV7L4D: the row used to read "Refreshed every registered marketplace" whenever the
- * process exited 0, which is a claim about ~270 marketplaces derived from ONE status. A
- * per-marketplace failure inside a single invocation cannot move that status, so ten entries were
- * months stale while the lane logged success — and "zero failures across all trail rows" (the
- * evidence TRDD-PE54D95Q's AC6 was gated on) meant "zero failures OF THE THING WE LOG".
- */
-export function describeRefreshCoverage(
-  before: Map<string, string>,
-  after: Map<string, string>,
-): { ok: boolean; detail: string } {
-  const total = after.size
-  // Not "0 of 0 refreshed": an empty map is equally "the registry is unreadable", and inventing a
-  // failure from a missing instrument is the mirror of the bug being fixed.
-  if (total === 0) {
-    return {
-      ok: true,
-      detail: 'Refreshed (one invocation) — per-marketplace coverage UNKNOWN: registry unreadable or empty',
-    }
-  }
-  const stale = [...after.entries()]
-    .filter(([name, ts]) => ts === (before.get(name) ?? ''))
-    .map(([name]) => name)
-    .sort()
-  if (stale.length === 0) {
-    return { ok: true, detail: `Refreshed all ${total} registered marketplaces (one invocation)` }
-  }
-  const shown = stale.slice(0, REFRESH_LAGGARDS_SHOWN)
-  const hidden = stale.length - shown.length
-  return {
-    ok: false,
-    detail: `Refreshed ${total - stale.length} of ${total} registered marketplaces (one invocation); `
-      + `${stale.length} did not advance: ${shown.join(', ')}${hidden > 0 ? ` (+${hidden} more not shown)` : ''}`,
-  }
-}
+// readMarketplaceStamps / REFRESH_LAGGARDS_SHOWN / describeRefreshCoverage retired 2026-09-17
+// along with the marketplace-refresh duty they only served (see removal comment in
+// runAbsorbedDutyTickBody below).
 
 async function runAbsorbedDutyTickBody(
   settingsPath?: string,
 ): Promise<AutoUpdateRunEntry[]> {
   const entries: AutoUpdateRunEntry[] = []
-  const { RefreshAllMarketplaces, ChangePlugin } = await import('@/services/element-management-service')
+  const { ChangePlugin } = await import('@/services/element-management-service')
 
   // 0. Make the refresh below capable of producing upgrades at all. Ordered FIRST because a
   //    catalog refresh against marketplaces whose autoUpdate is off is pure network cost —
@@ -677,51 +616,9 @@ async function runAbsorbedDutyTickBody(
   //    not the refresh two lines down.
   entries.push(await ensureMarketplaceAutoUpdate(settingsPath))
 
-  // 1. marketplace-refresh — ONE argless invocation for EVERY registered marketplace.
-  //
-  //    This was a per-marketplace loop calling `UpdateMarketplace({ name })`, i.e. one
-  //    `claude plugin marketplace update <name>` process per entry — 275 of them on this host,
-  //    every tick. The loop's own comment already called itself "argless-equivalent", which it
-  //    was not: `claude plugin marketplace update` takes an OPTIONAL name and its help says
-  //    "updates all if no name specified", so the equivalent was available the whole time and
-  //    the loop was paying 275 process spawns and 275 git fetches to reach the same state.
-  //
-  //    It also collapses the reporting honestly. The loop emitted one entry per marketplace, so
-  //    `lastRunSummary` filled with hundreds of rows and its failures were per-name; there is now
-  //    ONE row, because there is one operation. A future reader wanting per-marketplace outcomes
-  //    should get them from the CLI's own output, not by reinstating the loop.
-  try {
-    const stampsBefore = await readMarketplaceStamps()
-    const r = await RefreshAllMarketplaces(SYSTEM_AUTH_CONTEXT)
-    //    THREE outcomes, three statuses. `r.skipped` is set when the pipeline deliberately did
-    //    not act because another process was already refreshing (G02b). Recording that as
-    //    `updated` would claim a refresh that never ran; recording it as `failed` would invent a
-    //    fault and pollute the failure trail this card exists to make readable. `skipped` is
-    //    already in the entry vocabulary, so the honest answer needs no new type.
-    //    On success the row is no longer written from `r.success` alone: the exit code says the
-    //    PROCESS worked, and the registry stamps say which marketplaces it actually refreshed
-    //    (TRDD-FXPV7L4D). A partial refresh is downgraded out of `updated` and names its
-    //    laggards, because a marketplace that has not moved in months is a finding for a human —
-    //    it almost always means the upstream repo is gone, which no retry will fix.
-    let row = entry('absorbed:marketplace-refresh', 'skipped', r.skipped)
-    if (!r.skipped) {
-      if (!r.success) {
-        row = entry('absorbed:marketplace-refresh', 'failed', r.error || 'Unknown failure')
-      } else {
-        const cov = describeRefreshCoverage(stampsBefore, await readMarketplaceStamps())
-        row = entry('absorbed:marketplace-refresh', cov.ok ? 'updated' : 'failed', cov.detail)
-      }
-    }
-    entries.push(row)
-  } catch (err) {
-    entries.push(entry('absorbed:marketplace-refresh', 'failed', errMsg(err)))
-  }
-  // The janitor cannot see this ran unless we say so. Its daemon is SUPPRESSED on a host we own
-  // (one-daemon-per-host), so `<task>.last-run.ts` is the only channel by which a chore we
-  // absorbed is distinguishable from one nobody is doing — and until TRDD-14HI8ZPR we never
-  // wrote it, so all five absorbed chores correctly read as dark for weeks (ai-maestro#111).
-  // Stamped OUTSIDE the loop: the chore is `marketplace-refresh` (singular), not one per market.
-  stampChoreRun('marketplace-refresh')
+  // marketplace-refresh duty retired 2026-09-17: its argless `claude plugin marketplace update`
+  // walked all ~260 registered marketplaces every tick and generated the file churn that grew
+  // fseventsd to 27 GB (step 1 removed; see TRDD for the removal).
 
   // 2. version-update — keep the janitor plugin itself current at user scope.
   //

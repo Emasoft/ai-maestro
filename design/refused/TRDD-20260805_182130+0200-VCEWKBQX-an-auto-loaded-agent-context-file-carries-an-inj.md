@@ -3,7 +3,7 @@ trdd-id: VCEWKBQX
 title: an auto-loaded agent-context file carries an injection pattern — .claude/rules/SCENARIOS_TESTS_RULES.md
 column: refused
 created: 2026-08-05T18:21:30+0200
-updated: 2026-08-05T22:03:29+0200
+updated: 2026-09-24T16:36:22+0200
 current-owner: janitor
 task-type: security
 severity: high
@@ -18,7 +18,9 @@ ticket-origin: agent-context-integrity
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-05
 
-**PROPOSED BY THE JANITOR — awaiting approval. NOT authorized to execute.**
+**WITHDRAWN BY THE JANITOR — the finding is GONE. No human declined this.**
+
+The condition this proposal described is no longer detectable as of 2026-09-24 (fixed by hand, or it was transient). It is kept as a record, never deleted. If the same condition reappears, the janitor proposes it again with a NEW id — this one is closed.
 
 The janitor detected this in code the **USER owns**, so it may only propose. It has NOT touched
 anything and will not, until a human or the main Claude approves by running:

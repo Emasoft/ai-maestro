@@ -10,7 +10,7 @@ severity: high
 ticket-kind: security-workflow
 ticket-severity: high
 ticket-evidence: [.claude/agents/scenario-runner.md]
-ticket-dedupe-key: AICTX-003:.claude/agents/scenario-runner.md:54
+ticket-dedupe-key: AICTX-003:6c2c97df3362:.claude/agents/scenario-runner.md:authority-override
 ticket-origin: agent-context-integrity
 ---
 

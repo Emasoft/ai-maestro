@@ -25,6 +25,7 @@ import {
   AUTHORITY_RANK, VALID_COLUMNS, expectedZone, statusForZone, parseTrddIdentity, TRDD_IDENTITY_FORMS,
 } from '@/lib/trdd-vocabulary'
 import { scopeOfDesignDir } from '@/lib/pillar/kinds'
+import { mainAgentProjectMismatch } from '@/lib/trdd-identity'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
 
@@ -321,6 +322,15 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // read only for project scope, so a local or user corpus no longer warns about a PRRD
   // it is not supposed to have.
   const projectId = scope === 'project' ? readProjectId(designDir) : null
+  // #168 cross-check (ai-maestro#168, owner ruling 2026-09-24): the CLI (resolveCliIdentity)
+  // already refuses an explicit main-agent@X whose X differs from the corpus's PRRD
+  // project-id. createTrdd is the OTHER mint path (the API route, any direct caller) and
+  // had no such check — mainAgentProjectMismatch is a no-op on anything but a
+  // `main-agent@` identity and a no-op when the corpus has no project-id, so this binds
+  // only the one case the CLI already refuses.
+  const projectIdForCheck = projectId && 'id' in projectId ? projectId.id : null
+  const authorMismatch = mainAgentProjectMismatch(author, projectIdForCheck)
+  if (authorMismatch) throw new Error(`author ${authorMismatch}`)
   if (scope !== 'project') {
     // A non-project card ALWAYS declares its scope. That is what makes the omission
     // below unambiguous: after derivation, an absent `scope:` can only mean project,
@@ -333,6 +343,10 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // Same grammar as the author (ai-maestro#168): `assignee:` carries owner rights.
   if (assignee && !parseTrddIdentity(assignee)) {
     throw new Error(`assignee must be an identity — ${TRDD_IDENTITY_FORMS} (got "${assignee.slice(0, 40)}")`)
+  }
+  if (assignee) {
+    const assigneeMismatch = mainAgentProjectMismatch(assignee, projectIdForCheck)
+    if (assigneeMismatch) throw new Error(`assignee ${assigneeMismatch}`)
   }
   if (assignee) lines.push(`assignee: ${assignee}`)
   if (isMandate) {

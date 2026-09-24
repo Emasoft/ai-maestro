@@ -194,8 +194,12 @@ const writePrrd = (dir: string, text: string) => {
   fs.mkdirSync(path.join(dir, 'requirements'), { recursive: true })
   fs.writeFileSync(path.join(dir, 'requirements', 'PRRD.md'), text, 'utf8')
 }
+// author: 'user' — this suite is about project-id extraction from the PRRD, not about
+// author identity, and each fixture PRRD below carries its OWN project-id (ai-maestro,
+// crlf-repo, bom-repo, ...). A `main-agent@X` author would need X to match every one of
+// them; 'user' carries no project and is never subject to the #168 cross-check.
 const mint = (dir: string, title: string) =>
-  createTrdd(dir, { title, taskType: 'bugfix', authorAuthority: 'none', author: 'main-agent@probe' })
+  createTrdd(dir, { title, taskType: 'bugfix', authorAuthority: 'none', author: 'user' })
 
 describe('idTaken — an unreadable zone is not an empty zone', () => {
   it('idTaken throws ENOTDIR on an unreadable zone instead of reading it as empty', () => {
@@ -403,5 +407,41 @@ describe('createTrdd validates authorship against the identity grammar', () => {
       const r = createTrdd(design, { ...base, title: `by ${author.slice(0, 10)}`, author })
       expect(fs.readFileSync(r.file, 'utf8')).toMatch(new RegExp(`^created-by: ${author.replace(/[.#]/g, '\\$&')}$`, 'm'))
     }
+  })
+})
+
+// ── #168 project-id cross-check, at the createTrdd mint site (not just the CLI) ──
+describe('createTrdd cross-checks a main-agent@X author/assignee against the PRRD project-id', () => {
+  const base = { title: 'cross-check probe', taskType: 'docs', authorAuthority: 'none' } as const
+
+  it('refuses an author naming the WRONG project, and names both ids', () => {
+    writePrrd(design, '---\nproject-id: real-project\n---\n# PRRD\n')
+    expect(() => createTrdd(design, { ...base, author: 'main-agent@other-project' }))
+      .toThrow(/names project "other-project".*PRRD project-id is "real-project"/s)
+    // nothing written
+    for (const z of ['tasks', 'proposals']) {
+      expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
+    }
+  })
+
+  it('refuses an assignee naming the WRONG project, and names both ids', () => {
+    writePrrd(design, '---\nproject-id: real-project\n---\n# PRRD\n')
+    expect(() => createTrdd(design, { ...base, author: 'user', assignee: 'main-agent@other-project' }))
+      .toThrow(/names project "other-project".*PRRD project-id is "real-project"/s)
+    for (const z of ['tasks', 'proposals']) {
+      expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
+    }
+  })
+
+  it('accepts a main-agent@<project-id> author that matches the corpus PRRD', () => {
+    writePrrd(design, '---\nproject-id: real-project\n---\n# PRRD\n')
+    const r = createTrdd(design, { ...base, author: 'main-agent@real-project' })
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^created-by: main-agent@real-project$/m)
+  })
+
+  it('with NO PRRD, any well-formed main-agent@X author/assignee is accepted (the check only binds when a project-id exists)', () => {
+    const r = createTrdd(design, { ...base, author: 'main-agent@anything-at-all', assignee: 'main-agent@something-else' })
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^created-by: main-agent@anything-at-all$/m)
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^assignee: main-agent@something-else$/m)
   })
 })

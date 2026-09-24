@@ -4,8 +4,9 @@ import * as os from 'os'
 import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
 import { globalStateDir } from '@/lib/oauth-rotator/global-state'
-import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP, ROOT_UNRESOLVED_CODE, ownsTickAlert } from '@/lib/oauth-rotator/server-tick'
-import { legacyRotatorRoot } from '@/lib/oauth-rotator/slots'
+import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP, ROOT_UNRESOLVED_CODE, ownsTickAlert, type TickDeliveryOpts } from '@/lib/oauth-rotator/server-tick'
+import { legacyRotatorRoot, canonicalRotatorRoot } from '@/lib/oauth-rotator/slots'
+import { deliverAlerts, alertsFile } from '@/lib/oauth-rotator/alert-delivery'
 import { readChoreStamp, choreStampPath } from '@/lib/janitor-chore-stamp'
 import type { RepairResult } from '@/lib/oauth-rotator/reauth-repair'
 import { deriveDecision } from '@/lib/oauth-rotator/tick'
@@ -365,8 +366,98 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
     expect(sent[0].map(f => f.code)).toEqual([ROOT_UNRESOLVED_CODE])
     // The refusal text itself, which names the human step (restore the DATA dir or opt in).
     expect(sent[0][0].message).toContain('rotator-root-fallback')
-    // Owned by this beat, so it is reaped once the root resolves instead of lingering.
+    // Inside this beat's claim. That alone does NOT clear it once the root resolves (a healthy beat
+    // never delivers); the explicit clear is pinned in the block below.
     expect(ownsTickAlert(ROOT_UNRESOLVED_CODE)).toBe(true)
+  })
+})
+
+/**
+ * ai-maestro#153 follow-up. The root alert must (1) never create the canonical root it reports
+ * missing, (2) travel in the SAME call as the beat's other finding, (3) never clear a tick code the
+ * beat did not re-evaluate, and (4) clear itself once the root resolves. These go through the REAL
+ * `deliverAlerts` and read the file it wrote — a stub delivery cannot see what gets created or reaped.
+ */
+describe('server-tick — the refused-root alert, through the real delivery (ai-maestro#153)', () => {
+  const armed = { enabledCheck: () => true, claudeRunningCheck: async () => true }
+  // Pass-through lock: the real one lives under the janitor global-state dir, which is not what
+  // these tests measure, and a live beat holding it would skip the body.
+  const lockImpl = <T,>(fn: () => Promise<T>) => fn()
+  const REAUTH = 'reauth-needed:refresh-dead'
+
+  function refuseRoot(): void {
+    fs.mkdirSync(legacyRotatorRoot(), { recursive: true })
+    fs.writeFileSync(path.join(legacyRotatorRoot(), 'state.json'), '{}')
+  }
+  /** The real delivery, recorded and awaitable, so a test reads the file the beat actually wrote. */
+  function realDelivery() {
+    const calls: Array<{ codes: string[]; opts: TickDeliveryOpts }> = []
+    const pending: Array<Promise<unknown>> = []
+    const deliverImpl = (f: ReadonlyArray<{ code: string; message: string }>, opts: TickDeliveryOpts) => {
+      calls.push({ codes: f.map(x => x.code), opts })
+      pending.push(deliverAlerts(f, { log: () => {}, owns: opts.owns, root: opts.root }))
+    }
+    return { calls, deliverImpl, settle: () => Promise.all(pending) }
+  }
+  function alertCodes(root: string): string[] {
+    const data = JSON.parse(fs.readFileSync(alertsFile(root), 'utf8')) as { alerts?: Record<string, unknown> }
+    return Object.keys(data.alerts ?? {}).sort()
+  }
+  const alertableResult = {
+    nextAction: 'reauth-needed', reason: 'refresh-dead', refreshed: [], switched: false,
+    decision: 'reauth-needed: 1 alternate slot(s) have a dead refresh',
+  }
+
+  it('(1) a refused root NEVER creates the canonical root — the alert lands in the legacy root', async () => {
+    refuseRoot()
+    const d = realDelivery()
+    await runOneTick({ ...armed, lockImpl, runTickImpl: async () => { throw new Error('rotator-state-write-refused: stub') }, deliverImpl: d.deliverImpl })
+    await d.settle()
+    // Positive control first: the delivery really wrote, so the absence below is not vacuous.
+    expect(alertCodes(legacyRotatorRoot())).toEqual([ROOT_UNRESOLVED_CODE])
+    expect(fs.existsSync(canonicalRotatorRoot()), 'the dir the refusal reports missing must stay missing').toBe(false)
+  })
+
+  it('(2) a refused root plus an alertable tick is ONE delivery carrying both codes', async () => {
+    refuseRoot()
+    const d = realDelivery()
+    await runOneTick({ ...armed, lockImpl, runTickImpl: async () => alertableResult, deliverImpl: d.deliverImpl })
+    await d.settle()
+    expect(d.calls).toHaveLength(1)
+    expect(d.calls[0].codes.sort()).toEqual([REAUTH, ROOT_UNRESOLVED_CODE].sort())
+  })
+
+  it('(3) an outstanding reauth alert SURVIVES a throw-path delivery the tick never re-evaluated', async () => {
+    refuseRoot()
+    await deliverAlerts([{ code: REAUTH, message: 'm' }], { log: () => {}, owns: ownsTickAlert, root: legacyRotatorRoot() })
+    const d = realDelivery()
+    await runOneTick({ ...armed, lockImpl, runTickImpl: async () => { throw new Error('rotator-state-write-refused: stub') }, deliverImpl: d.deliverImpl })
+    await d.settle()
+    expect(alertCodes(legacyRotatorRoot())).toEqual([REAUTH, ROOT_UNRESOLVED_CODE].sort())
+  })
+
+  it('(3b) the same holds when another process held the lock (null result: the tick did not run)', async () => {
+    refuseRoot()
+    await deliverAlerts([{ code: REAUTH, message: 'm' }], { log: () => {}, owns: ownsTickAlert, root: legacyRotatorRoot() })
+    const d = realDelivery()
+    await runOneTick({ ...armed, lockImpl: async () => null, runTickImpl: async () => alertableResult, deliverImpl: d.deliverImpl })
+    await d.settle()
+    expect(alertCodes(legacyRotatorRoot())).toEqual([REAUTH, ROOT_UNRESOLVED_CODE].sort())
+  })
+
+  it('(4) once the root resolves, the next beat CLEARS the root alert — a healthy beat included', async () => {
+    refuseRoot()
+    const first = realDelivery()
+    await runOneTick({ ...armed, lockImpl, runTickImpl: async () => { throw new Error('rotator-state-write-refused: stub') }, deliverImpl: first.deliverImpl })
+    await first.settle()
+    expect(alertCodes(legacyRotatorRoot())).toEqual([ROOT_UNRESOLVED_CODE])
+    // The owner restores the canonical state: the root resolves.
+    fs.mkdirSync(canonicalRotatorRoot(), { recursive: true })
+    fs.writeFileSync(path.join(canonicalRotatorRoot(), 'state.json'), '{}')
+    const second = realDelivery()
+    await runOneTick({ ...armed, lockImpl, runTickImpl: async () => ({ nextAction: 'ok', refreshed: [], switched: false, decision: 'no action needed' }), deliverImpl: second.deliverImpl })
+    await second.settle()
+    expect(alertCodes(legacyRotatorRoot())).toEqual([])
   })
 })
 

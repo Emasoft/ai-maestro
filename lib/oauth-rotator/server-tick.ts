@@ -29,8 +29,8 @@ import { withTickLock } from './tick-lock'
 import { runTick } from './tick'
 import type { TickResult } from './tick'
 import { writeTickStatus } from './tick-status'
-import { deliverAlerts } from './alert-delivery'
-import { rotatorRoot, lastRootFallbackRefusal } from './slots'
+import { deliverAlerts, alertsFile } from './alert-delivery'
+import { rotatorRoot, legacyRotatorRoot, lastRootFallbackRefusal } from './slots'
 import { stampChoreRun } from '../janitor-chore-stamp'
 
 /**
@@ -69,6 +69,37 @@ export function ownsTickAlert(code: string): boolean {
 export function rootUnresolvedFinding(): { code: string; message: string } | null {
   rotatorRoot()
   return lastRootFallbackRefusal ? { code: ROOT_UNRESOLVED_CODE, message: lastRootFallbackRefusal } : null
+}
+
+/** The reap claim for a delivery whose beat re-evaluated NONE of the tick's own codes — the tick
+ *  threw, or another process held the lock. `ownsTickAlert` there would CLEAR an outstanding
+ *  `reauth-needed:*` / `rotator-stuck:*` that nothing checked (a producer reaps every owned code
+ *  absent from its call). */
+export function ownsRootAlert(code: string): boolean {
+  return code === ROOT_UNRESOLVED_CODE
+}
+
+/**
+ * Does the root alert's record still sit in the legacy root's alert file? A refused root's alert
+ * is written THERE (see `runOneTick`), and once the root resolves no finding names it again — and a
+ * healthy beat never delivers at all, so without an explicit clear the record would outlive the
+ * fix by the 7-day orphan bound. Absent is the normal answer; any other read failure answers true,
+ * so the delivery runs and its own failure path logs the fault instead of this hiding it.
+ */
+export function rootAlertOutstanding(): boolean {
+  try {
+    const data = JSON.parse(fs.readFileSync(alertsFile(legacyRotatorRoot()), 'utf8')) as { alerts?: unknown }
+    return typeof data.alerts === 'object' && data.alerts !== null && ROOT_UNRESOLVED_CODE in data.alerts
+  } catch (err) {
+    return (err as NodeJS.ErrnoException)?.code !== 'ENOENT'
+  }
+}
+
+/** What `runOneTick` hands each delivery: which codes that call may reap, and the dir it writes to
+ *  (absent = the default `rotatorRoot()`). */
+export interface TickDeliveryOpts {
+  owns: (code: string) => boolean
+  root?: string
 }
 
 export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision' | 'identities'> | null {
@@ -149,7 +180,7 @@ export interface RunOneTickDeps {
    *  supervisor's, so a test can assert the alert REACHED a channel without a filesystem or a
    *  notifier — the defect being fixed is precisely "the finding was perfect and reached nobody",
    *  which no assertion on the tick's return value could ever have caught. */
-  deliverImpl?: (findings: ReadonlyArray<{ code: string; message: string }>) => void
+  deliverImpl?: (findings: ReadonlyArray<{ code: string; message: string }>, opts: TickDeliveryOpts) => void
   /** Default `withTickLock` — the MACHINE-WIDE beat lock. A seam because it is the one
    *  collaborator here that is shared with processes outside the test runner: on a host where the
    *  rotator is actually armed, a real 60 s beat holding the lock makes `withTickLock` return null
@@ -239,13 +270,13 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.
-    const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
-      void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: ownsTickAlert })
+    const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>, o: TickDeliveryOpts) => {
+      void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: o.owns, root: o.root })
         .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
     })
-    const deliverSafely = (f: ReadonlyArray<{ code: string; message: string }>): void => {
+    const deliverSafely = (f: ReadonlyArray<{ code: string; message: string }>, o: TickDeliveryOpts): void => {
       try {
-        deliver(f)
+        deliver(f, o)
       } catch (derr) {
         // Its OWN catch, NOT the outer one. The outer catch reports "server tick failed", which
         // would be a FALSE attribution when the tick succeeded and only the notifier threw — and a
@@ -256,11 +287,16 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
     // ai-maestro#153: read BEFORE the tick, because with a refused root the tick throws the moment
     // it tries to write state, and then the outer catch would be the only thing to see it.
     const rootFinding = rootUnresolvedFinding()
+    // A refused root's alert goes to the LEGACY root, which exists by the refusal's own definition
+    // (rotatorRoot() refuses only when legacy/state.json is a file). The default, rotatorRoot(), is
+    // the CANONICAL dir, and the delivery mkdirs it (appendRotatorLog, the alert file) — recreating
+    // the janitor DATA dir whose absence is the very thing the alert reports.
+    const alertRoot = rootFinding ? legacyRotatorRoot() : undefined
     let result: unknown
     try {
       result = await lockImpl(() => runTickImpl()) // serialise; concurrent tick → null.
     } catch (err) {
-      if (rootFinding) deliverSafely([rootFinding])
+      if (rootFinding) deliverSafely([rootFinding], { owns: ownsRootAlert, root: alertRoot })
       throw err
     }
     // PERSIST-THEN-READ (TRDD-1GGQ4HWY → DXJZM3BW): stamp the cascade next_action so the continuity
@@ -305,7 +341,11 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
       // decision line, which is counts-only for the LOG's sake, not the alert's (TRDD-JDXTJXE7).
       findings.push({ code, message: composeTickAlert(alertable) })
     }
-    if (findings.length > 0) deliverSafely(findings)
+    // A null result means another process held the lock and the tick did not run: this beat
+    // re-evaluated none of its own codes, so it may reap only the root code.
+    if (findings.length > 0) deliverSafely(findings, { owns: result === null ? ownsRootAlert : ownsTickAlert, root: alertRoot })
+    // The root resolved but its alert is still recorded: clear it now, not 7 days from now.
+    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsRootAlert, root: legacyRotatorRoot() })
     // REPAIR (TRDD-CVQJNW3A). The beat above can DETECT a dead slot and has nowhere to go —
     // re-capture is the one repair it cannot perform, and on 2026-07-31 that gap cost the owner a
     // manual login while the rotator watched it happen every 60 s. This is that leg.

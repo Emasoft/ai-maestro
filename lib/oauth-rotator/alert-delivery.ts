@@ -37,8 +37,8 @@ import path from 'path'
 
 /** Where the always-written alert record lives. Beside the rotator's own state, so anything that
  *  can find the rotator can find its outstanding alerts. */
-export function alertsFile(): string {
-  return path.join(rotatorRoot(), 'active-alerts.json')
+export function alertsFile(root: string = rotatorRoot()): string {
+  return path.join(root, 'active-alerts.json')
 }
 
 export interface AlertRecord {
@@ -134,6 +134,11 @@ export interface DeliveryDeps {
    * mistake into a compile error instead.
    */
   owns: (code: string) => boolean
+  /** The dir holding the alert file and the rotator.log the transitions go to. Default
+   *  `rotatorRoot()`. A caller whose root was REFUSED passes one that already exists, because
+   *  writing to `rotatorRoot()` would create the very dir whose absence the refusal reports
+   *  (ai-maestro#153). */
+  root?: string
 }
 
 /**
@@ -153,7 +158,7 @@ export async function deliverAlerts(
   const delivered: string[] = []
 
   try {
-    const file = alertsFile()
+    const file = alertsFile(deps.root)
     const existing = await readJson(file)
     const prior: Record<string, AlertRecord> =
       existing.ok && typeof existing.data.alerts === 'object' && existing.data.alerts !== null
@@ -218,14 +223,14 @@ export async function deliverAlerts(
     // one alert reached pm2-out.log 4506 times in 4 days and became unreadable. A log records a
     // change of state; a poll belongs in the state file, which is what `alerts` already is.
     for (const f of findings) {
-      if (prior[f.code] === undefined) appendRotatorLog('alert', `ONSET ${f.code} — ${f.message}`)
+      if (prior[f.code] === undefined) appendRotatorLog('alert', `ONSET ${f.code} — ${f.message}`, { root: deps.root })
     }
     for (const code of Object.keys(prior)) {
       // SAME scoping as the state reap above, and for the same reason (TRDD-W6PHZFC9): a CLEARED
       // line for another producer's code is not merely noise, it is a false statement about a
       // condition this producer never observed — and it is the half a reader sees, because the
       // log is the shared timeline the state file is reconstructed from.
-      if (!live.has(code) && owns(code)) appendRotatorLog('alert', `CLEARED ${code}`)
+      if (!live.has(code) && owns(code)) appendRotatorLog('alert', `CLEARED ${code}`, { root: deps.root })
     }
 
     for (const [code, message, outstandingS] of toNotify) {

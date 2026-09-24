@@ -570,6 +570,33 @@ describe('v4 — normalizeTrddRef no longer folds a v1 slug into its parent (#16
   })
 })
 
+describe('v5 — V1_DERIVED_SLUG_RE narrowed to hex, closing the v2-base36 misclassification (#166 follow-up)', () => {
+  it('migrating v4 → v5 clears records, edges, FTS and files — a stale non-hex-slug edge cannot survive', () => {
+    // Simulate a v4 index built under the OLD broad `[A-Z0-9]{8}` regex: a v2
+    // base36 card whose own slug starts with `npt-` was wrongly treated as an
+    // unfoldable v1 artifact, so its `npt:` reference stayed unfolded and never
+    // resolved — dropping the edge `syncIndex` would have written under the fix.
+    // No shape change at v5, so nothing to ALTER.
+    const db = openIndex(db1)
+    db.pragma('user_version = 4')
+    db.prepare(`INSERT INTO files VALUES ('/k3qx.md','trdd','tasks','i',0)`).run()
+    db.prepare(
+      `INSERT INTO records (kind,id,path,line,col,title,priority) VALUES ('trdd','K3QX9P2W','/k3qx.md',NULL,'complete','t',NULL)`,
+    ).run()
+    db.close()
+
+    const fresh = openIndex(db1)
+    const count = (t: string) =>
+      (fresh.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n
+    expect(count('files')).toBe(0)
+    expect(count('records')).toBe(0)
+    expect(count('edges')).toBe(0)
+    expect(count('records_fts')).toBe(0)
+    expect(validate(fresh)).toEqual({ ok: true })
+    fresh.close()
+  })
+})
+
 describe('validate depth — a SCHEDULE change, not a weakening (TRDD-4VCXRHAY)', () => {
   /**
    * The full pass ran on EVERY open, and two of its checks scan the whole index:

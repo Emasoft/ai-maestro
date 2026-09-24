@@ -289,6 +289,20 @@ describe('non-local blocked-by spellings (TRDD-PTFPGSLV)', () => {
     expect(kinds(nodes)).not.toContain('childMissing')
   })
 
+  it('a v2 base36 id whose OWN slug starts with npt-/eht- still FOLDS and resolves (#166 hex-narrowing follow-up)', () => {
+    // V1_DERIVED_SLUG_RE used to be `[A-Z0-9]{8}-(?:NPT|EHT)-`, which also matches
+    // a v2 base36 id containing a non-hex letter (e.g. K3QX9P2W has no hex-only
+    // prefix requirement) followed by `-npt-`/`-eht-` in its OWN filename slug —
+    // wrongly treating a plain filename-stem citation as the unfoldable v1
+    // derived-task shape. Narrowed to `[0-9A-F]{8}` (a v1 id's leading 8 chars are
+    // always hex), so this now folds and resolves like any other citation.
+    const normalized = normalizeTrddRef('TRDD-K3QX9P2W-npt-migration')
+    expect(normalized).toBe('K3QX9P2W')
+    const nodes = [node('K3QX9P2W', { column: 'complete' }), node('BBBB2222', { column: 'complete', npt: [normalized] })]
+    expect(kinds(nodes)).not.toContain('childMissing')
+    expect(kinds(nodes)).not.toContain('danglingV1Slug')
+  })
+
   it('externalRefList keeps the RAW spelling — the raw ref IS the information', () => {
     expect(externalRefList(['gh:Emasoft/ai-maestro#145', 'AAAA1111'])).toEqual(['gh:Emasoft/ai-maestro#145'])
     expect(externalRefList('amama:TRDD-LT5N2JA4')).toEqual(['amama:TRDD-LT5N2JA4'])

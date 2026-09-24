@@ -121,8 +121,18 @@ const UUID_REMAINDER_RE = /^-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * `danglingV1Slug` split further down re-tests the SAME regex against the
  * already-normalized value to pick the finding's severity. One regex, one
  * definition of "known-benign v1 artifact".
+ *
+ * The 8-char id-shaped prefix is restricted to `[0-9A-F]` (hex), not
+ * `[A-Z0-9]` (full base36) — a v1 id IS a UUID prefix, so its first 8 chars are
+ * always hex. `[A-Z0-9]` also matches a v2 base36 id whose leading 8 chars
+ * contain a non-hex letter (G-Z minus the hex letters), so a v2 card whose OWN
+ * filename slug happens to start with `npt-`/`eht-` (`TRDD-K3QX9P2W-npt-…`) was
+ * wrongly classified as a v1 derived-task slug: it stayed unfolded, resolved to
+ * no card, and got downgraded to the `danglingV1Slug` WARN instead of the real
+ * `childMissing` bug it is. Restricting to hex makes the regex un-matchable by
+ * any v2 id containing a non-hex digit, closing that misclassification.
  */
-const V1_DERIVED_SLUG_RE = /^[A-Z0-9]{8}-(?:NPT|EHT)-/
+const V1_DERIVED_SLUG_RE = /^[0-9A-F]{8}-(?:NPT|EHT)-/
 
 export function normalizeTrddRef(ref: unknown): string {
   const stripped = String(ref).trim().replace(/^TRDD-/i, '')

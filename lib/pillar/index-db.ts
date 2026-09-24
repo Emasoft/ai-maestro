@@ -31,7 +31,7 @@ import Database from 'better-sqlite3'
  */
 import { corpusIdentity } from '@/lib/corpus-identity'
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export type IndexFaultCode =
   /** DB newer than this binary. The repair is the OPPOSITE one: upgrade the code. */
@@ -183,6 +183,31 @@ const MIGRATIONS: readonly Migration[] = [
       // comment names for `files` alone: clear all four tables TOGETHER (not just
       // `edges`) so `freshness.ts` computes every live file as `added` and nothing
       // for a since-deleted file survives as a phantom record.
+      db.exec(`
+        DELETE FROM records;
+        DELETE FROM edges;
+        DELETE FROM records_fts;
+        DELETE FROM files;
+      `)
+    },
+  },
+  {
+    to: 5,
+    name: 'normalizeTrddRef v1-slug regex narrowed to hex, closing the v2-base36 misclassification the v4 migration missed (#166 follow-up)',
+    run: (db) => {
+      // Same shape-unchanged, force-re-derivation step as v4, needed again because
+      // the LIVE-INSTALLED CLI kept building indexes with the broad `[A-Z0-9]{8}`
+      // form of `V1_DERIVED_SLUG_RE` between the v4 migration landing (commit
+      // 163bc07cf) and this fix (commit c3155e8ea): a v2 base36 card whose
+      // filename slug happens to start with `npt-`/`eht-` was wrongly treated as an
+      // unfoldable v1 artifact and lost its edge. `freshness.ts` keys on file
+      // content, not on which regex built the row, and this ladder has no way to
+      // tell WHEN a given v4 index was built — only that it sits at v4 — so the
+      // bump is a blanket, unconditional re-derivation of every v4 index, not a
+      // targeted one: harmless for an index that was never affected (it just
+      // re-derives the same correct edges), necessary for the ones that were.
+      // Clear all four tables together, as v2/v3/v4 do, so no phantom record
+      // survives for a file deleted while the index sat at v4.
       db.exec(`
         DELETE FROM records;
         DELETE FROM edges;

@@ -98,6 +98,11 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
     // (V1_STATUS_TO_COLUMN). A write that touches only `status:` must be checked
     // against the zone exactly like a `column:` write — keying the guard on the
     // FIELD NAME `column` let a status-only write skip this check entirely.
+    //
+    // Since the life-stage ruling (owner 2026-09-24, TRDD-MQE5D28T) `status:` may hold ONLY
+    // proposed|tasked|archived, so a status-only write of a v1 pipeline value is refused
+    // outright, before it can reach the fallback at all — the stronger form of this test's
+    // original intent (a status-only write cannot skip a check a column write gets).
     const r = validateTrddFieldEdits(
       { status: 'cancelled', updated: ISO },
       baseFm({ column: undefined, status: 'in-progress' }),
@@ -106,19 +111,23 @@ describe('validateTrddFieldEdits — column must agree with the card\'s zone (TR
     )
     expect(r.ok).toBe(false)
     if (!r.ok) {
-      expect(r.error).toContain('archived')
+      expect(r.error).toMatch(/not this card's life stage/)
     }
   })
 
-  it('accepts an ordinary status-only edit that lands in an OPEN column (positive control)', () => {
-    // 'in-progress' -> 'dev' via V1_STATUS_TO_COLUMN, an ordinary WORKING column
-    // that belongs in tasks/ — must still be accepted through the fallback.
-    const r = validateTrddFieldEdits(
+  // INVERTED by the life-stage ruling (was: a status-only write of the v1 value 'in-progress'
+  // accepted through the fallback). A v1 pipeline value in `status:` is the defect the linter
+  // reports (STATUS-HOLDS-COLUMN-VALUE), so the write gate refuses it; the life stage itself
+  // is still accepted (positive control).
+  it('refuses a status-only write of a v1 pipeline value; accepts the life stage (positive control)', () => {
+    const v1 = validateTrddFieldEdits(
       { status: 'in-progress', updated: ISO },
       baseFm({ column: undefined, status: 'not-started' }),
       resolveAll,
       'tasks',
     )
-    expect(r.ok).toBe(true)
+    expect(v1.ok).toBe(false)
+    const stage = validateTrddFieldEdits({ status: 'tasked', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(stage.ok).toBe(true)
   })
 })

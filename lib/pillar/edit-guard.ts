@@ -32,7 +32,7 @@ import type { PillarKind } from './kinds'
 import { walkDocuments, walkRecords, type PillarRecord } from './store'
 import { isPipelineStateValue } from '../trdd-vocabulary'
 import { TRDD_ZONES, type TrddZone } from './kinds'
-import { candidateFrontmatter, introducedViolations, validateTrddCandidate } from './trdd-candidate'
+import { archivedWriteRefusal, candidateFrontmatter, introducedViolations, validateTrddCandidate } from './trdd-candidate'
 
 /** A refused pillar edit — the CLIs print it as `BLOCKED <tool>: …` and exit 2. */
 export class GuardedEditError extends Error {
@@ -389,6 +389,10 @@ function perDocumentCheck(
   // guessed. Every other clause still applies.
   const parent = path.basename(path.dirname(opts.filePath))
   const zone = (TRDD_ZONES as readonly string[]).includes(parent) ? (parent as TrddZone) : null
+  // G5 (D8): a raw line edit of an archived card is refused whatever it changes — body or
+  // frontmatter. `AIM_PILLAR_ALLOW_WRITE` lifts the tool-level write gate, never this.
+  const archived = archivedWriteRefusal(zone, 'the edit')
+  if (archived) return () => { throw new GuardedEditError(archived) }
   return ({ prevLines, nextLines }) => {
     const violations = zone
       ? introducedViolations(

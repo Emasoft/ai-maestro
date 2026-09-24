@@ -30,8 +30,11 @@ import {
   AUTHORITY_RANK,
   V1_STATUS_TO_COLUMN,
   expectedZone,
+  TRDD_STATUSES,
+  statusForZone,
 } from './trdd-vocabulary'
 import type { TrddZone } from './pillar/kinds'
+import { archivedWriteRefusal, WRITE_ONCE_FIELDS, RECORD_ONLY_FIELDS } from './pillar/trdd-candidate'
 
 export type EditGuardResult = { ok: true } | { ok: false; error: string }
 
@@ -42,9 +45,10 @@ const REF_FIELDS = ['blocked-by', 'npt', 'eht', 'parent-trdd', 'supersedes', 'su
 const DATE_FIELDS = ['created', 'updated', 'approval-datetime'] as const
 
 /**
- * A card in a FROZEN column is frozen (IND base §12) — nothing may edit its
- * body or frontmatter except these two fields, which is exactly why `editTrdd`
- * always writes `updated` alongside whatever the caller asked for.
+ * A FINISHED card not yet archived is frozen (IND base §12, kept by TRDD-MQE5D28T D5) —
+ * nothing may edit its body or frontmatter except these two fields, which is exactly
+ * why `editTrdd` always writes `updated` alongside whatever the caller asked for. An
+ * ARCHIVED card has no carve-out at all (D8): `archivedWriteRefusal` refuses it first.
  */
 const FROZEN_ALLOWED_FIELDS = new Set(['updated', 'superseded-by'])
 
@@ -114,7 +118,40 @@ export function validateTrddFieldEdits(
   resolveId: (id: string) => boolean,
   zone: TrddZone,
 ): EditGuardResult {
-  // ── definitive-card freeze (IND base §12) — checked FIRST, on the CURRENT column
+  // ── archived (D8) — checked BEFORE the definitive-card freeze, because the freeze's
+  // two carve-outs (`updated`, `superseded-by`) belong to a FINISHED card not yet archived
+  // (D5), never to an archived one. Moving this below the freeze would let them through. ──
+  const archived = archivedWriteRefusal(zone, 'the field edit')
+  if (archived) return { ok: false, error: archived }
+
+  // ── identity and approval-record fields (#168) — the same rule the CLI gates apply,
+  // judged on the API side without a string-vs-parsed comparison: a write-once field may
+  // be written only while the card lacks it, a record-only field never. ──
+  for (const field of WRITE_ONCE_FIELDS) {
+    const was = current[field]
+    if (field in fields && was !== undefined && was !== null && String(was).trim() !== '') {
+      return { ok: false, error: `"${field}" is write-once — the card already carries it, and it may not be changed` }
+    }
+  }
+  for (const field of RECORD_ONLY_FIELDS) {
+    if (field in fields) {
+      return { ok: false, error: `"${field}" is written only by the create/approve code paths, never by a field edit` }
+    }
+  }
+
+  // ── status is the life stage (owner ruling 2026-09-24) — one of three values, and the
+  // one this card's folder implies; the linter reports anything else as an ERROR. ──
+  if ('status' in fields) {
+    const s = fields['status'].trim()
+    if (!(TRDD_STATUSES as readonly string[]).includes(s) || s !== statusForZone(zone)) {
+      return {
+        ok: false,
+        error: `"status" value "${fields['status']}" is not this card's life stage — a card in design/${zone}/ carries status: ${statusForZone(zone)}`,
+      }
+    }
+  }
+
+  // ── definitive-card freeze (IND base §12) — checked on the CURRENT column
   // AND CURRENT zone, never the resultant ones: a definitive card's whole point is
   // that nothing may move it. Uses `isDefinitiveCard` (owner ruling 2026-09-24), not
   // the narrower flock-done TERMINAL_DONE: a `failed` card in design/tasks/ is OPEN

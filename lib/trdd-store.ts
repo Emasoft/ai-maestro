@@ -29,7 +29,7 @@ import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pill
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
 import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, isDefinitiveCard, isParkedByOtherForm, statusForZone } from './trdd-vocabulary'
-import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
+import { archivedWriteRefusal, candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
@@ -1043,6 +1043,9 @@ export function setTrddField(
   return withTrddLock(designDir, id, () => {
     const trdd = findTrdd(designDir, id)
     if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    // G3 (D8): checked before anything else, so no field of an archived card can land.
+    const archived = archivedWriteRefusal(trdd.zone, `to set \`${field}:\``)
+    if (archived) return { ok: false, status: 409, error: archived }
     if (field === 'column') {
       return {
         ok: false,
@@ -1123,6 +1126,10 @@ export function appendTrddSection(
   return withTrddLock(designDir, id, () => {
     const trdd = findTrdd(designDir, id)
     if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    // G2 (D8): an archived card takes no append at all — not even to `## Approval log`,
+    // whose exemption below is IND rule 12's carve-out for a finished card NOT yet archived.
+    const archived = archivedWriteRefusal(trdd.zone, 'the append')
+    if (archived) return { ok: false, status: 409, error: archived }
     const marker = heading.startsWith('## ') ? heading : `## ${heading}`
     if (/[\r\n\u0000-\u001f]/.test(text) || /[\r\n\u0000-\u001f]/.test(heading)) {
       return { ok: false, status: 400, error: 'the heading and the text must each be one line — a newline here could open a second `---` fence and everything after it would read as frontmatter' }
@@ -1180,6 +1187,10 @@ export function checkTrddBox(
   return withTrddLock(designDir, id, () => {
     const trdd = findTrdd(designDir, id)
     if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+    // G1 (D8): ticking a box on an archived card would change the checklist the archive
+    // transition was judged on — history, not a to-do list.
+    const archived = archivedWriteRefusal(trdd.zone, 'to change a checkbox')
+    if (archived) return { ok: false, status: 409, error: archived }
     const content = fs.readFileSync(trdd.filePath, 'utf-8')
     const lines = content.split('\n')
     const mark = opts.check === false ? ' ' : 'x'
@@ -1226,71 +1237,17 @@ export function archiveTrdd(
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   // `refused` is a column, not a zone — a refused proposal is OPEN (not terminal) and
   // archives through this same function like any other proposals/ or tasks/ card, once
-  // its author decides to (owner ruling 2026-09-24). Only an ALREADY-archived card is
-  // refused outright — EXCEPT the one terminal-to-terminal edit IND base step 12 explicitly permits:
-  // complete/completed → superseded on a card ALREADY in archived/. Step 12 says a
-  // terminal card's body is frozen except `updated:` and, when superseding,
-  // `superseded-by:` — and every terminal column archives AS ITSELF, so this is a
-  // COLUMN edit with NO zone move, not a second archive. Before this branch nothing
-  // in the store could reach it: `archiveTrdd` refused outright ("already terminal"),
-  // `editTrdd`/`set` refuses a bare `column` edit as "half a transition" (the guard's
-  // FROZEN_ALLOWED_FIELDS omits it on purpose). A checklist-less terminal card could
-  // then never be superseded through the sanctioned write path (TRDD-MUB7NTRF).
-  if (trdd.zone === 'archived' && opts.state === 'superseded') {
-    // `published`/`live`/`failed` are release-pipeline statements — force-superseding
-    // one is NON-EXEMPT (PRRD R-Y) and routes through the approval flow, never a bare
-    // CLI move. (Since D2 an archived `failed` card is DEFINITIVE and keeps its column,
-    // so this refusal is also what stops that forensic column being overwritten here.
-    // Removing this whole in-place branch is step 5 G9, not this step.)
-    const RELEASE_PIPELINE_COLUMNS = new Set(['published', 'live', 'failed'])
-    if (RELEASE_PIPELINE_COLUMNS.has(trdd.column ?? '')) {
-      return {
-        ok: false,
-        status: 409,
-        error: `${trdd.id} is "${trdd.column}" — a release-pipeline statement, and force-superseding it is NON-EXEMPT (PRRD R-Y); route this through the approval flow instead of \`move\``,
-      }
-    }
-    if (trdd.column !== 'complete' && trdd.column !== 'completed') {
-      return {
-        ok: false,
-        status: 409,
-        error: `${trdd.id} is "${trdd.column}" in archived/ — an in-place archived → superseded edit only covers a finished (complete/completed) card`,
-      }
-    }
-    if (!opts.supersededBy) {
-      return {
-        ok: false,
-        status: 409,
-        error: `superseding an already-archived card needs --superseded-by naming its replacement`,
-      }
-    }
-    if (!findTrdd(designDir, opts.supersededBy)) {
-      return {
-        ok: false,
-        status: 404,
-        error: `--superseded-by ${JSON.stringify(opts.supersededBy)} does not resolve to a TRDD under ${designDir}`,
-      }
-    }
-    if (!opts.reason || !opts.reason.trim()) {
-      return {
-        ok: false,
-        status: 409,
-        error: `--reason is required — name the checklist gap (or other cause) this in-place supersede is closing`,
-      }
-    }
-    editAt(
-      trdd.filePath,
-      [
-        ['column', 'superseded'],
-        ['updated', opts.iso],
-        ['superseded-by', `[${opts.supersededBy}]`],
-      ],
-      `- ${opts.iso} — SUPERSEDED by ${opts.approver}. ${opts.reason} (in-place archived → superseded, no zone move — IND base step 12).`,
-    )
-    return { ok: true, id: trdd.id, from: 'archived', to: 'archived', column: 'superseded', filePath: trdd.filePath }
-  }
+  // its author decides to (owner ruling 2026-09-24). An ALREADY-archived card is refused
+  // outright, with no exception (D8, G9). The in-place archived → superseded rewrite that
+  // TRDD-MUB7NTRF added here is withdrawn: it overwrote the column an archived card was
+  // "photographed" in. That a newer card replaces an archived one is recorded on the LIVE
+  // replacement, as `supersedes:`.
   if (trdd.zone === 'archived') {
-    return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
+    return {
+      ok: false,
+      status: 409,
+      error: `${trdd.id} is already archived — ${archivedWriteRefusal('archived', 'a second archive')}. To record that a newer card replaces it, set \`supersedes: [${trdd.id}]\` on the replacement`,
+    }
   }
   // TRDD-XCQ9TDSK: `advanceColumn` (TRDD-ISGUYYLN) owns the leaving-`blocked`
   // invariant for every WORKING-column move, but a blocked card archiving straight

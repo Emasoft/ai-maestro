@@ -16,8 +16,72 @@
  * derived-TRDD depth invariant) stays in `lib/trdd-doctor.ts`, which walks it. A gate
  * that had to load the corpus would put an O(N) walk inside the write lock.
  */
-import { VALID_COLUMNS, AUTHORITY_RANK, isPipelineStateValue, expectedZone } from '../trdd-vocabulary'
-import type { TrddZone } from './kinds'
+import { VALID_COLUMNS, AUTHORITY_RANK, isPipelineStateValue, expectedZone, TRDD_STATUSES, statusForZone } from '../trdd-vocabulary'
+import { TRDD_ZONES, type TrddZone } from './kinds'
+
+/**
+ * The ONE refusal every write verb gives an archived card (TRDD-MQE5D28T D8, owner ruling
+ * 2026-09-24: archived cards "are like corpses: you cannot change them anymore … photographed
+ * forever in the state it was when it was archived"). Keyed on the ZONE only, never on the
+ * column: a finished card not yet archived keeps IND rule 12's carve-outs (`updated:`,
+ * `superseded-by:`, the Approval log — D5), and an archived card has none at all. The
+ * archiving transition's own closing write is not a verb that calls this.
+ */
+export function archivedWriteRefusal(zone: string | null | undefined, what: string): string | null {
+  return zone === 'archived'
+    ? `refusing ${what}: the card is in design/archived/ — archived cards are immutable, definitive history (TRDD-MQE5D28T D8); nothing may change one, not even \`updated:\` or the Approval log`
+    : null
+}
+
+/**
+ * Identity fields (#168): set once at creation — or filled when missing, a repair — and never
+ * changed afterwards. Authorization reads `created-by` to decide who owns and who authored a
+ * card, so a generic field write that could rewrite it would let any writer make itself the
+ * author. This stops honest mistakes through the tools; it is not a security boundary against a
+ * writer that edits the file directly (that needs the server-side record tracked with #168).
+ */
+export const WRITE_ONCE_FIELDS = ['created-by', 'created'] as const
+
+/**
+ * The approval record (`approval-judge`, `approval-datetime`) and the mandate (`mandate`,
+ * `mandated-by`) are written ONLY by the code paths that make those decisions — `createTrdd` at
+ * mint, `promoteTrdd` at approval — never by a generic field write, where they would be a forged
+ * approval the D4 watchdog then trusts.
+ */
+export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by'] as const
+
+export interface FieldWriteOpts {
+  /**
+   * #168 SEAM — the future owner-approved identity-migration verb (legacy session labels and
+   * logins → the identity grammar) passes true to rewrite a legacy `created-by`. It is the ONLY
+   * exemption from write-once, it never exempts `created` or a record-only field, and nothing
+   * passes it today.
+   */
+  identityMigration?: boolean
+}
+
+/** Changes a generic write may not make to the identity and approval-record fields. */
+export function protectedFieldViolations(
+  prev: Record<string, string> | null,
+  next: Record<string, string> | null,
+  opts: FieldWriteOpts = {},
+): string[] {
+  const before = prev ?? {}
+  const after = next ?? {}
+  const bad: string[] = []
+  for (const field of WRITE_ONCE_FIELDS) {
+    const was = before[field] ?? ''
+    if (!was || (after[field] ?? '') === was) continue
+    if (field === 'created-by' && opts.identityMigration) continue
+    bad.push(`${field}: is write-once — it was ${JSON.stringify(was)} and may not be changed or removed`)
+  }
+  for (const field of RECORD_ONLY_FIELDS) {
+    if ((after[field] ?? '') !== (before[field] ?? '')) {
+      bad.push(`${field}: is written only by the create/approve code paths, never by a generic field write`)
+    }
+  }
+  return bad
+}
 
 /** ISO 8601 with a LOCAL offset — never bare, never `Z` (TRDD-ZRRDCQ52). */
 const ISO_OFFSET_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4}$/
@@ -89,6 +153,18 @@ export function validateTrddCandidate(
       `status: may not hold the pipeline value ${JSON.stringify(fm['status'])} — ` +
         "pipeline state lives in a TRDD's column:, never in status:",
     )
+  } else if (has('status')) {
+    // The life stage (owner ruling 2026-09-24: "status. enforced to the 3 values"), judged with
+    // the linter's own two rules (STATUS-INVALID, STATUS-ZONE-MISMATCH) so a write can no longer
+    // land the ERROR the linter then reports. "belongs in design/" is the phrase the per-document
+    // gate filters when the zone is unknown, exactly as it filters the column rule's.
+    const status = fm['status']
+    if (!(TRDD_STATUSES as readonly string[]).includes(status)) {
+      bad.push(`status ${JSON.stringify(status)} is not a life stage (${TRDD_STATUSES.join(' ')})`)
+    } else if (status !== statusForZone(zone)) {
+      const home = TRDD_ZONES.find((z) => statusForZone(z) === status)
+      bad.push(`status '${status}' belongs in design/${home}/ but this file is in design/${zone}/`)
+    }
   }
 
   if (has('trdd-id') && !ID_RE.test(fm['trdd-id'])) {
@@ -133,7 +209,11 @@ export function introducedViolations(
   prev: Record<string, string> | null,
   next: Record<string, string> | null,
   zone: TrddZone,
+  opts: FieldWriteOpts = {},
 ): string[] {
   const before = new Set(validateTrddCandidate(prev, zone))
-  return validateTrddCandidate(next, zone).filter((v) => !before.has(v))
+  return [
+    ...validateTrddCandidate(next, zone).filter((v) => !before.has(v)),
+    ...protectedFieldViolations(prev, next, opts),
+  ]
 }

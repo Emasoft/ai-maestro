@@ -17,6 +17,8 @@ import {
   setFrontmatterField,
   appendApprovalLog,
   appendTrddSection,
+  checkTrddBox,
+  setTrddField,
   isoLocal,
   STATE_HEADING_SOURCE,
 } from '@/lib/trdd-store'
@@ -385,15 +387,18 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(text).not.toMatch(/## STATE-notes\n\n- unrelated\n- new/)
   })
 
-  it('--create is refused on a definitive card for any heading except `## Approval log`', async () => {
+  // D8 INVERTED this test's fixture (was: an ARCHIVED complete card, where the Approval-log
+  // exemption was allowed). The exemption is IND rule 12's carve-out for a finished card NOT
+  // yet archived (D5): here a `complete` card with release-via publish, which stays in tasks/.
+  it('--create is refused on a finished (not archived) card for any heading except `## Approval log`', async () => {
     const id = 'FROZEN01'
-    const file = path.join(designDir, 'archived', `TRDD-20260709_102705+0200-${id}-frozen.md`)
+    const file = path.join(designDir, 'tasks', `TRDD-20260709_102705+0200-${id}-frozen.md`)
     fs.mkdirSync(path.dirname(file), { recursive: true })
     // Deliberately built WITHOUT `## Approval log` — `writeArchived`/`writeTask` always
     // include it, and the exemption is only observable on a card that lacks the section.
     fs.writeFileSync(
       file,
-      `---\ntrdd-id: ${id}\ntitle: frozen title\ncolumn: complete\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+      `---\ntrdd-id: ${id}\ntitle: frozen title\ncolumn: complete\nrelease-via: publish\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
     )
     const before = fs.readFileSync(file, 'utf-8')
     const refused = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
@@ -411,37 +416,32 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(fs.readFileSync(file, 'utf-8')).toMatch(/## Approval log\n\n- entry/)
   })
 
-  // #167 follow-up: the terminal-card `--create` refusal used to check the narrower
-  // TERMINAL_DONE set (the flock-done columns) instead of the freeze rule's own
-  // DEFINITIVE_COLUMNS (IND base step 12), so a `cancelled` card could still gain a
-  // brand-new section. `refused` is DELIBERATELY excluded here (owner ruling
-  // 2026-09-24, TRDD-MQE5D28T) — it is a column, not its own zone, and it is NOT
-  // definitive: see 'a refused proposal is OPEN, not frozen' below. `failed` is
-  // excluded too — see the two tests below it, which pin the owner ruling that
-  // `failed` is definitive only once archived.
-  it.each([
-    ['cancelled', 'archived'],
-  ] as const)('--create is refused on a %s card (zone %s)', async (column, zone) => {
-    const id = `FRZ${column.slice(0, 5).toUpperCase()}`.padEnd(8, '0').slice(0, 8)
-    const file = path.join(designDir, zone, `TRDD-20260709_102705+0200-${id}-frozen-${column}.md`)
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(
-      file,
-      `---\ntrdd-id: ${id}\ntitle: frozen ${column} title\ncolumn: ${column}\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
-    )
+  // D8 INVERTED this test (was: a `cancelled` card in archived/ still took an `## Approval
+  // log` append). An archived card takes NO append — not to a new section, not to the
+  // Approval log, not to an existing section — and the file stays byte-identical (G2).
+  it.each(['cancelled', 'complete', 'failed', 'dev'])('every append is refused on an archived %s card, Approval log included (D8)', async (column) => {
+    const id = `ARC${column.slice(0, 5).toUpperCase()}`.padEnd(8, '0').slice(0, 8)
+    const file = writeArchived(id, `archived-${column}`, column)
     const before = fs.readFileSync(file, 'utf-8')
-    const refused = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
-    expect(refused.ok).toBe(false)
-    if (!refused.ok) {
-      expect(refused.status).toBe(409)
-      expect(refused.error).toMatch(new RegExp(`definitive card \\(column: ${column}`))
+    for (const [heading, create] of [['## Some New Heading', true], ['Approval log', true], ['Acceptance', false]] as const) {
+      const r = await appendTrddSection(designDir, id, heading, '- x', { iso: isoLocal().iso, create })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.status).toBe(409)
+        expect(r.error).toMatch(/archived cards are immutable/)
+      }
     }
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    expect(findTrdd(designDir, id)!.zone).toBe('archived')
+  })
 
-    // `## Approval log` stays exempt even on these columns.
-    const allowed = await appendTrddSection(designDir, id, 'Approval log', '- entry', { iso: isoLocal().iso, create: true })
-    expect(allowed.ok).toBe(true)
-    if (allowed.ok) expect(allowed.created).toBe(true)
+  // Positive control for the G2 refusal above: the same append on the same column in tasks/
+  // succeeds, so the refusal is the zone rule and not an earlier, unrelated failure.
+  it('an append to an existing section on a tasks/ card succeeds (positive control for G2)', async () => {
+    const id = 'ARCCTRL1'
+    writeTask(id, 'append-control', 'dev')
+    const r = await appendTrddSection(designDir, id, 'Approval log', '- x', { iso: isoLocal().iso })
+    expect(r.ok).toBe(true)
   })
 
   // Owner ruling (2026-09-24, TRDD-MQE5D28T): "it remains in the proposals and can
@@ -490,8 +490,61 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.status).toBe(409)
-      expect(r.error).toMatch(/definitive card \(column: failed/)
+      // D8: refused by the archived-zone rule (G2), which runs before the D5 freeze.
+      expect(r.error).toMatch(/archived cards are immutable/)
     }
+  })
+})
+
+describe('checkTrddBox / setTrddField refuse an ARCHIVED card (D8, step 5 G1/G3)', () => {
+  it('checkTrddBox is refused on an archived card, file byte-identical', async () => {
+    const file = writeArchived('ARCBOX01', 'boxed', 'complete')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await checkTrddBox(designDir, 'ARCBOX01', 1, { iso: isoLocal().iso, check: false })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/archived cards are immutable/)
+    }
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('setTrddField is refused on an archived card, file byte-identical', async () => {
+    const file = writeArchived('ARCSET01', 'set-me', 'complete')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await setTrddField(designDir, 'ARCSET01', 'severity', 'high', { iso: isoLocal().iso })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/archived cards are immutable/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('positive control: the same set lands on a tasks/ card', async () => {
+    writeTask('LIVESET1', 'set-me', 'dev')
+    const r = await setTrddField(designDir, 'LIVESET1', 'severity', 'high', { iso: isoLocal().iso })
+    expect(r.ok).toBe(true)
+  })
+
+  it('setTrddField refuses rewriting created-by (write-once, #168), file byte-identical', async () => {
+    const file = writeTask('LIVESET2', 'owned', 'dev', designDir, 'created-by: main-agent@fixture\n')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await setTrddField(designDir, 'LIVESET2', 'created-by', 'someone-else', { iso: isoLocal().iso })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/created-by: is write-once/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('setTrddField refuses writing an approval-record field (#168)', async () => {
+    writeTask('LIVESET3', 'judged', 'dev')
+    const r = await setTrddField(designDir, 'LIVESET3', 'approval-judge', 'manager', { iso: isoLocal().iso })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/approval-judge: is written only/)
+  })
+
+  it('setTrddField refuses a status that disagrees with the folder', async () => {
+    writeTask('LIVESET4', 'staged', 'dev')
+    const r = await setTrddField(designDir, 'LIVESET4', 'status', 'proposed', { iso: isoLocal().iso })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/belongs in design\/proposals\//)
   })
 })
 
@@ -877,115 +930,36 @@ describe('trdd-store lifecycle transitions', () => {
     expect(t.column).toBe('cancelled')
   })
 
-  // TRDD-MUB7NTRF — the one terminal-to-terminal edit IND base step 12 permits:
-  // complete/completed → superseded on a card ALREADY in archived/, in place, no
-  // zone move, no git mv. Before this, `archiveTrdd` refused outright ("already
-  // terminal") and `set column=...` refused as "half a transition" — leaving a
-  // checklist-less terminal card with no sanctioned way to be superseded.
-  it('archive accepts an in-place complete → superseded edit on a card already in archived/', async () => {
-    writeArchived('OLDD0001', 'old-card', 'complete')
+  // G9 (D8) — TRDD-MUB7NTRF's in-place archived → superseded rewrite is WITHDRAWN: it
+  // overwrote the column an archived card was "photographed" in. The replacement records the
+  // relation instead (`supersedes:` on the live card). These tests replace MUB7NTRF's seven,
+  // which pinned the rewrite; every archive call on an archived card is now a 409, whatever
+  // the state and whatever the column, and the file stays byte-identical.
+  it.each([
+    ['complete', 'superseded', 'OLDD0001'],
+    ['completed', 'superseded', 'OLDD0002'],
+    ['failed', 'superseded', 'OLDD0003'],
+    ['complete', 'cancelled', 'OLDD0004'],
+    ['dev', undefined, 'OLDD0005'],
+  ] as const)('archive of an ARCHIVED %s card (state %s) is refused, file byte-identical (G9, D8)', async (column, state, id) => {
+    const file = writeArchived(id, `old-${column}`, column)
     writeTask('NEWX0001', 'the-replacement', 'dev')
-    const r = await archiveTrdd(designDir, 'OLDD0001', {
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await archiveTrdd(designDir, id, {
       approver: 'manager',
-      state: 'superseded',
+      ...(state ? { state } : {}),
       supersededBy: 'TRDD-NEWX0001',
-      reason: 'superseded by the replacement card',
-      iso: ISO,
-    })
-    expect(r.ok).toBe(true)
-    if (r.ok) {
-      expect(r.from).toBe('archived')
-      expect(r.to).toBe('archived')
-      expect(r.column).toBe('superseded')
-    }
-    const t = findTrdd(designDir, 'OLDD0001')!
-    expect(t.zone).toBe('archived') // no zone move — stays put per step 12
-    expect(t.column).toBe('superseded')
-    expect(t.frontmatter['superseded-by']).toEqual(['TRDD-NEWX0001'])
-    expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('SUPERSEDED by manager')
-  })
-
-  it('archive accepts the in-place edit with an OPEN (non-terminal) --superseded-by target', async () => {
-    writeArchived('OLDD0002', 'old-card-2', 'completed')
-    writeTask('NEWX0002', 'still-in-dev', 'dev') // open, not terminal — accept box says "open or terminal"
-    const r = await archiveTrdd(designDir, 'OLDD0002', {
-      approver: 'manager',
-      state: 'superseded',
-      supersededBy: 'TRDD-NEWX0002',
-      reason: 'closing the checklist gap',
-      iso: ISO,
-    })
-    expect(r.ok).toBe(true)
-    const t = findTrdd(designDir, 'OLDD0002')!
-    expect(t.column).toBe('superseded')
-  })
-
-  it('archive REFUSES the in-place edit (409) when --superseded-by is missing', async () => {
-    writeArchived('OLDD0003', 'old-card-3', 'complete')
-    const r = await archiveTrdd(designDir, 'OLDD0003', { approver: 'manager', state: 'superseded', reason: 'x', iso: ISO })
-    expect(r.ok).toBe(false)
-    if (!r.ok) {
-      expect(r.status).toBe(409)
-      expect(r.error).toMatch(/--superseded-by/)
-    }
-    expect(findTrdd(designDir, 'OLDD0003')!.column).toBe('complete') // untouched
-  })
-
-  it('archive REFUSES the in-place edit (404) when --superseded-by does not resolve', async () => {
-    writeArchived('OLDD0004', 'old-card-4', 'complete')
-    const r = await archiveTrdd(designDir, 'OLDD0004', {
-      approver: 'manager',
-      state: 'superseded',
-      supersededBy: 'TRDD-GHOSTX01',
-      reason: 'x',
+      reason: 'a newer card replaces it',
       iso: ISO,
     })
     expect(r.ok).toBe(false)
     if (!r.ok) {
-      expect(r.status).toBe(404)
-      expect(r.error).toMatch(/GHOSTX01/)
-    }
-  })
-
-  it('archive REFUSES the in-place edit (409) with no --reason', async () => {
-    writeArchived('OLDD0005', 'old-card-5', 'complete')
-    writeTask('NEWX0005', 'the-replacement-5', 'dev')
-    const r = await archiveTrdd(designDir, 'OLDD0005', { approver: 'manager', state: 'superseded', supersededBy: 'TRDD-NEWX0005', iso: ISO })
-    expect(r.ok).toBe(false)
-    if (!r.ok) {
       expect(r.status).toBe(409)
-      expect(r.error).toMatch(/--reason/)
+      expect(r.error).toMatch(/already archived/)
+      expect(r.error).toMatch(new RegExp(`supersedes: \\[${id}\\]`)) // points at the sanctioned route
     }
-  })
-
-  it.each(['published', 'live', 'failed'])(
-    'archive REFUSES the in-place edit (409) when the archived column is a release-pipeline statement: %s',
-    async (col) => {
-      writeArchived('OLDD0006', `old-card-${col}`, col)
-      writeTask('NEWX0006', `the-replacement-${col}`, 'dev')
-      const r = await archiveTrdd(designDir, 'OLDD0006', {
-        approver: 'manager',
-        state: 'superseded',
-        supersededBy: 'TRDD-NEWX0006',
-        reason: 'x',
-        iso: ISO,
-      })
-      expect(r.ok).toBe(false)
-      if (!r.ok) {
-        expect(r.status).toBe(409)
-        expect(r.error).toMatch(/NON-EXEMPT/)
-      }
-    },
-  )
-
-  it('archive still refuses a non-superseded state on an already-archived card (409, unchanged behaviour)', async () => {
-    writeArchived('OLDD0007', 'old-card-7', 'complete')
-    const r = await archiveTrdd(designDir, 'OLDD0007', { approver: 'manager', state: 'cancelled', iso: ISO })
-    expect(r.ok).toBe(false)
-    if (!r.ok) {
-      expect(r.status).toBe(409)
-      expect(r.error).toMatch(/already terminal/)
-    }
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    expect(findTrdd(designDir, id)!.zone).toBe('archived')
   })
 })
 

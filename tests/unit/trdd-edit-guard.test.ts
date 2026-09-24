@@ -164,11 +164,20 @@ describe('validateTrddFieldEdits — referenced TRDD ids must resolve', () => {
   })
 })
 
+// The mandate is written only at mint (`createTrdd`), so a field edit may no longer WRITE
+// `mandate`/`mandated-by` (#168, record-only fields). The forged-authority rule still guards
+// the edits it can see: an edit to an EXISTING mandate's floor, judged on the merged card.
 describe('validateTrddFieldEdits — mandate authority', () => {
-  it('refuses mandate: true issued below the floor (forged approval)', () => {
+  it.each(['mandate', 'mandated-by'])('refuses writing %s through a field edit (record-only)', (field) => {
+    const r = validateTrddFieldEdits({ [field]: field === 'mandate' ? 'true' : 'manager', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/written only by the create\/approve code paths/)
+  })
+
+  it('refuses raising the floor above an existing mandate (forged approval)', () => {
     const r = validateTrddFieldEdits(
-      { mandate: 'true', 'mandated-by': 'orchestrator', 'min-approval-requirement': 'manager', updated: ISO },
-      baseFm(),
+      { 'min-approval-requirement': 'manager', updated: ISO },
+      baseFm({ mandate: true, 'mandated-by': 'orchestrator', 'min-approval-requirement': 'none' }),
       resolveAll,
       'tasks',
     )
@@ -176,10 +185,10 @@ describe('validateTrddFieldEdits — mandate authority', () => {
     if (!r.ok) expect(r.error).toMatch(/forged/)
   })
 
-  it('accepts mandate: true issued at or above the floor (positive control)', () => {
+  it('accepts an unrelated edit on a card whose mandate is at or above the floor (positive control)', () => {
     const r = validateTrddFieldEdits(
-      { mandate: 'true', 'mandated-by': 'manager', 'min-approval-requirement': 'manager', updated: ISO },
-      baseFm(),
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ mandate: true, 'mandated-by': 'manager', 'min-approval-requirement': 'manager' }),
       resolveAll,
       'tasks',
     )
@@ -188,8 +197,8 @@ describe('validateTrddFieldEdits — mandate authority', () => {
 
   it('treats mandated-by: self as rank "none", not an unknown rung', () => {
     const r = validateTrddFieldEdits(
-      { mandate: 'true', 'mandated-by': 'self', 'min-approval-requirement': 'none', updated: ISO },
-      baseFm(),
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ mandate: true, 'mandated-by': 'self', 'min-approval-requirement': 'none' }),
       resolveAll,
       'tasks',
     )
@@ -198,13 +207,60 @@ describe('validateTrddFieldEdits — mandate authority', () => {
 
   it('refuses an authority the ladder does not know', () => {
     const r = validateTrddFieldEdits(
-      { mandate: 'true', 'mandated-by': 'nonsense-rank', updated: ISO },
-      baseFm(),
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ mandate: true, 'mandated-by': 'nonsense-rank' }),
       resolveAll,
       'tasks',
     )
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/does not know/)
+  })
+})
+
+describe('validateTrddFieldEdits — identity and approval-record fields (#168)', () => {
+  it.each(['created-by', 'created'])('refuses changing an existing %s (write-once)', (field) => {
+    const r = validateTrddFieldEdits(
+      { [field]: field === 'created' ? '2026-01-02T00:00:00+0100' : 'someone-else', updated: ISO },
+      baseFm({ 'created-by': 'main-agent@x' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/write-once/)
+  })
+
+  it('allows filling a MISSING created-by (a repair, not a rewrite)', () => {
+    const r = validateTrddFieldEdits({ 'created-by': 'main-agent@x', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(r.ok).toBe(true)
+  })
+
+  it.each(['approval-judge', 'approval-datetime'])('refuses writing %s through a field edit (record-only)', (field) => {
+    const r = validateTrddFieldEdits(
+      { [field]: field === 'approval-datetime' ? '2026-01-02T00:00:00+0100' : 'manager', updated: ISO },
+      baseFm(),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/create\/approve/)
+  })
+})
+
+describe('validateTrddFieldEdits — status is the life stage', () => {
+  it('refuses a status that disagrees with the folder', () => {
+    const r = validateTrddFieldEdits({ status: 'proposed', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/carries status: tasked/)
+  })
+
+  it('refuses a value outside the three stages', () => {
+    const r = validateTrddFieldEdits({ status: 'normative', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(r.ok).toBe(false)
+  })
+
+  it('accepts the folder-derived value (positive control)', () => {
+    const r = validateTrddFieldEdits({ status: 'tasked', updated: ISO }, baseFm(), resolveAll, 'tasks')
+    expect(r.ok).toBe(true)
   })
 })
 
@@ -240,14 +296,28 @@ describe('validateTrddFieldEdits — definitive column freeze (IND base §12)', 
     if (!r.ok) expect(r.error).toMatch(/definitive/)
   })
 
-  it('allows "updated" and "superseded-by" on a definitive card (the two carve-outs)', () => {
+  // D8 INVERTED this test (was: the carve-outs allowed on an ARCHIVED complete card). The two
+  // carve-outs belong to a finished card NOT yet archived (D5) — here a `complete` card with
+  // release-via publish, which legitimately stays in tasks/. On an archived card they are refused.
+  it('allows "updated" and "superseded-by" on a finished card still in tasks/ (the D5 carve-outs)', () => {
+    const r = validateTrddFieldEdits(
+      { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
+      baseFm({ column: 'complete', 'release-via': 'publish' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it('refuses even "updated" and "superseded-by" on an ARCHIVED card (D8 — no carve-out)', () => {
     const r = validateTrddFieldEdits(
       { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
       baseFm({ column: 'complete' }),
       resolveAll,
       'archived',
     )
-    expect(r.ok).toBe(true)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/design\/archived\/ — archived cards are immutable/)
   })
 
   // #167 follow-up: the guard used to check the narrower flock-done TERMINAL_DONE set
@@ -267,14 +337,16 @@ describe('validateTrddFieldEdits — definitive column freeze (IND base §12)', 
     if (!r.ok) expect(r.error).toMatch(/definitive/)
   })
 
-  it.each(['cancelled', 'refused'])('allows "updated" and "superseded-by" on a %s card', (column) => {
+  // D8 INVERTED this test (was: allowed on these columns in archived/). A `cancelled` card in
+  // archived/ takes no edit at all; the carve-outs survive only for a finished card outside it.
+  it.each(['cancelled', 'refused'])('refuses even "updated" and "superseded-by" on an archived %s card (D8)', (column) => {
     const r = validateTrddFieldEdits(
       { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
       baseFm({ column }),
       resolveAll,
       'archived',
     )
-    expect(r.ok).toBe(true)
+    expect(r.ok).toBe(false)
   })
 
   // Owner ruling (2026-09-24): "of course they stays open for retry" — a `failed`

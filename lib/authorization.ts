@@ -113,6 +113,10 @@ export interface TrddAuthContext {
   assigneeAgentId?: string | null
   /** The TRDD's author (`created-by:`). Self-approval is refused — see below. */
   createdByAgentId?: string | null
+  /** The folder the card sits in — its life stage (TRDD-MQE5D28T). `archive` needs it. */
+  zone?: 'proposals' | 'tasks' | 'archived' | null
+  /** The card's `column:` as read from disk BEFORE any transition. `archive` needs it. */
+  column?: string | null
 }
 
 /**
@@ -510,11 +514,45 @@ export function authorize(
         return { allowed: true }
       }
 
-      // `archive` retires a terminal-DONE card. The owner or MANAGER may.
-      // WHICH states are archivable — never `failed` — is a DATA invariant and
-      // lives in the route, because it must bind the human owner too (who is
-      // granted unconditionally above and never reaches this matrix).
+      // `archive` makes a card DEFINITIVE (TRDD-MQE5D28T D3, owner rulings 2026-09-24).
+      // Who may do it depends on the card's life stage, read from disk BEFORE the move:
+      //   proposals/ → its AUTHOR only. MANAGER and CHIEF-OF-STAFF never archive a proposal.
+      //   failed     → MANAGER, or the CHIEF-OF-STAFF of the assignee's team — never the
+      //                owner. The column checked is the one on disk, so asking for
+      //                `state: cancelled` cannot launder a failed card past this rule.
+      //   otherwise  → MANAGER or the owner (assignee or author), as before.
+      // These rules bind AGENTS: the human system owner is granted before this matrix
+      // (`!auth.agentId`), which is intended — outside the harness the USER decides.
+      // WHICH target states are legal is a DATA invariant enforced in trdd-authz.ts,
+      // because it must bind that human owner too.
       case 'archive': {
+        if (!trdd.zone) {
+          // Fail closed: without the life stage the author-only and failed-card rules
+          // cannot be applied, and guessing "tasked" would grant MANAGER a proposal.
+          return { allowed: false, reason: 'archive requires the card\'s folder (zone) to decide who may archive it' }
+        }
+        if (trdd.zone === 'proposals') {
+          if (trdd.createdByAgentId && trdd.createdByAgentId === auth.agentId) return { allowed: true }
+          return {
+            allowed: false,
+            reason: 'Only its author can archive a proposal — MANAGER and CHIEF-OF-STAFF never archive a proposal (owner ruling 2026-09-24)',
+          }
+        }
+        if (trdd.column === 'failed') {
+          if (title === 'manager') return { allowed: true }
+          if (title === 'chief-of-staff' && trdd.assigneeAgentId) {
+            // Same team scope as the ORCHESTRATOR edit rule: a COS is its own team's
+            // entry point (R6 v3). An unresolvable assignee has no team → deny.
+            const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+            if (cosTeamId && cosTeamId === lookupTeamIdForAgent(trdd.assigneeAgentId)) {
+              return { allowed: true }
+            }
+          }
+          return {
+            allowed: false,
+            reason: 'Archiving a failed TRDD makes it definitive — only MANAGER, or the CHIEF-OF-STAFF of its assignee\'s team, may decide that (owner rulings 2026-09-24)',
+          }
+        }
         if (title === 'manager') return { allowed: true }
         const isOwner =
           (trdd.assigneeAgentId && trdd.assigneeAgentId === auth.agentId) ||

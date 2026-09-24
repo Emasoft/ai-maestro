@@ -29,12 +29,11 @@ import { getAgent, getAgentByNameAnyHost } from './agent-registry'
 /**
  * The only columns an `archive` may target.
  *
- * `failed` is deliberately ABSENT, and that absence is the whole point. A failed
- * TRDD is RETRYABLE: it stays on the board, its cause gets fixed (often by other
- * TRDDs), and it is tried again. Archiving it would quietly convert a task that
- * still needs doing into a task nobody will ever look at again. Giving up on a
- * failed TRDD is an explicit `cancelled` — a decision someone makes, not a
- * side-effect of the word "archive".
+ * `failed` is not a TARGET: archiving never marks a card failed. A card that is
+ * ALREADY failed stays open and retryable in design/tasks/ by default; archiving it
+ * is a separate, definitive act that only MANAGER or the assignee's team
+ * CHIEF-OF-STAFF may take (owner rulings 2026-09-24, TRDD-MQE5D28T D3 — enforced in
+ * authorization.ts `case 'archive'` on the column read from disk).
  */
 export const ARCHIVABLE_STATES = new Set(['completed', 'cancelled', 'superseded'])
 
@@ -124,6 +123,12 @@ function authorizeTrddVerb(
     minApproval: readMinApproval(fm),
     assigneeAgentId: resolveActor(fm['assignee']),
     createdByAgentId: resolveActor(fm['created-by']),
+    // The life stage and the column AS ON DISK: `archive` authority turns on both
+    // (proposal → author only; failed → MANAGER / team COS), and reading them here,
+    // inside the document lock, is what stops a requested target state from
+    // standing in for the card's real one.
+    zone: trdd.zone,
+    column: trdd.column,
   })
 
   if (!decision.allowed) {
@@ -184,16 +189,6 @@ export async function withAuthorizedTrdd<T>(
   })
 }
 
-/**
- * Reject an archive that targets a non-terminal state — `failed` above all.
- *
- * This is a DATA invariant, not an authorization one, so it lives HERE and not
- * in authorize(): the human system-owner is granted unconditionally inside
- * authorize() (`!auth.agentId` → allowed) and would never reach a check placed
- * there. A rule that protects a task from being lost must bind the owner too.
- *
- * @returns a NextResponse the route must RETURN (400), or null to proceed.
- */
 /**
  * TRDD-P6MSMQ2I — the terminal-column COMPLETION gate, enforced where the transition
  * actually happens.
@@ -263,6 +258,17 @@ export function rejectIncompleteChecklist(
   return null
 }
 
+/**
+ * Reject an archive whose TARGET state is not completed | cancelled | superseded —
+ * `failed` included, since archiving never marks a card failed.
+ *
+ * This is a DATA invariant, not an authorization one, so it lives HERE and not
+ * in authorize(): the human system-owner is granted unconditionally inside
+ * authorize() (`!auth.agentId` → allowed) and would never reach a check placed
+ * there. A rule that protects a task from being lost must bind the owner too.
+ *
+ * @returns a NextResponse the route must RETURN (400), or null to proceed.
+ */
 export function rejectUnarchivableState(state: unknown): NextResponse | null {
   const s = str(state)?.toLowerCase() ?? ''
   if (ARCHIVABLE_STATES.has(s)) return null

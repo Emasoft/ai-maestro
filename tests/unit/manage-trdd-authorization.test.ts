@@ -12,7 +12,15 @@
  * "MANAGER → always allowed" branch grants a MANAGER the two things the approval
  * system exists to deny — approving a USER-reserved TRDD, and approving its own.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// The team file, as authorize() reads it for team-scoped rules. Mocked so the COS
+// archive scope can be tested — and so no test here reads the developer's real
+// ~/.aimaestro/teams file. Default: no teams, which is what the ORCHESTRATOR
+// "outside the team" case already assumed.
+const teams = vi.hoisted(() => ({ list: [] as Array<Record<string, unknown>> }))
+vi.mock('@/lib/team-registry', () => ({ loadTeams: () => teams.list }))
+
 import { authorize, type TrddAuthContext } from '@/lib/authorization'
 import { rejectUnarchivableState, readMinApproval, ARCHIVABLE_STATES } from '@/lib/trdd-authz'
 import type { AgentAuthResult } from '@/lib/agent-auth'
@@ -162,17 +170,62 @@ describe('manage-trdd — edit is ownership, not tier', () => {
 })
 
 describe('manage-trdd — archive', () => {
+  beforeEach(() => { teams.list = [] })
+
+  // A tasked card that is not failed: the long-standing rule, MANAGER or owner.
+  const tasked = (over: Partial<TrddAuthContext>) => ctx({ verb: 'archive', zone: 'tasks', column: 'dev', ...over })
+
   it('MANAGER may archive', () => {
-    expect(can(MANAGER, ctx({ verb: 'archive' }))).toBe(true)
+    expect(can(MANAGER, tasked({}))).toBe(true)
   })
 
   it('the owner may archive its own card', () => {
-    expect(can(MEMBER, ctx({ verb: 'archive', assigneeAgentId: MEMBER_ID }))).toBe(true)
-    expect(can(MEMBER, ctx({ verb: 'archive', createdByAgentId: MEMBER_ID }))).toBe(true)
+    expect(can(MEMBER, tasked({ assigneeAgentId: MEMBER_ID }))).toBe(true)
+    expect(can(MEMBER, tasked({ createdByAgentId: MEMBER_ID }))).toBe(true)
   })
 
   it('an unrelated agent may not archive', () => {
-    expect(can(MEMBER, ctx({ verb: 'archive', assigneeAgentId: COS_ID }))).toBe(false)
+    expect(can(MEMBER, tasked({ assigneeAgentId: COS_ID }))).toBe(false)
+  })
+
+  it('no zone in the context → denied, even for MANAGER (fail closed)', () => {
+    const res = authorize(MANAGER, 'manage-trdd', undefined, ctx({ verb: 'archive', column: 'dev' }))
+    expect(res.allowed).toBe(false)
+    expect(res.reason).toMatch(/folder \(zone\)/)
+  })
+
+  // Owner ruling 2026-09-24 (TRDD-MQE5D28T): "the manager and the cos never archive a
+  // proposal. only the author can."
+  it('a proposal: its author may archive it; MANAGER, COS and a non-author assignee may not', () => {
+    const proposal = (over: Partial<TrddAuthContext>) =>
+      ctx({ verb: 'archive', zone: 'proposals', column: 'refused', createdByAgentId: MEMBER_ID, ...over })
+    expect(can(MEMBER, proposal({}))).toBe(true)
+    const mgr = authorize(MANAGER, 'manage-trdd', undefined, proposal({}))
+    expect(mgr.allowed).toBe(false)
+    expect(mgr.reason).toMatch(/Only its author can archive a proposal/)
+    expect(can(COS, proposal({}))).toBe(false)
+    expect(can(ORCH, proposal({ assigneeAgentId: ORCH_ID }))).toBe(false)
+  })
+
+  // Owner rulings R1/R3: archiving a failed card is MANAGER's or the CHIEF-OF-STAFF's call.
+  it('a failed card: MANAGER and the same-team COS may archive it; another team’s COS and the owner may not', () => {
+    teams.list = [
+      { id: 'team-a', agentIds: [MEMBER_ID], chiefOfStaffId: COS_ID },
+      { id: 'team-b', agentIds: [], chiefOfStaffId: ORCH_ID },
+    ]
+    const failed = ctx({ verb: 'archive', zone: 'tasks', column: 'failed', assigneeAgentId: MEMBER_ID, createdByAgentId: MEMBER_ID })
+    expect(can(MANAGER, failed)).toBe(true)
+    expect(can(COS, failed)).toBe(true)
+    const otherCos = agent(ORCH_ID, 'chief-of-staff') // COS of team-b
+    expect(can(otherCos, failed)).toBe(false)
+    const owner = authorize(MEMBER, 'manage-trdd', undefined, failed)
+    expect(owner.allowed).toBe(false)
+    expect(owner.reason).toMatch(/failed TRDD makes it definitive/)
+  })
+
+  it('a failed card with an unresolvable assignee: the COS is denied (no team to match)', () => {
+    teams.list = [{ id: 'team-a', agentIds: [MEMBER_ID], chiefOfStaffId: COS_ID }]
+    expect(can(COS, ctx({ verb: 'archive', zone: 'tasks', column: 'failed', assigneeAgentId: null }))).toBe(false)
   })
 })
 
@@ -199,6 +252,8 @@ describe('archive state — a failed TRDD is retryable and must never be archive
   it('binds the HUMAN owner too — it is a data invariant, not an authorization one', () => {
     // authorize() grants the system-owner unconditionally, so a check placed
     // there would never run for the human. This one is route-level on purpose.
+    // No zone on purpose: the owner is granted BEFORE the archive matrix, so even the
+    // fail-closed zone check never binds it.
     expect(can(SYSTEM_OWNER, ctx({ verb: 'archive' }))).toBe(true)
     expect(rejectUnarchivableState('failed')).not.toBeNull()
   })

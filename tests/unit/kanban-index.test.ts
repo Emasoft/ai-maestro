@@ -16,6 +16,7 @@ import os from 'os'
 import path from 'path'
 import { createHash } from 'crypto'
 import {
+  ARCHIVED_COLUMN,
   KANBAN_INDEX_COLUMNS,
   UNKNOWN_COLUMN,
   buildKanbanIndex,
@@ -120,6 +121,21 @@ describe('buildKanbanIndex reads the TRDD, which IS the card', () => {
     const index = buildKanbanIndex(dir, ISO)
     expect(index.rows).toHaveLength(1)
     expect(index.byColumn[UNKNOWN_COLUMN]).toEqual(['WEIRD001'])
+  })
+
+  it('an archived card with an unfinished column is history, never live WIP (TRDD-MQE5D28T D2)', () => {
+    // Archiving keeps the column, so an archived `dev` card still says `dev`. It must not
+    // be counted in the `dev` bucket next to the live one; a finished archived column
+    // keeps its own bucket, exactly as before.
+    write('tasks', 'LIVEDEV1', 'title: live\ncolumn: dev\n')
+    write('archived', 'ARCHDEV1', 'title: archived dev\ncolumn: dev\n')
+    write('archived', 'ARCHFAIL', 'title: archived failed\ncolumn: failed\n')
+    write('archived', 'ARCHDONE', 'title: archived done\ncolumn: completed\n')
+    const { byColumn } = buildKanbanIndex(dir, ISO)
+    expect(byColumn.dev).toEqual(['LIVEDEV1'])
+    expect(byColumn.failed).toEqual([])
+    expect(byColumn[ARCHIVED_COLUMN]).toEqual(['ARCHDEV1', 'ARCHFAIL'])
+    expect(byColumn.completed).toEqual(['ARCHDONE'])
   })
 
   it('orders rows by column, then priority, then id — deterministically', () => {

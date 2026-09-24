@@ -30,6 +30,7 @@ import { statePath } from '@/lib/ecosystem-constants'
 import { TRDD_ZONES, listTrddFiles, parseTrddFile, type TrddZone } from '@/lib/trdd-store'
 import { toGraphNode } from '@/lib/trdd-graph'
 import { corpusIdentity } from '@/lib/corpus-identity'
+import { DEFINITIVE_COLUMNS } from '@/lib/trdd-vocabulary'
 
 /**
  * Column order for a rendered board. `DEFAULT_STATUSES` is the ratified 22-column
@@ -51,6 +52,15 @@ export const KANBAN_INDEX_COLUMNS: readonly string[] = Array.from(
  * A non-empty bucket is an alarm, and a test asserts it stays empty.
  */
 export const UNKNOWN_COLUMN = '(unknown)'
+
+/**
+ * Where an archived card lands when its column is NOT a finished one. Archiving keeps
+ * the card's column as it was (TRDD-MQE5D28T D2: "photographed forever"), so a card
+ * archived from `dev`, `blocked` or `failed` still SAYS `dev`/`blocked`/`failed` — and
+ * bucketing it there would report definitive history as live work in progress. Finished
+ * columns (`DEFINITIVE_COLUMNS`) keep their own bucket, as before.
+ */
+export const ARCHIVED_COLUMN = '(archived)'
 
 export interface KanbanRow {
   id: string
@@ -182,8 +192,12 @@ export function buildKanbanIndex(designDir: string, generatedAt: string): Kanban
   const byColumn: Record<string, string[]> = {}
   for (const c of KANBAN_INDEX_COLUMNS) byColumn[c] = []
   byColumn[UNKNOWN_COLUMN] = []
+  byColumn[ARCHIVED_COLUMN] = []
   for (const r of rows) {
-    const key = order.has(r.column) ? r.column : UNKNOWN_COLUMN
+    const key =
+      r.zone === 'archived' && !DEFINITIVE_COLUMNS.has(r.column)
+        ? ARCHIVED_COLUMN
+        : order.has(r.column) ? r.column : UNKNOWN_COLUMN
     byColumn[key].push(r.id)
   }
 

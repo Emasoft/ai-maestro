@@ -106,9 +106,14 @@ describe('trddgrep write verbs refuse an ARCHIVED card (D8, step 5 G1/G2/G3/G5)'
 
 describe('trddgrep set refuses the #168 protected fields', () => {
   it.each([
-    ['created-by', 'someone-else', /write-once/],
+    // Values must satisfy the #168 identity grammar (`user` | `main-agent@<project-id>` |
+    // `<agent-name>#<agent-uuid>`) so the case reaches the write-once/create-approve gate
+    // under test, rather than being refused earlier by the identity-shape check. Using the
+    // `<agent-name>#<agent-uuid>` form (not the generic `user` value) also rules out `user`
+    // ever being treated as a default/no-op identity somewhere in the guard.
+    ['created-by', 'bob#00000000-0000-0000-0000-000000000000', /write-once/],
     ['created', '2026-02-02T00:00:00+0100', /write-once/],
-    ['approval-judge', 'manager', /create\/approve/],
+    ['approval-judge', 'bob#00000000-0000-0000-0000-000000000000', /create\/approve/],
     ['mandated-by', 'manager', /create\/approve/],
   ])('set %s is refused, file byte-identical', (field, value, message) => {
     const file = card('tasks', 'LIVECRD2', 'dev')

@@ -789,7 +789,11 @@ switch (cmd) {
     // not be followed by a word char or hyphen) so `## STATE-notes`/`## Statement of
     // work`/`### STATE` are never mistaken for the STATE block — the SAME pattern the
     // `append` verb's STATE alias uses to locate this exact heading (lib/trdd-store.ts).
-    const state = fresh.body.match(new RegExp(`${STATE_HEADING_SOURCE}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |\\n$)`, 'im'))
+    // #167 follow-up: the tail used to be `(?=\n## |\n$)` — under the `m` flag `\n$` also
+    // matches a BLANK line, so a two-paragraph STATE block truncated at its first blank
+    // line. `(?![\s\S])` only matches the true end of the string, so the capture now runs
+    // to the next `## ` heading or the actual end of the body, whichever comes first.
+    const state = fresh.body.match(new RegExp(`${STATE_HEADING_SOURCE}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |(?![\\s\\S]))`, 'im'))
     if (state) {
       console.log(C.b('\n  ⏵ STATE (authoritative — supersedes the body)\n'))
       for (const l of state[1].trim().split('\n').slice(0, 30)) console.log(`  ${l}`)

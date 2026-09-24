@@ -46,6 +46,22 @@ export const TERMINAL_DONE: ReadonlySet<string> = new Set([
   'superseded',
 ])
 
+/** Columns whose body is FROZEN (IND base trdd-design-tasks.md step 12): every
+ * `TERMINAL_DONE` column PLUS `failed` (frozen once it reaches that terminal branch)
+ * and the two terminal-but-not-shipped folder states `cancelled` and `refused` —
+ * the `--create` section guard must refuse a new section on any of these, not only
+ * the flock-done subset `TERMINAL_DONE` tracks for the completion gate. */
+export const FROZEN_COLUMNS: ReadonlySet<string> = new Set([
+  'complete',
+  'completed',
+  'failed',
+  'superseded',
+  'published',
+  'live',
+  'cancelled',
+  'refused',
+])
+
 
 // Cards that actually SHIPPED — a hold on a dependency clears only when the dependency
 // really landed. `superseded` is terminal but means the dependency was never satisfied,

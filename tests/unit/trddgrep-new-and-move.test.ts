@@ -501,6 +501,50 @@ describe('trddgrep append / check-box', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
   })
 
+  it('#167 (d): `STATE` lands in the CANONICAL block, not a later `## ⏵ STATE UPDATE — ...` section', () => {
+    const id = seed()
+    const file = only('tasks')
+    // The canonical block comes first (as every real card puts it, right after the
+    // title); a later `STATE UPDATE` section is a real, common heading (see
+    // design/archived/TRDD-…-3GU9V70H-…) that must NOT be mistaken for the alias — its
+    // "STATE" is followed by a space then a word, not by an em dash or end of line.
+    fs.appendFileSync(
+      file,
+      '\n## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-01-01\n\n' +
+        '- canonical prior state\n\n' +
+        '## ⏵ STATE UPDATE — 2026-01-02 — a later followup section\n\n' +
+        '- update prior state\n',
+    )
+    git('add', '-A'); git('commit', '-qm', 'seed canonical + update state blocks')
+    const r = cli('append', id, 'STATE', '- alias landed')
+    expect(r.status).toBe(0)
+    const text = fs.readFileSync(file, 'utf-8')
+    // Landed after the canonical block's own content, never after the UPDATE section's.
+    expect(text).toMatch(/- canonical prior state\n- alias landed/)
+    expect(text).not.toMatch(/- update prior state\n- alias landed/)
+  })
+
+  it('#167 (d, no canonical block): `STATE` is REFUSED, not mistaken for a `## ⏵ STATE UPDATE — ...` section', () => {
+    // The (d) test above cannot fail under the pre-fix regex, because `findHeadingLine`
+    // already picks the FIRST match and the canonical block is listed first there — so
+    // over-matching "STATE UPDATE" is invisible whenever a canonical block also exists.
+    // This is the shape that actually exercises the over-match: a card carrying ONLY a
+    // "STATE UPDATE" follow-up section (a real corpus shape, e.g.
+    // design/archived/TRDD-…-3GU9V70H-…, which has no canonical STATE block at all).
+    // Under the old lookahead, `## ⏵ STATE UPDATE — ...` matched the alias and `append
+    // STATE` would have landed inside it; the fix must refuse instead, exactly as it does
+    // for any other card with no canonical STATE heading.
+    const id = seed()
+    const file = only('tasks')
+    fs.appendFileSync(file, '\n## ⏵ STATE UPDATE — 2026-01-02 — a followup section, no canonical block\n\n- update prior state\n')
+    git('add', '-A'); git('commit', '-qm', 'seed a STATE UPDATE section with no canonical block')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = cli('append', id, 'STATE', '- x')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/no section named "STATE"/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
   it('#167 (e): --create is refused on a terminal card, except for `## Approval log`', () => {
     const id = seed()
     expect(cli('check-box', id, '1').status).toBe(0)

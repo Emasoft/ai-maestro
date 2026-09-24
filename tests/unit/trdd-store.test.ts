@@ -391,6 +391,37 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     if (allowed.ok) expect(allowed.created).toBe(true)
     expect(fs.readFileSync(file, 'utf-8')).toMatch(/## Approval log\n\n- entry/)
   })
+
+  // #167 follow-up: the terminal-card `--create` refusal used to check the narrower
+  // TERMINAL_DONE set (the flock-done columns) instead of the freeze rule's own
+  // FROZEN_COLUMNS (IND base step 12), so `failed`, `cancelled`, and `refused` cards
+  // could still gain a brand-new section — three shapes the freeze is supposed to cover.
+  it.each([
+    ['failed', 'tasks'],
+    ['cancelled', 'archived'],
+    ['refused', 'refused'],
+  ] as const)('--create is refused on a %s card (zone %s)', async (column, zone) => {
+    const id = `FRZ${column.slice(0, 5).toUpperCase()}`.padEnd(8, '0').slice(0, 8)
+    const file = path.join(designDir, zone, `TRDD-20260709_102705+0200-${id}-frozen-${column}.md`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      `---\ntrdd-id: ${id}\ntitle: frozen ${column} title\ncolumn: ${column}\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+    )
+    const before = fs.readFileSync(file, 'utf-8')
+    const refused = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) {
+      expect(refused.status).toBe(409)
+      expect(refused.error).toMatch(new RegExp(`terminal card \\(column: ${column}\\)`))
+    }
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+
+    // `## Approval log` stays exempt even on these three columns.
+    const allowed = await appendTrddSection(designDir, id, 'Approval log', '- entry', { iso: isoLocal().iso, create: true })
+    expect(allowed.ok).toBe(true)
+    if (allowed.ok) expect(allowed.created).toBe(true)
+  })
 })
 
 describe('trdd-store lifecycle transitions', () => {

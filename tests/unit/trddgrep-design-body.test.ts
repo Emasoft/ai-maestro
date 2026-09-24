@@ -82,6 +82,16 @@ const CARDS = [
     'card with STATE then a checklist, no divider',
     '## STATE — read first\n\nSTATEMARK the state.\n\n## Acceptance\n\n- [x] CHECKLISTMARK one\n- [ ] CHECKLISTMARK two',
   ),
+  // #167 follow-up regression: a divided card whose STATE block has TWO paragraphs
+  // separated by a blank line. Under the `m` flag, `\n$` (the old tail) also matches at
+  // that blank line, so the STATE capture used to stop after the FIRST paragraph and drop
+  // the second one silently — `show` must print both.
+  card(
+    'FFFF6666',
+    'state-two-paragraphs',
+    'card whose STATE block has two paragraphs',
+    '## STATE — read first\n\nPARAMARK one, first paragraph.\n\nPARAMARK two, second paragraph.\n\n<!-- @trdd:design-body -->\n\nDESIGNMARK the design body.',
+  ),
 ]
 
 beforeAll(() => {
@@ -101,7 +111,7 @@ describe('trddgrep --design-body / --no-design-body (3P-TRDD-13)', () => {
   it('the fixture corpus is readable — a zero below must mean "no match", never "no corpus"', () => {
     const r = run(['board'])
     expect(r.status).toBe(0)
-    expect(r.stdout).toContain('5 open cards')
+    expect(r.stdout).toContain('6 open cards')
   })
 
   it('with NEITHER flag the search reads the whole body — every card matches either marker', () => {
@@ -196,6 +206,15 @@ describe('trddgrep --design-body / --no-design-body (3P-TRDD-13)', () => {
     expect(r.status).toBe(0)
     expect(r.stdout).toContain('no STATE block')
     expect(r.stdout).not.toContain('DESIGNMARK')
+  })
+
+  it('#167: show prints a STATE block with two paragraphs whole, not truncated at the blank line', () => {
+    const r = run(['show', 'FFFF6666'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('PARAMARK one, first paragraph.')
+    // Before the fix, `\n$` under the `m` flag matched at the blank line between the two
+    // paragraphs, so the second paragraph was silently dropped from the STATE summary.
+    expect(r.stdout).toContain('PARAMARK two, second paragraph.')
   })
 
   it('both flags together is a could-not-run (2), never a silent pick', () => {

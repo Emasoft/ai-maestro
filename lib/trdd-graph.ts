@@ -82,21 +82,32 @@ export interface TrddViolation {
  * Matching on the full id invents missing children that are sitting right there.
  *
  * Only a v1 UUID REMAINDER (`-xxxx-xxxx-xxxx-xxxxxxxxxxxx`, all hex) may be folded
- * into its leading 8 chars — it names one whole v1 TRDD. Anything else with an
- * 8-char-then-dash shape does NOT fold: most commonly a v1-era DERIVED-TASK slug
- * (`TRDD-<id8>-npt-<slug>` / `-eht-<slug>`), which names a prerequisite that was
- * never minted as its own card. Folding it anyway makes the ref equal the CARD
- * THAT WROTE IT — a phantom self-edge that `findOrderCycles` then reports as a
- * self-ring (#166: `TRDD-dccb0b8a-npt-pane-record` on card DCCB0B8A folded to
- * `DCCB0B8A`, its own id). Returning the whole ref, uppercased and unsliced, keeps
- * it distinguishable: it resolves to no card (`childMissing`-shaped, reported as
- * `danglingV1Slug` below) instead of silently becoming its author.
+ * into its leading 8 chars — it names one whole v1 TRDD. The ONLY other tail that
+ * does NOT fold is the SPECIFIC v1-era DERIVED-TASK slug shape
+ * (`TRDD-<id8>-npt-<slug>` / `-eht-<slug>`, `V1_DERIVED_SLUG_RE` below), which
+ * names a prerequisite that was never minted as its own card. Folding it anyway
+ * makes the ref equal the CARD THAT WROTE IT — a phantom self-edge that
+ * `findOrderCycles` then reports as a self-ring (#166:
+ * `TRDD-dccb0b8a-npt-pane-record` on card DCCB0B8A folded to `DCCB0B8A`, its own
+ * id). Returning the whole ref, uppercased and unsliced, keeps it distinguishable:
+ * it resolves to no card (`childMissing`-shaped, reported as `danglingV1Slug`
+ * below) instead of silently becoming its author.
+ *
+ * EVERY OTHER 8-char-then-dash shape DOES fold to its leading 8 chars, same as
+ * before #166 — a plain citation-by-filename-stem (`TRDD-<id8>-<some-slug>` in
+ * `blocked-by:`/`parent-trdd:`/`npt:`/`eht:`) must keep resolving to the card it
+ * names. #166's own fix over-corrected: matching "anything past 8 chars that
+ * isn't a UUID remainder" also un-folded THOSE citations, which used to resolve
+ * and silently stopped (review finding on #166, TRDD-follow-up). Narrowing the
+ * no-fold case to exactly `V1_DERIVED_SLUG_RE` restores them while keeping the
+ * self-cycle fix intact — a live-corpus sweep across every scope root found zero
+ * refs that resolved under the pre-#166 fold and would regress under this one.
  */
 const UUID_REMAINDER_RE = /^-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * The SPECIFIC v1-era derived-task slug shape (`<id8>-npt-<slug>` / `-eht-<slug>`),
- * matched on the value `normalizeTrddRef` already returned (8 id-shaped chars, a
+ * matched against the uppercased, `TRDD-`-stripped ref (8 id-shaped chars, a
  * dash, then the kind word). Deliberately NARROWER than "contains a dash": a bare
  * `c.includes('-')` would also downgrade a genuinely broken reference that merely
  * happens to contain one (a typo'd suffix, a `gh:`/cross-project-shaped string
@@ -104,13 +115,20 @@ const UUID_REMAINDER_RE = /^-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * lineage bug deserves to the WARN this rule reserves for a known-benign v1
  * artifact — silently softening `childMissing` for a class of input #166 never
  * asked to grandfather (review finding on #166's own fix).
+ *
+ * Shared by TWO sites so they cannot drift apart: `normalizeTrddRef` above tests
+ * it to decide whether a ref folds or stays whole, and the `childMissing` /
+ * `danglingV1Slug` split further down re-tests the SAME regex against the
+ * already-normalized value to pick the finding's severity. One regex, one
+ * definition of "known-benign v1 artifact".
  */
 const V1_DERIVED_SLUG_RE = /^[A-Z0-9]{8}-(?:NPT|EHT)-/
 
 export function normalizeTrddRef(ref: unknown): string {
   const stripped = String(ref).trim().replace(/^TRDD-/i, '')
   const tail = stripped.slice(8)
-  if (tail && !UUID_REMAINDER_RE.test(tail)) return stripped.toUpperCase()
+  const upper = stripped.toUpperCase()
+  if (tail && !UUID_REMAINDER_RE.test(tail) && V1_DERIVED_SLUG_RE.test(upper)) return upper
   return stripped.slice(0, 8).toUpperCase()
 }
 

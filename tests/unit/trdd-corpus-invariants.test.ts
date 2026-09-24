@@ -271,10 +271,22 @@ describe('non-local blocked-by spellings (TRDD-PTFPGSLV)', () => {
     expect(localRefList('blocked-by', ['gh:Emasoft/ai-maestro#145', 'TRDD-AAAA1111'])).toEqual(['AAAA1111'])
     // Scoped to blocked-by on purpose: silently dropping a bogus `gh:` from `npt:` would
     // soften `childMissing` — the parent's completion gate would stop counting it.
-    // Kept as the FULL uppercased ref, not sliced to 8 chars (#166): only a v1 UUID
-    // remainder may fold into its leading 8 chars, so this stays distinguishable and
-    // still resolves to no card.
-    expect(localRefList('npt', ['gh:Emasoft/ai-maestro#145'])).toEqual(['GH:EMASOFT/AI-MAESTRO#145'])
+    // Folded to its leading 8 chars, same as any other non-v1-derived-slug tail
+    // (review finding on #166's own fix, narrowed follow-up): only a v1 UUID
+    // remainder OR the specific `<id8>-npt-`/`-eht-` shape stays unfolded. A
+    // misplaced `gh:` ref in `npt:` is neither, so it folds and still resolves
+    // to no card — `childMissing` fires either way, just with a shorter detail.
+    expect(localRefList('npt', ['gh:Emasoft/ai-maestro#145'])).toEqual(['GH:EMASO'])
+  })
+
+  it('a plain filename-stem citation (not the v1 npt/eht slug shape) still FOLDS and resolves (follow-up to #166)', () => {
+    // #166's own fix over-corrected: un-folding EVERY non-UUID-remainder tail also
+    // broke an ordinary `TRDD-<id8>-<some-slug>` citation-by-filename-stem, which
+    // used to resolve to the card it names. Only the specific v1 derived-task slug
+    // shape (`-npt-`/`-eht-`) may stay whole; everything else folds as before.
+    expect(normalizeTrddRef('TRDD-AAAA1111-some-descriptive-slug')).toBe('AAAA1111')
+    const nodes = [node('AAAA1111', { column: 'complete' }), node('BBBB2222', { column: 'complete', npt: ['AAAA1111'] })]
+    expect(kinds(nodes)).not.toContain('childMissing')
   })
 
   it('externalRefList keeps the RAW spelling — the raw ref IS the information', () => {

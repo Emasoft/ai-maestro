@@ -4,7 +4,7 @@ status: tasked
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T18:56:02+0200
+updated: 2026-09-24T19:02:13+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: docs
@@ -61,11 +61,12 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
 - [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
 - [x] step 1: plan and decisions recorded on this card
-- [x] step 2: remove design/refused/, move its 32 cards to proposals/
+- [ ] step 2: remove design/refused/, move its 32 cards to proposals/
 - [x] step 3: add status: proposed|tasked|archived, enforced by the trddgrep linter
 - [ ] step 4: archive preserves the card's column; add archive authority table; wire the trddgrep archive verb
 - [ ] step 5: close immutability gaps on archived cards (no Approval-log append, no bump, no in-place rewrite, no check-box, no doctor --fix)
 - [ ] step 6: reconcile design/specs/3-pillars-spec.md and GOVERNANCE-RULES.md via specgrep, close janitor #308, run full verification
+- step 2 is PARTIAL (unticked 2026-09-24 after review): 26 cards moved in bc02c5129, not 32; design/refused/ still holds 5 janitor ticket cards pending ai-maestro-janitor#309, so the folder is not removed yet. Tick it when #309 lands and the 5 cards move.
 
 ## Provenance correction
 

@@ -2,7 +2,7 @@
 name: governance-password-invalidation
 description: "how does the user rotate / revoke / reset the governance password / forgot password / password leaked, must change it / next login asks to create a new password / why is a route denied only from my phone but works on the Mac (console_required 403) / how does a route know the real client IP / x-forwarded-for spoof / server crashed at boot 'does not provide an export named' after adding a lib import to server.mjs — the invalidate-by-possession + console-presence design (TRDD-P7XKV3N9)"
 ocd: 2026-07-13
-lmd: 2026-09-24
+lmd: 2026-09-25
 metadata:
   node_type: memory
   type: project
@@ -39,7 +39,7 @@ actually guarantees is narrower: `invalidatePassword()` DESTROYS the hash instea
 of replacing it with a new known value, so no replacement credential is ever
 issued that could itself leak.
 
-^4GCNGDYE [desc: "two factors gate the rotation: knowing the password and a one-shot code delivered to a local host file (the write is unconditional; chmod 0600 on it is best-effort, plus a best-effort desktop notification on top), never over HTTP for this route", keywords: two_factor_password_rotation password_proves_knowledge desktop_code_proves_presence_at_machine code_delivered_via_local_file_not_notification notification_is_best-effort_only attacker_with_password_but_not_at_console_blocked why_is_a_route_denied_only_from_my_phone console_presence_factor_security_property code_over_HTTP_would_be_theater possession_alone_must_not_rotate_credential invalidate_route_does_not_pass_email_opt, ocd: 2026-07-13, lmd: 2026-09-24]
+^4GCNGDYE [desc: "two factors gate the rotation: the password (knowledge) plus a one-shot code written to a local host file (chmod 0600 best-effort), plus a best-effort desktop notification; never HTTP for this route", keywords: two_factor_password_rotation password_proves_knowledge desktop_code_proves_presence_at_machine code_delivered_via_local_file_not_notification notification_is_best-effort_only attacker_with_password_but_not_at_console_blocked why_is_a_route_denied_only_from_my_phone console_presence_factor_security_property code_over_HTTP_would_be_theater possession_alone_must_not_rotate_credential invalidate_route_does_not_pass_email_opt, ocd: 2026-07-13, lmd: 2026-09-25]
 **Two factors, because possession alone must not rotate the master credential:**
 - the **password** proves you KNOW the secret;
 - a **code on the desktop** proves you are AT the machine. `dispatchCode()`
@@ -97,7 +97,7 @@ POST and render what the endpoint says. Every gate lives in the endpoint, becaus
 **every route is curl-able**: a check placed in a client is skippable with one
 curl, so it is not a weak check, it is no check.
 
-^20GBJU5N [desc:"this page governs the security-model tie-in to network-security-tailscale-bind, peer-address and tailscale-detect plumbing, and the still-open TRDD-9MZQ4T7E general sudo-token successor; MAESTRO login is NOT console-gated", keywords:"governs_security_model_network_perimeter network-security-tailscale-bind_relation tailscale-detect_isAllowedSource peer-address_perimeter_trusted-peer_plumbing TRDD-9MZQ4T7E_open_successor_sudo-token_path general_TTY_to_sudo-token_path_other_strict_routes this_endpoint_self-authenticating_sidesteps_successor MAESTRO_login_is_NOT_console-gated app_api_auth_login_route_no_isConsolePeer_call password-change_half_only_built_of_two_op_rule", ocd:2026-07-13, lmd:2026-08-02]
+^20GBJU5N [desc:"this page governs the tie-in to network-security-tailscale-bind, peer-address and tailscale-detect plumbing, and the open TRDD-9MZQ4T7E sudo-token successor; MAESTRO login is NOT console-gated", keywords:"governs_security_model_network_perimeter network-security-tailscale-bind_relation tailscale-detect_isAllowedSource peer-address_perimeter_trusted-peer_plumbing TRDD-9MZQ4T7E_open_successor_sudo-token_path general_TTY_to_sudo-token_path_other_strict_routes this_endpoint_self-authenticating_sidesteps_successor MAESTRO_login_is_NOT_console-gated app_api_auth_login_route_no_isConsolePeer_call password-change_half_only_built_of_two_op_rule", ocd:2026-07-13, lmd:2026-09-25]
 **Governs / see also:** the project's security model and network perimeter —
 [[network-security-tailscale-bind]], plus `lib/tailscale-detect.mjs` (`isAllowedSource`) and
 `lib/peer-address.mjs`, which are the perimeter + trusted-peer plumbing this page's

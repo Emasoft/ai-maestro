@@ -2,7 +2,7 @@
 name: role-plugins
 description: "what is a role-plugin / fourfold identity rule / how many predefined role-plugins are there / how do I edit a role-plugin without losing changes on update / claude plugin cache gets overwritten / compatible-titles compatible-clients / Haephestos plugin creation flow / N:1 title to plugin mapping"
 ocd: 2026-08-02
-lmd: 2026-09-24
+lmd: 2026-09-25
 metadata:
   node_type: memory
   type: reference
@@ -22,7 +22,7 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 ^DPD2860O [desc: "The local role-plugin marketplace is ai-maestro-local-roles-marketplace, a directory-based marketplace registered via claude plugin marketplace add ~/agents/role-plugins/.", keywords: local_role-plugin_marketplace_name ai-maestro-local-roles-marketplace how_is_the_role-plugin_marketplace_registered claude_plugin_marketplace_add_role-plugins directory-based_marketplace registering_the_local_roles_marketplace, ocd: 2026-08-02, lmd: 2026-09-24]
 **Local marketplace:** `ai-maestro-local-roles-marketplace` (directory-based, registered with Claude CLI via `claude plugin marketplace add ~/agents/role-plugins/`).
 
-^4JW633HN [desc: "Two role-plugin sources: Predefined (8 defaults) live on GitHub Emasoft/ai-maestro-plugins cached to ~/.claude/plugins/cache/, created by Emasoft; Custom live at ~/agents/role-plugins/<name>/, created by Haephestos.", keywords: predefined_vs_custom_role-plugins where_are_predefined_role-plugins_stored where_are_custom_role-plugins_stored who_creates_role-plugins haephestos_agent_creation_helper emasoft_project_owner ai-maestro-plugins_cache_location two_sources_for_role-plugins, ocd: 2026-08-02, lmd: 2026-09-24]
+^4JW633HN [desc: "Two role-plugin sources: Predefined (8) on GitHub Emasoft/ai-maestro-plugins, cached to ~/.claude/plugins/cache/, created by Emasoft; Custom at ~/agents/role-plugins/<name>/, created by Haephestos.", keywords: predefined_vs_custom_role-plugins where_are_predefined_role-plugins_stored where_are_custom_role-plugins_stored who_creates_role-plugins haephestos_agent_creation_helper emasoft_project_owner ai-maestro-plugins_cache_location two_sources_for_role-plugins, ocd: 2026-08-02, lmd: 2026-09-25]
 **Two sources for role-plugins:**
 
 | Source | Location | Created by |
@@ -30,7 +30,7 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 | **Predefined** (8 defaults) | GitHub `Emasoft/ai-maestro-plugins` → cached to `~/.claude/plugins/cache/` | Emasoft (project owner) |
 | **Custom** | `~/agents/role-plugins/<name>/` | Haephestos (agent creation helper) |
 
-^T8XDFFVN [desc: "The 8 predefined role-plugins and their governance-title mapping: amama-/MANAGER, amcos-/CHIEF-OF-STAFF, ampa-/MEMBER, amoa-/ORCHESTRATOR, amia-/INTEGRATOR, amaa-/ARCHITECT, amma-/MAINTAINER, amaua-/AUTONOMOUS.", keywords: how_many_predefined_role-plugins_are_there list_of_predefined_role-plugins role-plugin_governance_title_mapping amama_prefix_manager amcos_prefix_chief-of-staff ampa_prefix_member amoa_prefix_orchestrator amia_prefix_integrator amaa_prefix_architect amma_prefix_maintainer amaua_prefix_autonomous N:1_title_to_plugin_mapping, ocd: 2026-08-02, lmd: 2026-09-24]
+^T8XDFFVN [desc: "The 8 predefined role-plugins and their title mapping: amama-/MANAGER, amcos-/CHIEF-OF-STAFF, ampa-/MEMBER, amoa-/ORCHESTRATOR, amia-/INTEGRATOR, amaa-/ARCHITECT, amma-/MAINTAINER, amaua-/AUTONOMOUS.", keywords: how_many_predefined_role-plugins_are_there list_of_predefined_role-plugins role-plugin_governance_title_mapping amama_prefix_manager amcos_prefix_chief-of-staff ampa_prefix_member amoa_prefix_orchestrator amia_prefix_integrator amaa_prefix_architect amma_prefix_maintainer amaua_prefix_autonomous N:1_title_to_plugin_mapping, ocd: 2026-08-02, lmd: 2026-09-25]
 **Predefined role-plugins:**
 
 | Plugin Name | Prefix | Governance Title |
@@ -59,13 +59,13 @@ If ANY of the 4 don't match → invalid role-plugin, rejected. Naming convention
 ^QDX78A3R [desc: "The client a role-plugin belongs to is determined only by the compatible-clients field in .agent.toml, never by the plugin name.", keywords: how_is_a_role-plugins_client_determined compatible-clients_field_agent.toml role-plugin_target_client_not_by_name server_reads_agent.toml_for_target_clients client_determination_rule, ocd: 2026-08-02, lmd: 2026-09-24]
 **Client determination:** The client a role-plugin belongs to is determined ONLY by the `compatible-clients` field in `.agent.toml`, NOT by the plugin name. The server reads `.agent.toml` to discover target clients.
 
-^3LQU05HR [desc: "N:1 compatibility: role-plugins declare compatible-titles/compatible-clients; the UI shows a fixed label for 1 compatible plugin or a dropdown for 2+, and every title can swap between compatible plugins.", keywords: N:1_title_to_plugin_mapping compatible-titles_field multiple_plugins_serve_the_same_title dropdown_to_choose_a_role-plugin UI_compatible_plugin_selection can_MANAGER_swap_its_role-plugin can_COS_swap_its_role-plugin fixed_label_vs_dropdown_role-plugin, ocd: 2026-08-02, lmd: 2026-09-24]
+^3LQU05HR [desc: "N:1 compatibility: role-plugins declare compatible-titles/clients; the UI shows a fixed label for 1 compatible plugin or a dropdown for 2+, and every title can swap between compatible plugins.", keywords: N:1_title_to_plugin_mapping compatible-titles_field multiple_plugins_serve_the_same_title dropdown_to_choose_a_role-plugin UI_compatible_plugin_selection can_MANAGER_swap_its_role-plugin can_COS_swap_its_role-plugin fixed_label_vs_dropdown_role-plugin, ocd: 2026-08-02, lmd: 2026-09-25]
 **N:1 compatibility model:** Role-plugins declare which titles they're compatible with via `compatible-titles` in `.agent.toml`. Multiple plugins can serve the same title. Plugins also declare `compatible-clients` (e.g., `["claude-code"]`, `["claude-code", "codex"]`). The UI shows:
 - **1 compatible plugin** → fixed label (no choice needed)
 - **2+ compatible plugins** → dropdown to choose between them
 - ALL titles (including COS, MANAGER) can swap between compatible plugins
 
-^YO4OIL1G [desc: "The Haephestos role-plugin creation flow: gather info, generate TOML via PSS, prune/review, build via PSS make-plugin, add AI Maestro compat fields, validate with CPV, publish via the creation-helper API; then it appears in every role-plugin picker.", keywords: haephestos_plugin_creation_flow 8_steps_to_create_a_role-plugin PSS_binary_TOML_profile cpv-validate-plugin publish-plugin_API how_does_haephestos_build_a_plugin agent_creation_helper_workflow where_does_a_new_role-plugin_appear_after_publishing, ocd: 2026-08-02, lmd: 2026-09-24]
+^YO4OIL1G [desc: "Haephestos creation flow: gather info, generate TOML via PSS, prune/review, build via PSS make-plugin, add compat fields, validate with CPV, publish via creation-helper API; appears in every picker.", keywords: haephestos_plugin_creation_flow 8_steps_to_create_a_role-plugin PSS_binary_TOML_profile cpv-validate-plugin publish-plugin_API how_does_haephestos_build_a_plugin agent_creation_helper_workflow where_does_a_new_role-plugin_appear_after_publishing, ocd: 2026-08-02, lmd: 2026-09-25]
 **Haephestos creation flow (8 steps):**
 1. Gather info (role description + project type)
 2. Generate TOML profile via PSS binary
@@ -94,7 +94,7 @@ Normal plugins are general-purpose tools (skills, MCP servers, hooks, etc.) inst
 
 **Normal plugins are NEVER put in `~/agents/role-plugins/`.** They are managed entirely by Claude CLI's standard plugin system (`~/.claude/plugins/cache/`, `settings.json`, `settings.local.json`).
 
-^DCBVRHHT [desc: "Conversion rules: a role-plugin gets a target-client-suffixed name (bare for Claude) and OVERWRITES an existing same-named folder (no rename path); a normal plugin gets a -<client> suffix and stores under custom-plugins/.", keywords: role-plugin_conversion_rules converting_a_role-plugin_between_clients client_suffix_naming_ai-maestro-programmer-agent-codex overwrites_existing_folder_update_in_place converting_a_normal_plugin_between_clients R20.1_R20.23_R20.26_R20.28 why_does_the_converted_plugin_name_change plugin_names_are_immutable_no_rename_path, ocd: 2026-08-02, lmd: 2026-09-24]
+^DCBVRHHT [desc: "Conversion rules: a role-plugin gets a client-suffixed name (bare for Claude), OVERWRITES an existing same-named folder (no rename path); a normal plugin gets a -<client> suffix under custom-plugins/.", keywords: role-plugin_conversion_rules converting_a_role-plugin_between_clients client_suffix_naming_ai-maestro-programmer-agent-codex overwrites_existing_folder_update_in_place converting_a_normal_plugin_between_clients R20.1_R20.23_R20.26_R20.28 why_does_the_converted_plugin_name_change plugin_names_are_immutable_no_rename_path, ocd: 2026-08-02, lmd: 2026-09-25]
 **Role-plugin conversion rules:**
 - When converting a role-plugin from one client to another, the converter
   (per R20.1 naming, R20.23 duplication, R20.26 no-renaming — TRDD-39ABGST4
@@ -117,7 +117,7 @@ Normal plugins are general-purpose tools (skills, MCP servers, hooks, etc.) inst
   - Stores under `~/agents/custom-plugins/<client>-custom-marketplace/<name>-<client>/` (per R20.28; use `custom-marketplace/` for Claude)
   - Registers in `ai-maestro-local-custom-marketplace`
 
-^ZXEMPTTC [desc: "When a governance title is assigned via the UI, the ChangeTitle pipeline (Gates 15-16) keeps a compatible plugin, installs the first compatible one, or auto-converts from the Claude source if no native plugin exists.", keywords: title_to_role-plugin_auto-assignment ChangeTitle_pipeline_gates_15-16 getCompatiblePluginsForTitle auto_install_compatible_plugin_on_title_change auto-convert_from_claude_source_adapter what_happens_when_i_change_an_agents_title convertAndStorePlugin_emitForClient, ocd: 2026-08-02, lmd: 2026-09-24]
+^ZXEMPTTC [desc: "When a title is assigned via the UI, the ChangeTitle pipeline (Gates 15-16) keeps a compatible plugin, installs the first compatible one, or auto-converts from Claude source if none exists.", keywords: title_to_role-plugin_auto-assignment ChangeTitle_pipeline_gates_15-16 getCompatiblePluginsForTitle auto_install_compatible_plugin_on_title_change auto-convert_from_claude_source_adapter what_happens_when_i_change_an_agents_title convertAndStorePlugin_emitForClient, ocd: 2026-08-02, lmd: 2026-09-25]
 ### Title → Role-Plugin Auto-Assignment
 
 When a governance title is assigned via the UI (Title Assignment Dialog), the ChangeTitle pipeline (Gates 15-16) automatically:
@@ -126,7 +126,7 @@ When a governance title is assigned via the UI (Title Assignment Dialog), the Ch
 3. If not → installs the first compatible plugin (uninstalls the old one)
 4. If no native plugin for this client → auto-converts from Claude source via adapter system (`convertAndStorePlugin` + `emitForClient` + client adapter)
 
-^O59QYGJY [desc: "Key files implementing role-plugins: role-plugin-service.ts, element-management-service.ts's ChangeTitle, the role-plugins API routes, RoleTab.tsx, AgentCreationWizard.tsx step 5, ecosystem-constants.ts, and haephestos-creation-helper.md.", keywords: role-plugin_key_source_files role-plugin-service.ts element-management-service.ts_ChangeTitle RoleTab.tsx AgentCreationWizard.tsx_step_5 ecosystem-constants.ts haephestos-creation-helper.md where_is_role-plugin_logic_implemented, ocd: 2026-08-02, lmd: 2026-09-24]
+^O59QYGJY [desc: "Key files: role-plugin-service.ts, element-management-service.ts ChangeTitle, role-plugins API routes, RoleTab.tsx, AgentCreationWizard step5, ecosystem-constants.ts, haephestos-creation-helper.md.", keywords: role-plugin_key_source_files role-plugin-service.ts element-management-service.ts_ChangeTitle RoleTab.tsx AgentCreationWizard.tsx_step_5 ecosystem-constants.ts haephestos-creation-helper.md where_is_role-plugin_logic_implemented, ocd: 2026-08-02, lmd: 2026-09-25]
 ### Key Files
 
 - `services/role-plugin-service.ts` — Core service: `generatePluginFromToml()`, `createPersona()`, `listRolePlugins()`, `getPluginsForTitle()`, `ensureMarketplace()`, `updateMarketplaceManifest()`
@@ -138,7 +138,7 @@ When a governance title is assigned via the UI (Title Assignment Dialog), the Ch
 - `lib/ecosystem-constants.ts` — `LOCAL_MARKETPLACE_NAME`, `GITHUB_MARKETPLACE_NAME`, `getLocalMarketplacePath()`
 - `agents/haephestos-creation-helper.md` — 8-step role-plugin creation protocol
 
-^OIQO2D1I [desc: "Never edit ~/.claude/plugins/cache/ (overwritten on update); clone the plugin's own GitHub repo, edit the source, run publish.py (strict, hook-enforced), then optionally force-update locally; fix CPV failures via the plugin-fixer agent.", keywords: how_do_i_edit_a_role-plugin_without_losing_changes claude_plugin_cache_gets_overwritten never_edit_files_in_plugins_cache correct_workflow_to_edit_a_role-plugin publish.py_quality_gate_test_lint_validate_bump_commit_push cpv_plugin-fixer_agent pre-push_git_hook_refuses_direct_push claude_plugin_update_force_refresh, ocd: 2026-08-02, lmd: 2026-09-24]
+^OIQO2D1I [desc: "Never edit ~/.claude/plugins/cache/ (overwritten on update); clone the plugin's own repo, edit source, run publish.py (strict, hook-enforced), optionally force-update; fix CPV via the fixer agent.", keywords: how_do_i_edit_a_role-plugin_without_losing_changes claude_plugin_cache_gets_overwritten never_edit_files_in_plugins_cache correct_workflow_to_edit_a_role-plugin publish.py_quality_gate_test_lint_validate_bump_commit_push cpv_plugin-fixer_agent pre-push_git_hook_refuses_direct_push claude_plugin_update_force_refresh, ocd: 2026-08-02, lmd: 2026-09-25]
 ### Editing Role-Plugins (CRITICAL — Never Edit Cache)
 
 **NEVER edit files in `~/.claude/plugins/cache/`** — those are cached copies that get overwritten on every plugin update. All changes must go through the proper publish pipeline.
@@ -180,7 +180,7 @@ uv run python scripts/publish.py --patch
 claude plugin update <plugin-name>@ai-maestro-plugins
 ```
 
-^27XA4E6U [desc: "The 8 predefined role-plugin repos are each independent (not forked) under Emasoft/<plugin-name>; a 9th repo, ai-maestro-assistant-role-agent, is published but deliberately excluded from PREDEFINED_ROLE_PLUGIN_NAMES (open question, ai-maestro#86).", keywords: 8_predefined_role-plugin_github_repos which_repo_does_each_role-plugin_live_in ai-maestro-assistant-role-agent_ninth_repo PREDEFINED_ROLE_PLUGIN_NAMES_ecosystem-constants_authority why_isnt_the_ninth_role-plugin_counted do_not_fix_the_count_to_9 ai-maestro#86_open_question, ocd: 2026-08-02, lmd: 2026-09-24]
+^27XA4E6U [desc: "The 8 predefined role-plugin repos are each independent (not forked) under Emasoft/<name>; a 9th, ai-maestro-assistant-role-agent, is published but excluded from PREDEFINED_ROLE_PLUGIN_NAMES (#86).", keywords: 8_predefined_role-plugin_github_repos which_repo_does_each_role-plugin_live_in ai-maestro-assistant-role-agent_ninth_repo PREDEFINED_ROLE_PLUGIN_NAMES_ecosystem-constants_authority why_isnt_the_ninth_role-plugin_counted do_not_fix_the_count_to_9 ai-maestro#86_open_question, ocd: 2026-08-02, lmd: 2026-09-25]
 **The 8 predefined role-plugin repos (each independent, NOT forked):**
 
 > **Corrected 2026-08-02.** This heading said **7** and its table omitted

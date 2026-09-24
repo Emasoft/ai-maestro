@@ -3,7 +3,7 @@ import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { promoteTrdd, isoLocal } from '@/lib/trdd-store'
-import { withAuthorizedTrdd } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, trddActorIdentity } from '@/lib/trdd-authz'
 import { mintTrddDecisionToken } from '@/lib/trdd-approval-token'
 
 /**
@@ -67,7 +67,8 @@ export async function POST(
     const approvalToken = await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval')
 
     const result = await promoteTrdd(designDir, id, {
-      approver: auth.agentId || 'user',
+      // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner.
+      approver: trddActorIdentity(auth.agentId),
       rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
       iso: isoLocal().iso,
       approvalToken,

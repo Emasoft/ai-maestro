@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { advanceColumn, isoLocal } from '@/lib/trdd-store'
-import { withAuthorizedTrdd } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, trddActorIdentity } from '@/lib/trdd-authz'
 
 /**
  * POST /api/trdd/[id]/promote — advance an OPEN (design/tasks/) TRDD's `column`
@@ -52,7 +52,8 @@ export async function POST(
     advanceColumn(designDir, id, column, {
       iso: isoLocal().iso,
       note: typeof body.note === 'string' ? body.note : undefined,
-      approver: auth.agentId || undefined,
+      // #168: the ONE identity helper for an agent; the owner's advance stays unattributed, as before.
+      approver: auth.agentId ? trddActorIdentity(auth.agentId) : undefined,
     }),
   )
   if (outcome.denied) return outcome.denied

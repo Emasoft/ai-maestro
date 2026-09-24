@@ -18,14 +18,14 @@ describe('createTrdd — zone/column mismatch at mint', () => {
   it('a mandate author cannot mint column: proposal into tasks/ — the bug', () => {
     expect(() => createTrdd(design, {
       title: 'owner-authored but wrongly columned', taskType: 'feature',
-      authorAuthority: 'user', author: 'owner', column: 'proposal',
+      authorAuthority: 'user', author: 'user', column: 'proposal',
     })).toThrow(/proposal.*belongs in zone "proposals"/)
   })
 
   it('a mandate author minting an ordinary working column still lands in tasks/', () => {
     const r = createTrdd(design, {
       title: 'ordinary mandate', taskType: 'feature',
-      authorAuthority: 'user', author: 'owner', column: 'dev',
+      authorAuthority: 'user', author: 'user', column: 'dev',
     })
     expect(r.zone).toBe('tasks')
     expect(r.column).toBe('dev')
@@ -34,7 +34,7 @@ describe('createTrdd — zone/column mismatch at mint', () => {
   it('a below-floor author still lands column: proposal in proposals/ — the already-correct path', () => {
     const r = createTrdd(design, {
       title: 'needs approval', taskType: 'feature',
-      minApproval: 'manager', authorAuthority: 'none', author: 'member-1',
+      minApproval: 'manager', authorAuthority: 'none', author: 'main-agent@member-1',
     })
     expect(r.zone).toBe('proposals')
     expect(r.column).toBe('proposal')
@@ -47,7 +47,7 @@ describe('createTrdd — zone/column mismatch at mint', () => {
     // than riding along unnoticed on the fix for something else.
     expect(() => createTrdd(design, {
       title: 'born complete', taskType: 'feature',
-      authorAuthority: 'user', author: 'owner', column: 'complete',
+      authorAuthority: 'user', author: 'user', column: 'complete',
     })).toThrow(/complete.*belongs in zone "archived"/)
   })
 
@@ -56,7 +56,7 @@ describe('createTrdd — zone/column mismatch at mint', () => {
     // working column, so expectedZone returns null and the mint must proceed.
     const r = createTrdd(design, {
       title: 'planned mandate', taskType: 'feature',
-      authorAuthority: 'user', author: 'owner', column: 'planned',
+      authorAuthority: 'user', author: 'user', column: 'planned',
     })
     expect(r.zone).toBe('tasks')
     expect(r.column).toBe('planned')

@@ -114,6 +114,21 @@ function takeFlag(list, name) {
   return [value, [...list.slice(0, i), ...list.slice(i + 2)]]
 }
 
+/**
+ * A verb's VALUELESS switches may sit ANYWHERE; its positionals are what is left, in order.
+ *
+ * `append`, `check-box` and `set` used to read their positionals by index (`argv[2]`,
+ * `argv[3]`) and look for switches only AFTER them, so a switch placed before the last
+ * positional was read AS that positional: `append <id> <heading> --create "<line>"` took
+ * `--create` as the line and refused the real line as "unrecognised" (observed twice on
+ * 2026-09-24 — first mis-diagnosed as a `- `-prefixed line, which it never was). Splitting
+ * the switches out first makes every order mean the same thing. The one value that cannot
+ * be passed as a positional is a token spelled exactly like one of the verb's switches.
+ */
+function splitSwitches(tokens, switches) {
+  return [new Set(tokens.filter((t) => switches.includes(t))), tokens.filter((t) => !switches.includes(t))]
+}
+
 // `--path <file>` — name a `fix` target by file path instead of id (TRDD-9JOCY2EJ).
 // Stripped here, like `--design-dir`, so it never reaches the unknown-option check below.
 let pathVal
@@ -698,6 +713,9 @@ switch (cmd) {
         title: c.title,
         priority: c.priority,
         orderEdges: c.blockerRefs,
+        // An archived card keeps whatever column it had (TRDD-MQE5D28T D2); without its
+        // zone the ranker would list an archived `dev` card as ready work.
+        zone: c.zone,
       })),
     )
     if (q.length === 0) {
@@ -1078,7 +1096,7 @@ switch (cmd) {
   // TRDD-40DYBI4T. Nothing of that is reimplemented here — this verb is the CLI surface
   // that library never had, which is why the tools looked like they had no create verb.
   case 'new': {
-    const { createTrdd } = await import('../lib/trdd-create.ts')
+    const { createTrdd, readProjectId } = await import('../lib/trdd-create.ts')
     const { candidateFrontmatter, validateTrddCandidate } = await import('../lib/pillar/trdd-candidate.ts')
     const { parseTrddFile } = await import('../lib/trdd-store.ts')
 
@@ -1127,6 +1145,16 @@ switch (cmd) {
     // would let any caller mint a manager-floor mandate by omitting a flag. `none` can
     // only ever route a card to the MORE gated of the two zones.
     const splitIds = (v) => (v ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+    // WHO IS WRITING (ai-maestro#168): explicit --author, else the caller's AID, else
+    // `main-agent@<project-id>` only on a machine with no agent registry, else refuse.
+    // Never `process.env.USER` — the OS login is the leak #168 reports.
+    const { resolveCliIdentity } = await import('../lib/trdd-identity.ts')
+    const pid = readProjectId(designDir)
+    const who = resolveCliIdentity({ explicit: author, flag: '--author', projectId: 'id' in pid ? pid.id : null })
+    if (!who.ok) {
+      console.error(`trddgrep: refusing to create — ${who.error}`)
+      process.exit(2)
+    }
     let result
     try {
       result = createTrdd(designDir, {
@@ -1135,7 +1163,7 @@ switch (cmd) {
         column: columnVal,
         minApproval: minApproval ?? 'none',
         authorAuthority: authority ?? 'none',
-        author: author ?? process.env.USER ?? 'unknown',
+        author: who.identity,
         ...(assignee ? { assignee } : {}),
         ...(parent ? { parent } : {}),
         npt: splitIds(npt),
@@ -1186,21 +1214,18 @@ switch (cmd) {
   // claimed a state it did not carry. A setter that INSERTS a missing field cannot
   // produce that shape.
   case 'set': {
-    const field = argv[2]
-    const value = argv[3]
-    if (!arg || !field || value === undefined) {
+    const [setSw, [setId, field, value, ...setRest]] = splitSwitches(argv.slice(1), ['--no-bump'])
+    if (!setId || !field || value === undefined) {
       console.error('trddgrep: `set` needs an id, a field and a value — `trddgrep set <id> <field> <value>`')
       process.exit(2)
     }
-    let setRest = argv.slice(4)
-    const noBump = setRest.includes('--no-bump')
-    setRest = setRest.filter((t) => t !== '--no-bump')
+    const noBump = setSw.has('--no-bump')
     if (setRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`set\`: ${setRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
     }
     const { setTrddField, isoLocal } = await import('../lib/trdd-store.ts')
-    const res = await setTrddField(designDir, arg, field, value, { iso: isoLocal().iso, bump: !noBump })
+    const res = await setTrddField(designDir, setId, field, value, { iso: isoLocal().iso, bump: !noBump })
     if (!res.ok) {
       console.error(`trddgrep: ${res.error}`)
       process.exit(res.status === 404 ? 1 : 2)
@@ -1218,26 +1243,23 @@ switch (cmd) {
   // line a `- [ ]` sits on. The line-number route is CAS-guarded and safe — what it is
   // not is honest about what is being addressed.
   case 'append': {
-    const heading = argv[2]
-    const text = argv[3]
-    if (!arg || !heading || text === undefined) {
+    const [aSw, [aId, heading, text, ...aRest]] = splitSwitches(argv.slice(1), ['--no-bump', '--create'])
+    if (!aId || !heading || text === undefined) {
       console.error('trddgrep: `append` needs an id, a section heading and a line — `trddgrep append <id> "## Approval log" "<text>"`')
       process.exit(2)
     }
-    let aRest = argv.slice(4)
-    const aNoBump = aRest.includes('--no-bump')
+    const aNoBump = aSw.has('--no-bump')
     // #167: an unmatched heading used to silently CREATE a new `## <heading>` section at
     // EOF — even on a frozen terminal card — which is how a typo'd or stale heading (e.g.
     // addressing `## ⏵ STATE — READ THIS FIRST ON RESUME` by its old plain name) produced a
     // duplicate section instead of an error. Default is now refuse; `--create` opts in.
-    const aCreate = aRest.includes('--create')
-    aRest = aRest.filter((t) => t !== '--no-bump' && t !== '--create')
+    const aCreate = aSw.has('--create')
     if (aRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`append\`: ${aRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
     }
     const { appendTrddSection, isoLocal } = await import('../lib/trdd-store.ts')
-    const res = await appendTrddSection(designDir, arg, heading, text, { iso: isoLocal().iso, bump: !aNoBump, create: aCreate })
+    const res = await appendTrddSection(designDir, aId, heading, text, { iso: isoLocal().iso, bump: !aNoBump, create: aCreate })
     if (!res.ok) {
       console.error(`trddgrep: ${res.error}`)
       process.exit(res.status === 404 ? 1 : 2)
@@ -1252,21 +1274,20 @@ switch (cmd) {
   }
 
   case 'check-box': {
-    const ordinal = Number(argv[2])
-    if (!arg || !Number.isInteger(ordinal) || ordinal < 1) {
+    const [bSw, [bId, bOrdinal, ...bRest]] = splitSwitches(argv.slice(1), ['--uncheck', '--no-bump'])
+    const ordinal = Number(bOrdinal)
+    if (!bId || !Number.isInteger(ordinal) || ordinal < 1) {
       console.error('trddgrep: `check-box` needs an id and a 1-based box number — `trddgrep check-box <id> 3 [--uncheck]`')
       process.exit(2)
     }
-    let bRest = argv.slice(3)
-    const uncheck = bRest.includes('--uncheck')
-    const bNoBump = bRest.includes('--no-bump')
-    bRest = bRest.filter((t) => t !== '--uncheck' && t !== '--no-bump')
+    const uncheck = bSw.has('--uncheck')
+    const bNoBump = bSw.has('--no-bump')
     if (bRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`check-box\`: ${bRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
     }
     const { checkTrddBox, isoLocal } = await import('../lib/trdd-store.ts')
-    const res = await checkTrddBox(designDir, arg, ordinal, { iso: isoLocal().iso, check: !uncheck, bump: !bNoBump })
+    const res = await checkTrddBox(designDir, bId, ordinal, { iso: isoLocal().iso, check: !uncheck, bump: !bNoBump })
     if (!res.ok) {
       console.error(`trddgrep: ${res.error}`)
       process.exit(res.status === 404 && /TRDD not found/.test(res.error ?? '') ? 1 : 2)
@@ -1327,7 +1348,24 @@ switch (cmd) {
       process.exit(2)
     }
     const { iso } = isoLocal()
-    const who = approver ?? process.env.USER ?? 'unknown'
+    // WHO DECIDES (ai-maestro#168) — the same identity order as `new`, resolved only for the
+    // transitions that RECORD an approver. Never `process.env.USER`.
+    const { resolveCliIdentity } = await import('../lib/trdd-identity.ts')
+    const { readProjectId } = await import('../lib/trdd-create.ts')
+    const identityOrDie = () => {
+      const pid = readProjectId(designDir)
+      const r = resolveCliIdentity({ explicit: approver, flag: '--approver', projectId: 'id' in pid ? pid.id : null })
+      if (!r.ok) {
+        console.error(`trddgrep: refusing to move — ${r.error}`)
+        process.exit(2)
+      }
+      return r.identity
+    }
+    const recordsApprover = expectedZone(targetColumn, card.frontmatter ?? {}) === 'archived'
+      || targetColumn === 'refused' || (targetColumn === 'planned' && card.zone === 'proposals')
+    // An in-place advance records an approver only when one is given — and a given one must
+    // still be an identity, never a free string on the card.
+    const who = recordsApprover ? identityOrDie() : approver === undefined ? undefined : identityOrDie()
     // `expectedZone` is the arbiter, not a table local to this file. `null` means the
     // column implies no zone constraint (a `complete` card with release-via publish
     // still has stages ahead of it), which is an in-place advance.
@@ -1351,7 +1389,7 @@ switch (cmd) {
         console.error(`trddgrep: moving a card BACK to column 'proposal' is not a supported transition — a card that left proposals/ was approved, and un-approving it is a governance decision, not a move`)
         process.exit(2)
       }
-      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver, clearBlocker })
+      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver: who, clearBlocker })
     } else if (card.zone === 'proposals') {
       // proposals/ → tasks/ IS the approval event, and `promoteTrdd` is the verb that
       // writes the approval record for it. It lands on `planned` by definition, so a
@@ -1363,7 +1401,7 @@ switch (cmd) {
       }
       res = await promoteTrdd(designDir, card.id, { approver: who, rationale: reason, iso })
     } else {
-      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver, clearBlocker })
+      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver: who, clearBlocker })
     }
 
     if (!res.ok) {

@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { refuseTrdd, isoLocal } from '@/lib/trdd-store'
-import { withAuthorizedTrdd } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, trddActorIdentity } from '@/lib/trdd-authz'
 
 /**
  * POST /api/trdd/[id]/refuse — refuse a PROPOSAL at the gate: sets column=refused
@@ -49,7 +49,8 @@ export async function POST(
   // TRDD-6D6SQNI6: decision and write share one hold on the card.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'refuse', () =>
     refuseTrdd(designDir, id, {
-      approver: auth.agentId || 'user',
+      // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner.
+      approver: trddActorIdentity(auth.agentId),
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       iso: isoLocal().iso,
     }),

@@ -38,11 +38,10 @@ export async function POST(request: NextRequest) {
   // authority (member, architect, integrator, …) is 'none'.
   const title = typeof ctx.governanceTitle === 'string' ? ctx.governanceTitle : ''
   const authorAuthority = ctx.isSystemOwner ? 'user' : (title in AUTHORITY_RANK ? title : 'none')
-  let author = 'user'
-  if (ctx.agentId) {
-    const { getAgent } = await import('@/lib/agent-registry')
-    author = getAgent(ctx.agentId)?.name ?? ctx.agentId
-  }
+  // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner. This
+  // route used to write the bare NAME while approve/refuse/archive wrote the bare UUID.
+  const { trddActorIdentity } = await import('@/lib/trdd-authz')
+  const author = trddActorIdentity(ctx.agentId)
 
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : undefined)
   const list = (k: string) => (Array.isArray(body[k]) ? (body[k] as unknown[]).filter((x): x is string => typeof x === 'string') : undefined)

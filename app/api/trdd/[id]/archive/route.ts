@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd, isoLocal } from '@/lib/trdd-store'
-import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist, trddActorIdentity } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
 
@@ -76,7 +76,8 @@ export async function POST(
   //     change the fields the decision reads between the two.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', () =>
     archiveTrdd(designDir, id, {
-      approver: auth.agentId || 'user',
+      // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner.
+      approver: trddActorIdentity(auth.agentId),
       state: state as (typeof ARCHIVE_STATES)[number] | undefined,
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,

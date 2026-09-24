@@ -25,6 +25,7 @@ import { authorize, type TrddVerb, type TrddApprovalTitle } from './authorizatio
 import { readTrdd, withTrddLock } from './trdd-store'
 import { countAcceptanceBoxes } from './trdd-doctor'
 import { getAgent, getAgentByNameAnyHost } from './agent-registry'
+import { parseTrddIdentity, formatTrddIdentity } from './trdd-vocabulary'
 
 /**
  * The only columns an `archive` may target.
@@ -93,8 +94,41 @@ export function readMinApproval(fm: Record<string, unknown>): TrddApprovalTitle 
 function resolveActor(v: unknown): string | null {
   const s = str(v)
   if (!s || s === 'null' || s === 'none' || s === 'unassigned') return null
-  if (getAgent(s)) return s // already an agent UUID
+  // The identity grammar first (ai-maestro#168). `name#uuid` resolves by the UUID — names
+  // can be reused after a hard delete, the id cannot — and a name that no longer matches
+  // the registry is reported, never silently accepted. `user` and `main-agent@…` are not
+  // agents: the human owner is granted before the matrix, and a project's main agent has
+  // no registry entry, so both resolve to "no agent" (fail closed, as legacy values do).
+  const id = parseTrddIdentity(s)
+  if (id) {
+    if (id.kind !== 'agent') return null
+    const agent = getAgent(id.uuid)
+    if (!agent) return null
+    if (agent.name !== id.name) {
+      console.warn(`[trdd-authz] identity ${s} names "${id.name}" but agent ${id.uuid} is registered as "${agent.name}" — resolving by id`)
+    }
+    return id.uuid
+  }
+  // LEGACY values, readable forever (archived cards are immutable): a bare UUID (what the
+  // API's approve/refuse/archive/promote wrote before #168) or a bare registered name (what
+  // its create wrote). Anything else — session labels, OS logins — resolves to no agent.
+  if (getAgent(s)) return s
   return getAgentByNameAnyHost(s)?.id ?? null
+}
+
+/**
+ * The identity an API write records for the AUTHENTICATED caller — the ONE helper every
+ * TRDD route uses, so create (which wrote a NAME) and approve/refuse/archive/promote (which
+ * wrote a bare UUID) can no longer disagree (ai-maestro#168). The human owner is `user`.
+ * An authenticated agent id that the registry cannot name is a server fault, not a value to
+ * write: it throws rather than record a half-identity on a card that may become immutable.
+ */
+export function trddActorIdentity(agentId: string | null | undefined): string {
+  if (!agentId) return 'user'
+  const agent = getAgent(agentId)
+  const identity = agent ? parseTrddIdentity(`${agent.name}#${agentId}`) : null
+  if (!identity) throw new Error(`authenticated agent ${agentId} has no registry name in the identity grammar`)
+  return formatTrddIdentity(identity)
 }
 
 /**

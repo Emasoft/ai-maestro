@@ -21,7 +21,9 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
-import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone, statusForZone } from '@/lib/trdd-vocabulary'
+import {
+  AUTHORITY_RANK, VALID_COLUMNS, expectedZone, statusForZone, parseTrddIdentity, TRDD_IDENTITY_FORMS,
+} from '@/lib/trdd-vocabulary'
 import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
@@ -94,7 +96,7 @@ const isoNow = () => isoLocal()
  * into a grep-first frontmatter line. So an unparseable value is reported as
  * unparseable, which is a more useful message than "absent" anyway.
  */
-function readProjectId(designDir: string): { id: string } | { why: string } {
+export function readProjectId(designDir: string): { id: string } | { why: string } {
   const prrd = path.join(designDir, 'requirements', 'PRRD.md')
   let text: string
   try {
@@ -156,7 +158,8 @@ export interface CreateTrddOpts {
   minApproval?: string
   /** The AUTHOR's authority rung (from their verified governance title; 'user' for the owner). */
   authorAuthority: string
-  /** Who authored it (agent name or 'user') — current-owner + created-by. */
+  /** Who authored it — current-owner + created-by. MUST be in the identity grammar
+   *  (`user` | `main-agent@<project-id>` | `<agent-name>#<agent-uuid>`, ai-maestro#168). */
   author: string
   /**
    * The card's OWNER. Distinct from `author` (`created-by:`, authorship, set once) and
@@ -210,7 +213,11 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // any frontmatter-bound string, and relationship ids must BE ids.
   if (/[\r\n\u0000-\u001f]/.test(title)) throw new Error('title must be one line')
   const author = (opts.author ?? '').trim()
-  if (!author || /[\r\n\u0000-\u001f:]/.test(author)) throw new Error('author must be a one-line name without a colon')
+  // THE ONE MINT SITE validates authorship against the identity grammar (ai-maestro#168,
+  // owner ruling 2026-09-24): a session label, an OS login or a bare name is not an author.
+  // The grammar is also the injection guard this line used to be — it admits no colon, no
+  // whitespace and no control character, so no value can forge a second frontmatter line.
+  if (!parseTrddIdentity(author)) throw new Error(`author must be an identity — ${TRDD_IDENTITY_FORMS} (got "${author.slice(0, 40)}")`)
   const idShape = /^[A-Za-z0-9]{8}$/
   for (const [field, val] of [['parent', opts.parent ? [opts.parent] : []], ['npt', opts.npt ?? []], ['eht', opts.eht ?? []]] as const) {
     for (const v of val) {
@@ -323,8 +330,9 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     lines.push('scope: project', `project-id: ${projectId.id}`)
   }
   const assignee = (opts.assignee ?? (isMandate ? author : '')).trim()
-  if (assignee && /[\r\n\u0000-\u001f:]/.test(assignee)) {
-    throw new Error('assignee must be a one-line name without a colon')
+  // Same grammar as the author (ai-maestro#168): `assignee:` carries owner rights.
+  if (assignee && !parseTrddIdentity(assignee)) {
+    throw new Error(`assignee must be an identity — ${TRDD_IDENTITY_FORMS} (got "${assignee.slice(0, 40)}")`)
   }
   if (assignee) lines.push(`assignee: ${assignee}`)
   if (isMandate) {

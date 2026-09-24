@@ -313,3 +313,54 @@ const ZONE_TO_STATUS: Readonly<Record<TrddZone, TrddStatus>> = {
 export function statusForZone(zone: TrddZone): TrddStatus {
   return ZONE_TO_STATUS[zone]
 }
+
+/**
+ * THE IDENTITY GRAMMAR of a card's identity fields — `created-by`, `current-owner`,
+ * `assignee`, `approval-judge` (ai-maestro#168). Owner ruling 2026-09-24, verbatim: "author
+ * can only be a main agent from a specific project folder, or the user (rare, the user
+ * delegate the writing of trdd to the main agent usually), or (when inside the ai-maestro
+ * harness) an agent with a specific name and id."
+ *
+ *   `user`                         the human owner
+ *   `main-agent@<project-id>`      a project's main agent, outside the harness — the id from
+ *                                  the project's PRRD, never a path (a path leaks a home dir
+ *                                  and differs per machine)
+ *   `<agent-name>#<agent-uuid>`    a harness agent — the uuid is what RESOLVES (names can be
+ *                                  reused after a hard delete); the name is for readers.
+ *                                  `#` keeps it one plain YAML scalar with no colon.
+ *
+ * A session label, an OS login or a bare name is NOT a legal author: those are the values the
+ * survey found on every corpus of the machine, which is what the ruling objects to. Legacy
+ * values stay READABLE (archived cards are immutable) — `parseTrddIdentity` simply answers
+ * null for them, and every consumer treats null as "no identity".
+ */
+export type TrddIdentity =
+  | { kind: 'user' }
+  | { kind: 'main-agent'; projectId: string }
+  | { kind: 'agent'; name: string; uuid: string }
+
+// The project-id shape is the one `readProjectId` (lib/trdd-create.ts) accepts from the PRRD.
+const MAIN_AGENT_IDENTITY = /^main-agent@([A-Za-z0-9][A-Za-z0-9._-]*)$/
+// Agent names may start with `_` (the registry holds `_aim-*` service agents); ids are UUIDs.
+const AGENT_IDENTITY =
+  /^([A-Za-z0-9_][A-Za-z0-9._-]*)#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+/** Parse an identity-field value; null for anything outside the grammar (legacy values included). */
+export function parseTrddIdentity(raw: string): TrddIdentity | null {
+  const v = raw.trim()
+  if (v === 'user') return { kind: 'user' }
+  const m = MAIN_AGENT_IDENTITY.exec(v)
+  if (m) return { kind: 'main-agent', projectId: m[1] }
+  const a = AGENT_IDENTITY.exec(v)
+  if (a) return { kind: 'agent', name: a[1], uuid: a[2].toLowerCase() }
+  return null
+}
+
+export function formatTrddIdentity(id: TrddIdentity): string {
+  if (id.kind === 'user') return 'user'
+  if (id.kind === 'main-agent') return `main-agent@${id.projectId}`
+  return `${id.name}#${id.uuid}`
+}
+
+/** The one-line human description of the grammar, for refusal messages. */
+export const TRDD_IDENTITY_FORMS = '`user` | `main-agent@<project-id>` | `<agent-name>#<agent-uuid>`'

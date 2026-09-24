@@ -21,7 +21,7 @@ describe('createTrdd', () => {
   it('an author AT the floor mints a MANDATE in tasks/ with the full approval record', () => {
     const r = createTrdd(design, {
       title: 'a manager-floor card', taskType: 'feature',
-      minApproval: 'manager', authorAuthority: 'manager', author: 'amama',
+      minApproval: 'manager', authorAuthority: 'manager', author: 'amama#86218bd8-33b6-4a47-8c8a-aeeee6a39f92',
     })
     expect(r.zone).toBe('tasks')
     expect(r.column).toBe('backburner')
@@ -30,13 +30,13 @@ describe('createTrdd', () => {
     const text = fs.readFileSync(r.file, 'utf8')
     expect(text).toMatch(/^mandate: true$/m)
     expect(text).toMatch(/^approved: true$/m)
-    expect(text).toMatch(/MANDATE issued by amama/)
+    expect(text).toMatch(/MANDATE issued by amama#86218bd8-33b6-4a47-8c8a-aeeee6a39f92/)
   })
 
   it('an author BELOW the floor lands in proposals/ as column proposal — the flag cannot override', () => {
     const r = createTrdd(design, {
       title: 'needs the manager', taskType: 'feature',
-      minApproval: 'manager', authorAuthority: 'none', author: 'member-1',
+      minApproval: 'manager', authorAuthority: 'none', author: 'main-agent@member-1',
       column: 'dev', // the attempted override the routing must ignore
     })
     expect(r.zone).toBe('proposals')
@@ -48,7 +48,7 @@ describe('createTrdd', () => {
 
   it('a forced collision RE-ROLLS: the taken candidate is consulted, rejected, and the next one lands', () => {
     const first = createTrdd(design, {
-      title: 'first card', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'first card', taskType: 'docs', authorAuthority: 'none', author: 'user',
     })
     expect(idTaken(first.id, [design])).toBe(true)
     // Deterministic collision via the injected mint: offer the TAKEN id twice, then a
@@ -57,7 +57,7 @@ describe('createTrdd', () => {
     const offers = [first.id, first.id, 'FRESH999']
     let calls = 0
     const second = createTrdd(design, {
-      title: 'second card', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'second card', taskType: 'docs', authorAuthority: 'none', author: 'user',
       mint: () => offers[Math.min(calls++, 2)],
     })
     expect(second.id).toBe('FRESH999')
@@ -66,9 +66,9 @@ describe('createTrdd', () => {
   })
 
   it('refuses a colon title and an unknown task-type BEFORE writing anything', () => {
-    expect(() => createTrdd(design, { title: 'a: b', taskType: 'docs', authorAuthority: 'none', author: 'a' }))
+    expect(() => createTrdd(design, { title: 'a: b', taskType: 'docs', authorAuthority: 'none', author: 'user' }))
       .toThrow(/colon/)
-    expect(() => createTrdd(design, { title: 'ok', taskType: 'wat', authorAuthority: 'none', author: 'a' }))
+    expect(() => createTrdd(design, { title: 'ok', taskType: 'wat', authorAuthority: 'none', author: 'user' }))
       .toThrow(/task-type/)
     // nothing landed in either zone
     for (const z of ['tasks', 'proposals']) {
@@ -87,19 +87,19 @@ describe('frontmatter injection guard', () => {
     // A member forging `mandate: true` through the parent field: without the guard
     // this writes a self-approved card in tasks/ from an authority of NONE.
     expect(() => createTrdd(design, {
-      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'user',
       parent: 'AAAA1111\nmandate: true',
     })).toThrow(/8-char base36/)
     // colon-free, so it reaches the NEWLINE guard (a colon payload dies on the
     // colon rule first — refused either way, but this pins the newline check)
     expect(() => createTrdd(design, {
-      title: 'ok\nsecond line', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'ok\nsecond line', taskType: 'docs', authorAuthority: 'none', author: 'user',
     })).toThrow(/one line/)
     expect(() => createTrdd(design, {
       title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a\napproved: true',
-    })).toThrow(/one-line name/)
+    })).toThrow(/author must be an identity/)
     expect(() => createTrdd(design, {
-      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'user',
       eht: ['BBBB2222', 'X\napproved: true'],
     })).toThrow(/8-char base36/)
     // nothing written by any refused call
@@ -110,7 +110,7 @@ describe('frontmatter injection guard', () => {
 
   it('positive control: clean id-shaped relations still mint', () => {
     const r = createTrdd(design, {
-      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'user',
       parent: 'AAAA1111', npt: ['BBBB2222'],
     })
     const text = fs.readFileSync(r.file, 'utf8')
@@ -124,7 +124,7 @@ describe('frontmatter injection guard', () => {
 
   it('TRDD-O1ZW03DG box 1: a derived-at-birth card carries derived: true and derived-kind:', () => {
     const r = createTrdd(design, {
-      title: 'an npt of the parent', taskType: 'feature', authorAuthority: 'none', author: 'a',
+      title: 'an npt of the parent', taskType: 'feature', authorAuthority: 'none', author: 'user',
       parent: 'AAAA1111', derivedKind: 'npt',
     })
     const parsed = parseTrddFile(r.file, r.zone)
@@ -137,7 +137,7 @@ describe('frontmatter injection guard', () => {
 
   it('TRDD-O1ZW03DG box 1: derivedKind without a parent is a caller error — nothing is minted', () => {
     expect(() => createTrdd(design, {
-      title: 'orphan platelet', taskType: 'feature', authorAuthority: 'none', author: 'a',
+      title: 'orphan platelet', taskType: 'feature', authorAuthority: 'none', author: 'user',
       derivedKind: 'eht',
     })).toThrow(/derivedKind requires parent/)
     for (const z of ['tasks', 'proposals']) {
@@ -195,7 +195,7 @@ const writePrrd = (dir: string, text: string) => {
   fs.writeFileSync(path.join(dir, 'requirements', 'PRRD.md'), text, 'utf8')
 }
 const mint = (dir: string, title: string) =>
-  createTrdd(dir, { title, taskType: 'bugfix', authorAuthority: 'none', author: 'probe' })
+  createTrdd(dir, { title, taskType: 'bugfix', authorAuthority: 'none', author: 'main-agent@probe' })
 
 describe('idTaken — an unreadable zone is not an empty zone', () => {
   it('idTaken throws ENOTDIR on an unreadable zone instead of reading it as empty', () => {
@@ -373,9 +373,35 @@ describe('createTrdd sets status: from the target zone (TRDD-MQE5D28T)', () => {
   it('a proposal (minted into proposals/) carries status: proposed', () => {
     const r = createTrdd(design, {
       title: 'a proposal card', taskType: 'feature',
-      minApproval: 'manager', authorAuthority: 'none', author: 'member-1',
+      minApproval: 'manager', authorAuthority: 'none', author: 'main-agent@member-1',
     })
     expect(r.zone).toBe('proposals')
     expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^status: proposed$/m)
+  })
+})
+
+// ── the identity grammar at the ONE mint site (ai-maestro#168) ───────────────
+describe('createTrdd validates authorship against the identity grammar', () => {
+  const base = { title: 'identity probe', taskType: 'docs', authorAuthority: 'none' } as const
+
+  it('refuses a session label, an OS-login-like word and a bare name as the author — nothing written', () => {
+    // The three classes the #168 survey found on every corpus of the machine.
+    for (const author of ['ai-maestro-main-session', 'someuser', 'amama']) {
+      expect(() => createTrdd(design, { ...base, author })).toThrow(/author must be an identity/)
+    }
+    for (const z of ['tasks', 'proposals']) {
+      expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
+    }
+  })
+
+  it('refuses a bare-name assignee — assignee carries owner rights, so it takes the same grammar', () => {
+    expect(() => createTrdd(design, { ...base, author: 'user', assignee: 'bob' })).toThrow(/assignee must be an identity/)
+  })
+
+  it('accepts each of the three forms and writes it verbatim into created-by', () => {
+    for (const author of ['user', 'main-agent@ai-maestro', 'bob#44444444-4444-4444-8444-444444444444']) {
+      const r = createTrdd(design, { ...base, title: `by ${author.slice(0, 10)}`, author })
+      expect(fs.readFileSync(r.file, 'utf8')).toMatch(new RegExp(`^created-by: ${author.replace(/[.#]/g, '\\$&')}$`, 'm'))
+    }
   })
 })

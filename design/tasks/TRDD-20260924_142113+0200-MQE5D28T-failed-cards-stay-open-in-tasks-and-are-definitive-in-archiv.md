@@ -3,7 +3,7 @@ trdd-id: MQE5D28T
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T15:41:38+0200
+updated: 2026-09-24T15:46:28+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: docs
@@ -58,6 +58,7 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [ ] proposed: reconcile design/specs/3-pillars-spec.md clause 3P-ZON-06 with this ruling via specgrep, bumping spec-version per 3P-VER-01 (a MUST changes)
 - [ ] proposed: the corpus tooling's archive-eligibility check should accept a failed card moving into archived/ when the move is attributed to the MANAGER or CHIEF-OF-STAFF (or, outside the harness, the USER or main agent) — today's zone-mismatch logic (ZONE-MISMATCH / expectedZone) treats failed as tasks/-only and would need to allow this one exception, not a general one
 - [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
+- [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
 
 ## Provenance correction
 
@@ -67,3 +68,7 @@ mandated-by corrected from the default 'none' to 'user': the content of this car
 
 USER 2026-09-24 (verbatim): "a failed TRDD can still be kept in the tasks folder if its not archived. because a failed TRDD can always be tried again (it can be put back to dev or design). but if a card is archived, no matter if it is failed or any other column, its definitive: no more tries. the 3 life-stages are all irreversible: 1. proposed (in proposals/), 2. tasked (in tasks/), 3. archived (in archived/). this is why they are 3 folders and not just a frontmatter metadata (but they also have the metadata indicating the stage of life). The stage 3 is definitive and irreversible. Even if a similar task should be done again, a new card must be created. So failed is just a temporary column state. A trdd can fail hundreds of times before succeeding. Only when the agent or the MANAGER / COS decide to give up, it becomes an archived card. Is it clear? write this in the specs of the 3 pillars and update all 3-pilllars rule files and skills files."
 USER 2026-09-24 (verbatim): "also there should be a special option to archive a trdd card in the trddgrep tool, so that it is not possible to be ambiguous. if the MANAGER decides to archive a card, no matter the column it is in, it must simply execute `trddgrep archive <TRDD-ID>` or `trddgrep archive <TRDD FILE PATH>` in the root of the project it belongs and it will be archived."
+
+## Related
+
+The trddgrep archive verb is tracked in TRDD-4NISAY49.

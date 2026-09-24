@@ -1,5 +1,6 @@
 ---
 trdd-id: 35VKIGTC
+status: tasked
 title: Refuse to wake an agent whose auto-loaded context is poisoned
 column: design
 scope: project

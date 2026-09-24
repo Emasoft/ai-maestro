@@ -1,5 +1,6 @@
 ---
 trdd-id: D39FH00U
+status: proposed
 title: The user's statusline holds a third private usage cache with three defects — report only
 column: proposal
 scope: project

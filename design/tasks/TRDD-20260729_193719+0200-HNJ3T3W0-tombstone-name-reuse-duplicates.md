@@ -1,5 +1,6 @@
 ---
 trdd-id: HNJ3T3W0
+status: tasked
 title: A name held by a soft-deleted tombstone can be re-created, producing two registry entries with the same name
 column: planned
 pre-block-column: planned

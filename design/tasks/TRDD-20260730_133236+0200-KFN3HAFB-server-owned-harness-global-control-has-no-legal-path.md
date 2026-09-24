@@ -1,5 +1,6 @@
 ---
 trdd-id: KFN3HAFB
+status: tasked
 title: Server-owned GLOBAL control ops for harness agents have no legal implementation as specified
 scope: project
 project-id: ai-maestro

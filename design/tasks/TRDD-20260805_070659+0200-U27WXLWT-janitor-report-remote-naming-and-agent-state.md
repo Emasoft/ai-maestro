@@ -1,5 +1,6 @@
 ---
 trdd-id: U27WXLWT
+status: tasked
 title: The janitor global report names the upstream as origin because our remotes are inverted
 column: todo
 scope: project

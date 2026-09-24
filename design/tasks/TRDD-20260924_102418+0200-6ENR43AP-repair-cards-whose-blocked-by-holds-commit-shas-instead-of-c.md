@@ -1,5 +1,6 @@
 ---
 trdd-id: 6ENR43AP
+status: tasked
 title: Repair cards whose blocked-by holds commit shas instead of card ids
 column: backburner
 created: 2026-09-24T10:24:18+0200

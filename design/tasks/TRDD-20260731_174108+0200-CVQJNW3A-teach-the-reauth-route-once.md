@@ -1,5 +1,6 @@
 ---
 trdd-id: CVQJNW3A
+status: tasked
 title: Teach the REAUTH route once — close the slot-recapture hole that strands the rotator
 column: todo
 scope: project

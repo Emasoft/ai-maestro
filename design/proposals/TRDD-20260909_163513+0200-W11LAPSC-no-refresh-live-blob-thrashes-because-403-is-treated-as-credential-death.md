@@ -1,5 +1,6 @@
 ---
 trdd-id: W11LAPSC
+status: proposed
 title: a no-refresh live blob thrashes once per tick because 403 is treated as credential death and networkUp stays true
 column: proposal
 created: 2026-09-09T16:35:13+0200

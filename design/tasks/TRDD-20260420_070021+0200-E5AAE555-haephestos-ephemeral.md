@@ -1,5 +1,6 @@
 ---
 trdd-id: E5AAE555
+status: tasked
 title: Haephestos ephemeral-session hardening
 column: blocked
 created: 2026-04-20T07:00:21+0200

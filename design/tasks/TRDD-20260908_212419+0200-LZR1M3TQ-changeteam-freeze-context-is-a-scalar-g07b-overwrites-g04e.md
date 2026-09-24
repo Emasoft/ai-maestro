@@ -1,5 +1,6 @@
 ---
 trdd-id: LZR1M3TQ
+status: tasked
 title: ChangeTeam freeze context is a scalar — G07b overwrites G04e
 column: backburner
 created: 2026-09-08T21:24:19+0200

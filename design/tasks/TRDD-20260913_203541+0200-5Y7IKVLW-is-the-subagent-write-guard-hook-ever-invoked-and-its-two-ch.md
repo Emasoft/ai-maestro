@@ -1,5 +1,6 @@
 ---
 trdd-id: 5Y7IKVLW
+status: tasked
 title: Is the subagent write-guard hook ever invoked, and its two checks disagree about the project root
 column: todo
 created: 2026-09-13T20:35:41+0200

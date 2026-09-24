@@ -1,5 +1,6 @@
 ---
 trdd-id: 6B1ND5TD
+status: tasked
 title: SCEN-015 S012 S016 S019 Action fields wait on the agent clock inside a runner step (Rule 15)
 column: todo
 created: 2026-09-06T02:15:58+0200

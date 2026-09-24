@@ -1,5 +1,6 @@
 ---
 trdd-id: W4MTW35A
+status: tasked
 title: The identity mapping table that kernel peer credentials rely on is writable by every agent
 column: planned
 scope: project

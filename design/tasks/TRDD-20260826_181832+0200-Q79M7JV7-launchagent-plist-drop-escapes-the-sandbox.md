@@ -1,5 +1,6 @@
 ---
 trdd-id: Q79M7JV7
+status: tasked
 title: The sandbox profile leaves macOS persistence surfaces writable so a dropped LaunchAgent runs outside it
 column: planned
 scope: project

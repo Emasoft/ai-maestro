@@ -1,5 +1,6 @@
 ---
 trdd-id: U7MJUHWJ
+status: tasked
 title: ASSISTANT-role filesystem containment hook set
 column: todo
 created: 2026-09-05T21:04:45+0200

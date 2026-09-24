@@ -1,5 +1,6 @@
 ---
 trdd-id: 1EE4A3C1
+status: tasked
 title: Self-contained portable agents — workdir .aimaestro mirror, sessions.json reconcile, orphan revival
 column: todo
 created: 2026-05-22T12:14:11+0200

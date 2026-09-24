@@ -1,5 +1,6 @@
 ---
 trdd-id: OZZB3DJA
+status: tasked
 title: Migrate janitor functions into the ai-maestro server as script-wrapped APIs
 column: backburner
 created: 2026-07-01T16:02:30+0200

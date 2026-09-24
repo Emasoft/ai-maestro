@@ -1,5 +1,6 @@
 ---
 trdd-id: 8C1Z42GV
+status: tasked
 title: Multi-client registry entries and detection tests
 column: design
 scope: project

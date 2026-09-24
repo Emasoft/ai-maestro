@@ -1,5 +1,6 @@
 ---
 trdd-id: D0SI66XM
+status: tasked
 title: Multi-client runtime-behaviour settings enforcer (codex / gemini / opencode / kiro / kimi)
 column: design
 created: 2026-07-17T02:57:59+0200

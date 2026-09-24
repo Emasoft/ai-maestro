@@ -1,5 +1,6 @@
 ---
 trdd-id: 9IIC9CKT
+status: proposed
 title: Promote the context-breakdown heuristic-estimate disclaimer to a visible badge
 column: refused
 created: 2026-07-07T12:44:38+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 8K68E16G
+status: tasked
 title: A CHIEF-OF-STAFF may delete agents of its own team with MANAGER approval
 column: blocked
 created: 2026-07-14T15:30:55+0200

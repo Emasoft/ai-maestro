@@ -1,5 +1,6 @@
 ---
 trdd-id: 963CTSUO
+status: tasked
 title: Registry status and sessions never update for a created agent (general bug, not adoption-specific)
 column: planned
 created: 2026-09-10T09:48:41+0200

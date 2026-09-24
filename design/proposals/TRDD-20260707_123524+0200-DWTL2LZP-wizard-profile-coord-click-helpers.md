@@ -1,5 +1,6 @@
 ---
 trdd-id: DWTL2LZP
+status: proposed
 title: Codify wizard and Profile coordinate-click quirks as shared dev-browser helpers
 column: refused
 created: 2026-07-07T12:35:24+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: QR9FSL3Q
+status: tasked
 title: Cross-host groups — broadcast chat rooms spanning hosts; teams stay same-host (R45)
 column: planned
 created: 2026-07-16T09:47:54+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: JT3U4ZVM
+status: tasked
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: blocked
 pre-block-column: ai_review

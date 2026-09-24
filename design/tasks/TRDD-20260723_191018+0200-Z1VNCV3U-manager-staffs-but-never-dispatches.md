@@ -1,5 +1,6 @@
 ---
 trdd-id: Z1VNCV3U
+status: tasked
 title: The MANAGER staffs a portfolio correctly but never dispatches — workers created, never woken, never messaged
 column: planned
 created: 2026-07-23T19:10:18+0200

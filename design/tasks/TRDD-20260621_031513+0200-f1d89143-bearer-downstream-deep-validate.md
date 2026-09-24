@@ -1,5 +1,6 @@
 ---
 trdd-id: F1D89143
+status: tasked
 title: Deep-validate Bearer credentials at the downstream WS and pty handler — not the pre-handshake gate
 column: backburner
 created: 2026-06-21T03:15:13+0200

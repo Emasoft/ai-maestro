@@ -1,5 +1,6 @@
 ---
 trdd-id: 9JOCY2EJ
+status: tasked
 title: Pillar CLI defects - help path, fix target, write gate, blocker semantics
 column: dev
 created: 2026-09-13T02:34:17+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 46MY2EX4
+status: tasked
 title: A local process that resolves to no agent must be refused and never conflated with the system owner
 column: planned
 scope: project

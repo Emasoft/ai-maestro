@@ -1,5 +1,6 @@
 ---
 trdd-id: ACA7013M
+status: tasked
 title: Decide and apply the auth policy for the GET role-plugins status and governance reachable info-leak endpoints
 column: backburner
 created: 2026-08-25T18:17:40+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: B6XN2VKD
+status: tasked
 title: Block agents from executing the claude CLI, via settings.local.json deny permissions
 column: backburner
 created: 2026-07-09T17:51:47+0200

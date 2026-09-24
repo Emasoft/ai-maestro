@@ -1,5 +1,6 @@
 ---
 trdd-id: 17K0SHDQ
+status: tasked
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
 column: blocked
 pre-block-column: dev

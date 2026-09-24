@@ -1,5 +1,6 @@
 ---
 trdd-id: W7B0TC9B
+status: proposed
 title: E2E smoke of manage-trdd write verbs 798OAHMX B
 column: refused
 created: 2026-08-22T17:29:30+0200

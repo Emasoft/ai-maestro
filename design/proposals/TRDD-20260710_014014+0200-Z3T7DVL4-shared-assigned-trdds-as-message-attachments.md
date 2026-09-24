@@ -1,5 +1,6 @@
 ---
 trdd-id: Z3T7DVL4
+status: proposed
 title: Assigned TRDDs are shared objects attached to the message, not copies
 column: proposal
 min-approval-requirement: user

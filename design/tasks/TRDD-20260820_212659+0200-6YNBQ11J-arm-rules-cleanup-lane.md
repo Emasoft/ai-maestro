@@ -1,5 +1,6 @@
 ---
 trdd-id: 6YNBQ11J
+status: tasked
 title: Arm or permanently decline the rules-cleanup lane (AIM_RULES_CLEANUP)
 column: backburner
 scope: project

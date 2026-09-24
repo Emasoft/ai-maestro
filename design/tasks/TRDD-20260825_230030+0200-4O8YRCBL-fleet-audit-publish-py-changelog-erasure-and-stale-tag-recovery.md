@@ -1,5 +1,6 @@
 ---
 trdd-id: 4O8YRCBL
+status: tasked
 title: Fleet audit — publish.py template erases changelog history and reuses stale tags on recovery
 column: todo
 created: 2026-08-25T23:00:30+0200

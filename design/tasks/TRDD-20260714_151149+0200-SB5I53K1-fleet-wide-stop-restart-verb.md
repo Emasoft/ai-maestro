@@ -1,5 +1,6 @@
 ---
 trdd-id: SB5I53K1
+status: tasked
 title: A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
 column: planned
 created: 2026-07-14T15:11:49+0200

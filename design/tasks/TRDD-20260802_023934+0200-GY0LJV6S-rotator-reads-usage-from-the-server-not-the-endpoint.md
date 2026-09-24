@@ -1,5 +1,6 @@
 ---
 trdd-id: GY0LJV6S
+status: tasked
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
 column: blocked
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: IJI8TU3L
+status: tasked
 title: Release TRDDs derived from the founding directive must not stamp approval-judge user for a decision the USER did not individually make
 column: planned
 created: 2026-07-23T11:15:46+0200

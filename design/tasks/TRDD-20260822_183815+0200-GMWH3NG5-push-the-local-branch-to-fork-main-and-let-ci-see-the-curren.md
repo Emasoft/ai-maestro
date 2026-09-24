@@ -1,5 +1,6 @@
 ---
 trdd-id: GMWH3NG5
+status: tasked
 title: Push the local branch to fork main and let CI see the current tree
 column: todo
 blocked-by: []

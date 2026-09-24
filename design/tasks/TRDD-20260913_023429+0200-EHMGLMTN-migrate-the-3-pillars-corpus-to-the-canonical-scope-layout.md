@@ -1,5 +1,6 @@
 ---
 trdd-id: EHMGLMTN
+status: tasked
 title: Migrate the 3-pillars corpus to the canonical scope layout
 column: backburner
 created: 2026-09-13T02:34:29+0200

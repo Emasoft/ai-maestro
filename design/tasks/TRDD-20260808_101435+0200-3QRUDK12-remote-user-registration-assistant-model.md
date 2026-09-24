@@ -1,5 +1,6 @@
 ---
 trdd-id: 3QRUDK12
+status: tasked
 title: Remote USER registration and the ASSISTANT collaboration model (USER ruling)
 column: planned
 created: 2026-08-08T10:14:35+0200

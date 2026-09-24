@@ -1,5 +1,6 @@
 ---
 trdd-id: MSLBWEDK
+status: tasked
 title: Live install and update of the parameterized installer against a clean target host
 column: todo
 created: 2026-08-22T18:19:33+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: HGE9T6VT
+status: tasked
 title: Authentication is substituting for authorization — the headless router must be driven by the same table as the guard and fail closed
 column: planned
 created: 2026-07-14T15:52:55+0200

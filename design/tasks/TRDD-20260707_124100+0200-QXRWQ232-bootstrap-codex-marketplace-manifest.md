@@ -1,5 +1,6 @@
 ---
 trdd-id: QXRWQ232
+status: tasked
 title: Bootstrap the Codex marketplace manifest file when absent
 column: planned
 created: 2026-07-07T12:41:00+0200

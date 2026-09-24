@@ -1,5 +1,6 @@
 ---
 trdd-id: HF2DY4VT
+status: tasked
 title: The settings-edit API and CLI report success true while carrying auditOk false in the same object
 column: human_review
 pre-block-column: todo

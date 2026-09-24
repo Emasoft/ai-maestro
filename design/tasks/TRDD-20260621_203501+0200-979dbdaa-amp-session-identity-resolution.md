@@ -1,5 +1,6 @@
 ---
 trdd-id: 979DBDAA
+status: tasked
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
 column: approval
 created: 2026-06-21T20:35:01+0200

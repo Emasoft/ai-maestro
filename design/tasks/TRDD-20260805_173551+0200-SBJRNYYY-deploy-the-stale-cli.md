@@ -1,5 +1,6 @@
 ---
 trdd-id: SBJRNYYY
+status: tasked
 title: 25 of 87 CLI scripts on PATH are stale and 7 were never deployed — order the deploy
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: K5X9WYEJ
+status: tasked
 title: A connected socket carries its peer credentials so an agent can hand another agent its identity
 column: planned
 scope: project

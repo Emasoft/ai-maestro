@@ -1,5 +1,6 @@
 ---
 trdd-id: FM2ERCE6
+status: tasked
 title: SessionReconcile should relaunch an orphan shell-only pane, not just kill it
 column: planned
 approved: true

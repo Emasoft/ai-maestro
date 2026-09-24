@@ -1,5 +1,6 @@
 ---
 trdd-id: JY6IDFFC
+status: tasked
 title: Spec and ruling on the aimaestro-agent.sh deployment contract — manual cp-based install and no build-vs-runnable distinction
 column: todo
 scope: project

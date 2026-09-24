@@ -1,5 +1,6 @@
 ---
 trdd-id: YSODGH22
+status: proposed
 title: the approved column invariant is unenforced and ambiguous for a card superseded after approval
 column: refused
 created: 2026-08-23T11:45:00+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: WLHP34KZ
+status: proposed
 title: network-down degraded branch admits a no-refresh slot and max-expiry selection then prefers it over every healthy slot
 column: proposal
 created: 2026-09-09T16:27:06+0200

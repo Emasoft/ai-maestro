@@ -1,5 +1,6 @@
 ---
 trdd-id: SX5FPMG0
+status: tasked
 title: Branch-protection baseline shape is derived from the APPLIER's ambient context, not from the repo
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: 2G1AR7BB
+status: tasked
 title: TRDD write gate disagreement on mandated-by field between CLI set and API route
 column: todo
 created: 2026-09-06T03:01:01+0200

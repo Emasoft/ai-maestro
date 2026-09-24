@@ -1,5 +1,6 @@
 ---
 trdd-id: P1AO5EY5
+status: proposed
 title: Replace the literal "? msgs" placeholder with a real cached message count
 column: refused
 created: 2026-07-07T12:44:38+0200

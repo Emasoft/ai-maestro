@@ -1,5 +1,6 @@
 ---
 trdd-id: SL3PV2JO
+status: proposed
 title: Add a validate-only dry-run mode to scenario-setup.sh
 column: refused
 created: 2026-07-07T12:41:00+0200

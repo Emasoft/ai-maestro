@@ -1,5 +1,6 @@
 ---
 trdd-id: 1HUKAYI6
+status: tasked
 title: aimaestro-governance.sh login echoes the governance password when stdin is not a keyboard
 column: planned
 min-approval-requirement: user

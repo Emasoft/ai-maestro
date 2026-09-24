@@ -1,5 +1,6 @@
 ---
 trdd-id: 903B7A20
+status: tasked
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200

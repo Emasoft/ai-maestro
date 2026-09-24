@@ -1,5 +1,6 @@
 ---
 trdd-id: RA2ZSTOF
+status: proposed
 title: Keychain denied-latch blinds the OAuth rotator under host load — exempt attribute-only reads, harden the half-open probe, add a burn-rate horizon
 column: proposal
 created: 2026-09-05T15:19:54+0200

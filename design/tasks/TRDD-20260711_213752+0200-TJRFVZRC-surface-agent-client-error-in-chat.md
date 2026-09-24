@@ -1,5 +1,6 @@
 ---
 trdd-id: TJRFVZRC
+status: tasked
 title: A chat message to an agent whose client cannot act must surface an error, not vanish
 column: planned
 approved: true

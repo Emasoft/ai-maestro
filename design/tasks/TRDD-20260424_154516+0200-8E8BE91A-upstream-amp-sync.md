@@ -1,5 +1,6 @@
 ---
 trdd-id: 8E8BE91A
+status: tasked
 title: Upstream AMP Sync Before PR Submission
 column: todo
 created: 2026-04-24T15:45:16+0200

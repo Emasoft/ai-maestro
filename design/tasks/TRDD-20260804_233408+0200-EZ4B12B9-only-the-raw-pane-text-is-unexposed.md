@@ -1,5 +1,6 @@
 ---
 trdd-id: EZ4B12B9
+status: tasked
 title: The only unexposed terminal read is the RAW PANE TEXT — everything semantically useful is already readable
 column: backburner
 created: 2026-08-04T23:34:08+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 74WEU9SD
+status: proposed
 title: Add a Team Profile Panel for unified team management
 column: refused
 created: 2026-07-07T12:35:40+0200

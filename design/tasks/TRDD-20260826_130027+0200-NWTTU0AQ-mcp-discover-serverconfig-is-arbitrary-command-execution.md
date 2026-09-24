@@ -1,5 +1,6 @@
 ---
 trdd-id: NWTTU0AQ
+status: tasked
 title: mcp-discover accepts an arbitrary inline serverConfig and spawns its command — any authenticated agent gets code execution
 column: planned
 scope: project

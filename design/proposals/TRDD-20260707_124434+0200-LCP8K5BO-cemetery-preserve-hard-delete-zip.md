@@ -1,5 +1,6 @@
 ---
 trdd-id: LCP8K5BO
+status: proposed
 title: Optional per-host setting to preserve a ZIP export before hard-delete-with-folder
 column: refused
 created: 2026-07-07T12:44:38+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: PLOVIPZE
+status: tasked
 title: MAESTRO console-presence gates — registration + first login + password change are local-only (R48)
 column: planned
 created: 2026-07-16T09:47:54+0200

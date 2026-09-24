@@ -1,5 +1,6 @@
 ---
 trdd-id: UZ9YT1SD
+status: tasked
 title: One portable cheap-delegation rule in the server-installed layer instead of per-plugin guidance
 column: planned
 created: 2026-08-08T12:01:51+0200

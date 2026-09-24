@@ -1,5 +1,6 @@
 ---
 trdd-id: KX1DWP9X
+status: proposed
 title: Decide fate of the permanently-Exited default placeholder agent in the sidebar
 column: refused
 created: 2026-07-07T12:44:38+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: YJUIFOLO
+status: tasked
 title: The who-am-I endpoint rejects the credential the server hands the session
 column: planned
 scope: project

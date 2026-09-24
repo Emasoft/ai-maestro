@@ -1,5 +1,6 @@
 ---
 trdd-id: A1019073
+status: tasked
 title: Controlled execution environment for AI Maestro agents — UID separation, host sandboxing, supply-chain controls
 column: todo
 created: 2026-05-22T11:15:03+0200

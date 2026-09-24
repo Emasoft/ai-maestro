@@ -1,5 +1,6 @@
 ---
 trdd-id: 9KMWH05E
+status: proposed
 title: One-time cleanup pass for orphan scen* teams, COS agents, and cemetery entries
 column: refused
 created: 2026-07-07T12:35:24+0200

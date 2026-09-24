@@ -1,5 +1,6 @@
 ---
 trdd-id: AQTGAY60
+status: tasked
 title: DeleteAgent leaves the agent's local plugin records behind in installed_plugins.json
 column: human_review
 scope: project

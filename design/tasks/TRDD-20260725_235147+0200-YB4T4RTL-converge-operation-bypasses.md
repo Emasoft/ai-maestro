@@ -1,5 +1,6 @@
 ---
 trdd-id: YB4T4RTL
+status: tasked
 title: Converge the 37 non-AIO mutation sites onto their all-in-one functions
 column: todo
 scope: project

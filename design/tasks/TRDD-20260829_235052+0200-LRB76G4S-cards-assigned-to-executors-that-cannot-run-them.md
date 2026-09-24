@@ -1,5 +1,6 @@
 ---
 trdd-id: LRB76G4S
+status: tasked
 title: RETRACTED — a mention-grep was read as a dependency; the residue is two small board-hygiene items
 column: todo
 created: 2026-08-29T23:50:52+0200

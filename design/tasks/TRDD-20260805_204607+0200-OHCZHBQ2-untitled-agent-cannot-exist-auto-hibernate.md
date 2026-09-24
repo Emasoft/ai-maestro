@@ -1,5 +1,6 @@
 ---
 trdd-id: OHCZHBQ2
+status: tasked
 title: An agent that is not 100 percent valid must stay hibernated — one validity gate, not N special cases
 column: todo
 scope: project

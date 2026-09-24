@@ -1,5 +1,6 @@
 ---
 trdd-id: 3RIWC3FI
+status: tasked
 title: Capture a live AskUserQuestion menu frame as a fixture so the continuity matcher can be written from it
 column: todo
 created: 2026-09-05T11:33:12+0200

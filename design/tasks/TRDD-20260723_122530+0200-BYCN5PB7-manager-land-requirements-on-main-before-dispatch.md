@@ -1,5 +1,6 @@
 ---
 trdd-id: BYCN5PB7
+status: tasked
 title: MANAGER must land the requirements on main (or an already-merged base) before dispatching the dev — never leave them in an unmerged PR that gates the NPT
 column: planned
 created: 2026-07-23T12:25:30+0200

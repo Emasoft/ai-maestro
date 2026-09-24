@@ -1,5 +1,6 @@
 ---
 trdd-id: UIDK2SDL
+status: tasked
 title: isStale has an out-of-repo reader in the janitor and nothing in this repo says so
 column: todo
 created: 2026-09-09T16:54:06+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 0GX8FOCJ
+status: proposed
 title: A sandbox profile built by string interpolation can be altered by an attacker-chosen agent name
 column: refused
 scope: project

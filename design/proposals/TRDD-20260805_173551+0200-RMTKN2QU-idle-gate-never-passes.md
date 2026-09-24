@@ -1,5 +1,6 @@
 ---
 trdd-id: RMTKN2QU
+status: proposed
 title: The sendCommand idle gate can never pass — fix it or delete it
 column: refused
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: 8CL6EC48
+status: tasked
 title: Wire the ama-star skill surface into every role plugin's agents — AMAMA F5883DCC item B.2
 column: backburner
 created: 2026-08-25T18:25:09+0200

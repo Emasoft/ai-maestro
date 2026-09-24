@@ -1,5 +1,6 @@
 ---
 trdd-id: IALQ43QP
+status: tasked
 title: Automatic fallback when a model-scoped window is exhausted but the account has headroom
 column: blocked
 pre-block-column: testing

@@ -1,5 +1,6 @@
 ---
 trdd-id: P9H0Q7SZ
+status: tasked
 title: USER-escalation script verb with acknowledgment state
 column: approval
 created: 2026-08-19T14:01:56+0200

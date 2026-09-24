@@ -1,5 +1,6 @@
 ---
 trdd-id: 8J8J174D
+status: tasked
 title: Full mode has no semantic credential gate while headless closed the same hole for all its handlers
 column: todo
 created: 2026-09-04T13:44:10+0200

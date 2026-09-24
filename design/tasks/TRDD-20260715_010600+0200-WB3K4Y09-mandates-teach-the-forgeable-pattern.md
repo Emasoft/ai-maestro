@@ -1,5 +1,6 @@
 ---
 trdd-id: WB3K4Y09
+status: tasked
 title: The governance rules teach agents to hand-write approvals, so every real mandate is unverifiable
 column: planned
 min-approval-requirement: manager

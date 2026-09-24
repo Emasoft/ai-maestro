@@ -1,5 +1,6 @@
 ---
 trdd-id: Q4GTD9C4
+status: proposed
 title: Commit gate — a verified-in-code claim must cite a range that resolves
 column: proposal
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: IB6D0BRK
+status: proposed
 title: Pillar CLIs mint a full approval record from an unverified --approver string
 column: proposal
 created: 2026-09-13T15:49:19+0200

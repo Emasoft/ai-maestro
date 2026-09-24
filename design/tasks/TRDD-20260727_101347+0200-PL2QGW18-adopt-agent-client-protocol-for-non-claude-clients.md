@@ -1,5 +1,6 @@
 ---
 trdd-id: PL2QGW18
+status: tasked
 title: Adopt the Agent Client Protocol for every non-Claude client
 column: design
 scope: project

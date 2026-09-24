@@ -1,5 +1,6 @@
 ---
 trdd-id: FFHZM7XV
+status: proposed
 title: The absorbed version-update lane is cadence-driven not detection-driven, and its trail cannot measure publish-to-installed latency
 column: refused
 scope: project

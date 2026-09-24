@@ -1,5 +1,6 @@
 ---
 trdd-id: 96ZED7BA
+status: tasked
 title: The scenario suite was testing the opposite of what matters — it puppeted the agents
 column: todo
 created: 2026-07-11T21:33:57+0200

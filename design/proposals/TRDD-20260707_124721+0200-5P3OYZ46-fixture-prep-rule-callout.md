@@ -1,5 +1,6 @@
 ---
 trdd-id: 5P3OYZ46
+status: proposed
 title: Add a top-of-file callout requiring fixture-prep for scenarios with git-fixtures
 column: refused
 created: 2026-07-07T12:47:21+0200

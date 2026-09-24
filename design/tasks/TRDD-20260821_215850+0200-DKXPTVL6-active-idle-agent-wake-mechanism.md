@@ -1,5 +1,6 @@
 ---
 trdd-id: DKXPTVL6
+status: tasked
 title: Active idle-agent wake mechanism so a filed directive reaches an idle agent without a human bridge
 column: todo
 scope: project

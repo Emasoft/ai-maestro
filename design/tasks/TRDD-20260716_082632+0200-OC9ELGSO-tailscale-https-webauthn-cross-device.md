@@ -1,5 +1,6 @@
 ---
 trdd-id: OC9ELGSO
+status: tasked
 title: Tailscale-native HTTPS + host-derived WebAuthn RP_ID for cross-device passkeys
 column: planned
 created: 2026-07-16T08:26:32+0200

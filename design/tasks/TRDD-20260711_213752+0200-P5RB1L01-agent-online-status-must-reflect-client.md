@@ -1,5 +1,6 @@
 ---
 trdd-id: P5RB1L01
+status: tasked
 title: Agent Online status must reflect the client, not just tmux session existence
 column: planned
 approved: true

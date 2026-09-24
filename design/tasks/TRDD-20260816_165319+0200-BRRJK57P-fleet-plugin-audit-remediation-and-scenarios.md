@@ -1,5 +1,6 @@
 ---
 trdd-id: BRRJK57P
+status: tasked
 title: USER fleet program — every plugin self-audits twice, remediates via TRDDs, and is proven by new scenario tests
 column: todo
 scope: project

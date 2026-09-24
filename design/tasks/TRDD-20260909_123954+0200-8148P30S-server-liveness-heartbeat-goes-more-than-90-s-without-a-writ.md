@@ -1,5 +1,6 @@
 ---
 trdd-id: 8148P30S
+status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
 column: todo
 created: 2026-09-09T12:39:54+0200

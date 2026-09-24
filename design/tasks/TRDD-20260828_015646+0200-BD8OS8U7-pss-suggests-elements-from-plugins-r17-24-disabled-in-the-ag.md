@@ -1,5 +1,6 @@
 ---
 trdd-id: BD8OS8U7
+status: tasked
 title: PSS suggests elements from plugins R17.24 disabled in the agent because its enablement filter runs at index time
 column: todo
 created: 2026-08-28T01:56:46+0200

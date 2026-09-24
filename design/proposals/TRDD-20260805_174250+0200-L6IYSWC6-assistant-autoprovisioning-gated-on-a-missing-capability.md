@@ -1,5 +1,6 @@
 ---
 trdd-id: L6IYSWC6
+status: proposed
 title: ASSISTANT auto-provisioning is gated on native-user registration, which does not exist
 column: proposal
 scope: project

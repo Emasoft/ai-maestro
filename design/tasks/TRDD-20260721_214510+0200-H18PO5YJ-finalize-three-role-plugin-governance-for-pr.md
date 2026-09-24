@@ -1,5 +1,6 @@
 ---
 trdd-id: H18PO5YJ
+status: tasked
 title: Finalize ai-maestro to a 3-role-plugin governance model (MANAGER/MAINTAINER/AUTONOMOUS) for the PR
 column: todo
 created: 2026-07-21T21:45:10+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: Y8VPE3NS
+status: tasked
 title: Retry-wedge event the ai-maestro 90 contract
 column: todo
 review-after: 2026-10-05

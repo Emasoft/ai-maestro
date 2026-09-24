@@ -1,5 +1,6 @@
 ---
 trdd-id: KTHBJRDC
+status: proposed
 title: Share a parsed-JSONL cache between the Chat tab and the Sessions tab
 column: refused
 created: 2026-07-07T12:44:38+0200

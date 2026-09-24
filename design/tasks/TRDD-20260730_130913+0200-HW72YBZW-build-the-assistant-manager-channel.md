@@ -1,5 +1,6 @@
 ---
 trdd-id: HW72YBZW
+status: tasked
 title: Build the ASSISTANT-MANAGER channel and drop the superseded MAESTRO grant
 scope: project
 project-id: ai-maestro

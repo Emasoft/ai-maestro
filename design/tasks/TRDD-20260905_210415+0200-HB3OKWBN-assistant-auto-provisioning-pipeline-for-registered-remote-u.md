@@ -1,5 +1,6 @@
 ---
 trdd-id: HB3OKWBN
+status: tasked
 title: ASSISTANT auto-provisioning pipeline for registered remote USERs
 column: todo
 created: 2026-09-05T21:04:15+0200

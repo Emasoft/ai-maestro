@@ -1,5 +1,6 @@
 ---
 trdd-id: 5CIL7A07
+status: tasked
 title: Programmatic per-client terminal-continuity automaton
 column: blocked
 pre-block-column: dispatch

@@ -1,5 +1,6 @@
 ---
 trdd-id: C94C60E9
+status: tasked
 title: Script SSOT and code-signing readiness — dedupe AMP tree, route hook through CLI, collapse helpers
 column: planned
 min-approval-requirement: manager

@@ -1,5 +1,6 @@
 ---
 trdd-id: T3FXA0Y0
+status: tasked
 title: Establish and enforce an exit-status contract across the frozen CLI
 column: blocked
 scope: project

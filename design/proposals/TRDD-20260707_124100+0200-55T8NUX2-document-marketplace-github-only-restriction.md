@@ -1,5 +1,6 @@
 ---
 trdd-id: 55T8NUX2
+status: proposed
 title: Document that Add Marketplace currently accepts GitHub URLs only
 column: refused
 created: 2026-07-07T12:41:00+0200

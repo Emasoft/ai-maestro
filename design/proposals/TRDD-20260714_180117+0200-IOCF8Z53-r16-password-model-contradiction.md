@@ -1,5 +1,6 @@
 ---
 trdd-id: IOCF8Z53
+status: proposed
 title: R16 says agents never hold the governance password — the shipped product requires them to
 column: proposal
 created: 2026-07-14T18:01:17+0200

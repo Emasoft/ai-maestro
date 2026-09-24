@@ -1,5 +1,6 @@
 ---
 trdd-id: 36AUWWHX
+status: proposed
 title: Add gh-CLI-mocked unit tests for lib/github-project.ts CRUD functions
 column: refused
 created: 2026-07-07T12:47:21+0200

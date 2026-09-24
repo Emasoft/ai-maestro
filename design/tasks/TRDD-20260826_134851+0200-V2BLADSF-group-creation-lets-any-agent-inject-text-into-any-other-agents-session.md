@@ -1,5 +1,6 @@
 ---
 trdd-id: V2BLADSF
+status: tasked
 title: Group creation lets any authenticated agent inject arbitrary text into any other agent's live session as AI Maestro
 column: planned
 scope: project

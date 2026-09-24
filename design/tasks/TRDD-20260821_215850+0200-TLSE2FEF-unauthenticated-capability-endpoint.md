@@ -1,5 +1,6 @@
 ---
 trdd-id: TLSE2FEF
+status: tasked
 title: Unauthenticated capability-set endpoint with per-verb revision counters
 column: todo
 scope: project

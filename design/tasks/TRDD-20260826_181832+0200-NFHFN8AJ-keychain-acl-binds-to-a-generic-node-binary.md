@@ -1,5 +1,6 @@
 ---
 trdd-id: NFHFN8AJ
+status: tasked
 title: The keychain ACL for the encryption key would bind to an adhoc-signed node that every agent can run
 column: planned
 scope: project

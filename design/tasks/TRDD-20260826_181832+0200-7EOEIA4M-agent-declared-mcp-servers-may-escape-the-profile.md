@@ -1,5 +1,6 @@
 ---
 trdd-id: 7EOEIA4M
+status: tasked
 title: An agent-declared MCP server is a process whose sandbox and identity are unspecified
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: N1FYP2AW
+status: tasked
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: backburner
 created: 2026-06-23T20:14:21+0200

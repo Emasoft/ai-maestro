@@ -1,5 +1,6 @@
 ---
 trdd-id: B7G2R0SX
+status: tasked
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: approval
 created: 2026-07-22T20:59:43+0200

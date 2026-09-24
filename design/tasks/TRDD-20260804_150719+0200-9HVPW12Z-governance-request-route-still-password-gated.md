@@ -1,5 +1,6 @@
 ---
 trdd-id: 9HVPW12Z
+status: tasked
 title: The agent-facing governance-request route still demands the governance password after R32 superseded it
 column: design
 created: 2026-08-04T15:07:19+0200

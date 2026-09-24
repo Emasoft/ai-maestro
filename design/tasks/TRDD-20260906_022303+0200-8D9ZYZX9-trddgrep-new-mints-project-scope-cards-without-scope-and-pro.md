@@ -1,5 +1,6 @@
 ---
 trdd-id: 8D9ZYZX9
+status: tasked
 title: trddgrep new mints project-scope cards without scope and project-id
 column: backburner
 created: 2026-09-06T02:23:03+0200

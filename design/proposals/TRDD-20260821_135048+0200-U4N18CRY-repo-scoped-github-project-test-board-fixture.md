@@ -1,5 +1,6 @@
 ---
 trdd-id: U4N18CRY
+status: proposed
 title: USER fixture — a team linked to a REPO-scoped GitHub Project, so the kanban round-trip can run
 column: proposal
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: 7JRFBEQ2
+status: proposed
 title: R39.2 and RP-ASSISTANT-01 still say the ASSISTANT plugin is unpublished
 column: refused
 scope: project

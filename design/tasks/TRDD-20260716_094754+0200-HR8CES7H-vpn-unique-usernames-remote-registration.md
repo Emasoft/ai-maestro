@@ -1,5 +1,6 @@
 ---
 trdd-id: HR8CES7H
+status: tasked
 title: VPN-unique user names + remote normal-user registration and password change (R47)
 column: planned
 created: 2026-07-16T09:47:54+0200

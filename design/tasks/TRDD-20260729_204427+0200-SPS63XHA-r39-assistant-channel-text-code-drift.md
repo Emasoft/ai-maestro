@@ -1,5 +1,6 @@
 ---
 trdd-id: SPS63XHA
+status: tasked
 title: R39.5 and R39.7 are marked ENFORCED but their guards encode the pre-2026-07-22 rule
 column: blocked
 scope: project

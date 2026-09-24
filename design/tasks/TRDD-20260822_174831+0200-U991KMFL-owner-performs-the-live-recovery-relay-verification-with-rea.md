@@ -1,5 +1,6 @@
 ---
 trdd-id: U991KMFL
+status: tasked
 title: Owner performs the live recovery-relay verification with real SMTP credentials
 column: todo
 created: 2026-08-22T17:48:31+0200

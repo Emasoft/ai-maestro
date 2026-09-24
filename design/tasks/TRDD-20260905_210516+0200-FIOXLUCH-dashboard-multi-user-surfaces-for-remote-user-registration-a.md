@@ -1,5 +1,6 @@
 ---
 trdd-id: FIOXLUCH
+status: tasked
 title: Dashboard multi-user surfaces for remote USER registration and ASSISTANT collaboration
 column: todo
 created: 2026-09-05T21:05:16+0200

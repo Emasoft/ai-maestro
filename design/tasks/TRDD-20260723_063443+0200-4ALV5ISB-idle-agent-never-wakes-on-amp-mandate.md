@@ -1,5 +1,6 @@
 ---
 trdd-id: 4ALV5ISB
+status: tasked
 title: An idle agent never wakes to process an inbound AMP mandate — the fleet delegation chain breaks at the worker
 column: planned
 approved: true

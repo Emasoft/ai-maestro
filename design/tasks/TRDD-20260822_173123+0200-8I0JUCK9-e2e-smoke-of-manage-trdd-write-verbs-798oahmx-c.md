@@ -1,5 +1,6 @@
 ---
 trdd-id: 8I0JUCK9
+status: tasked
 title: E2E smoke of manage-trdd write verbs 798OAHMX C
 column: planned
 created: 2026-08-22T17:31:23+0200

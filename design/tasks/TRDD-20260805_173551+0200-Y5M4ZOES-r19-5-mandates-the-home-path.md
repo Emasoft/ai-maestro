@@ -1,5 +1,6 @@
 ---
 trdd-id: Y5M4ZOES
+status: tasked
 title: R19.5 mandates the $HOME path that ai-maestro#32 calls a governance violation
 column: planned
 scope: project

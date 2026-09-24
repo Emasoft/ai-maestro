@@ -1,5 +1,6 @@
 ---
 trdd-id: Y894NLRQ
+status: tasked
 title: Per-USER authentication and session model for remote registrants
 column: todo
 created: 2026-09-05T21:04:03+0200

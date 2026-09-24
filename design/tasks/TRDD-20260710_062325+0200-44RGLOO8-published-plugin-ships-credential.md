@@ -1,5 +1,6 @@
 ---
 trdd-id: 44RGLOO8
+status: tasked
 title: The published web-scenario-tester ships the live governance credential in its rules doc
 column: human_review
 approved: true

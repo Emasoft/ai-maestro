@@ -1,5 +1,6 @@
 ---
 trdd-id: F1SL03CK
+status: tasked
 title: Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
 column: planned
 created: 2026-07-14T13:57:21+0200

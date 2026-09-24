@@ -1,5 +1,6 @@
 ---
 trdd-id: 1GGQ4HWY
+status: tasked
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: design
 pre-block-column: 

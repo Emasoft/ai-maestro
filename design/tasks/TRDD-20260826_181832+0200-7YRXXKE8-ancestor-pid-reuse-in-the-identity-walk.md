@@ -1,5 +1,6 @@
 ---
 trdd-id: 7YRXXKE8
+status: tasked
 title: PID reuse is closed for the peer and open for every ancestor the identity walk touches
 column: planned
 scope: project

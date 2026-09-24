@@ -1,5 +1,6 @@
 ---
 trdd-id: VXFI1BR5
+status: tasked
 title: switchLiveTo discards a working credential at rotate-off instead of snapshotting it back to the outgoing slot
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: RND4LDFK
+status: proposed
 title: A trusted in-process system AMP sender — the server cannot message a closed-team COS
 column: proposal
 created: 2026-09-08T21:24:18+0200

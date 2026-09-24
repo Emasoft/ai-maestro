@@ -1,5 +1,6 @@
 ---
 trdd-id: W9FA6ACZ
+status: tasked
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200

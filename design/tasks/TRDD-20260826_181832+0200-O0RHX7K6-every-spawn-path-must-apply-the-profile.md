@@ -1,5 +1,6 @@
 ---
 trdd-id: O0RHX7K6
+status: tasked
 title: One agent spawned without the sandbox profile defeats the confinement layer for the whole fleet
 column: planned
 scope: project

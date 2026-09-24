@@ -1,5 +1,6 @@
 ---
 trdd-id: YRZXUBW8
+status: proposed
 title: Arm or permanently decline the cold-cache-clear lane (AIM_COLD_CACHE_CLEAR is read and set nowhere)
 column: proposal
 created: 2026-09-05T09:52:56+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: F181A4AE
+status: tasked
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: blocked
 pre-block-column: published

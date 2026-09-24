@@ -1,5 +1,6 @@
 ---
 trdd-id: 9SEQ4QI9
+status: tasked
 title: Workdir-containment hooks are SERVER-provisioned — no role plugin may own containment
 column: todo
 created: 2026-08-08T12:49:57+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 5F3490TA
+status: tasked
 title: MANAGER should delegate repo-create + branch-rules + CI + clone to the MAINTAINER, not do it inline
 column: planned
 created: 2026-07-23T11:15:46+0200

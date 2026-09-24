@@ -1,5 +1,6 @@
 ---
 trdd-id: 91TLL7DW
+status: tasked
 title: Kernel-attested identity is void on any route that takes the acting agent from a request parameter
 column: planned
 scope: project

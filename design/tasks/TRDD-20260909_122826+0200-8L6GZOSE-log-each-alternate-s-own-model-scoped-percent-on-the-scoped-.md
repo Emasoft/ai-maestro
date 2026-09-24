@@ -1,5 +1,6 @@
 ---
 trdd-id: 8L6GZOSE
+status: tasked
 title: Log each alternate's own model-scoped percent on the SCOPED-WALL verdict line
 column: todo
 created: 2026-09-09T12:28:26+0200

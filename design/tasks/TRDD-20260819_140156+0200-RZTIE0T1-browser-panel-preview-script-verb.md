@@ -1,5 +1,6 @@
 ---
 trdd-id: RZTIE0T1
+status: tasked
 title: Browser-panel preview script verb for artifact-producing plugins
 column: todo
 priority-note: demoted to low by consumer measurement 2026-08-19 (see STATE)

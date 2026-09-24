@@ -1,5 +1,6 @@
 ---
 trdd-id: 271764MC
+status: tasked
 title: Server rotator vetoes every Fable alternate above 90 percent and hands the fleet to a model switch
 column: dev
 created: 2026-09-08T15:23:54+0200

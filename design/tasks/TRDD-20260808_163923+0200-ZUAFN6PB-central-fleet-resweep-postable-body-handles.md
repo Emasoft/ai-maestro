@@ -1,5 +1,6 @@
 ---
 trdd-id: ZUAFN6PB
+status: tasked
 title: Central fleet re-sweep for postable-body handles with the context-scoped classifier
 column: design
 created: 2026-08-08T16:39:23+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: IAR39SQB
+status: tasked
 title: Make SCEN-030's R42 observation pollable and split from fleet-build
 column: planned
 min-approval-requirement: none

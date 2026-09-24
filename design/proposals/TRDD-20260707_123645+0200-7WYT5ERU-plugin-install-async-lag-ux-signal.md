@@ -1,5 +1,6 @@
 ---
 trdd-id: 7WYT5ERU
+status: proposed
 title: Show an installing-state signal while role-plugin install lags the title-change confirmation
 column: refused
 created: 2026-07-07T12:36:45+0200

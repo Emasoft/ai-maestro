@@ -1,5 +1,6 @@
 ---
 trdd-id: MVZTEKX4
+status: tasked
 title: Flip the statusLine command so the built ingest pipeline actually receives data
 column: todo
 created: 2026-08-22T18:22:45+0200

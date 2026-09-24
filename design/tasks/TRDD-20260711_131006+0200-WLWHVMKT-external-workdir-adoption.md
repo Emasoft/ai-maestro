@@ -1,5 +1,6 @@
 ---
 trdd-id: WLWHVMKT
+status: tasked
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200

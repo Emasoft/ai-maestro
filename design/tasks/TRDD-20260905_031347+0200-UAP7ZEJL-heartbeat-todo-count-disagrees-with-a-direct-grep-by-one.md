@@ -1,5 +1,6 @@
 ---
 trdd-id: UAP7ZEJL
+status: tasked
 title: The heartbeat todo count and a direct grep disagree by exactly one card
 scope: project
 project-id: ai-maestro

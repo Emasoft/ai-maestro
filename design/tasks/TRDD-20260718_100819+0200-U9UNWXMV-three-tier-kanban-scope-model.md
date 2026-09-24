@@ -1,5 +1,6 @@
 ---
 trdd-id: U9UNWXMV
+status: tasked
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200

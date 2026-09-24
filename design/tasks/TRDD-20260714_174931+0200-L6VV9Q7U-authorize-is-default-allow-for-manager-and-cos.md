@@ -1,5 +1,6 @@
 ---
 trdd-id: L6VV9Q7U
+status: tasked
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
 column: planned
 created: 2026-07-14T17:49:31+0200

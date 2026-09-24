@@ -1,5 +1,6 @@
 ---
 trdd-id: R268J32X
+status: tasked
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200

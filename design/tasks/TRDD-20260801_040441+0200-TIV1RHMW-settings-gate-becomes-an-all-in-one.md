@@ -1,5 +1,6 @@
 ---
 trdd-id: TIV1RHMW
+status: tasked
 title: convert the settings-gate API into a true all-in-one function
 column: design
 scope: project

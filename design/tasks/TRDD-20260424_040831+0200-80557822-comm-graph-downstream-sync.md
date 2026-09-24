@@ -1,5 +1,6 @@
 ---
 trdd-id: 80557822
+status: tasked
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200

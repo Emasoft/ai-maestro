@@ -1,5 +1,6 @@
 ---
 trdd-id: OUAQARPL
+status: tasked
 title: chore ownership of oauth-rotator-tick flapped between the janitor daemon and the server for four hours
 column: blocked
 created: 2026-09-05T21:13:22+0200

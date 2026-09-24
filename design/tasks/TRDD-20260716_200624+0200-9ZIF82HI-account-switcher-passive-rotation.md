@@ -1,5 +1,6 @@
 ---
 trdd-id: 9ZIF82HI
+status: tasked
 title: Account switcher — passive rotation to a fresh account/token on 429 / dead-refresh / network interruption
 column: planned
 created: 2026-07-16T20:06:24+0200

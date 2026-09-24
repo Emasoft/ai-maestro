@@ -1,5 +1,6 @@
 ---
 trdd-id: CHN16JXZ
+status: tasked
 title: Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet
 column: human_review
 pre-block-column: null

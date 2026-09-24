@@ -1,5 +1,6 @@
 ---
 trdd-id: RC33OAFQ
+status: tasked
 title: Any authenticated agent can read any other agent's full conversation transcript via conversations/parse
 column: planned
 scope: project

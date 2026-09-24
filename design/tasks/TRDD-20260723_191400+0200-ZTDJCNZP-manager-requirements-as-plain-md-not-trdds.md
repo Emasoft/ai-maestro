@@ -1,5 +1,6 @@
 ---
 trdd-id: ZTDJCNZP
+status: tasked
 title: MANAGER writes requirements as ad-hoc markdown never as TRDDs, and never pushes them to the project repo
 column: planned
 created: 2026-07-23T19:14:00+0200

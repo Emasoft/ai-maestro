@@ -1,5 +1,6 @@
 ---
 trdd-id: 17X8X06D
+status: tasked
 title: MAINTAINER PR-review workflow wiring for ASSISTANT-authored PRs
 column: todo
 created: 2026-09-05T21:05:02+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: C3CHP8L2
+status: tasked
 title: createNewTeam has no team-level compensation - a failure after saveTeams leaves the team and its COS behind under a 500
 column: todo
 created: 2026-09-06T03:38:49+0200

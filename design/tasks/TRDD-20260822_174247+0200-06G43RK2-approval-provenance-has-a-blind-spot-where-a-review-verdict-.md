@@ -1,5 +1,6 @@
 ---
 trdd-id: 06G43RK2
+status: tasked
 title: approval provenance has a blind spot where a review verdict is the authority
 column: todo
 created: 2026-08-22T17:42:47+0200

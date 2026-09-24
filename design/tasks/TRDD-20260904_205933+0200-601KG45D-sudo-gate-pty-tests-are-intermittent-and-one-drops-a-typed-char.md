@@ -1,5 +1,6 @@
 ---
 trdd-id: 601KG45D
+status: tasked
 title: The sudo-gate pty tests fail intermittently and one failure showed a truncated password
 scope: project
 project-id: ai-maestro

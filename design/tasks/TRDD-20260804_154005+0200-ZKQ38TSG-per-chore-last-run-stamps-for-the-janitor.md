@@ -1,5 +1,6 @@
 ---
 trdd-id: ZKQ38TSG
+status: tasked
 title: Publish per-chore last-run stamps so either side can answer is chore X alive with a stat
 column: design
 created: 2026-08-04T15:40:05+0200

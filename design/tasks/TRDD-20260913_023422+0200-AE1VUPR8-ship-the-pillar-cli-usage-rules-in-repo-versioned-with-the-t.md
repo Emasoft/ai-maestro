@@ -1,5 +1,6 @@
 ---
 trdd-id: AE1VUPR8
+status: tasked
 title: Ship the pillar-CLI usage rules in-repo versioned with the tools
 column: backburner
 created: 2026-09-13T02:34:22+0200

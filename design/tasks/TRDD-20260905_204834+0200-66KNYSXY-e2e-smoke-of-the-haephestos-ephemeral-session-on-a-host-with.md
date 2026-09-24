@@ -1,5 +1,6 @@
 ---
 trdd-id: 66KNYSXY
+status: tasked
 title: E2E smoke of the Haephestos ephemeral session on a host without Claude
 column: todo
 created: 2026-09-05T20:48:34+0200

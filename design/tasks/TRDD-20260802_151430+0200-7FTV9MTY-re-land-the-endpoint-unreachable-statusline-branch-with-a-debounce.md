@@ -1,5 +1,6 @@
 ---
 trdd-id: 7FTV9MTY
+status: tasked
 title: Re-land the endpoint-unreachable statusline rotation behind a debounce and a statusline-specific dwell
 column: design
 scope: project

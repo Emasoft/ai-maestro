@@ -1,5 +1,6 @@
 ---
 trdd-id: CAVCTULL
+status: tasked
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: WHAE30E7
+status: proposed
 title: Cemetery TTL and batch purge to end unbounded cross-run archive accumulation
 column: refused
 created: 2026-07-07T03:43:13+0200

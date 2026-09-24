@@ -1,5 +1,6 @@
 ---
 trdd-id: LXF16IXG
+status: tasked
 title: Emasoft/AgentlensPro carries a stale require_code_owner_review after the fleet baseline converged
 column: planned
 scope: project

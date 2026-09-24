@@ -1,5 +1,6 @@
 ---
 trdd-id: D9C27OQ0
+status: tasked
 title: Fleet deadlock detector — a worker acknowledged a mandate but took 0 project actions for N minutes
 column: planned
 created: 2026-07-23T11:15:46+0200

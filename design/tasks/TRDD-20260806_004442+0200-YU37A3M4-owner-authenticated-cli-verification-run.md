@@ -1,5 +1,6 @@
 ---
 trdd-id: YU37A3M4
+status: tasked
 title: Owner-authenticated CLI verification run for the two remaining T3FXA0Y0 probes
 column: todo
 scope: project

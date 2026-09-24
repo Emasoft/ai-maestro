@@ -1,5 +1,6 @@
 ---
 trdd-id: GLFSHTBH
+status: tasked
 title: create library appends a second Approval log heading when the body already has one
 column: todo
 created: 2026-09-05T20:58:58+0200

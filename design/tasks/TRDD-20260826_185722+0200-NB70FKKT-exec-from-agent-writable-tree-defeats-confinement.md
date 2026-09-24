@@ -1,5 +1,6 @@
 ---
 trdd-id: NB70FKKT
+status: tasked
 title: An unconfined process executing a script from the agent-writable tree defeats the sandbox entirely
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: GFX57106
+status: tasked
 title: Nothing keeps the installed script layer in sync, so the fleet cannot reach verify
 column: backburner
 min-approval-requirement: none

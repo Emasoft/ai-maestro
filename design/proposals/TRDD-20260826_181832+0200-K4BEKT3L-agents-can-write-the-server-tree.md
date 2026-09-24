@@ -1,5 +1,6 @@
 ---
 trdd-id: K4BEKT3L
+status: proposed
 title: Agents can write the ai-maestro server tree and patch the guarantor itself
 column: proposal
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: RXENA70O
+status: tasked
 title: Rooting all agent credentials in the keychain concentrates a failure this host has already suffered fleet-wide
 column: planned
 scope: project

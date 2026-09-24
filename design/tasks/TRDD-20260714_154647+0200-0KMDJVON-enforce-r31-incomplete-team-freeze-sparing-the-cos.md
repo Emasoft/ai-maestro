@@ -1,5 +1,6 @@
 ---
 trdd-id: 0KMDJVON
+status: tasked
 title: Enforce R31 incomplete-team freeze — and the freeze MUST spare the CHIEF-OF-STAFF
 column: blocked
 created: 2026-07-14T15:46:47+0200

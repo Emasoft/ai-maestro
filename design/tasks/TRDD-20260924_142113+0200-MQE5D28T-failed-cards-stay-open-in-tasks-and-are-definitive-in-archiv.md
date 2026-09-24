@@ -1,5 +1,6 @@
 ---
 trdd-id: MQE5D28T
+status: tasked
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200

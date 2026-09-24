@@ -1,5 +1,6 @@
 ---
 trdd-id: 0GCIMQ9F
+status: tasked
 title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: human_review
 scope: project

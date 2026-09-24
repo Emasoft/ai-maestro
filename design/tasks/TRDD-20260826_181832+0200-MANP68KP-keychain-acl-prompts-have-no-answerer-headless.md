@@ -1,5 +1,6 @@
 ---
 trdd-id: MANP68KP
+status: tasked
 title: A keychain ACL prompt in a headless server hangs or denies and both are outages
 column: planned
 scope: project

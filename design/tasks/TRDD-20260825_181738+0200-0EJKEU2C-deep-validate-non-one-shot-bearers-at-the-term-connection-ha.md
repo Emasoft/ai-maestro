@@ -1,5 +1,6 @@
 ---
 trdd-id: 0EJKEU2C
+status: tasked
 title: Deep-validate non-one-shot bearers at the term connection handler without consuming one-shot AID tokens
 column: backburner
 created: 2026-08-25T18:17:38+0200

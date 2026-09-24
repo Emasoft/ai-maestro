@@ -1,5 +1,6 @@
 ---
 trdd-id: 6WTIA4ZT
+status: tasked
 title: Issue 142 is closed as fixed and 14 of 15 fleet repos still run the pre-fix pre-push hook
 column: todo
 created: 2026-08-22T19:35:16+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: Y3AGECQE
+status: proposed
 title: Stamp the CPV pre-install security verdict into the R27 install path
 column: proposal
 created: 2026-09-05T13:26:43+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: KPPD109P
+status: proposed
 title: Consider a deterministic-but-readable label for auto-created COS agents
 column: refused
 created: 2026-07-07T12:35:40+0200

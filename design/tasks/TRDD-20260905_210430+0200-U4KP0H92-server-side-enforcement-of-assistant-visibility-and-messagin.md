@@ -1,5 +1,6 @@
 ---
 trdd-id: U4KP0H92
+status: tasked
 title: Server-side enforcement of ASSISTANT visibility and messaging restrictions
 column: todo
 created: 2026-09-05T21:04:30+0200

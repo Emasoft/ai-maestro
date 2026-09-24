@@ -1,5 +1,6 @@
 ---
 trdd-id: U49TYPNI
+status: tasked
 title: avatar-grid sidebar view — agent card clicks unreliable, delete flow only reliable in compact view
 column: planned
 created: 2026-07-23T12:51:14+0200

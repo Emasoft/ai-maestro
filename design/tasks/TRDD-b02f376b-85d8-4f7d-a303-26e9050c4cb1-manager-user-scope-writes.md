@@ -1,5 +1,6 @@
 ---
 trdd-id: B02F376B
+status: tasked
 title: Tamper-proof title verification for the directory guard hook (MANAGER user-scope writes)
 column: todo
 created: 2026-04-30T08:18:15+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: MFTDMSJY
+status: tasked
 title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-needed for 10 minutes each time
 column: human_review
 review-after: 2026-09-11

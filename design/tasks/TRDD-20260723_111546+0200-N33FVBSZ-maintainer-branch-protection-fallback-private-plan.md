@@ -1,5 +1,6 @@
 ---
 trdd-id: N33FVBSZ
+status: tasked
 title: MAINTAINER branch-protection fallback when GitHub rulesets 403 on a private/free-plan repo
 column: planned
 created: 2026-07-23T11:15:46+0200

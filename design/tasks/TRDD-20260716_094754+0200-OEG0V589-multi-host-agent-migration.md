@@ -1,5 +1,6 @@
 ---
 trdd-id: OEG0V589
+status: tasked
 title: Cross-host agent migration — export bundle + dual-MANAGER approval + automated transfer (R44)
 column: planned
 created: 2026-07-16T09:47:54+0200

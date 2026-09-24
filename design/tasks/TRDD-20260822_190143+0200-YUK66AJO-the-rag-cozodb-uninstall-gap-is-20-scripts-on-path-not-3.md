@@ -1,5 +1,6 @@
 ---
 trdd-id: YUK66AJO
+status: tasked
 title: The RAG-CozoDB uninstall gap is 20 scripts on PATH not 3
 column: todo
 created: 2026-08-22T19:01:43+0200

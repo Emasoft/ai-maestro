@@ -1,5 +1,6 @@
 ---
 trdd-id: 2JC2ORBN
+status: proposed
 title: TERMINAL-WITH-OPEN-BOX has no grandfather boundary so pre-gate archived cards are permanently red
 column: refused
 created: 2026-08-27T15:22:51+0200

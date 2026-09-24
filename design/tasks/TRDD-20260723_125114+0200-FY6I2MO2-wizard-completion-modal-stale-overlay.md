@@ -1,5 +1,6 @@
 ---
 trdd-id: FY6I2MO2
+status: tasked
 title: agent-creation wizard completion modal can persist and overlay the dashboard, blocking Delete
 column: todo
 created: 2026-07-23T12:51:14+0200

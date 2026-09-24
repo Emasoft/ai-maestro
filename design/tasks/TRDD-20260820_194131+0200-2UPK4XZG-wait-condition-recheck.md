@@ -1,5 +1,6 @@
 ---
 trdd-id: 2UPK4XZG
+status: tasked
 title: A card's wait condition is never re-evaluated after the thing it waits on completes
 column: planned
 created: 2026-08-20T19:41:31+0200

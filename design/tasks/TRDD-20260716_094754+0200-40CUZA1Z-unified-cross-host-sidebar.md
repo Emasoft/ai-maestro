@@ -1,5 +1,6 @@
 ---
 trdd-id: 40CUZA1Z
+status: tasked
 title: Unified cross-host sidebar — all users and agents in one list; user and paired agent both shown (R46)
 column: planned
 created: 2026-07-16T09:47:54+0200

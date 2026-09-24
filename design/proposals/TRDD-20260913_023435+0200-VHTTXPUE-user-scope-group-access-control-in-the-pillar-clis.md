@@ -1,5 +1,6 @@
 ---
 trdd-id: VHTTXPUE
+status: proposed
 title: USER-scope group access control in the pillar CLIs
 column: proposal
 created: 2026-09-13T02:34:35+0200

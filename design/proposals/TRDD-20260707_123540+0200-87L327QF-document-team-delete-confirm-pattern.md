@@ -1,5 +1,6 @@
 ---
 trdd-id: 87L327QF
+status: proposed
 title: Document Delete-Team inline confirm pattern in scenario rules + add a helper
 column: refused
 created: 2026-07-07T12:35:40+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: K8UEIATW
+status: tasked
 title: Tailnet-gated remote USER registration service
 column: todo
 created: 2026-09-05T21:03:47+0200

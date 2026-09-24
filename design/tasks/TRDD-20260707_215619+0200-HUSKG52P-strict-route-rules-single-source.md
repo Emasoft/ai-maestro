@@ -1,5 +1,6 @@
 ---
 trdd-id: HUSKG52P
+status: tasked
 title: Derive strict-route rules from one source instead of 4-way string duplication
 column: planned
 approved: true

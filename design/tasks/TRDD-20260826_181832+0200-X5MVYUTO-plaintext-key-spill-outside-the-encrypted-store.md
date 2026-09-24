@@ -1,5 +1,6 @@
 ---
 trdd-id: X5MVYUTO
+status: tasked
 title: Encryption at rest does not stop the server writing decrypted keys to logs temp files or crash dumps
 column: planned
 scope: project

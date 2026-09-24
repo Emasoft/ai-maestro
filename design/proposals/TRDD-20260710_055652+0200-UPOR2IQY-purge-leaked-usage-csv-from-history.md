@@ -1,5 +1,6 @@
 ---
 trdd-id: UPOR2IQY
+status: proposed
 title: Decide how to purge the leaked usage-export CSV from public git history
 column: proposal
 created: 2026-07-10T05:56:52+0200

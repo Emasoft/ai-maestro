@@ -1,5 +1,6 @@
 ---
 trdd-id: 1V7UZ38I
+status: tasked
 title: The docker agent path is dormant and would expose an unauthenticated remote PTY plus a duplicate host session if anyone used it
 column: planned
 scope: project

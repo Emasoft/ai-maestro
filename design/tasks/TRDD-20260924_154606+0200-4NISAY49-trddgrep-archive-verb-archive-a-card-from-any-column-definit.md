@@ -1,5 +1,6 @@
 ---
 trdd-id: 4NISAY49
+status: tasked
 title: trddgrep archive verb - archive a card from any column, definitively
 column: design
 created: 2026-09-24T15:46:06+0200

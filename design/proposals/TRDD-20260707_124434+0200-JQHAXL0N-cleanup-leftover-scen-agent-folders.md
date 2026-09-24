@@ -1,5 +1,6 @@
 ---
 trdd-id: JQHAXL0N
+status: proposed
 title: Clean up leftover scen-prefixed agent folders from prior failed scenario runs
 column: refused
 created: 2026-07-07T12:44:38+0200

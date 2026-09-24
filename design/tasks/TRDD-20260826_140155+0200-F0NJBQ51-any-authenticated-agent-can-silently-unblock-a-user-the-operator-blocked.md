@@ -1,5 +1,6 @@
 ---
 trdd-id: F0NJBQ51
+status: tasked
 title: Any authenticated agent can silently unblock a user the operator blocked on the host vpn-chat blocklist
 column: planned
 scope: project

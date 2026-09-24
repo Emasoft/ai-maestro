@@ -1,5 +1,6 @@
 ---
 trdd-id: L58QB3FR
+status: tasked
 title: The capped throttled scenario batch — a cost decision the owner has never been asked
 column: todo
 created: 2026-08-22T19:06:50+0200

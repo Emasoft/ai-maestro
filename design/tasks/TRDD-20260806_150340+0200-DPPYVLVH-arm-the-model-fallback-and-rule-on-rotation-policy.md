@@ -1,5 +1,6 @@
 ---
 trdd-id: DPPYVLVH
+status: tasked
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200

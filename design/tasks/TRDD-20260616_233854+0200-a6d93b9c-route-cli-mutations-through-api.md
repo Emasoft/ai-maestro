@@ -1,5 +1,6 @@
 ---
 trdd-id: A6D93B9C
+status: tasked
 title: Route CLI plugin skill and local-message mutations through the server API and forbid agent user-scope
 column: planned
 pre-block-column: null

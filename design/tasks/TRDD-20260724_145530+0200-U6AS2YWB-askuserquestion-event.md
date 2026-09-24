@@ -1,5 +1,6 @@
 ---
 trdd-id: U6AS2YWB
+status: tasked
 title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: blocked
 scope: project

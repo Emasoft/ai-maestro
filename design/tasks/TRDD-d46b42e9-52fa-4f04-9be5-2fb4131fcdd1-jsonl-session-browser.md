@@ -1,5 +1,6 @@
 ---
 trdd-id: D46B42E9
+status: tasked
 title: JSONL Session Browser (Rust streaming reader + chat transcript UI)
 column: todo
 created: 2026-04-20T22:31:54+0200

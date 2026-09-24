@@ -1,5 +1,6 @@
 ---
 trdd-id: G6EBLBIQ
+status: tasked
 title: TRDD corpus selection is caller-supplied rather than caller-derived
 column: human_review
 created: 2026-09-13T02:34:07+0200

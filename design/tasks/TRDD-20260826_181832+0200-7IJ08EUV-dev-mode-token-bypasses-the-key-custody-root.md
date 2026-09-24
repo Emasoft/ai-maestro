@@ -1,5 +1,6 @@
 ---
 trdd-id: 7IJ08EUV
+status: tasked
 title: The dev-mode keychain bypass token is a possessable credential for the root of the whole key hierarchy
 column: backburner
 scope: project

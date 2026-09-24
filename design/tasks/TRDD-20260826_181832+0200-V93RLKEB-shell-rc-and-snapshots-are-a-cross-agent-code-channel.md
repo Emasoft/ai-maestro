@@ -1,5 +1,6 @@
 ---
 trdd-id: V93RLKEB
+status: tasked
 title: Shell rc files and the Claude Code shell-snapshot directory are agent-writable and execute in every other agent
 column: planned
 scope: project

@@ -1,5 +1,6 @@
 ---
 trdd-id: 61KLQT7N
+status: proposed
 title: Bootstrap the ai-maestro PRRD — the missing top pillar of its own 3-pillars system
 column: refused
 scope: project

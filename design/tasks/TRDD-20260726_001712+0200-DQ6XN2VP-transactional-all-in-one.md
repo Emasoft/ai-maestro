@@ -1,5 +1,6 @@
 ---
 trdd-id: DQ6XN2VP
+status: tasked
 title: Make every all-in-one pipeline transactional — all-or-nothing with reverse compensation
 column: todo
 scope: project

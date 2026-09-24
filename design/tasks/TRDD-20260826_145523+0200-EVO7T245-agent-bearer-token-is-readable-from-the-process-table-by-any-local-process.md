@@ -1,5 +1,6 @@
 ---
 trdd-id: EVO7T245
+status: tasked
 title: The agent bearer token AID_AUTH leaks at three of five lifecycle stages — delivery argv, session environment, and 47 curl call sites
 column: planned
 scope: project

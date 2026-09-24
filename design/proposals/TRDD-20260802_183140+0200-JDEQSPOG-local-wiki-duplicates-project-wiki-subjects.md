@@ -1,5 +1,6 @@
 ---
 trdd-id: JDEQSPOG
+status: proposed
 title: Twelve LOCAL wiki pages duplicate PROJECT subjects under different names
 column: proposal
 scope: project

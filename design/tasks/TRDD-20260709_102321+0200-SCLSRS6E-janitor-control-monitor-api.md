@@ -1,5 +1,6 @@
 ---
 trdd-id: SCLSRS6E
+status: tasked
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: todo
 created: 2026-07-09T10:23:21+0200

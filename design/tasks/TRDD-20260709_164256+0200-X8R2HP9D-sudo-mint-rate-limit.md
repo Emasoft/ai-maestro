@@ -1,5 +1,6 @@
 ---
 trdd-id: X8R2HP9D
+status: tasked
 title: Successful sudo-token mints consume a global 5-per-minute bucket
 column: planned
 created: 2026-07-09T16:42:56+0200

@@ -1,5 +1,6 @@
 ---
 trdd-id: 44YTVZ63
+status: proposed
 title: The two ai-maestro#113 residuals — core-plugin skills live in another repo, and the since field
 column: proposal
 scope: project

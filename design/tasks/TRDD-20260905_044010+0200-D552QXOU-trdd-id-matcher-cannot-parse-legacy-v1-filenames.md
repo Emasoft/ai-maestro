@@ -1,5 +1,6 @@
 ---
 trdd-id: D552QXOU
+status: tasked
 title: The janitor TRDD id matcher cannot parse legacy v1 filenames so those cards vanish from four detectors
 scope: project
 project-id: ai-maestro

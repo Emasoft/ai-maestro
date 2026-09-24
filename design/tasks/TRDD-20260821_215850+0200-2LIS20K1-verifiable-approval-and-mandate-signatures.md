@@ -1,5 +1,6 @@
 ---
 trdd-id: 2LIS20K1
+status: tasked
 title: Make APPROVAL and MANDATE signatures cryptographically verifiable, not convention-only
 column: approval
 pre-block-column: todo

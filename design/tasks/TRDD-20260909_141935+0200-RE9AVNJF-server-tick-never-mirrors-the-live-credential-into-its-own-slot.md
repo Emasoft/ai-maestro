@@ -1,5 +1,6 @@
 ---
 trdd-id: RE9AVNJF
+status: tasked
 title: server tick never mirrors the live credential into its own slot, so every slot goes refresh-dead after hours live
 column: backburner
 created: 2026-09-09T14:19:35+0200

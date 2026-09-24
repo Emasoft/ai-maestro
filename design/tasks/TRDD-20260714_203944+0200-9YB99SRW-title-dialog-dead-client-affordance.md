@@ -1,5 +1,6 @@
 ---
 trdd-id: 9YB99SRW
+status: tasked
 title: Surface why the governance-title control is inert on a dead-client agent
 column: planned
 min-approval-requirement: none

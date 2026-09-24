@@ -1,5 +1,6 @@
 ---
 trdd-id: 3AUQ2CL9
+status: tasked
 title: creation-helper wizard test writes the developer real haephestos workdir
 column: todo
 created: 2026-09-05T20:42:22+0200

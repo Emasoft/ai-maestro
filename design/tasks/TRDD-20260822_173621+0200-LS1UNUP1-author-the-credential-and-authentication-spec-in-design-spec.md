@@ -1,5 +1,6 @@
 ---
 trdd-id: LS1UNUP1
+status: tasked
 title: Author the credential and authentication spec in design specs
 column: todo
 created: 2026-08-22T17:36:21+0200

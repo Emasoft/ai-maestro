@@ -1,5 +1,6 @@
 ---
 trdd-id: Z70X3LEW
+status: tasked
 title: Normative 3P-TOOL clause family — role plugins bind to the pillar CLIs
 column: planned
 created: 2026-08-19T04:40:55+0200

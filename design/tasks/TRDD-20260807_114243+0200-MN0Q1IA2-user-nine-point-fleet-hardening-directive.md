@@ -1,5 +1,6 @@
 ---
 trdd-id: MN0Q1IA2
+status: tasked
 title: USER nine-point fleet-hardening directive — updates cadence, auto-update, rotator, unblock, ledger, agentlenspro
 column: blocked
 pre-block-column: dev

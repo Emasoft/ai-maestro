@@ -1,5 +1,6 @@
 ---
 trdd-id: P7HGMW5Z
+status: proposed
 title: Show agent name alongside persona label in agent listings
 column: refused
 created: 2026-07-07T12:35:40+0200

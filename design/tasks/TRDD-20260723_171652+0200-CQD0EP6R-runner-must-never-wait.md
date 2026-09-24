@@ -1,5 +1,6 @@
 ---
 trdd-id: CQD0EP6R
+status: tasked
 title: A scenario runner must never wait — the orchestrator owns the clock, the runner owns bounded UI bursts
 column: approval
 created: 2026-07-23T17:16:52+0200

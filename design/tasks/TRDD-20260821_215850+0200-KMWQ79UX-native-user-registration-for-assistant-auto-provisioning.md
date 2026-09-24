@@ -1,5 +1,6 @@
 ---
 trdd-id: KMWQ79UX
+status: tasked
 title: Native-user registration so ASSISTANT auto-provisioning has something to gate on
 column: todo
 scope: project

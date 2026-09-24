@@ -1,8 +1,8 @@
 ---
 name: trdd-conventions
-description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped by every consumer that enumerates the corpus by filename / the filename is the parse key, not the frontmatter / my decomposition of the difference sums correctly but I only measured one term / is my arithmetic explanation actually measured / writing a headcount into a memory page that no test checks / state the mechanism instead of a headcount. AND: my batch logged FAIL edit but the deprecated field was already gone — trddgrep set removes approval-tier itself / a GRAPH-DANGLING-BLOCKER appeared right after I closed a root card — move clears blocked-by only on the card it moves, never on the cards that cite it."
+description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live. AND: the heartbeat board count disagrees with a direct grep / a card is missing from the board / why is my TRDD not being counted / a legacy filename with no timestamp prefix is unparseable and silently dropped by every consumer that enumerates the corpus by filename / the filename is the parse key, not the frontmatter / my decomposition of the difference sums correctly but I only measured one term / is my arithmetic explanation actually measured / writing a headcount into a memory page that no test checks / state the mechanism instead of a headcount. AND: my batch logged FAIL edit but the deprecated field was already gone — trddgrep set removes approval-tier itself / a GRAPH-DANGLING-BLOCKER appeared right after I closed a root card — move clears blocked-by only on the card it moves, never on the cards that cite it. AND: trddgrep lint says STATUS-MISSING / what values may status have on a card (proposed, tasked, archived) / STATUS-ZONE-MISMATCH / the design/refused folder is gone, where do refused proposals go / can a failed TRDD be archived and who may do it / MANAGER cannot archive a proposal / an archived card cannot be changed or un-archived."
 ocd: 2026-06-23
-lmd: 2026-09-06
+lmd: 2026-09-24
 metadata:
   node_type: memory
   type: reference
@@ -33,10 +33,11 @@ ISO=$(date +%Y-%m-%dT%H:%M:%S%z)      # frontmatter created:/updated:
 
 ## Where a TRDD lives (folder = lifecycle)
 
-- `design/tasks/` — OPEN work (authorized): every `column:` from `planned` through `dev`/`testing`/`blocked`/`failed`. A `failed` TRDD stays here (retryable), never archived.
-- `design/proposals/` — authored, awaiting approval (`column: proposal`, Tier 1/2/3).
-- `design/refused/` — proposals never approved.
-- `design/archived/` — once-approved TRDDs now terminal (`completed`/`cancelled`/`superseded`).
+- `design/proposals/` — `status: proposed`. Authored, awaiting approval (`column: proposal`), OR refused (`column: refused` — a refused proposal stays here, open and editable, re-proposable; there is no refused folder since 2026-09-24).
+- `design/tasks/` — `status: tasked`. OPEN work (authorized): every `column:` from `planned` through `dev`/`testing`/`blocked`/`failed`. A `failed` TRDD stays here (retryable) until someone with authority archives it.
+- `design/archived/` — `status: archived`. DEFINITIVE and immutable, in whatever column it had when archived — including `failed`.
+
+The three stages are irreversible and `status:` must match the folder (ATOM-476C-AJ24). Refused proposals: ATOM-PJX5-TYSG. Who may archive, and why archiving `failed` is definitive: ATOM-B1QY-5J2I. The legacy `design/refused/` still holds five janitor ticket cards pending ai-maestro-janitor#309.[^11]
 
 Trivial in-session work is tracked in the session, not as a TRDD. Whatever tracks it names the `TRDD-<id8>` id when it references one.[^8]
 
@@ -47,7 +48,7 @@ Three spellings compete for it, and only the first is legitimate:
 | spelling | verdict |
 |---|---|
 | `column:` (frontmatter) | **the only home.** The v2 state machine; the kanban reads it. |
-| `status:` (frontmatter) | a **DIFFERENT field** — it carries other aspects (the pillar specs use `status: normative`). NOT a retired duplicate of `column:` (USER ruling, 2026-07-30).[^4] Holding a *column value* there is the defect, not holding the field. |
+| `status:` (frontmatter) | a **DIFFERENT field** — NOT a retired duplicate of `column:` (USER ruling, 2026-07-30).[^4] On a TRDD card it is the LIFE STAGE, `proposed`/`tasked`/`archived`, and must match the folder (since 2026-09-24, ATOM-476C-AJ24); spec documents keep `status: normative`. Holding a *column value* there is the defect, not holding the field. |
 | `**Status:**` / `**Column:**` / a line-initial `Status:` (BODY) | **v1-era residue.** The v1→v2 migration moved the field into frontmatter without deleting the original line, so ~98 cards across 13 corpora still carry one.[^3] |
 
 Two `lib/trdd-doctor.ts` rules enforce it, and they do not overlap — two defects, two messages:
@@ -196,6 +197,63 @@ column terminal. On a NON-terminal card — e.g. `column: live_auditing` — `tr
 on the body is legal; the freeze is not a blanket "approval logs are append-only forever", it is
 conditioned on the card's CURRENT column.
 
+
+^ATOM-476C-AJ24 [desc: "a TRDD card's status: is its LIFE STAGE (proposed|tasked|archived) and must match its folder; the linter enforces it (f84851018)", keywords: trddgrep_lint_says_STATUS-MISSING what_values_may_status_have is_status_the_same_as_column STATUS-ZONE-MISMATCH_error STATUS-INVALID_error status_proposed_tasked_archived life_stage_field status_disagrees_with_folder trddgrep_fix_adds_status_tasked status_normative_on_a_card LEGACY-REFUSED-FOLDER_warning, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-24]
+On a TRDD card, `status:` is the irreversible LIFE STAGE, exactly one of three values, and it must
+match the folder: proposals/ = proposed, tasks/ = tasked, archived/ = archived (owner ruling
+2026-09-24: "yes. status. enforced to the 3 values by the trddgrep linter."; TRDD-MQE5D28T D4;
+commit f84851018). `statusForZone(zone)` in lib/trdd-vocabulary.ts is the ONE mapping; every writer
+(create, promote, refuse, advance, archive) sets it, and every app/api/trdd route writes through them.
+
+Lint rules (lib/trdd-doctor.ts): STATUS-INVALID (ERROR, value outside the three, e.g. `normative`
+copied from a spec); STATUS-ZONE-MISMATCH (ERROR, valid value, wrong folder); STATUS-MISSING (WARN,
+auto-fixable, mechanical, no `updated:` bump — WARN because the global trddgrep lints every corpus on
+the machine and most lack the field); LEGACY-REFUSED-FOLDER (WARN, one finding).
+
+The fix never adds status to an archived card or to a finished card still outside archived/ (D5),
+judges the column the SAME pass leaves, writes only inside the frontmatter, and needs a target id
+(issue 160), so a backfill runs per id. Spec documents in design/specs/ keep `status: normative`:
+they are never loaded as cards. `column:` remains the pipeline position. [^12]
+
+
+^ATOM-PJX5-TYSG [desc: "refused is a COLUMN inside design/proposals/, not a folder; a refused proposal stays open and editable; only its author archives it (bc02c5129)", keywords: design/refused_folder_gone where_do_refused_proposals_go refused_proposal_can_be_edited_again re-propose_a_refused_TRDD refused_column_not_folder who_may_archive_a_proposal MANAGER_cannot_archive_a_proposal janitor_ticket_cards_in_design/refused LEGACY-REFUSED-FOLDER expectedZone_refused_returns_proposals, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-24]
+
+`refused` is a `column:` value, not a folder (owner ruling 2026-09-24: "i only asked for refused to
+be a metadata, not a folder ... i would prefer to not have a refusal folder"; commit bc02c5129,
+TRDD-MQE5D28T D6). A refused card stays in design/proposals/ with `status: proposed`, open, editable
+and re-proposable. `expectedZone('refused')` returns proposals.
+
+Only the proposal's AUTHOR may archive it: "the manager and the cos never archive a proposal. only
+the author can." Outside the harness, or for a local-scope TRDD, the main agent plays every role.
+Enforced server-side in authorize('manage-trdd', archive) since 470da9cb2; the CLI checks no
+identity until issue #168.
+
+Exception still open: five janitor ticket cards (D49OPVWP, Q47OTJ14, V630G4CY, VCEWKBQX, XOHLHQOF)
+stay in design/refused/, because the janitor's ticket code (retract(), human-refused dedupe) still
+reads and writes that folder; moving them starts a tug-of-war with the heartbeat. Tracked on
+ai-maestro-janitor#309. The linter reports the folder as one LEGACY-REFUSED-FOLDER WARN.
+
+
+^ATOM-B1QY-5J2I [desc: "failed stays open in tasks/; archiving is DEFINITIVE and immutable; who may archive depends on life stage and on-disk column", keywords: can_a_failed_TRDD_be_archived failed_card_stays_in_tasks who_may_archive_a_failed_card archived_card_cannot_be_edited un-archive_a_TRDD archive_denied_403 archived_failed_means_never_retry definitive_not_frozen superseded_rewrite_of_archived_card_denied MUB7NTRF_withdrawn archive_authority_matrix, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-24]
+
+A `failed` card stays OPEN and retryable in design/tasks/ ("failed in tasks -> retry"). Archiving
+it is a separate, DEFINITIVE act ("failed in archived -> definitive"): never retried; a new attempt
+needs a new card. The owner rejected "frozen" and "ended" as wording (overlay commit 23fdb2348).
+
+Archived cards are immutable forensic history in whatever column they had ("photographed forever");
+no option may exist to un-archive (D8).
+
+Who may archive, enforced in authorize('manage-trdd', archive) from the card AS ON DISK (470da9cb2):
+- proposals/: its author only. MANAGER and COS are denied.
+- column failed: MANAGER, or the COS of the assignee's team (unresolvable assignee = denied). Never
+  the owner, so `state: cancelled` cannot launder a single-step archive.
+- any other tasked card: MANAGER or owner.
+- no zone: denied (fail closed). zone archived: denied for every agent (920d4361d). That withdrew,
+  for agents, the in-place archived to superseded rewrite TRDD-MUB7NTRF had delivered.
+The human owner is granted before the matrix and still reaches the store until step-5 G9. `created-by`
+resolves only to a REGISTERED agent, so cards authored by a session name (not an agent) are
+archivable only by the human owner. [^11]
+
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned
   there as `3P-TRDD-09` (status is not column), `3P-TRDD-10` (one state claim) and `3P-TRDD-11`
@@ -265,3 +323,5 @@ conditioned on the card's CURRENT column.
   the transcripts it measured. Read every hit at its source line before counting it.
 [^9]: [id: ATOM-ZU2K-STX4, status: valid, desc: "the first version of this atom asserted a two-term arithmetic decomposition that measurement refuted — it broke its own rule", keywords: "my_decomposition_sums_to_the_observed_gap_so_it_must_be_right I_named_two_causes_that_add_up_correctly a_net_difference_explained_by_terms_I_did_not_each_measure the_numbers_add_up_but_I_only_measured_one_term writing_a_headcount_into_a_memory_page_that_no_test_checks 4_of_5_detectors an_atom_that_violates_the_lesson_it_teaches an_inherited_number_written_as_established_fact how_many_detectors_are_affected is_my_arithmetic_explanation_actually_measured the_count_moved_from_52_to_54_so_my_theory_is_confirmed a_memory_page_has_no_test_behind_it stating_a_mechanism_instead_of_a_headcount", ocd: 2026-09-05, lmd: 2026-09-05] DO NOT write a decomposition of an observed difference into a durable note when you have measured only SOME of its terms, BECAUSE terms chosen to sum correctly are indistinguishable from terms that are true — this atom's own first version said the gap was "-2 + 1 = -1" on the strength of the -2 alone (the rename moved the count 52 to 54), and a later count found TWO todo cards outside `design/tasks`, not one, so 54 + 2 never reconstructed the heartbeat's 55. It also wrote "4 of the 5 detectors" as fact: the 5 was later confirmed by a census, the 4 never was. DO measure each term independently, or state the MECHANISM and leave the arithmetic open — a memory page has no test behind it, so a wrong number there is never caught, only inherited.
 [^10]: [id: ATOM-N9Y2-EFZH, status: valid, desc: "a direct blocked→complete move does NOT clear the moved card own blocked-by either — validate then raises GRAPH-DANGLING-BLOCKER on a terminal card", keywords: "GRAPH-DANGLING-BLOCKER_on_a_card_I_just_moved_to_complete blocked-by_survived_the_move_to_complete trddgrep_move_blocked_to_complete_left_blocked-by dangling_blocker_on_a_terminal_card frozen_card_still_lists_a_blocker how_do_I_clear_blocked-by_on_a_complete_card trddgrep_set_blocked-by_empty_on_archived_card move_did_not_clear_my_own_blocked-by close_a_blocked_card_directly blocked_to_complete_skips_pre-block-column", ocd: 2026-09-05, lmd: 2026-09-05] DO NOT assume `trddgrep move <id> complete` on a `blocked` card clears that card's own `blocked-by:`, BECAUSE measured 2026-09-05 (DQVPODKW, blocked-by [1LFRP6GJ], moved blocked→complete after 1LFRP6GJ closed): the move renamed the file into archived/ and set the column but left `blocked-by: [1LFRP6GJ]` in place, so the next `trddgrep validate` raised GRAPH-DANGLING-BLOCKER on a now-terminal card — the earlier reading of this atom ("move clears blocked-by only on the card it moves") held for blocked→pre-block-column, not for a direct blocked→terminal move. DO run `trddgrep set <id> blocked-by '[]'` right after such a move (the tool accepts it on a terminal card and bumps `updated:`) and record why in the card's `## Approval log`, the one append-only field rule 12 leaves open.
+[^11]: [id: ATOM-BI89-Q8TM, status: valid, keywords: "failed_never_archived_is_outdated design/refused_folder_is_outdated old_lifecycle_section four_folders_became_three refused_folder_removed failed_card_archived_by_manager stale_TRDD_lifecycle_claim page_said_never_archived archived_only_completed_cancelled_superseded owner_overruled_failed-is-open", ocd: 2026-09-24, lmd: 2026-09-24] DO NOT trust the pre-2026-09-24 text of this page's "Where a TRDD lives" section, BECAUSE it said a failed TRDD is "never archived", listed a design/refused/ folder for "proposals never approved", and limited archived/ to completed/cancelled/superseded — all three were overruled by the owner on 2026-09-24 (TRDD-MQE5D28T; commits bc02c5129, 23fdb2348, 470da9cb2, f84851018). DO read the folder and the `status:` field: three folders, three life stages, refused is a column in proposals/, and a failed card may be archived by MANAGER or the assignee's team COS, after which it is definitive.
+[^12]: [id: ATOM-Z4B7-RYZ1, status: valid, keywords: "fixer_added_status_to_a_finished_card same-pass_repair_changed_the_column linter_and_fixer_judged_different_values loaded_column_vs_written_column status_tasked_on_column_complete v1_status_complete_migrated_then_status_added fix_inserted_status_into_the_body fix_skipped_a_card_the_lint_called_autofixable stale_c.column_in_fixCorpus repair_order_inside_one_pass", ocd: 2026-09-24, lmd: 2026-09-24] DO NOT let a fixer decide with the value it LOADED when an earlier repair in the same pass already rewrote it, BECAUSE the first STATUS-MISSING fix judged `c.column` as loaded: a v1 card `status: complete` was migrated to `column: complete` and then, in the SAME pass, given `status: tasked` — a finished card edited against D5 (reproduced before the fix). It also tested for `status:` across the whole file (a body line suppressed the repair the lint reported) and inserted after the first `trdd-id:` anywhere. DO track the value each branch writes (`let col = c.column`, updated where a branch writes a column), scope presence checks and inserts to the frontmatter, and keep the lint and the fix on ONE predicate (isDefinitiveCard). Found by adversarial review; fixed in f84851018.

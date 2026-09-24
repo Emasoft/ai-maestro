@@ -1,8 +1,8 @@
 ---
 name: team-meeting-and-kanban
-description: "how does the team meeting state machine work / where are team tasks stored / what are the 22 kanban columns / when did the kanban go from 17 to 22 columns / where do approval and the design review columns sit / why does the kanban board use a different column set / how do groups differ from teams / where do groups persist"
+description: "how does the team meeting state machine work / where are team tasks stored / what are the 22 kanban columns / when did the kanban go from 17 to 22 columns / where do approval and the design review columns sit / why does the kanban board use a different column set / how do groups differ from teams / where do groups persist / the kanban index shows an archived card as work in progress / what is the (archived) bucket in byColumn"
 ocd: 2026-08-02
-lmd: 2026-08-23
+lmd: 2026-09-24
 metadata:
   node_type: memory
   type: reference
@@ -92,6 +92,19 @@ Groups persist in `~/.aimaestro/teams/groups.json` via `lib/group-registry.ts`.
 Open teams were removed in the governance simplification (2026-03-27). All teams are now
 closed (isolated messaging with COS gateway). Groups replace the "open, unstructured
 collection of agents" use case that open teams served, but without governance overhead.
+
+
+^ATOM-OLFR-6UZ6 [desc: "the kanban index puts an archived card whose column is not finished into an (archived) bucket, never into its column, so history is not counted as WIP (7bf577be0)", keywords: kanban_shows_an_archived_card_as_work_in_progress archived_card_in_dev_column (archived)_bucket_in_byColumn kanban_index_counts_archived_cards WIP_count_wrong_after_archiving archived_failed_card_on_the_board byColumn_has_an_extra_key kanban-index_archived_column trddgrep_next_lists_an_archived_card board_shows_definitive_history_as_live, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-24]
+
+Archiving keeps a card's column (TRDD-MQE5D28T D2: "photographed forever"), so a card archived from
+`dev`, `blocked` or `failed` still says so. `buildKanbanIndex` (lib/kanban-index.ts) used to bucket
+`byColumn` by column alone and would have counted that definitive history as live work. Since commit
+7bf577be0 a row with `zone === 'archived'` and a column outside DEFINITIVE_COLUMNS goes to the
+`(archived)` bucket (ARCHIVED_COLUMN). Archived cards in a finished column keep their own bucket, and
+the `rows` array is unchanged. The kanban API route spreads the index, so API consumers see
+`(archived)` as an extra byColumn key next to `(unknown)`; no component in components/ reads byColumn.
+`scripts/trdd-doctor.mjs --board` groups its own cards from tasks/ only (unless --all).
+Not yet fixed: `readyQueueFrom` (`trddgrep next`) has the same column-only reading.
 
 ## See also
 

@@ -310,11 +310,30 @@ describe('STATE_HEADING_SOURCE (#167)', () => {
     ['## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-01-01', true],
     ['## STATE', true],
     ['## State', true],
+    // En dash (owner-directive fix): the old lookahead required `[ \t]*(?:—|\n|$)`
+    // directly after STATE, which a colon or an opening paren already satisfied via
+    // `\n`/`$` only when nothing else followed — these three shapes are real,
+    // measured spellings in the corpus (2026-09-24 sweep across design/,
+    // .claude/local/design/, and the janitor plugin's design/) that the tightened
+    // regex must keep matching.
+    ['## STATE – x', true],
+    ['## STATE: x', true],
+    ['## STATE (note)', true],
+    ['## STATE\r', true],
     ['## STATE-notes', false],
     ['## Statement of work', false],
     ['### STATE', false],
+    ['## ⏵ STATE UPDATE — x', false],
   ])('%s -> %s', (line, expected) => {
     expect(re().test(line)).toBe(expected)
+  })
+
+  it('matches a bare `## STATE` as the very last line, with no trailing newline', () => {
+    // `findHeadingLine` (the only real caller) tests this regex PER LINE, never
+    // against the whole file text — so the fixture here is the last line alone,
+    // exactly as `content.split('\n')` would hand it over.
+    const lastLine = 'some text\n## STATE'.split('\n').at(-1)!
+    expect(re().test(lastLine)).toBe(true)
   })
 })
 
@@ -366,7 +385,7 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(text).not.toMatch(/## STATE-notes\n\n- unrelated\n- new/)
   })
 
-  it('--create is refused on a terminal card for any heading except `## Approval log`', async () => {
+  it('--create is refused on a definitive card for any heading except `## Approval log`', async () => {
     const id = 'FROZEN01'
     const file = path.join(designDir, 'archived', `TRDD-20260709_102705+0200-${id}-frozen.md`)
     fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -381,7 +400,7 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(refused.ok).toBe(false)
     if (!refused.ok) {
       expect(refused.status).toBe(409)
-      expect(refused.error).toMatch(/terminal card \(column: complete\)/)
+      expect(refused.error).toMatch(/definitive card \(column: complete/)
       expect(refused.error).toMatch(/Approval log/)
     }
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
@@ -394,10 +413,11 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
 
   // #167 follow-up: the terminal-card `--create` refusal used to check the narrower
   // TERMINAL_DONE set (the flock-done columns) instead of the freeze rule's own
-  // FROZEN_COLUMNS (IND base step 12), so `failed`, `cancelled`, and `refused` cards
-  // could still gain a brand-new section — three shapes the freeze is supposed to cover.
+  // DEFINITIVE_COLUMNS (IND base step 12), so `cancelled` and `refused` cards could
+  // still gain a brand-new section — two shapes the freeze is supposed to cover.
+  // `failed` is deliberately excluded here — see the two tests below it, which pin
+  // the owner ruling (2026-09-24) that `failed` is definitive only once archived.
   it.each([
-    ['failed', 'tasks'],
     ['cancelled', 'archived'],
     ['refused', 'refused'],
   ] as const)('--create is refused on a %s card (zone %s)', async (column, zone) => {
@@ -413,14 +433,47 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     expect(refused.ok).toBe(false)
     if (!refused.ok) {
       expect(refused.status).toBe(409)
-      expect(refused.error).toMatch(new RegExp(`terminal card \\(column: ${column}\\)`))
+      expect(refused.error).toMatch(new RegExp(`definitive card \\(column: ${column}`))
     }
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
 
-    // `## Approval log` stays exempt even on these three columns.
+    // `## Approval log` stays exempt even on these columns.
     const allowed = await appendTrddSection(designDir, id, 'Approval log', '- entry', { iso: isoLocal().iso, create: true })
     expect(allowed.ok).toBe(true)
     if (allowed.ok) expect(allowed.created).toBe(true)
+  })
+
+  // Owner ruling (2026-09-24): "of course they stays open for retry" — a `failed`
+  // card in design/tasks/ is OPEN, so `--create` may add any new section there.
+  it('--create is allowed on a failed card in tasks/ (open for retry)', async () => {
+    const id = 'FAILOPEN'
+    const file = path.join(designDir, 'tasks', `TRDD-20260709_102705+0200-${id}-failed-open.md`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      `---\ntrdd-id: ${id}\ntitle: failed open title\ncolumn: failed\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+    )
+    const r = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.created).toBe(true)
+  })
+
+  // Owner ruling (2026-09-24): "failed in archived -> definitive (wrong road, never
+  // try again, lesson learned)" — the same column becomes definitive once archived.
+  it('--create is refused on a failed card in archived/ (definitive)', async () => {
+    const id = 'FAILDONE'
+    const file = path.join(designDir, 'archived', `TRDD-20260709_102705+0200-${id}-failed-done.md`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      `---\ntrdd-id: ${id}\ntitle: failed done title\ncolumn: failed\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+    )
+    const r = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/definitive card \(column: failed/)
+    }
   })
 })
 

@@ -26,7 +26,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
-import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, FROZEN_COLUMNS, isParkedByOtherForm } from './trdd-vocabulary'
+import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, isDefinitiveCard, isParkedByOtherForm } from './trdd-vocabulary'
 import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
@@ -378,7 +378,7 @@ export function appendApprovalLog(content: string, logLine: string): string {
 // (mixed-case, `⏵` optional). The trailing lookahead pins that: after "STATE", once
 // optional spaces are skipped, the line must either end or continue with an em dash —
 // never another word — so "STATE UPDATE" no longer matches the alias.
-export const STATE_HEADING_SOURCE = String.raw`^##[ \t]*⏵?[ \t]*STATE(?![\w-])(?=[ \t]*(?:—|\n|$))`
+export const STATE_HEADING_SOURCE = String.raw`^##[ \t]*⏵?[ \t]*STATE(?![\w-])(?![ \t]+\w)`
 
 /** True when `heading` (with or without a `## ` prefix) is exactly the bare word "state" —
  * the one heading callers may address by name instead of its dated, marker-carrying text. */
@@ -1097,19 +1097,19 @@ export function appendTrddSection(
         error: `no section named "${heading}"; existing sections: ${existingSectionHeadings(content).join(', ') || '(none)'} — pass --create to add it`,
       }
     }
-    // The `## Approval log` heading is append-only and explicitly exempt from the terminal
-    // freeze (IND base §12) — every other heading is ordinary body prose, so creating one on
-    // a card whose body is otherwise frozen would be the freeze's exact violation. Freeze
-    // check uses FROZEN_COLUMNS (#167 follow-up), not the narrower flock-done TERMINAL_DONE:
-    // step 12 freezes complete|failed|superseded|published|live, and the archived/refused
-    // zones also carry completed|cancelled|refused — TERMINAL_DONE alone let `--create` still
-    // add sections to a `failed`, `cancelled`, or `refused` card.
+    // The `## Approval log` heading is append-only and explicitly exempt from the
+    // definitive-card freeze (IND base §12) — every other heading is ordinary body
+    // prose, so creating one on a card whose body is otherwise definitive would be
+    // the freeze's exact violation. Uses `isDefinitiveCard` (owner ruling
+    // 2026-09-24), not the narrower flock-done TERMINAL_DONE: a `failed` card in
+    // design/tasks/ is OPEN for retry and becomes definitive only once archived —
+    // see the comment on `DEFINITIVE_COLUMNS`/`isDefinitiveCard` in trdd-vocabulary.ts.
     const isApprovalLog = heading.replace(/^##\s*/, '').trim().toLowerCase() === 'approval log'
-    if (willCreate && !isApprovalLog && FROZEN_COLUMNS.has(trdd.column)) {
+    if (willCreate && !isApprovalLog && isDefinitiveCard(trdd.column, trdd.zone)) {
       return {
         ok: false,
         status: 409,
-        error: `refusing to create "## ${heading.replace(/^##\s*/, '')}" on a terminal card (column: ${trdd.column}) — only "## Approval log" may be created here`,
+        error: `refusing to create "## ${heading.replace(/^##\s*/, '')}" on a definitive card (column: ${trdd.column} in design/${trdd.zone}/) — only "## Approval log" may be created here`,
       }
     }
     content = appendToSection(content, marker, text, { create: true })

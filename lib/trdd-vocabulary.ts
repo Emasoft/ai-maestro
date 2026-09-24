@@ -46,21 +46,50 @@ export const TERMINAL_DONE: ReadonlySet<string> = new Set([
   'superseded',
 ])
 
-/** Columns whose body is FROZEN (IND base trdd-design-tasks.md step 12): every
- * `TERMINAL_DONE` column PLUS `failed` (frozen once it reaches that terminal branch)
- * and the two terminal-but-not-shipped folder states `cancelled` and `refused` —
- * the `--create` section guard must refuse a new section on any of these, not only
- * the flock-done subset `TERMINAL_DONE` tracks for the completion gate. */
-export const FROZEN_COLUMNS: ReadonlySet<string> = new Set([
+/**
+ * Columns whose body is DEFINITIVE (IND base trdd-design-tasks.md step 12): every
+ * `TERMINAL_DONE` column PLUS the two terminal-but-not-shipped folder states
+ * `cancelled` and `refused`. `failed` is DELIBERATELY excluded from this set —
+ * a `failed` card in design/tasks/ stays OPEN for retry.
+ *
+ * Owner rulings (2026-09-24), quoted verbatim because they are the whole reason
+ * this is a two-part rule (column ∪ zone) rather than a flat column set:
+ *
+ *   1. "of course they stays open for retry. they can only marked as filed on an
+ *      express MANAGER or CHIEF-OF-STAFF decision. Or, outside the harness, by a
+ *      user or main agent decision."
+ *   2. "failed in tasks -> retry / failed in archived -> frozen/ended (wrong road,
+ *      never try again, lesson learned)"
+ *   3. "frozen is an ambiguous term. it could suggest that the trdd can be
+ *      unfrozen in the future. but if the MANAGER or the CHIEF-OF-STAFF archive a
+ *      failed card, that card must never be tried anymore. so use another
+ *      terminology."
+ *   4. "why ended? don't we have failed? just failed in archived -> definitive"
+ *
+ * So `failed` is definitive only once it is ARCHIVED — `isDefinitiveCard` below
+ * is the one predicate that adds that zone half; nothing should test
+ * `DEFINITIVE_COLUMNS.has(column)` alone for a card that might be `failed`.
+ */
+export const DEFINITIVE_COLUMNS: ReadonlySet<string> = new Set([
   'complete',
   'completed',
-  'failed',
   'superseded',
   'published',
   'live',
   'cancelled',
   'refused',
 ])
+
+/**
+ * Is this card's body DEFINITIVE (IND base §12 freeze)? True when the column is
+ * in `DEFINITIVE_COLUMNS`, OR when the card's zone is `archived` or `refused` —
+ * the zone half is what makes a `failed` card definitive once archived while
+ * leaving a `failed` card in `tasks/` open for retry (owner ruling 2026-09-24;
+ * see `DEFINITIVE_COLUMNS` above).
+ */
+export function isDefinitiveCard(column: string, zone: TrddZone): boolean {
+  return DEFINITIVE_COLUMNS.has(column) || zone === 'archived' || zone === 'refused'
+}
 
 
 // Cards that actually SHIPPED — a hold on a dependency clears only when the dependency

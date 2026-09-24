@@ -149,11 +149,16 @@ describe('validateTrddFieldEdits — referenced TRDD ids must resolve', () => {
   })
 
   it('accepts a resolvable superseded-by (flow-style single-element list shape)', () => {
+    // Deliberately does NOT also move `column` to 'superseded' here: `baseFm()`'s
+    // CURRENT column is 'dev', which only ever legitimately sits in the `tasks`
+    // zone — `isDefinitiveCard` now checks the CURRENT zone too, so pairing 'dev'
+    // with an `archived` zone would trip the freeze on an unrelated (unrealistic)
+    // zone-mismatch before this test's own rule (ref-list resolution) ever ran.
     const r = validateTrddFieldEdits(
-      { 'superseded-by': '[ZZZZZZZZ]', updated: ISO, column: 'superseded' },
+      { 'superseded-by': '[ZZZZZZZZ]', updated: ISO },
       baseFm(),
       resolveAll,
-      'archived',
+      'tasks',
     )
     expect(r.ok).toBe(true)
   })
@@ -223,8 +228,8 @@ describe('validateTrddFieldEdits — date fields', () => {
   })
 })
 
-describe('validateTrddFieldEdits — terminal column freeze (IND base §12)', () => {
-  it('refuses editing an unrelated field on a terminal (complete) card', () => {
+describe('validateTrddFieldEdits — definitive column freeze (IND base §12)', () => {
+  it('refuses editing an unrelated field on a definitive (complete) card', () => {
     const r = validateTrddFieldEdits(
       { severity: 'HIGH', updated: ISO },
       baseFm({ column: 'complete' }),
@@ -232,10 +237,10 @@ describe('validateTrddFieldEdits — terminal column freeze (IND base §12)', ()
       'archived',
     )
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toMatch(/frozen/)
+    if (!r.ok) expect(r.error).toMatch(/definitive/)
   })
 
-  it('allows "updated" and "superseded-by" on a terminal card (the two carve-outs)', () => {
+  it('allows "updated" and "superseded-by" on a definitive card (the two carve-outs)', () => {
     const r = validateTrddFieldEdits(
       { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
       baseFm({ column: 'complete' }),
@@ -243,6 +248,59 @@ describe('validateTrddFieldEdits — terminal column freeze (IND base §12)', ()
       'archived',
     )
     expect(r.ok).toBe(true)
+  })
+
+  // #167 follow-up: the guard used to check the narrower flock-done TERMINAL_DONE set
+  // instead of the freeze rule's own DEFINITIVE_COLUMNS (IND base step 12), so
+  // `cancelled` and `refused` cards could still have an unrelated field edited —
+  // two definitive columns TERMINAL_DONE does not cover. `failed` is deliberately
+  // excluded here: it is definitive only in the `archived` zone (owner ruling
+  // 2026-09-24) — see the `failed`-in-`tasks`-is-open tests below.
+  it.each(['cancelled', 'refused'])('refuses editing an unrelated field on a %s card', (column) => {
+    const r = validateTrddFieldEdits(
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ column }),
+      resolveAll,
+      'archived',
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/definitive/)
+  })
+
+  it.each(['cancelled', 'refused'])('allows "updated" and "superseded-by" on a %s card', (column) => {
+    const r = validateTrddFieldEdits(
+      { updated: ISO, 'superseded-by': '[ZZZZZZZZ]' },
+      baseFm({ column }),
+      resolveAll,
+      'archived',
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  // Owner ruling (2026-09-24): "of course they stays open for retry" — a `failed`
+  // card in design/tasks/ is OPEN, not definitive, so an unrelated field edit is
+  // allowed there (subject to every other guard in this file).
+  it('allows editing an unrelated field on a failed card in tasks/ (open for retry)', () => {
+    const r = validateTrddFieldEdits(
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ column: 'failed' }),
+      resolveAll,
+      'tasks',
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  // Owner ruling (2026-09-24): "failed in archived -> definitive (wrong road, never
+  // try again, lesson learned)" — the same column becomes definitive once archived.
+  it('refuses editing an unrelated field on a failed card in archived/ (definitive)', () => {
+    const r = validateTrddFieldEdits(
+      { severity: 'HIGH', updated: ISO },
+      baseFm({ column: 'failed' }),
+      resolveAll,
+      'archived',
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/definitive/)
   })
 })
 

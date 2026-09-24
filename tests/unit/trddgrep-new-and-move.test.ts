@@ -545,7 +545,7 @@ describe('trddgrep append / check-box', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
   })
 
-  it('#167 (e): --create is refused on a terminal card, except for `## Approval log`', () => {
+  it('#167 (e): --create is refused on a definitive card, except for `## Approval log`', () => {
     const id = seed()
     expect(cli('check-box', id, '1').status).toBe(0)
     expect(cli('check-box', id, '2').status).toBe(0)
@@ -555,7 +555,7 @@ describe('trddgrep append / check-box', () => {
     const before = fs.readFileSync(file, 'utf-8')
     const refused = cli('append', id, '## Some New Heading', '- x', '--create')
     expect(refused.status).toBe(2)
-    expect(refused.stderr).toMatch(/terminal card \(column: complete\)/)
+    expect(refused.stderr).toMatch(/definitive card \(column: complete/)
     expect(refused.stderr).toMatch(/Approval log/)
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
     // `move` already emits `## Approval log` (with the MANDATE line) as part of archiving,
@@ -645,5 +645,54 @@ describe('trddgrep append / check-box', () => {
     expect(cli('check-box', id, '1').status).toBe(0)
     expect(cli('check-box', id, '1', '--uncheck').status).toBe(0)
     expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^- \[ \] one$/m)
+  })
+})
+
+// #167 follow-up: `edit` used to reject `--no-bump` as an unrecognised option — an
+// unconditional `if (strayEdit.length > 0) exit(2)` with no allowance for it, unlike
+// `set`/`append`/`check-box`, which all strip the flag before checking for stray
+// tokens. `edit` never bumps `updated:` on its own (it is a raw `--at-line`/`--expect`/
+// `--replace` triple), so the fix is to accept `--no-bump` as a documented no-op rather
+// than refuse it.
+describe('trddgrep edit --no-bump', () => {
+  it('is accepted (not refused as an unrecognised option) and leaves `updated:` byte-identical while applying the replacement', () => {
+    const r0 = cli('new', '--title', 'edit no-bump target', '--task-type', 'infra', '--author', 'probe')
+    expect(r0.status).toBe(0)
+    const file = only('tasks')
+    const before = fs.readFileSync(file, 'utf-8')
+    const lines = before.split('\n')
+    const titleLineNo = lines.findIndex((l) => l.startsWith('title: ')) + 1
+    expect(titleLineNo).toBeGreaterThan(0)
+    const titleLine = lines[titleLineNo - 1]
+
+    const r = cli(
+      'edit',
+      only('tasks').match(/-([A-Z0-9]{8})-/)?.[1] ?? '',
+      '--at-line', String(titleLineNo),
+      '--expect', titleLine,
+      '--replace', 'title: edited by --no-bump',
+      '--no-bump',
+    )
+    expect(r.status).toBe(0)
+
+    const after = fs.readFileSync(file, 'utf-8')
+    expect(after).toMatch(/^title: edited by --no-bump$/m)
+    // `updated:` is whatever `--no-bump` was asked to leave alone — since `edit` never
+    // auto-bumps at all, this also proves the flag did not make the CLI treat it as an
+    // unrecognised stray token that would have aborted the whole edit (status 0 above
+    // already implies this, but the byte-identical `updated:` line is the field the
+    // task asks to pin explicitly).
+    const beforeUpdated = before.split('\n').find((l) => l.startsWith('updated: '))
+    const afterUpdated = after.split('\n').find((l) => l.startsWith('updated: '))
+    expect(afterUpdated).toBe(beforeUpdated)
+  })
+
+  it('still refuses a genuinely unrecognised option', () => {
+    const r0 = cli('new', '--title', 'edit stray target', '--task-type', 'infra', '--author', 'probe')
+    expect(r0.status).toBe(0)
+    const id = only('tasks').match(/-([A-Z0-9]{8})-/)?.[1] ?? ''
+    const r = cli('edit', id, '--at-line', '1', '--expect', 'x', '--replace', 'y', '--totally-unknown')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/unrecognised option/)
   })
 })

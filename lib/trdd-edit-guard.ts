@@ -26,7 +26,7 @@
  */
 import {
   VALID_COLUMNS,
-  TERMINAL_DONE,
+  isDefinitiveCard,
   AUTHORITY_RANK,
   V1_STATUS_TO_COLUMN,
   expectedZone,
@@ -42,7 +42,7 @@ const REF_FIELDS = ['blocked-by', 'npt', 'eht', 'parent-trdd', 'supersedes', 'su
 const DATE_FIELDS = ['created', 'updated', 'approval-datetime'] as const
 
 /**
- * A card in a terminal-DONE column is frozen (IND base §12) — nothing may edit its
+ * A card in a FROZEN column is frozen (IND base §12) — nothing may edit its
  * body or frontmatter except these two fields, which is exactly why `editTrdd`
  * always writes `updated` alongside whatever the caller asked for.
  */
@@ -114,15 +114,19 @@ export function validateTrddFieldEdits(
   resolveId: (id: string) => boolean,
   zone: TrddZone,
 ): EditGuardResult {
-  // ── terminal-column freeze (IND base §12) — checked FIRST, on the CURRENT column,
-  // never the resultant one: a frozen card's whole point is that nothing may move it. ──
+  // ── definitive-card freeze (IND base §12) — checked FIRST, on the CURRENT column
+  // AND CURRENT zone, never the resultant ones: a definitive card's whole point is
+  // that nothing may move it. Uses `isDefinitiveCard` (owner ruling 2026-09-24), not
+  // the narrower flock-done TERMINAL_DONE: a `failed` card in design/tasks/ is OPEN
+  // for retry and becomes definitive only once archived — see the comment on
+  // `DEFINITIVE_COLUMNS`/`isDefinitiveCard` in trdd-vocabulary.ts. ──
   const currentColumn = effectiveColumn(current)
-  if (TERMINAL_DONE.has(currentColumn)) {
+  if (isDefinitiveCard(currentColumn, zone)) {
     for (const field of Object.keys(fields)) {
       if (!FROZEN_ALLOWED_FIELDS.has(field)) {
         return {
           ok: false,
-          error: `TRDD is in terminal column "${currentColumn}" and its body is frozen (IND base §12) — only "updated" and "superseded-by" may be edited, not "${field}"`,
+          error: `TRDD is definitive (column "${currentColumn}" in design/${zone}/) — never reopened or retried; only "updated" and "superseded-by" may be edited, not "${field}"`,
         }
       }
     }

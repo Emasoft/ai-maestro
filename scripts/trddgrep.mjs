@@ -1036,7 +1036,14 @@ switch (cmd) {
   case 'edit': {
     const { TRDD_KIND } = await import('../lib/pillar/kinds.ts')
     const { parseEditFlags, runPillarEdit, palette } = await import('../lib/pillar/cli.ts')
-    const { edits, rest: strayEdit } = parseEditFlags(argv.slice(2))
+    // `--no-bump` is a NO-OP here, recognised for consistency with `set`/`append`/
+    // `check-box`: unlike those, `edit` is a raw `--at-line`/`--expect`/`--replace`
+    // triple (lib/pillar/cli.ts::runPillarEdit) that never touches `updated:` on its
+    // own — it writes only the exact lines the caller named. A caller that always
+    // appends `--no-bump` to a mechanical repair (matching the sibling verbs) must
+    // not have `edit` refuse it as an unrecognised option.
+    const editRest = argv.slice(2).filter((t) => t !== '--no-bump')
+    const { edits, rest: strayEdit } = parseEditFlags(editRest)
     // `rest` used to be DISCARDED, so any token `parseEditFlags` did not recognise was
     // silently dropped and the write proceeded anyway. trddgrep's own help advertises
     // `--dry-run` for the sibling `fix` verb, so `trddgrep edit ID … --dry-run` performed
@@ -1447,11 +1454,13 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  or terminal) and a non-empty --reason. Refused when the archived column is')}
   ${C.d('  published/live/failed (a release-pipeline statement — NON-EXEMPT, use the approval flow).')}
 
-  ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
+  ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}   [--no-bump]
   ${C.d('  AT LINE N, REPLACE X WITH Y — under the document lock. If X is not at line N the')}
   ${C.d('  card changed since you read it and the edit is BLOCKED (exit 2, stderr starts STALE).')}
   ${C.d('  --at-line is REQUIRED: a TRDD record spans the whole document, so there is no line')}
   ${C.d('  to default to. Repeat the triple for a batch; a batch is ALL-OR-NOTHING.')}
+  ${C.d('  --no-bump   accepted for consistency with set/append/check-box, but a no-op: `edit`')}
+  ${C.d('  never touches `updated:` on its own — pass an explicit triple to change it.')}
 
   ${C.c('trddgrep env')}              which corpus this is — standalone project or ai-maestro agent
 

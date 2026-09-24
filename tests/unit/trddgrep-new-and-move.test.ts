@@ -791,6 +791,18 @@ describe('trddgrep identity (ai-maestro#168)', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
   })
 
+  it('`move` to a PLAIN (non-recording) column with an invalid --approver is still refused, card untouched', () => {
+    // `dev` records no approver (not archived/refused/planned-from-proposals) — the check
+    // still must run whenever `--approver` is GIVEN, not only on the recording transitions.
+    expect(cli('new', '--title', 'plain move bad approver', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
+    const file = only('tasks')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = cli('move', idOf(file), 'dev', '--approver', 'not an identity')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/refusing to move.*ai-maestro#168/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
   it('with NO PRRD project-id, any well-formed main-agent@X is accepted (interim rule, open on #168)', () => {
     fs.rmSync(path.join(design, 'requirements', 'PRRD.md'))
     expect(cli('new', '--title', 'no prrd', '--task-type', 'infra', '--author', 'main-agent@Other').status).toBe(0)

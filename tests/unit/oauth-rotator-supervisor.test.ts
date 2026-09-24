@@ -9,7 +9,7 @@
  * zero network and zero keychain — these tests prove exactly the six finding branches supervisor.py
  * emits, plus the D3 cookie-leg sidecar persistence.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -17,11 +17,32 @@ import path from 'path'
 import {
   diagnose, apply, optInPresent, tickCompletedAgeS, trackCannotSelfRenew, gatherFacts,
   PINNING_ENV, SETUP_REMIND_DAYS, TICK_STALL_ALERT_S, COOKIE_LEG_ALERT_S,
-  type Facts, type SlotFact,
+  refreshDeadCount, refreshAnsweredCount, refreshNeedsHuman, REFRESH_ANSWERED_CEILING,
+  type Facts, type SlotFact, type RefreshCounters, type BlobIdentity,
 } from '@/lib/oauth-rotator/supervisor'
 import { serverTickAgeS } from '@/lib/oauth-rotator/server-supervisor'
 import { DEFAULT_MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/supervisor'
 import type { CredentialBlob } from '@/lib/oauth-rotator/slots'
+
+// issue-152 follow-up: the supervisor is a diagnostic OBSERVER (module header: "It heals
+// NOTHING") and must never mutate a credential. `slots.ts`'s `readSlot()` is NOT read-only — it
+// re-heals a corrupt primary keychain entry from the backup mirror by WRITING it back
+// (`slotKeychainWrite`, slots.ts ~:377). Spying on `slotKeychainWrite` would NOT catch a
+// regression that reintroduces `readSlot` as the default reader: `readSlot`'s own call to
+// `slotKeychainWrite` is a SAME-MODULE reference (both live in slots.ts), so it resolves to
+// slots.ts's own internal binding, not to a spy this mock hands to OUTSIDE importers — mocking
+// cannot intercept a same-file self-call. Guard the CROSS-module boundary instead: `readSlot`
+// itself is what supervisor.ts would have to import and call, and that import IS a genuine
+// cross-module reference this mock controls, so asserting it was never invoked is what actually
+// catches the regression. `slotKeychainRead` is stubbed to `null` so no real keychain is touched.
+vi.mock('@/lib/oauth-rotator/slots', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/oauth-rotator/slots')>()
+  return {
+    ...actual,
+    slotKeychainRead: vi.fn(() => null),
+    readSlot: vi.fn(actual.readSlot),
+  }
+})
 
 let tmpDir: string
 const savedEnv: Record<string, string | undefined> = {}
@@ -283,6 +304,41 @@ describe('supervisor.diagnose — cookie-leg-stuck names the CAUSE, not a verdic
     }
     expect(msg(stuck({ hasRefresh: false, refreshFailures: 0 }))).not.toMatch(/only a human/i)
   })
+
+  // #152 (f): the alert text must carry BOTH the dead count and the total, and must say which
+  // rung of `refreshNeedsHuman` fired — an observed `invalid_grant` verdict, or the cause-blind
+  // ceiling (a guess, not a verdict).
+  it('#152: credential-dead message carries BOTH the consecutive-dead count and the total', () => {
+    const m = msg(
+      stuck({
+        lastRefreshFailure: 'credential-dead',
+        refreshFailures: 5,
+        refreshDeadFailures: 2,
+        refreshCountsSnapshot: { total: 5, fp: 'fp-x', expiresAt: 1000 },
+        refreshCurrentIdentity: { fp: 'fp-x', expiresAt: 1000 },
+      }),
+    )
+    expect(m).toMatch(/2 consecutive credential-dead failures/)
+    expect(m).toMatch(/5 total/)
+  })
+
+  it('#152: the cause-blind ceiling fires its OWN message, distinct from an observed credential-dead verdict', () => {
+    const m = msg(
+      stuck({
+        lastRefreshFailure: 'network',
+        refreshFailures: 100,
+        refreshDeadFailures: 0,
+        refreshAnsweredFailures: REFRESH_ANSWERED_CEILING,
+        refreshCountsSnapshot: { total: 100, fp: 'fp-y', expiresAt: 2000 },
+        refreshCurrentIdentity: { fp: 'fp-y', expiresAt: 2000 },
+      }),
+    )
+    expect(m).toMatch(/cause-blind ceiling/)
+    expect(m).toMatch(new RegExp(`${REFRESH_ANSWERED_CEILING} consecutive answered failures`))
+    expect(m).toMatch(/last cause network/)
+    expect(m).toMatch(/may not be a dead credential/)
+    expect(m).not.toMatch(/invalid_grant/) // never claims the endpoint judged the grant
+  })
 })
 
 describe('supervisor.trackCannotSelfRenew — the D3 cookie-leg sidecar (temp root, 0-IMPACT)', () => {
@@ -342,6 +398,17 @@ describe('supervisor.gatherFacts — the I/O wiring (injected deps, temp root, 0
     fs.writeFileSync(path.join(tmpDir, 'state.json'), JSON.stringify({ slots: stateSlots }))
     fs.writeFileSync(path.join(tmpDir, 'tick-completed.ts'), String(NOW - 120))
   }
+
+  it('issue-152: slotFacts() with default deps (no readSlotBlob override) never calls the WRITE-capable readSlot', async () => {
+    const { slotKeychainRead, readSlot } = await import('@/lib/oauth-rotator/slots')
+    armRoot({ 'a@b.com': { refresh_failures: 0 } })
+    // No `deps.readSlotBlob` override — this exercises the module's own default reader.
+    gatherFacts({ root: tmpDir, deps: { daemonAlive: () => true, now: () => NOW } })
+    expect(readSlot).not.toHaveBeenCalled()
+    // Positive control: the default path really was reached (not short-circuited earlier by
+    // the opt-in gate or an empty email list), so the assertion above is not vacuous.
+    expect(slotKeychainRead).toHaveBeenCalledWith('a@b.com')
+  })
 
   it('assembles Facts from the root + injected blob reader + daemonAlive + now', () => {
     armRoot({ 'a@b.com': { refresh_failures: 0 } })
@@ -507,5 +574,141 @@ describe('supervisor — server tick-liveness probe (TRDD-IGCSDTIU)', () => {
     // as well against a fix that disabled the alert outright.
     stampOwnTick(NOW - (TICK_STALL_ALERT_S + 60))
     expect(diagnose({ ...gather(), onMacos: true }).map((f) => f.code)).toContain('tick-stalled')
+  })
+})
+
+/**
+ * #152 (GitHub issue Emasoft/ai-maestro#152) — the shared `refreshDeadCount` /
+ * `refreshAnsweredCount` / `refreshNeedsHuman` predicate. Before this, `tick.ts` and this module
+ * each re-derived "does this refresh path need a human" from the RAW, cause-blind
+ * `refresh_failures` total, so 775 consecutive `network` failures on a live credential escalated
+ * to a human REAUTH nudge exactly like a real `invalid_grant` rejection (measured 2026-08-20,
+ * TRDD-Y1ZWU998). These tests pin the PURE predicate directly — no I/O, no tick, no keychain.
+ */
+describe('supervisor — #152 refreshDeadCount / refreshAnsweredCount / refreshNeedsHuman', () => {
+  const FP_A = 'fp-fixture-aaaa1111'
+  const FP_B = 'fp-fixture-bbbb2222'
+  const identity = (fp: string, expiresAt: number | null = 1000): BlobIdentity => ({ fp, expiresAt })
+
+  it('(d) a LEGACY meta (no #152 fields at all) with refresh_failures >= MAX still escalates — raw-total fallback', () => {
+    const legacy: RefreshCounters = { refresh_failures: DEFAULT_MAX_REFRESH_FAILURES }
+    expect(refreshDeadCount(legacy, identity(FP_A))).toBe(DEFAULT_MAX_REFRESH_FAILURES)
+    expect(refreshNeedsHuman(legacy, true, identity(FP_A))).toBe(true)
+    // ...and the SAME legacy meta with a total below the max does not escalate.
+    expect(refreshNeedsHuman({ refresh_failures: DEFAULT_MAX_REFRESH_FAILURES - 1 }, true, identity(FP_A))).toBe(false)
+  })
+
+  it('(iii) a FRESH snapshot (total + identity match) is trusted: dead=0 at total=3 does NOT escalate', () => {
+    const meta: RefreshCounters = {
+      refresh_failures: 3,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: 0,
+      refresh_counts_snapshot: { total: 3, ...identity(FP_A) },
+    }
+    // The raw-total fallback WOULD escalate at total=3 — this proves the snapshot is actually
+    // being TRUSTED (read: overriding the fallback), not merely present and ignored.
+    expect(refreshDeadCount(meta, identity(FP_A))).toBe(0)
+    expect(refreshNeedsHuman(meta, true, identity(FP_A))).toBe(false)
+  })
+
+  it('(i) a STALE snapshot (total drifted since the server last wrote it) falls back and escalates', () => {
+    // The server wrote dead=0 at total=1; something else (the janitor) then raised the total to 4
+    // without touching the new fields — exactly the TOTAL-DRIFT split-brain scenario.
+    const meta: RefreshCounters = {
+      refresh_failures: 4,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: 0,
+      refresh_counts_snapshot: { total: 1, ...identity(FP_A) },
+    }
+    expect(refreshDeadCount(meta, identity(FP_A))).toBe(4) // fallback to the raw total, not 0
+    expect(refreshNeedsHuman(meta, true, identity(FP_A))).toBe(true)
+  })
+
+  it('(ii) the ABA case — snapshot total EQUAL but the blob identity changed — falls back and escalates', () => {
+    // The server wrote dead=0 at total=3 (three RETRYABLE failures, no rejection yet). The janitor
+    // then had a SUCCESS (which changes the blob's fp/expiresAt — a fresh access token/expiry) and
+    // a fresh run of THREE MORE failures re-climbed the total back to exactly 3, without ever going
+    // through this server. A total-only check would call the snapshot "still current" and wrongly
+    // TRUST dead=0 — the discriminating assertion is that the identity mismatch instead falls back
+    // to the raw total (3), which is what must escalate here.
+    const meta: RefreshCounters = {
+      refresh_failures: 3,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: 0,
+      refresh_counts_snapshot: { total: 3, ...identity(FP_A) },
+    }
+    expect(refreshDeadCount(meta, identity(FP_B))).toBe(3) // fallback to the raw total, NOT the stale 0
+    expect(refreshNeedsHuman(meta, true, identity(FP_B))).toBe(true)
+    // Same fp, but a DIFFERENT expiresAt is just as much "a success happened since".
+    expect(refreshDeadCount(meta, identity(FP_A, 9999))).toBe(3)
+  })
+
+  it('an UNREADABLE current blob (current === null) can never confirm freshness — always falls back', () => {
+    const meta: RefreshCounters = {
+      refresh_failures: 3,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: 0,
+      refresh_counts_snapshot: { total: 3, ...identity(FP_A) },
+    }
+    expect(refreshDeadCount(meta, null)).toBe(3)
+    expect(refreshNeedsHuman(meta, true, null)).toBe(true)
+  })
+
+  it('no refresh token at all needs a human unconditionally, regardless of any counter', () => {
+    expect(refreshNeedsHuman({ refresh_failures: 0 }, false, identity(FP_A))).toBe(true)
+  })
+
+  it('(c) dead, dead, network, dead: the dead-count is FROZEN by the network failure, never reset', () => {
+    // Cause sequence: credential-dead, credential-dead, network, credential-dead — matching the
+    // real accumulation order `keepaliveRefresh` would produce.
+    let dead = 0
+    let answered = 0
+    for (const cause of ['credential-dead', 'credential-dead', 'network', 'credential-dead'] as const) {
+      dead = cause === 'credential-dead' ? dead + 1 : dead
+      answered = cause !== 'network' ? answered + 1 : answered
+    }
+    expect(dead).toBe(3) // the network failure did NOT reset it — it only failed to increment it
+    expect(answered).toBe(3) // the network failure froze this too
+    const meta: RefreshCounters = {
+      refresh_failures: 4,
+      refresh_dead_failures: dead,
+      refresh_answered_failures: answered,
+      refresh_counts_snapshot: { total: 4, ...identity(FP_A) },
+    }
+    expect(refreshDeadCount(meta, identity(FP_A))).toBe(3)
+    expect(refreshNeedsHuman(meta, true, identity(FP_A))).toBe(true)
+  })
+
+  it('(e) the cause-blind ANSWERED ceiling: 99 consecutive answered failures do NOT escalate, 100 do', () => {
+    const meta99: RefreshCounters = {
+      refresh_failures: 99,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: REFRESH_ANSWERED_CEILING - 1,
+      refresh_counts_snapshot: { total: 99, ...identity(FP_A) },
+    }
+    expect(refreshAnsweredCount(meta99, identity(FP_A))).toBe(REFRESH_ANSWERED_CEILING - 1)
+    expect(refreshNeedsHuman(meta99, true, identity(FP_A))).toBe(false)
+
+    const meta100: RefreshCounters = {
+      refresh_failures: 100,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: REFRESH_ANSWERED_CEILING,
+      refresh_counts_snapshot: { total: 100, ...identity(FP_A) },
+    }
+    expect(refreshNeedsHuman(meta100, true, identity(FP_A))).toBe(true)
+  })
+
+  it('the ceiling never fires on pure `network` failures — an offline host stays inert', () => {
+    // 775 consecutive network failures (TRDD-Y1ZWU998's measured live incident): dead=0,
+    // answered=0 (network freezes BOTH), snapshot fresh and matching.
+    const meta: RefreshCounters = {
+      refresh_failures: 775,
+      refresh_dead_failures: 0,
+      refresh_answered_failures: 0,
+      refresh_counts_snapshot: { total: 775, ...identity(FP_A) },
+    }
+    expect(refreshDeadCount(meta, identity(FP_A))).toBe(0)
+    expect(refreshAnsweredCount(meta, identity(FP_A))).toBe(0)
+    expect(refreshNeedsHuman(meta, true, identity(FP_A))).toBe(false)
   })
 })

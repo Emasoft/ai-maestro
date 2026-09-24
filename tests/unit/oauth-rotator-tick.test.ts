@@ -19,8 +19,9 @@ import {
   surveyAlternates,
 } from '@/lib/oauth-rotator/tick'
 import { setKeychainDenied, keychainDeniedLatched } from '@/lib/oauth-rotator/safe-storage'
-import { loadState, saveState, writeSlot, readSlot, fingerprint, type RotatorState } from '@/lib/oauth-rotator/slots'
+import { loadState, saveState, writeSlot, readSlot, fingerprint, oauthOf, type RotatorState } from '@/lib/oauth-rotator/slots'
 import { writeLiveBlob, readLiveBlob } from '@/lib/oauth-rotator/live'
+import { refreshDeadCount, refreshAnsweredCount, refreshNeedsHuman, type BlobIdentity } from '@/lib/oauth-rotator/supervisor'
 
 // 0-IMPACT / R16 SAFETY: autoRotate/keepalive can call writeSlot + switchLiveTo→writeLiveBlob.
 // Forced-off backend + HOME→temp (hard-guarded) route every credential write to the temp dir; the
@@ -483,6 +484,11 @@ describe('tick — keepaliveRefresh never brands a TRANSIENT failure as credenti
     expect(meta.refresh_failures).toBe(4)
     expect(meta.last_refresh_failure).toBe('network')
     expect(meta.refresh_dead_fp).toBeUndefined()
+    // #152: 'network' FREEZES both new sub-counters at 0 (the endpoint was never even reached),
+    // and the staleness snapshot is written against the total this beat produced.
+    expect(meta.refresh_dead_failures).toBe(0)
+    expect(meta.refresh_answered_failures).toBe(0)
+    expect((meta.refresh_counts_snapshot as { total: number }).total).toBe(4)
   })
 
   it('SELF-HEALS a pre-fix mis-brand: a refresh_dead_fp standing beside a retryable last-cause is cleared and the exchange retried', async () => {
@@ -526,6 +532,133 @@ describe('tick — keepaliveRefresh never brands a TRANSIENT failure as credenti
     const meta = loadState().slots?.['ghost@x'] as unknown as Record<string, unknown>
     expect(meta.refresh_dead_fp).toBeUndefined() // un-bricked despite the unreadable blob
     expect(meta.refresh_failures).toBe(775) // nothing attempted, nothing re-counted — read still fails
+  })
+})
+
+/**
+ * #152 (GitHub issue Emasoft/ai-maestro#152) end-to-end: what `keepaliveRefresh` WRITES must be
+ * exactly what the shared `refreshNeedsHuman` predicate (supervisor.ts) reads back the same way,
+ * against the SAME blob-identity computation both sides use. This is the split-brain check the
+ * corrections asked for: tick.ts and supervisor.ts must never disagree about one slot's state.
+ */
+describe('tick — keepaliveRefresh + refreshNeedsHuman: no escalation on a network storm, escalation on real rejection', () => {
+  function countingNetworkDownFetch(): { impl: typeof fetch; calls: () => number } {
+    let n = 0
+    const impl = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('/oauth/token')) { n++; throw new Error('network down') }
+      if (u.includes('/oauth/usage')) return new Response('{}', { status: 200 })
+      return new Response('{}', { status: 404 })
+    }) as unknown as typeof fetch
+    return { impl, calls: () => n }
+  }
+
+  /** A fetch stub that answers every /oauth/token call with a Cloudflare-shaped 403 —
+   *  classified 'transport-refused' by network.ts (ANSWERED, never 'credential-dead'). */
+  function countingTransportRefusedFetch(): { impl: typeof fetch; calls: () => number } {
+    let n = 0
+    const impl = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('/oauth/token')) { n++; return new Response('{}', { status: 403 }) }
+      if (u.includes('/oauth/usage')) return new Response('{}', { status: 200 })
+      return new Response('{}', { status: 404 })
+    }) as unknown as typeof fetch
+    return { impl, calls: () => n }
+  }
+
+  function currentIdentity(email: string): BlobIdentity | null {
+    const b = readSlot(email)
+    if (!b) return null
+    const exp = oauthOf(b).expiresAt
+    return { fp: fingerprint(b), expiresAt: typeof exp === 'number' ? exp : null }
+  }
+
+  // (a): 775 consecutive NETWORK failures on a live credential must never escalate — the exact
+  // measured 2026-08-20 incident (TRDD-Y1ZWU998) this fix exists to close for good, not just for
+  // the retry-ban half.
+  it('(a) 775 consecutive network failures: no escalation, and the retry ban never arms', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('flaky@x', blob('FLAKY', H1()))
+    const f = countingNetworkDownFetch()
+
+    for (let i = 0; i < 775; i++) await keepaliveRefresh({ fetchImpl: f.impl })
+
+    expect(f.calls()).toBe(775) // the retry ban never armed — every beat still reached the endpoint
+    const meta = loadState().slots?.['flaky@x'] as unknown as Record<string, unknown>
+    expect(meta.refresh_failures).toBe(775)
+    const counters = { refresh_failures: meta.refresh_failures as number, refresh_dead_failures: meta.refresh_dead_failures as number, refresh_answered_failures: meta.refresh_answered_failures as number, refresh_counts_snapshot: meta.refresh_counts_snapshot as never }
+    expect(refreshDeadCount(counters, currentIdentity('flaky@x'))).toBe(0)
+    expect(refreshAnsweredCount(counters, currentIdentity('flaky@x'))).toBe(0)
+    expect(refreshNeedsHuman(counters, true, currentIdentity('flaky@x'))).toBe(false)
+  }, 20_000)
+
+  // (b): 3 credential-dead failures escalate AND the retry ban arms on the 4th attempt.
+  it('(b) 3 credential-dead failures escalate, and arm the retry ban', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('dead@x', blob('DEAD', H1()))
+    const f = countingFailingTokenFetch()
+
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(3)
+
+    const meta = loadState().slots?.['dead@x'] as unknown as Record<string, unknown>
+    const counters = { refresh_failures: meta.refresh_failures as number, refresh_dead_failures: meta.refresh_dead_failures as number, refresh_answered_failures: meta.refresh_answered_failures as number, refresh_counts_snapshot: meta.refresh_counts_snapshot as never }
+    expect(refreshDeadCount(counters, currentIdentity('dead@x'))).toBe(3)
+    expect(refreshNeedsHuman(counters, true, currentIdentity('dead@x'))).toBe(true)
+
+    // ...and the retry ban (a SEPARATE mechanism, fingerprint-keyed) has armed too.
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(3) // banned — the 4th beat never reached the endpoint
+  })
+
+  // (e): the cause-blind ANSWERED ceiling escalates on a pure 'transport-refused' run even though
+  // the endpoint never rejected the grant (never 'credential-dead') — but the retry ban, which is
+  // fingerprint + dead-count only, must NOT arm from it (TRDD-Y1ZWU998's own collapse, reintroduced
+  // via a different door if the ceiling were allowed to feed the ban).
+  it('(e) 100 consecutive transport-refused failures escalate via the ceiling but do NOT arm the retry ban', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('refused@x', blob('REFUSED', H1()))
+    const f = countingTransportRefusedFetch()
+
+    for (let i = 0; i < 100; i++) await keepaliveRefresh({ fetchImpl: f.impl })
+
+    expect(f.calls()).toBe(100) // the ban never armed — every beat still reached the endpoint
+    const meta = loadState().slots?.['refused@x'] as unknown as Record<string, unknown>
+    expect(meta.refresh_dead_fp).toBeUndefined() // no verdict was ever reached — never banned
+    const counters = { refresh_failures: meta.refresh_failures as number, refresh_dead_failures: meta.refresh_dead_failures as number, refresh_answered_failures: meta.refresh_answered_failures as number, refresh_counts_snapshot: meta.refresh_counts_snapshot as never }
+    expect(refreshDeadCount(counters, currentIdentity('refused@x'))).toBe(0) // never judged dead
+    expect(refreshAnsweredCount(counters, currentIdentity('refused@x'))).toBe(100)
+    expect(refreshNeedsHuman(counters, true, currentIdentity('refused@x'))).toBe(true) // via the ceiling only
+  }, 20_000)
+})
+
+/** #152: `surveyAlternates`'s `refreshDead` list is built from the SAME shared predicate — a
+ *  dead-but-expired alternate escalates, a network-storm-but-expired one does not. */
+describe('tick — surveyAlternates: refreshDead only names a slot the shared #152 predicate calls dead', () => {
+  const EXPIRED = -1000 // ms in the past — always locally expired, regardless of grace
+
+  it('a credential-dead-classified, expired alternate IS reported', () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    const st = loadState()
+    st.slots!['dead@x'] = { fp: 'x', refresh_failures: 3, refresh_dead_failures: 3, refresh_answered_failures: 3, refresh_counts_snapshot: { total: 3, fp: fingerprint(blob('DEAD', EXPIRED)), expiresAt: EXPIRED } } as never
+    saveState(st)
+    writeSlot('dead@x', blob('DEAD', EXPIRED))
+
+    const survey = surveyAlternates()
+    expect(survey.refreshDead).toContain('dead@x')
+  })
+
+  it('a 775-network-failure, expired alternate is NOT reported — the exact TRDD-Y1ZWU998 shape', () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    const st = loadState()
+    st.slots!['flaky@x'] = { fp: 'x', refresh_failures: 775, refresh_dead_failures: 0, refresh_answered_failures: 0, refresh_counts_snapshot: { total: 775, fp: fingerprint(blob('FLAKY', EXPIRED)), expiresAt: EXPIRED } } as never
+    saveState(st)
+    writeSlot('flaky@x', blob('FLAKY', EXPIRED))
+
+    const survey = surveyAlternates()
+    expect(survey.refreshDead).not.toContain('flaky@x')
   })
 })
 

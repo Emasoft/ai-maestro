@@ -98,6 +98,56 @@ describe('GET /api/oauth-rotator/status (TRDD-OX5TT5OT)', () => {
     expect(mockLoadState).not.toHaveBeenCalled()
   })
 
+  it('issue-152: a slot with no `meta.fp` (legacy, pre-#152) has NO identity — a fresh-looking snapshot is ignored, falls back to the raw total', async () => {
+    // `currentIdentityFrom` returns null when `meta.fp` is absent, so `freshRefreshSubCounters`
+    // treats the snapshot as unconfirmable regardless of how well `total` matches, and
+    // `refreshDeadCount` falls back to the raw `refresh_failures` — the same legacy behavior this
+    // route always had for a slot the tick has not yet stamped an identity onto.
+    mockLoadState.mockImplementation(() => ({
+      live_email: 'live@example.com',
+      live_fp: null,
+      slots: {
+        'live@example.com': {
+          expires_at: Date.now() + 2 * HOUR_MS,
+          refresh_failures: 5, // >= DEFAULT_MAX_REFRESH_FAILURES (3)
+          refresh_dead_failures: 0, // a snapshot claiming ZERO dead failures
+          refresh_answered_failures: 0,
+          refresh_counts_snapshot: { total: 5, fp: 'aaaaaaaaaaaaaaaa', expiresAt: null },
+          // deliberately NO `fp` field on the entry itself
+        },
+      },
+    }))
+    const data = (await (await GET(req())).json()) as { accounts: { refreshDead: boolean }[] }
+    // If the snapshot were (wrongly) trusted despite no verified identity, dead=0 -> false.
+    expect(data.accounts[0].refreshDead).toBe(true)
+  })
+
+  it('issue-152: a fresh, VERIFIED snapshot (meta.fp/expires_at match) is trusted — 775 network failures correctly read NOT dead', async () => {
+    // TRDD-Y1ZWU998's measured live incident: 775 consecutive `network`-cause failures on a live
+    // credential must NOT read as refreshDead — the endpoint never actually rejected the grant.
+    // The tick wrote `meta.fp`/`meta.expires_at` on its last success AND a `refresh_counts_snapshot`
+    // matching that exact identity, so this route's own `currentIdentityFrom` must agree with it
+    // and let the real (dead=0, answered=0) sub-counters through instead of the raw 775 total.
+    const fp = 'cccccccccccccccc'
+    const expiresAt = Date.now() + HOUR_MS
+    mockLoadState.mockImplementation(() => ({
+      live_email: 'live@example.com',
+      live_fp: fp,
+      slots: {
+        'live@example.com': {
+          fp,
+          expires_at: expiresAt,
+          refresh_failures: 775,
+          refresh_dead_failures: 0,
+          refresh_answered_failures: 0,
+          refresh_counts_snapshot: { total: 775, fp, expiresAt },
+        },
+      },
+    }))
+    const data = (await (await GET(req())).json()) as { accounts: { refreshDead: boolean }[] }
+    expect(data.accounts[0].refreshDead).toBe(false)
+  })
+
   it('reports an empty fleet as empty rather than throwing', async () => {
     mockLoadState.mockImplementation(() => ({ live_email: null, live_fp: null, slots: {} }))
     const data = (await (await GET(req())).json()) as { liveEmail: null; accounts: unknown[] }

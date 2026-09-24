@@ -19,7 +19,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, renameS
 import os from 'os'
 import path from 'path'
 
-import { rotatorRoot, slotKeychainRead, type CredentialBlob } from './slots'
+import { rotatorRoot, slotKeychainRead, fingerprint, type CredentialBlob } from './slots'
 import { rotatorLogPath } from './decision-log'
 // Consecutive keepalive-refresh failures after which a present-but-FAILING refresh token is
 // treated as DEAD and escalated down the cascade (TRDD-HJGR4I5W). A few ticks: long enough to ride
@@ -30,6 +30,137 @@ import { rotatorLogPath } from './decision-log'
 // zero production callers, and this constant — used at the `noUsableRefresh` decision below — was
 // the only thing keeping the module reachable. A constant now lives with its sole consumer.
 export const DEFAULT_MAX_REFRESH_FAILURES = 3
+
+// #152: a cause-blind CEILING for when the classifier itself may be wrong about a dead credential
+// (e.g. it mislabels a permanent 403 as something else). 100 consecutive ANSWERED failures (the
+// endpoint responded at all — cause !== 'network') escalate regardless of cause, same as a real
+// `invalid_grant` verdict would. An offline host produces only 'network' causes, so this stays
+// inert for it — that is the "degrades safely" property TRDD-Y1ZWU998 relies on. KNOWN BLIND SPOT:
+// `network.ts`'s classifier collapses an unparseable 2xx (e.g. a Cloudflare interstitial/challenge
+// page) to status 0 -> 'network', which freezes both counters below — a dead credential hidden
+// behind such a page never escalates through this ceiling either.
+export const REFRESH_ANSWERED_CEILING = 100
+
+/** The identity of a slot's blob at one moment: its access-token fingerprint plus its
+ *  `expiresAt`. Neither alone is a reliable "this is the same token instant" check — see
+ *  `freshRefreshSubCounters`'s comment for why both are required. */
+export interface BlobIdentity {
+  fp: string
+  expiresAt: number | null
+}
+
+/** `refresh_failures` at the moment `refresh_dead_failures`/`refresh_answered_failures` were last
+ *  written, PLUS the identity of the slot's blob at that same moment. Both halves are required
+ *  to trust the sub-counters on read — see `RefreshCounters`'s docstring for why either one alone
+ *  is not enough. */
+export interface RefreshCountsSnapshot extends BlobIdentity {
+  total: number
+}
+
+/** The subset of a slot's state.json meta this module reads to judge refresh health. Optional
+ *  fields so a legacy slot (written before #152) is read correctly rather than mistyped.
+ *
+ *  `refresh_counts_snapshot` exists because `state.json` is SHARED with the janitor's own
+ *  rotator, and chore ownership between the two has flapped before (TRDD-OUAQARPL) — an older
+ *  janitor build bumps `refresh_failures` on every failure and knows nothing about the two new
+ *  counters below, so it can change the total without touching them. Two failure modes need two
+ *  checks:
+ *   - TOTAL DRIFT: the janitor raises (or resets) `refresh_failures` after this server last wrote
+ *     the snapshot. Caught by `snapshot.total !== refresh_failures`. A plain CLAMP (`min(dead,
+ *     total)`) was tried first and is WRONG here: if this server wrote `dead=0` at `total=1` and
+ *     the janitor then records 3 more `credential-dead` failures itself (total=4), `min(0, 4) = 0`
+ *     and a genuinely dead credential never escalates — a regression, not a safety net.
+ *   - THE ABA CASE: the janitor's OWN success path resets `refresh_failures` to 0 and then a fresh
+ *     run of failures re-climbs it back to the exact total the snapshot recorded, without ever
+ *     going through this server. `snapshot.total === refresh_failures` alone would then wrongly
+ *     read as "still current". The blob's FINGERPRINT changes on every successful exchange
+ *     (`fingerprint(freshBlob)` — see `slots.ts`), so comparing it against the slot's CURRENT blob
+ *     fingerprint catches exactly this: a real reset always changes the fp even when the total
+ *     lands back where it started.
+ *  Both `slotFacts()` and `tick.ts`'s keepalive loop already read the slot's blob for other
+ *  reasons, so validating the fp costs no extra I/O. */
+export interface RefreshCounters {
+  refresh_failures?: number
+  refresh_dead_failures?: number
+  refresh_answered_failures?: number
+  refresh_counts_snapshot?: RefreshCountsSnapshot
+}
+
+/** The sub-counters, but only if the snapshot proves they are still current against the total AND
+ *  the slot's CURRENT blob identity (`current`, or `null` when the blob could not be read — an
+ *  unreadable blob can never confirm freshness, so it falls back too). `null` return means
+ *  stale/absent/unconfirmable — either way, `refreshDeadCount`/`refreshAnsweredCount` fall back
+ *  rather than trust the sub-counters.
+ *
+ *  BOTH `fp` and `expiresAt` are compared, not just `fp`, because either one alone has a gap:
+ *   - `fp` alone: relies on `fingerprint()` (slots.ts) hashing the ACCESS token, not the refresh
+ *     token — every successful exchange mints a fresh access token, even against a non-rotating
+ *     server that keeps the SAME refresh token (network.ts:247-251), so an fp mismatch reliably
+ *     detects "a success happened since this snapshot was written" regardless of who performed
+ *     it. But an endpoint that returns the SAME still-valid access token unchanged (some do, on a
+ *     no-op refresh) leaves `fp` equal to the snapshot despite a real round-trip; a token-less
+ *     blob also always fingerprints to `''`, which would otherwise let two DIFFERENT token-less
+ *     states compare equal.
+ *   - `expiresAt` alone: moves on every real exchange (a fresh token always gets a fresh expiry),
+ *     but is not itself proof of WHICH token — nothing here ties it to the specific credential.
+ *  Together they close both gaps. If `fingerprint()` is ever changed to hash the refresh token
+ *  instead of the access token, the `fp` half goes blind to the ABA case it exists to catch — see
+ *  its own doc — and `expiresAt` remains the fallback proof of "something happened since". */
+function freshRefreshSubCounters(meta: RefreshCounters, current: BlobIdentity | null): { dead: number; answered: number } | null {
+  const total = typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0
+  const snap = meta.refresh_counts_snapshot
+  if (!snap || snap.total !== total || current === null || snap.fp !== current.fp || snap.expiresAt !== current.expiresAt) return null
+  return {
+    dead: typeof meta.refresh_dead_failures === 'number' ? meta.refresh_dead_failures : 0,
+    answered: typeof meta.refresh_answered_failures === 'number' ? meta.refresh_answered_failures : 0,
+  }
+}
+
+/** Consecutive CREDENTIAL-DEAD failures. Falls back to the RAW total when the snapshot is
+ *  stale/absent/unconfirmable — the pre-#152, cause-blind behaviour, which errs toward escalating
+ *  rather than toward silence (a false re-login prompt is recoverable; a credential nobody flags
+ *  is not). So until a slot is next written by THIS server, one `credential-dead` failure plus two
+ *  `network` failures still reaches the max here, exactly as before #152 — a KNOWN CEILING on how
+ *  precise this fix can be, not a bug it claims to close. */
+export function refreshDeadCount(meta: RefreshCounters, current: BlobIdentity | null): number {
+  const fresh = freshRefreshSubCounters(meta, current)
+  if (fresh) return fresh.dead
+  return typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0
+}
+
+/** Consecutive ANSWERED failures (cause !== 'network'). Falls back to 0 when stale/absent/
+ *  unconfirmable — unlike the dead-count fallback there is no cause-blind proxy for "how many of
+ *  these were answered", so a stale snapshot simply cannot trip the ceiling (it can still
+ *  escalate via `refreshDeadCount`'s own fallback above). */
+export function refreshAnsweredCount(meta: RefreshCounters, current: BlobIdentity | null): number {
+  const fresh = freshRefreshSubCounters(meta, current)
+  return fresh ? fresh.answered : 0
+}
+
+/**
+ * THE shared "does this refresh path need a human" predicate (#152 — GitHub issue
+ * Emasoft/ai-maestro#152). Before this, `tick.ts`'s `surveyAlternates` and `runTick`'s retry ban
+ * and this module's `trackCannotSelfRenew` each re-derived the same verdict from the RAW,
+ * cause-blind `refresh_failures` total — so 775 consecutive `network` failures on a live
+ * credential escalated to a human REAUTH nudge exactly like a real `invalid_grant` rejection
+ * (measured 2026-08-20, TRDD-Y1ZWU998). One predicate, used everywhere the verdict is needed:
+ *   - no refresh token at all -> needs a human, unconditionally.
+ *   - `refreshDeadCount` reached the cascade's max -> the endpoint ACTUALLY rejected the grant.
+ *   - else the cause-blind `REFRESH_ANSWERED_CEILING` as a last-resort safety net (see its doc).
+ *     KNOWN BLIND SPOT: `network.ts`'s classifier collapses an unparseable 2xx (e.g. a Cloudflare
+ *     interstitial/challenge page) to status 0 -> 'network', which freezes BOTH counters, so a
+ *     dead credential hidden behind such a page never escalates through either rung.
+ * Deliberately NOT used by the retry ban in `tick.ts` — the ban only fires on the dead-count half
+ * (`refreshDeadCount(...) >= DEFAULT_MAX_REFRESH_FAILURES`) plus a fingerprint match, never on the
+ * ceiling: the ceiling is a cause-blind heuristic, and a transient outage (429/403/5xx) tripping
+ * it must never arm a human-only retry ban on its own (that collapse is exactly what
+ * TRDD-Y1ZWU998 fixed for `refresh_dead_fp` branding).
+ */
+export function refreshNeedsHuman(meta: RefreshCounters, hasRefresh: boolean, current: BlobIdentity | null): boolean {
+  if (!hasRefresh) return true
+  if (refreshDeadCount(meta, current) >= DEFAULT_MAX_REFRESH_FAILURES) return true
+  return refreshAnsweredCount(meta, current) >= REFRESH_ANSWERED_CEILING
+}
 
 // A pinning env var is read at process start and overrides the keychain, so the live `claude`
 // never sees a swapped credential — rotation is silently defeated.
@@ -99,6 +230,19 @@ export interface SlotFact {
    *  Optional so every existing SlotFact literal stays valid and an older rotator's slot is simply
    *  uncaused rather than mistyped. */
   lastRefreshFailure?: RefreshFailureCause | null
+  /** #152: consecutive CREDENTIAL-DEAD failures (see `refreshDeadCount`). Optional for the same
+   *  reason as `lastRefreshFailure` — a pre-#152 slot simply has none recorded. */
+  refreshDeadFailures?: number
+  /** #152: consecutive ANSWERED failures, i.e. cause !== 'network' (see `refreshAnsweredCount`). */
+  refreshAnsweredFailures?: number
+  /** #152: the snapshot the two fields above were last written against — see
+   *  `RefreshCounters`'s docstring for why both halves (total + identity) are required to trust
+   *  them. */
+  refreshCountsSnapshot?: RefreshCountsSnapshot
+  /** #152: the identity of THIS slot's CURRENT blob (already read by `slotFacts()` for
+   *  `hasRefresh`/`expiresDays`), or `null` when the blob could not be read. Compared against
+   *  `refreshCountsSnapshot` to detect the ABA case — see `RefreshCounters`'s docstring. */
+  refreshCurrentIdentity?: BlobIdentity | null
 }
 
 /** Everything `diagnose` needs, gathered by `gatherFacts` (the only I/O). */
@@ -160,9 +304,29 @@ function cookieLegCause(s: SlotFact): string {
   const cause = s.refreshFailures > 0 ? (s.lastRefreshFailure ?? null) : null
   const failed = `${s.refreshFailures} refresh exchanges failed, the last one`
   const retryable = 'the credential itself was never judged. Retryable: chase the transport, do not re-login on this evidence.'
+  // #152: this slot can reach `noUsableRefresh` via TWO different rungs of `refreshNeedsHuman` —
+  // an OBSERVED `invalid_grant` rejection (refreshDeadCount hit the max), or the cause-blind
+  // `REFRESH_ANSWERED_CEILING` safety net. Say which one fired: the ceiling is a guess, not a
+  // verdict, and collapsing the two into one "dead" message is the exact defect TRDD-XV9BLQC5
+  // already fixed once for the raw-count case above it.
+  const counters: RefreshCounters = {
+    refresh_failures: s.refreshFailures,
+    refresh_dead_failures: s.refreshDeadFailures,
+    refresh_answered_failures: s.refreshAnsweredFailures,
+    refresh_counts_snapshot: s.refreshCountsSnapshot,
+  }
+  const current = s.refreshCurrentIdentity ?? null
+  const deadCount = refreshDeadCount(counters, current)
+  const answeredCount = refreshAnsweredCount(counters, current)
+  if (cause !== 'credential-dead' && deadCount < DEFAULT_MAX_REFRESH_FAILURES && answeredCount >= REFRESH_ANSWERED_CEILING) {
+    return (
+      `cause-blind ceiling: ${answeredCount} consecutive answered failures, last cause ${cause ?? 'unknown'} — ` +
+      `may not be a dead credential. ${cookieTail}`
+    )
+  }
   switch (cause) {
     case 'credential-dead':
-      return `the endpoint REJECTED the refresh token (invalid_grant) after ${s.refreshFailures} failed exchanges — this credential really is dead. ${cookieTail}`
+      return `the endpoint REJECTED the refresh token (invalid_grant) after ${deadCount} consecutive credential-dead failures (${s.refreshFailures} total) — this credential really is dead. ${cookieTail}`
     case 'transport-refused':
       return `${failed} REFUSED IN TRANSPORT (Cloudflare 403/1010) — ${retryable}`
     case 'network':
@@ -310,7 +474,17 @@ export function trackCannotSelfRenew(root: string, slots: readonly SlotFact[], n
   const updated: Record<string, number> = {}
   const stamped: SlotFact[] = []
   for (const s of slots) {
-    const noUsableRefresh = !s.hasRefresh || s.refreshFailures >= DEFAULT_MAX_REFRESH_FAILURES
+    // #152: shared predicate, not a raw-total re-derivation — see `refreshNeedsHuman`'s docstring.
+    const noUsableRefresh = refreshNeedsHuman(
+      {
+        refresh_failures: s.refreshFailures,
+        refresh_dead_failures: s.refreshDeadFailures,
+        refresh_answered_failures: s.refreshAnsweredFailures,
+        refresh_counts_snapshot: s.refreshCountsSnapshot,
+      },
+      s.hasRefresh,
+      s.refreshCurrentIdentity ?? null,
+    )
     const dying = s.expiresDays === null || s.expiresDays < 1.0
     if (noUsableRefresh && dying) {
       const first = since[s.email]
@@ -420,6 +594,16 @@ function slotFacts(root: string, now: number, deps: GatherDeps): SlotFact[] {
   }
   if (emails.length === 0) return []
 
+  // #152 REVERTED: `readSlot` (slots.ts) is NOT read-only — when the primary keychain entry is
+  // missing/corrupt but the backup mirror survives, it re-heals by WRITING the mirror back to the
+  // primary (`slotKeychainWrite`, slots.ts ~:377). This supervisor is a diagnostic OBSERVER and
+  // must never mutate a credential (module header: "It heals NOTHING"). Default to the read-only
+  // `slotKeychainRead` (primary keychain only) instead. Rare fallout: if the primary is corrupt
+  // and only the mirror survives, this reader's identity can differ from `tick.ts`'s (which uses
+  // `readSlot` and DOES heal), so `freshRefreshSubCounters` may see a stale snapshot and fall back
+  // to the raw `refresh_failures` total — the legacy pre-#152 behaviour, which errs toward
+  // escalating rather than under-counting, so it is safe. `deps.readSlotBlob` stays overridable
+  // for tests.
   const readBlob = deps.readSlotBlob ?? ((email: string) => slotKeychainRead(email))
   const out: SlotFact[] = []
   for (const email of emails) {
@@ -438,12 +622,21 @@ function slotFacts(root: string, now: number, deps: GatherDeps): SlotFact[] {
     if (!inner || typeof inner !== 'object') continue
     const hasRefresh = Boolean(inner['refreshToken'] ?? inner['refresh_token'])
     const exp = inner['expiresAt'] ?? inner['expires_at']
+    const rawExpiresAt = typeof exp === 'number' && Number.isFinite(exp) ? exp : null
     let days: number | null = null
-    if (typeof exp === 'number' && Number.isFinite(exp)) {
-      const secs = exp > 1e12 ? exp / 1000 : exp
+    if (rawExpiresAt !== null) {
+      const secs = rawExpiresAt > 1e12 ? rawExpiresAt / 1000 : rawExpiresAt
       days = (secs - now) / 86400.0
     }
-    const meta = idx[email] as { refresh_failures?: number; last_refresh_failure?: unknown } | undefined
+    const meta = idx[email] as
+      | {
+          refresh_failures?: number
+          last_refresh_failure?: unknown
+          refresh_dead_failures?: number
+          refresh_answered_failures?: number
+          refresh_counts_snapshot?: unknown
+        }
+      | undefined
     const rf = typeof meta?.refresh_failures === 'number' ? meta.refresh_failures : 0
     // janitor#228: the failure CAUSE rides in the SAME meta object we already read the counter
     // from, so surfacing it costs no extra I/O. VALIDATED rather than passed through — state.json
@@ -454,7 +647,29 @@ function slotFacts(root: string, now: number, deps: GatherDeps): SlotFact[] {
       typeof rawCause === 'string' && (REFRESH_FAIL_CAUSES as readonly string[]).includes(rawCause)
         ? (rawCause as RefreshFailureCause)
         : null
-    out.push({ email, hasRefresh, expiresDays: days, refreshFailures: rf, cannotSelfRenewAgeS: null, lastRefreshFailure: cause })
+    // #152: the sub-counters + their staleness snapshot, passed through raw (undefined stays
+    // undefined) — `refreshDeadCount`/`refreshAnsweredCount` own the staleness check and the
+    // legacy fallback, so this reader does not duplicate that judgment. `currentFp` reuses the
+    // blob ALREADY read above (`blob`) — no extra keychain I/O to validate the snapshot.
+    const deadFailures = typeof meta?.refresh_dead_failures === 'number' ? meta.refresh_dead_failures : undefined
+    const answeredFailures = typeof meta?.refresh_answered_failures === 'number' ? meta.refresh_answered_failures : undefined
+    const rawSnap = meta?.refresh_counts_snapshot as Record<string, unknown> | undefined
+    const snapshot: RefreshCountsSnapshot | undefined =
+      rawSnap && typeof rawSnap.total === 'number' && typeof rawSnap.fp === 'string' && (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
+        ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
+        : undefined
+    out.push({
+      email,
+      hasRefresh,
+      expiresDays: days,
+      refreshFailures: rf,
+      cannotSelfRenewAgeS: null,
+      lastRefreshFailure: cause,
+      refreshDeadFailures: deadFailures,
+      refreshAnsweredFailures: answeredFailures,
+      refreshCountsSnapshot: snapshot,
+      refreshCurrentIdentity: blob ? { fp: fingerprint(blob), expiresAt: rawExpiresAt } : null,
+    })
   }
   return trackCannotSelfRenew(root, out, now)
 }

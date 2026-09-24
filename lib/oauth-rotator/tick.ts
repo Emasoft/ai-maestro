@@ -82,6 +82,16 @@ import {
   fiveHourResetSec,
   type NetworkDeps,
 } from './network'
+// #152: the shared refresh-health predicate + the two new sub-counters it reads. Safe against a
+// cycle — `supervisor.ts` imports only `fs`/`os`/`path`/`./slots`/`./decision-log`, never this
+// module or anything that (transitively) imports this module.
+import {
+  DEFAULT_MAX_REFRESH_FAILURES,
+  refreshDeadCount,
+  refreshNeedsHuman,
+  type RefreshCounters,
+  type BlobIdentity,
+} from './supervisor'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -119,7 +129,39 @@ const KEEPALIVE_AHEAD_H = 6
  *  SAME threshold the tick does; a UI with its own number would eventually disagree with the
  *  mechanism it is reporting on, and the owner would be told to re-login an account the rotator
  *  still considers healthy (or worse, the reverse). */
-export const MAX_REFRESH_FAILURES = 3
+// #152: alias of `supervisor.ts`'s `DEFAULT_MAX_REFRESH_FAILURES`, not a second constant — the
+// two used to be independently-defined copies of the same `3`, which is exactly the kind of
+// duplication that lets a threshold change in one file silently stop matching the other.
+export const MAX_REFRESH_FAILURES = DEFAULT_MAX_REFRESH_FAILURES
+
+/** #152: read the `RefreshCounters` fields off a raw slot-meta record. `meta` is typed
+ *  `Record<string, unknown>` throughout this file because state.json is shared with the
+ *  janitor's own writer, so every field is read defensively rather than trusted. */
+function readRefreshCounters(meta: Record<string, unknown> | undefined): RefreshCounters {
+  const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined)
+  const rawSnap = meta?.refresh_counts_snapshot as Record<string, unknown> | undefined
+  const snapshot =
+    rawSnap &&
+    typeof rawSnap.total === 'number' &&
+    typeof rawSnap.fp === 'string' &&
+    (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
+      ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
+      : undefined
+  return {
+    refresh_failures: num(meta?.refresh_failures),
+    refresh_dead_failures: num(meta?.refresh_dead_failures),
+    refresh_answered_failures: num(meta?.refresh_answered_failures),
+    refresh_counts_snapshot: snapshot,
+  }
+}
+
+/** #152: this slot's blob identity RIGHT NOW — see `BlobIdentity`'s docstring (supervisor.ts) for
+ *  why both halves are needed to validate a snapshot. */
+function blobIdentity(blob: CredentialBlob): BlobIdentity {
+  const exp = oauthOf(blob).expiresAt
+  return { fp: fingerprint(blob), expiresAt: typeof exp === 'number' ? exp : null }
+}
+
 /** A live-account 429 must persist across this many consecutive ticks before it is believed
  * (a single 429 is often the usage endpoint's own throttle, not a real limit). */
 const LIVE_429_DEBOUNCE = 2
@@ -907,8 +949,14 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     //   → 1 red / 31 green: "a network failure … sets NO refresh_dead_fp and never arms the ban"
     //   s/if \(meta0\?\.refresh_dead_fp !== undefined && …\) \{/if (false) {/
     //   → 1 red / 31 green: "SELF-HEALS a pre-fix mis-brand … cleared and the exchange retried"
-    const fails0 = typeof meta0?.refresh_failures === 'number' ? meta0.refresh_failures : 0
-    if (fails0 >= MAX_REFRESH_FAILURES && meta0?.refresh_dead_fp === fingerprint(blob)) continue
+    // #152: the dead-COUNT half of `refreshNeedsHuman` only — never the cause-blind
+    // `REFRESH_ANSWERED_CEILING` half. A transient outage (429/403/5xx, all classified
+    // 'network'/'transport-refused') must never arm this human-only ban on its own; that
+    // collapse is exactly what the fingerprint-branding fix a few lines below (:936) already
+    // corrected for `refresh_dead_fp`, and reintroducing it via the ceiling would undo it.
+    const blobFp = fingerprint(blob)
+    const blobIdent = blobIdentity(blob)
+    if (refreshDeadCount(readRefreshCounters(meta0), blobIdent) >= MAX_REFRESH_FAILURES && meta0?.refresh_dead_fp === blobFp) continue
     const res = await refreshOauthToken(blob, netDeps(deps))
     if (res.blob === null) {
       // Count EVERY failure (the cascade escalates to REAUTH on the counter), and record the
@@ -919,9 +967,26 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
       // `network` failures, all three branded dead).
       const meta = slots[email]
       if (meta && typeof meta === 'object') {
-        meta.refresh_failures = (typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0) + 1
+        const newTotal = (typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0) + 1
+        meta.refresh_failures = newTotal
         meta.last_refresh_failure = res.cause
         if (res.cause === 'credential-dead') meta.refresh_dead_fp = fingerprint(blob)
+        // #152: `refresh_dead_failures` increments ONLY on 'credential-dead' (the endpoint
+        // actually judged and rejected the grant) and is otherwise FROZEN — never reset, never
+        // bumped — by every other cause, so a 'network'/'transport-refused'/'malformed' run
+        // cannot escalate it. `refresh_answered_failures` increments on every cause where the
+        // endpoint answered at all (cause !== 'network') — this is the cause-blind CEILING's
+        // input, a last-resort net for when the classifier itself mislabels a dead credential.
+        // Absent counters read as 0 before applying the rule, per the design (#152).
+        const deadBefore = typeof meta.refresh_dead_failures === 'number' ? meta.refresh_dead_failures : 0
+        const answeredBefore = typeof meta.refresh_answered_failures === 'number' ? meta.refresh_answered_failures : 0
+        meta.refresh_dead_failures = res.cause === 'credential-dead' ? deadBefore + 1 : deadBefore
+        meta.refresh_answered_failures = res.cause !== 'network' ? answeredBefore + 1 : answeredBefore
+        // #152: the staleness snapshot — see `RefreshCounters`'s docstring. Written in the SAME
+        // update as the two counters above, against the POST-increment total AND the slot's
+        // CURRENT blob identity (`blob` is unchanged by a failed exchange, so `blobIdent` —
+        // computed once above, before the retry-ban check — is still correct here).
+        meta.refresh_counts_snapshot = { total: newTotal, ...blobIdent }
         changed = true
       }
       continue
@@ -976,6 +1041,14 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
         // above keys on `last_refresh_failure !== 'credential-dead'` and would otherwise strip
         // this legitimate brand on the next beat and resume pointless traffic.
         meta.last_refresh_failure = 'credential-dead'
+        // #152: consistent with the brand above — this IS a credential-dead verdict, so the
+        // dead-count must say so too, or `refreshDeadCount` would read 0 against a total of
+        // MAX_REFRESH_FAILURES and under-report exactly the slot this branch just condemned.
+        meta.refresh_dead_failures = MAX_REFRESH_FAILURES
+        meta.refresh_answered_failures = MAX_REFRESH_FAILURES
+        // #152: identity against the OLD `blob` — it is what the slot STILL holds (the write
+        // failed), matching `refresh_dead_fp` above.
+        meta.refresh_counts_snapshot = { total: MAX_REFRESH_FAILURES, ...blobIdentity(blob) }
         changed = true
       }
       const why = exc instanceof SlotKeychainWriteError ? 'keychain write refused' : 'slot write failed'
@@ -994,6 +1067,15 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
       meta.expires_at = oauthOf(fresh).expiresAt ?? null
       meta.refresh_failures = 0 // a successful exchange clears the dead-refresh counter
       delete meta.refresh_dead_fp // ...and the fingerprint that earned the retry ban
+      // #152: a success clears BOTH new counters too, and re-stamps the snapshot at 0 — the
+      // same "a real fix must be able to un-gate this" reasoning the fingerprint-clear above
+      // already applies to `refresh_dead_fp`.
+      meta.refresh_dead_failures = 0
+      meta.refresh_answered_failures = 0
+      // #152: snapshot against the NEW `fresh` blob's identity — the freshly-minted access token
+      // and expiry are exactly what make the ABA case detectable (see
+      // `freshRefreshSubCounters`'s comment).
+      meta.refresh_counts_snapshot = { total: 0, ...blobIdentity(fresh) }
       changed = true
     }
     actions.push(email)
@@ -1462,12 +1544,11 @@ export function surveyAlternates(): AlternateSurvey {
     if (!b) { unreadable.push(email); continue } // unreadable alternate → needs attention
     const inner = oauthOf(b)
     const hasRefresh = Boolean(inner.refreshToken || inner.refresh_token)
-    // A dead-refresh alternate (no refresh at all, or a refresh whose exchange has failed
-    // MAX_REFRESH_FAILURES times running) that is ALSO expiring can only be fixed by a re-login.
-    // Expiry is half the test on purpose: a dead refresh on a token that still has runway is not
-    // yet a fault, and re-capturing it would spend a browser window on an account that works.
-    const failures = typeof inner === 'object' ? Number((slots[email] as Record<string, unknown> | undefined)?.refresh_failures) || 0 : 0
-    const refreshIsDead = !hasRefresh || failures >= MAX_REFRESH_FAILURES
+    // A dead-refresh alternate (no refresh at all, or a refresh whose exchange is DEAD per the
+    // shared #152 predicate) that is ALSO expiring can only be fixed by a re-login. Expiry is
+    // half the test on purpose: a dead refresh on a token that still has runway is not yet a
+    // fault, and re-capturing it would spend a browser window on an account that works.
+    const refreshIsDead = refreshNeedsHuman(readRefreshCounters(slots[email]), hasRefresh, blobIdentity(b))
     if (refreshIsDead && blobLocallyExpired(b)) refreshDead.push(email)
   }
   // TRDD-MFTDMSJY: ONE check, AFTER the loop, and that placement is the whole design. While the

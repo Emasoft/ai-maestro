@@ -17,13 +17,51 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { enforceMaestro } from '@/lib/route-auth'
 import { expiresInH, loadState } from '@/lib/oauth-rotator/slots'
-import { MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/tick'
 import { readTickStatus } from '@/lib/oauth-rotator/tick-status'
+import { refreshNeedsHuman, type RefreshCounters, type BlobIdentity } from '@/lib/oauth-rotator/supervisor'
 
 /** Read one optional numeric extra off an index entry without asserting the open shape. */
 function num(entry: Record<string, unknown>, key: string): number | null {
   const v = entry[key]
   return typeof v === 'number' ? v : null
+}
+
+/** issue-152: this slot's `BlobIdentity` AS OF WHATEVER `tick.ts` LAST WROTE — `meta.fp`
+ *  (tick.ts:795/1066, `fingerprint(...)` of the credential the tick most recently confirmed) and
+ *  `meta.expires_at` (tick.ts:796/1067) — built ENTIRELY from the no-secret state.json index, no
+ *  keychain read. This is deliberately NOT "the identity right now": a corrected route must never
+ *  claim the same value the tick already computed as if it were fresher. When the tick's own
+ *  `refresh_counts_snapshot` was written against this exact `(fp, expiresAt)` pair,
+ *  `freshRefreshSubCounters` (supervisor.ts) accepts it and this route gets the SAME cause-aware
+ *  verdict the tick and the supervisor already agree on (e.g. 775 consecutive `network` failures
+ *  correctly reading NOT dead, TRDD-Y1ZWU998). If `meta.fp` is absent (a legacy slot pre-#152, or
+ *  one never yet touched by a successful tick) the identity is `null`, which makes any snapshot
+ *  read as stale/unconfirmable and falls back to the raw `refresh_failures` total — safe, and the
+ *  same legacy behavior this route always had. */
+function currentIdentityFrom(entry: Record<string, unknown>): BlobIdentity | null {
+  const fp = entry.fp
+  if (typeof fp !== 'string') return null
+  return { fp, expiresAt: num(entry, 'expires_at') }
+}
+
+/** issue-152: the same `RefreshCounters` extraction `tick.ts`'s `readRefreshCounters` does, so
+ *  this route's dead-count reads through the ONE shared predicate instead of re-deriving its own
+ *  raw-threshold comparison (the duplication #152 fixes elsewhere). */
+function readRefreshCounters(entry: Record<string, unknown>): RefreshCounters {
+  const rawSnap = entry.refresh_counts_snapshot as Record<string, unknown> | undefined
+  const snapshot =
+    rawSnap &&
+    typeof rawSnap.total === 'number' &&
+    typeof rawSnap.fp === 'string' &&
+    (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
+      ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
+      : undefined
+  return {
+    refresh_failures: num(entry, 'refresh_failures') ?? undefined,
+    refresh_dead_failures: num(entry, 'refresh_dead_failures') ?? undefined,
+    refresh_answered_failures: num(entry, 'refresh_answered_failures') ?? undefined,
+    refresh_counts_snapshot: snapshot,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -47,8 +85,14 @@ export async function GET(request: NextRequest) {
         // readings of `expiresAt` would eventually disagree, and the one on screen would be wrong.
         expiresInH: expiresAt === null ? null : expiresInH({ claudeAiOauth: { expiresAt } }),
         refreshFailures,
-        /** True when only a human can repair it — the SAME threshold the tick applies. */
-        refreshDead: refreshFailures >= MAX_REFRESH_FAILURES,
+        // issue-152: routed through the SAME shared predicate `tick.ts` uses, not a re-derived
+        // raw-threshold comparison. The identity comes from `meta.fp`/`meta.expires_at` — the
+        // no-secret index fields the tick itself writes on every success (see
+        // `currentIdentityFrom`'s doc) — never a keychain read. `hasRefresh: true` preserves prior
+        // behavior for a no-refresh setup-token slot (this index never recorded refresh-token
+        // presence, so treating it as unknown-but-true avoids inventing a NEW "no refresh ->
+        // always dead" verdict this route never made before).
+        refreshDead: refreshNeedsHuman(readRefreshCounters(entry), true, currentIdentityFrom(entry)),
         capturedAt: typeof entry.captured_at === 'string' ? entry.captured_at : null,
         via: typeof entry.via === 'string' ? entry.via : null,
       }

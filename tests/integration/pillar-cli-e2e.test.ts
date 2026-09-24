@@ -446,6 +446,48 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — query + diagnostics (real CLI)', (
   });
 });
 
+describe.skipIf(!HAVE_TRDDGREP)('trddgrep new — ai-maestro#168 identity resolution (real CLI, real temp corpus)', () => {
+  /** A corpus with a PRRD.md carrying a `project-id:` frontmatter field. */
+  function mkPrrdCorpusWithProjectId(projectId: string): string {
+    const design = mkDesignCorpus();
+    fs.mkdirSync(path.join(design, 'requirements'), { recursive: true });
+    fs.writeFileSync(
+      path.join(design, 'requirements', 'PRRD.md'),
+      ['---', `project-id: ${projectId}`, '---', '', '# PRRD', ''].join('\n')
+    );
+    return design;
+  }
+
+  it('20 · no PRRD, no --author → exits 2 with the no-project-id refusal', () => {
+    const design = mkDesignCorpus();
+    const r = run('trddgrep', ['--design-dir', design, 'new', '--title', 'No Identity Card', '--task-type', 'spike']);
+    expect(r.code).toBe(2);
+    expect(r.out + r.err).toContain('no --author given');
+    expect(r.out + r.err).toContain('no project-id');
+  });
+
+  it('21 · PRRD with project-id, no --author → defaults to main-agent@<project-id>', () => {
+    const design = mkPrrdCorpusWithProjectId('e2e-probe');
+    const r = run('trddgrep', ['--design-dir', design, 'new', '--title', 'Defaulted Identity Card', '--task-type', 'spike']);
+    expect(r.code).toBe(0);
+    const m = r.out.match(/created\s+([A-Z0-9]{8})\b/);
+    expect(m).not.toBeNull();
+    const content = fs.readFileSync(findCardFile(design, m![1])!, 'utf8');
+    expect(content).toMatch(/^created-by: main-agent@e2e-probe$/m);
+  });
+
+  it('22 · PRRD with project-id, --author main-agent@other → exits 2 with the project mismatch refusal', () => {
+    const design = mkPrrdCorpusWithProjectId('e2e-probe');
+    const r = run('trddgrep', [
+      '--design-dir', design, 'new', '--title', 'Mismatched Identity Card', '--task-type', 'spike',
+      '--author', 'main-agent@other',
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.out + r.err).toContain('names project "other"');
+    expect(r.out + r.err).toContain('e2e-probe');
+  });
+});
+
 describe.skipIf(!HAVE_TRDDGREP)('trddgrep — CHARACTERIZATION of known defects (real CLI)', () => {
   it('17 · --porcelain on the BOARD form is not TSV, while --column IS honoured on that same form', () => {
     const design = mkDesignCorpus();

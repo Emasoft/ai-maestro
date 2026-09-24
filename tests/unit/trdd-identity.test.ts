@@ -135,6 +135,22 @@ describe('resolveCliIdentity — explicit flag, then AID, then the registry-gate
     expect(!stale.ok && stale.error).not.toContain(secret)
     expect(!stale.ok && stale.error).not.toContain(secret.slice(4, 12)) // past the fixed `mst_` prefix
   })
+
+  it('a token that matches no registry secret never leaks any 8-char window of itself into the refusal', () => {
+    // A distinctive fake AID_AUTH — real shape (mst_ + 64 hex), but hashes to nothing any
+    // seeded row carries, so it takes the "stale or invalid token" branch.
+    const fake = 'mst_' + 'a1c9f7'.repeat(11) // 66 hex-ish chars, well past TOKEN_RANDOM_BYTES*2
+    fs.writeFileSync(registryFile, JSON.stringify([
+      { id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: generateSessionSecret().secretHash } },
+    ]))
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: fake }, registryFile })
+    expect(r.ok).toBe(false)
+    const msg = !r.ok ? r.error : ''
+    // Every 8-char sliding window of the token — not just the whole token — must be absent.
+    for (let i = 0; i + 8 <= fake.length; i++) {
+      expect(msg).not.toContain(fake.slice(i, i + 8))
+    }
+  })
 })
 
 describe('resolveActor — owner rights follow the grammar (via the real withAuthorizedTrdd)', () => {

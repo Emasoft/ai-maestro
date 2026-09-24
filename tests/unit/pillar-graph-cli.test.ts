@@ -372,15 +372,19 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
    * The fixture discriminates the two things a naive index-backed rewrite gets wrong:
    * `ROOTAAAA` is a prerequisite of cards in THREE zones (tasks, proposals, archived),
    * so its `unblocks` count is only right if the feeder spans zones exactly as the
-   * walk does; and it must outrank `TASKEEEE`, which is ready but frees nothing — so
-   * the RANKING is exercised, not just the membership.
+   * walk does — and, since `readyQueueFrom` deliberately never counts an archived-zone
+   * blocker toward `unblocks` (TRDD-MQE5D28T D2/D8, 66417db92 — an archived card is
+   * never OPEN, whatever column it kept), that count is 2 (TASKDDDD's npt +
+   * PROPBBBB's blocked-by), not 3: ARCHCCCC's edge is walked but excluded on purpose.
+   * It must also outrank `TASKEEEE`, which is ready but frees nothing — so the
+   * RANKING is exercised, not just the membership.
    */
-  it('`next` is byte-identical, and its ranking counts blockers across ALL zones', () => {
+  it('`next` is byte-identical, and its ranking counts blockers across the OPEN zones (an archived blocker is walked but never counted)', () => {
     const r = runBoth(['next'])
     expect(r.indexed).toBe(r.walk)
     // Non-vacuity: a `next` that returned nothing would compare two empty strings.
     expect(r.walk).toMatch(/READY — 2 card\(s\)/)
-    expect(r.walk).toMatch(/ROOTAAAA.*unblocks 3/)
+    expect(r.walk).toMatch(/ROOTAAAA.*unblocks 2/)
     expect(r.walk.indexOf('ROOTAAAA')).toBeLessThan(r.walk.indexOf('TASKEEEE'))
 
     // THE DISCRIMINATING ASSERTION, and the reason `runBoth`'s own guard is not enough

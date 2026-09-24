@@ -120,11 +120,18 @@ const NON_JOIN_REVIEWED = [
   // Bare calls that DISCARD the value — they exist only to refresh lastRootFallbackRefusal.
   'lib/oauth-rotator/rotate.ts:  rotatorRoot() // refresh lastRootFallbackRefusal',
   'lib/oauth-rotator/slots.ts:  rotatorRoot() // refresh lastRootFallbackRefusal for this call',
+  'lib/oauth-rotator/server-tick.ts:  rotatorRoot()',
   // Default params / aliases. Each is then JOINED (covered above) or passed on.
+  'lib/oauth-rotator/alert-delivery.ts:export function alertsFile(root: string = rotatorRoot()): string {',
   'lib/oauth-rotator/decision-log.ts:export function rotatorLogPath(root: string = rotatorRoot()): string {',
   'lib/oauth-rotator/decision-log.ts:    const root = opts.root ?? rotatorRoot()',
   'lib/oauth-rotator/supervisor.ts:export function optInPresent(root: string = rotatorRoot()): boolean {',
   'lib/oauth-rotator/supervisor.ts:  const root = opts.root ?? rotatorRoot()',
+  // Passed on as an ARGUMENT to alertsFile()/deliverSafely(), which themselves join — never
+  // joined at these lines.
+  'lib/oauth-rotator/server-tick.ts:    const alertRoot = rootFinding ? legacyRotatorRoot() : undefined',
+  "lib/oauth-rotator/server-tick.ts:    const data = JSON.parse(fs.readFileSync(alertsFile(legacyRotatorRoot()), 'utf8')) as { alerts?: unknown }",
+  'lib/oauth-rotator/server-tick.ts:    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsRootAlert, root: legacyRotatorRoot() })',
 ].sort()
 
 /** Lines mentioning a rotator root that are not a direct join and not a comment. */

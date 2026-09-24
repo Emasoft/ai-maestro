@@ -225,7 +225,21 @@ function mkMemCorpus(): string {
 
 /** Creates a real card via `trddgrep new` and returns its 8-char id. Throws if creation failed. */
 function createCard(design: string, title: string, taskType = 'spike'): string {
-  const r = run('trddgrep', ['--design-dir', design, 'new', '--title', title, '--task-type', taskType]);
+  // #168: `new` refuses to mint a card without a resolvable identity, and this fixture's
+  // corpus carries no PRRD project-id to derive `main-agent@<id>` from — pass an explicit
+  // identity so the fixture's authorship doesn't depend on whether this machine happens to
+  // host an ai-maestro agent registry.
+  const r = run('trddgrep', [
+    '--design-dir',
+    design,
+    'new',
+    '--title',
+    title,
+    '--task-type',
+    taskType,
+    '--author',
+    'user',
+  ]);
   const m = r.out.match(/created\s+([A-Z0-9]{8})\b/);
   if (!m) throw new Error(`trddgrep new failed to create a card: out=${r.out} err=${r.err}`);
   return m[1];
@@ -252,7 +266,17 @@ afterEach(() => {
 describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp corpus)', () => {
   it('01 · creates a new card with an 8-char base36 id, filed under tasks/', () => {
     const design = mkDesignCorpus();
-    const r = run('trddgrep', ['--design-dir', design, 'new', '--title', 'Test Spike Card', '--task-type', 'spike']);
+    const r = run('trddgrep', [
+      '--design-dir',
+      design,
+      'new',
+      '--title',
+      'Test Spike Card',
+      '--task-type',
+      'spike',
+      '--author',
+      'user',
+    ]);
     expect(r.code).toBe(0);
     const m = r.out.match(/created\s+([A-Z0-9]{8})\b/);
     expect(m).not.toBeNull();
@@ -336,7 +360,7 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
     run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] First criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Second criterion']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
-    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
+    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete', '--approver', 'user']);
     expect(r.code).toBe(2);
     expect(r.out + r.err).toContain('1 of 2 acceptance box(es) still unchecked');
     expect(findCardFile(design, id)!.includes(`${path.sep}tasks${path.sep}`)).toBe(true);
@@ -348,7 +372,7 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
     // #167: a fresh card has no `## Acceptance` heading yet.
     run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
-    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
+    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete', '--approver', 'user']);
     expect(r.code).toBe(0);
     const file = findCardFile(design, id)!;
     expect(file.includes(`${path.sep}archived${path.sep}`)).toBe(true);
@@ -358,7 +382,7 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
     const design = mkDesignCorpus();
     const oldId = createCard(design, 'Old Card');
     const newId = createCard(design, 'New Replacement Card');
-    const r = run('trddgrep', ['--design-dir', design, 'move', oldId, 'superseded', '--superseded-by', newId]);
+    const r = run('trddgrep', ['--design-dir', design, 'move', oldId, 'superseded', '--superseded-by', newId, '--approver', 'user']);
     expect(r.code).toBe(0);
     const file = findCardFile(design, oldId)!;
     expect(file.includes(`${path.sep}archived${path.sep}`)).toBe(true);
@@ -449,7 +473,7 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — CHARACTERIZATION of known defects 
     // #167: a fresh card has no `## Acceptance` heading yet.
     run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
-    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
+    const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete', '--approver', 'user']);
     expect(r.code).toBe(0);
     expect(r.out).toContain('STAGED');
   });

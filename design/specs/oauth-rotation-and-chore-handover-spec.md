@@ -3,7 +3,7 @@ spec: oauth-rotation-and-chore-handover
 spec-version: 1.0.0
 status: draft
 created: 2026-09-24T00:00:00+0200
-updated: 2026-09-24T08:33:43+0200
+updated: 2026-09-24T08:51:19+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 implementations: ["ai-maestro (server)", "ai-maestro-janitor (daemon)"]
@@ -51,7 +51,7 @@ character for character and bind both sides; no clause below may contradict them
 
 > "examine the state of the rotation code of the ai-maestro server and compare it
 > with the janitor plugin daemon rotator code. consult with the janitor to
-> understand how to align with it. the rotation should work seamless when
+> understand how to  align with it. the rotation should work seamless when
 > transitioning from the janitor daemon to the ai-maestro server daemon rotation
 > code."
 
@@ -100,9 +100,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 
 ## Ownership
 
-### ORH-1 — Server-first ownership while online and able
-
-- **Text.** While the ai-maestro server is online and ABLE (see ORH-4 / M3 for the
+`ORH-1` **server-first-ownership-while-online-and-able** — While the ai-maestro server is online and ABLE (see ORH-4 / M3 for the
   ability gate) it owns the oauth-rotator tick AND every janitor `GLOBAL_CHORE` it
   claims (janitor `scripts/lib/harness_backend.py:109`). The janitor daemon runs a chore
   only while no valid server lease exists for that chore.
@@ -115,9 +113,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 
 ## Protocol clauses
 
-### ORH-2 — One kernel lock (M1)
-
-- **Text.** Every tick, credential write, slot/vault write, and `state.json` mutation
+`ORH-2` **one-kernel-lock** (M1) — Every tick, credential write, slot/vault write, and `state.json` mutation
   on either side takes the janitor's existing flock files (both eras:
   `<CONTROL>/oauth-rotator-tick.lock` and `<DATA>/global-state/oauth-rotator-tick.lock`,
   where `<CONTROL>` is the janitor control dir and `<DATA>` is the plugin data dir),
@@ -146,9 +142,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   the shared `lockf`/`flock(2)` primitive). The follow-through items ORH-24 through
   ORH-26 below are separately OPEN — not yet built or measured.
 
-### ORH-24 — M1 follow-through: lock ordering across both era files
-
-- **Text.** Both era lock files (`<CONTROL>/oauth-rotator-tick.lock` and
+`ORH-24` **m1-follow-through-lock-ordering-across-both-era-files** — Both era lock files (`<CONTROL>/oauth-rotator-tick.lock` and
   `<DATA>/global-state/oauth-rotator-tick.lock`) must be taken in the janitor's
   existing order; if either acquire fails, every lock already acquired in that
   attempt is released before retrying or giving up.
@@ -158,9 +152,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** OPEN — not yet built or measured on either side.
 
-### ORH-25 — M1 follow-through: holder-child liveness signal
-
-- **Text.** The server's lock-holder child process must signal "acquired" positively
+`ORH-25` **m1-follow-through-holder-child-liveness-signal** — The server's lock-holder child process must signal "acquired" positively
   back to the server (not merely be assumed to hold the lock once spawned), and must
   die together with the server process — e.g. a child reading a pipe connected to the
   server, so the server's own exit closes the pipe and ends the child, never an
@@ -172,9 +164,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server).
 - **Status.** OPEN — not yet built or measured.
 
-### ORH-26 — M1 follow-through: Linux `flock(1)` untested
-
-- **Text.** The `/usr/bin/lockf` measurement in ORH-2 is macOS-only. The Linux
+`ORH-26` **m1-follow-through-linux-flock-1-untested** — The `/usr/bin/lockf` measurement in ORH-2 is macOS-only. The Linux
   equivalent would be `flock(1)`, and this interop has not been tested.
 - **Rationale.** Recording this explicitly prevents the macOS measurement from being
   read as portable evidence once either side runs on Linux.
@@ -182,9 +172,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   whichever needs Linux support.
 - **Status.** OPEN — not yet measured.
 
-### ORH-3 — One ownership lease per chore (M2)
-
-- **Text.** One ownership lease PER CHORE, stored at
+`ORH-3` **one-ownership-lease-per-chore** (M2) — One ownership lease PER CHORE, stored at
   `<DATA>/oauth-rotator/owner-lease.json`, mapping `chore -> {owner, pid, epoch,
   lease_until}`, where `lease_until = now + max(150s, 2.5 × <chore's cadence>)` — the
   lease length scales with how often that chore actually runs, rather than a flat
@@ -203,9 +191,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-27 — Lease decides ownership; liveness is advisory (M2-bis)
-
-- **Text.** When the lease (ORH-3 / M2) and a liveness signal disagree about who owns
+`ORH-27` **lease-decides-ownership-liveness-is-advisory** (M2-bis) — When the lease (ORH-3 / M2) and a liveness signal disagree about who owns
   a chore, the lease decides; liveness capabilities are advisory only, never
   authoritative.
 - **Rationale.** Two independent signals (a lease and a liveness heartbeat) can
@@ -217,9 +203,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-4 — Server claims only when able (M3)
-
-- **Text.** The server claims a chore only when able: its flag is present, a run
+`ORH-4` **server-claims-only-when-able** (M3) — The server claims a chore only when able: its flag is present, a run
   completed within roughly 2 beats, the rotator root resolves, and the latch is open.
   The janitor-control chore stamp moves inside this ability gate, after completion.
   The server's first claim of a chore happens only after the first completed run,
@@ -230,9 +214,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server).
 - **Status.** AGREED.
 
-### ORH-5 — Switch bookkeeping (M4)
-
-- **Text.** Whichever side performs an account switch writes
+`ORH-5` **switch-bookkeeping** (M4) — Whichever side performs an account switch writes
   `<DATA>/global-state/rotation-success.ts` (epoch seconds, temp-file-then-rename,
   janitor format per `global_state.py:1054-1073`), clears `rotation-stuck.json`, stamps
   the beacon, and refreshes the live snapshot (`-livebak`, or `live_snapshot` in the
@@ -244,9 +226,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   side actually performs the switch.
 - **Status.** AGREED.
 
-### ORH-6 — One threshold table: values (M6)
-
-- **Text.** One threshold table shared by both sides, containing the following
+`ORH-6` **one-threshold-table-values** (M6) — One threshold table shared by both sides, containing the following
   agreed values (its file location and exact read cadence are specified separately
   in ORH-28). If the file cannot be read, both sides fall back to the same built-in
   defaults — the agreed set below — until the file is fixed. Any change to a value is
@@ -277,9 +257,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Status.** AGREED (the table and its default values); the SWITCH==SAFE hysteresis
   choice itself is OPEN per "Pending owner decisions" above.
 
-### ORH-28 — One threshold table: read cadence, file, and fallback logging (M6)
-
-- **Text.** The threshold table (ORH-6 / M6) is read at the start of EVERY tick by
+`ORH-28` **one-threshold-table-read-cadence-file-and-fallback-logging** (M6) — The threshold table (ORH-6 / M6) is read at the start of EVERY tick by
   both sides, from the file `<DATA>/oauth-rotator/rotation-policy.json`. If the file
   is missing or corrupt, both sides fall back to the built-in defaults (ORH-6) AND
   log loudly on every tick until the file is fixed.
@@ -289,11 +267,11 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   "silently running on defaults forever" visible in the shared decision log (ORH-18 /
   D8) instead of invisible.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
-- **Status.** AGREED.
+- **Status.** AGREED (the read-cadence and file-location half). The fallback-logging
+  sentence — "log loudly on every tick until the file is fixed" — is separately
+  **PROPOSED**.
 
-### ORH-7 — One state schema (M7)
-
-- **Text.** One shared state schema. The janitor honours `slots[e].refresh_dead_fp`.
+`ORH-7` **one-state-schema** (M7) — One shared state schema. The janitor honours `slots[e].refresh_dead_fp`.
   The server passes through `alt_429_streak` and `bootstrap_*`, and uses
   `alt_429_streak` for its own alternate-account 429 debounce. `usage_samples` and
   `learned_caps` are shared and feed the burn gate (ORH-15 / D5). The usage-cooldown
@@ -306,9 +284,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED, except the usage-cooldown store format, which is OPEN.
 
-### ORH-8 — Pane wake after a switch (M5)
-
-- **Text.** After a switch, the server wakes harness agents using the
+`ORH-8` **pane-wake-after-a-switch** (M5) — After a switch, the server wakes harness agents using the
   `rotation-success` epoch plus the retry-wedge signature found at the pane tail
   (never an attempt-counter advance). The janitor wakes non-harness sessions; its
   `instance_is_server_owned` check requires a LIVE server lease to treat a session as
@@ -321,9 +297,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   (daemon, non-harness sessions).
 - **Status.** AGREED.
 
-### ORH-9 — Keychain latches split by item class (M9)
-
-- **Text.** Keychain latches are split by item CLASS. Primary live reads get their
+`ORH-9` **keychain-latches-split-by-item-class** (M9) — Keychain latches are split by item CLASS. Primary live reads get their
   OWN latch, cooldown **600 seconds** on both sides: a DENIAL trips the primary
   latch immediately (on the first occurrence); a TIMEOUT needs **3 CONSECUTIVE**
   timeouts before tripping it. While tripped, primary reads fall back to the vault's
@@ -346,9 +320,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   carrying its own status lives in its own clause rather than inside this one's
   Status line.
 
-### ORH-36 — Whether both sides read the primary keychain item directly (M9)
-
-- **Text.** Whether both sides may read the primary keychain item ("Claude
+`ORH-36` **whether-both-sides-read-the-primary-keychain-item-directly** (M9) — Whether both sides may read the primary keychain item ("Claude
   Code-credentials") directly stays OPEN until TWO things both pass: the janitor's
   post-refresh watcher, AND a read attempted from the daemon's own LaunchAgent
   context. The one read measured so far (2026-09-24, `rc=0`, no dialog) was from an
@@ -368,9 +340,7 @@ maintainers to agree it between themselves, and they did — see ORH-2.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** OPEN — blocked on the two measurements named in the Text.
 
-### ORH-10 — Live-to-vault mirror (M8)
-
-- **Text.** Only the current lease owner mirrors or writes vault entries. It writes
+`ORH-10` **live-to-vault-mirror** (M8) — Only the current lease owner mirrors or writes vault entries. It writes
   only when the fingerprint (`fp`) differs AND `expiresAt` is newer. The mirror also
   runs AT THE SWITCH itself: read the live credential, file it into the OUTGOING
   vault entry, then write the new live credential — this absorbs `ai-maestro
@@ -391,16 +361,18 @@ maintainers to agree it between themselves, and they did — see ORH-2.
   existing entries keeps the mirror from silently fabricating vault state.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon) — whichever
   currently holds the lease.
-- **Status.** AGREED.
+- **Status.** AGREED (the base mirroring rule — lease-owner-only, fp+expiry gated,
+  mirrors at the switch itself). The three edge cases (switch proceeds on a failed
+  live read; a `null` `expiresAt` is never "newer" unless `fp` differs AND the
+  target's own `expiresAt` is also `null`; the mirror writes only into vault entries
+  that already EXIST) are separately **PROPOSED** — never put to the janitor.
 
 ## Vault migration clauses (owner ruling 2026-09-24, relayed by the janitor's maintainer)
 
 These clauses replace the keychain-slot storage named in ORH-9 (M9) and ORH-10 (M8) with
 a single shared vault file, per the owner's third relayed quote above.
 
-### ORH-19 — One vault file replaces the keychain slots (V1)
-
-- **Text.** Slots move from the keychain services "Claude Code-rotator-slot" and
+`ORH-19` **one-vault-file-replaces-the-keychain-slots** (V1) — Slots move from the keychain services "Claude Code-rotator-slot" and
   "-slot-backup" to ONE vault file, `<DATA>/oauth-rotator/vault/slots-vault.json`. Its
   directory is mode `0700` and contains a `.metadata_never_index` file (no Spotlight).
   The file itself is mode `0600`, excluded from Time Machine via `tmutil addexclusion`,
@@ -415,9 +387,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-20 — Vault schema (V2)
-
-- **Text.** Schema: `{email: {blob, fp, captured_at, expires_at, via,
+`ORH-20` **vault-schema** (V2) — Schema: `{email: {blob, fp, captured_at, expires_at, via,
   refresh_failures, refresh_dead_fp, alt_429_streak, bootstrap_attempts,
   last_bootstrap_at, last_refresh_failure}}`, the union of both sides' fields, plus a
   `live_snapshot` entry (see ORH-21 / V3). This supersedes the slot part of ORH-7
@@ -428,9 +398,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-21 — The live credential stays in the keychain; its backup moves to the vault (V3)
-
-- **Text.** The live credential stays in the keychain item "Claude Code-credentials":
+`ORH-21` **the-live-credential-stays-in-the-keychain-its-backup-moves-to-the-vault** (V3) — The live credential stays in the keychain item "Claude Code-credentials":
   read with plain `security find-generic-password -w`, written with
   `add-generic-password -U` and no ACL flags. It is the only keychain item the
   rotation uses; the ORH-9 (M9) class-split latch shrinks to this primary item plus
@@ -450,9 +418,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-22 — Migration from keychain slots to the vault (V4)
-
-- **Text.** The first side to hold the lease copies every keychain slot, AND the
+`ORH-22` **migration-from-keychain-slots-to-the-vault** (V4) — The first side to hold the lease copies every keychain slot, AND the
   "Claude Code-credentials-livebak" item (into `live_snapshot`, per ORH-21 / V3),
   into the vault, and verifies the read-back for each item. The keychain items —
   slots and the livebak item alike — stay as a fallback until the owner approves
@@ -471,9 +437,7 @@ a single shared vault file, per the owner's third relayed quote above.
   item; OPEN for deleting any of the keychain items afterward, which needs the
   owner's approval.
 
-### ORH-23 — Threat note (V5)
-
-- **Text.** Agents run under the same UID. The vault holds long-lived refresh tokens;
+`ORH-23` **threat-note** (V5) — Agents run under the same UID. The vault holds long-lived refresh tokens;
   `0600`, no Spotlight indexing, and the backup exclusion are the accepted
   mitigations. The previous keychain items trusted `/usr/bin/security`, so same-UID
   exposure is unchanged.
@@ -486,18 +450,14 @@ a single shared vault file, per the owner's third relayed quote above.
 
 ## Decision-logic clauses (both sides identical)
 
-### ORH-11 — Scoped `is_active:false` still counts (D1)
-
-- **Text.** A scoped entry marked `is_active:false` still counts as model-in-use
+`ORH-11` **scoped-is-active-false-still-counts** (D1) — A scoped entry marked `is_active:false` still counts as model-in-use
   evidence (janitor `token_burn.py:133-157`).
 - **Rationale.** Treating an inactive scoped entry as "no evidence" would undercount
   real usage and could cause a premature or missed rotation decision.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-12 — Scoped target veto (D2)
-
-- **Text.** The scoped target veto is `janitor token_burn.scoped_rotation_veto`, using
+`ORH-12` **scoped-target-veto** (D2) — The scoped target veto is `janitor token_burn.scoped_rotation_veto`, using
   the `SAFE_5H`/`SAFE_7D` bars per base window (see ORH-6 / M6). A vetoed candidate is
   DEMOTED, never dropped (janitor `TRDD-QE390SJA`).
 - **Rationale.** Demoting rather than dropping a vetoed candidate preserves it as a
@@ -506,9 +466,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-13 — Scoped rotate-away trigger (D3)
-
-- **Text.** The scoped rotate-away trigger is
+`ORH-13` **scoped-rotate-away-trigger** (D3) — The scoped rotate-away trigger is
   `model_fallback_verdict(scoped_high=SCOPED_SWITCH_AT, account_headroom=SCOPED_ACCOUNT_HEADROOM)`.
   The `/model` fallback detector calls the SAME gate function, but with different
   parameters: `require_active=True`, a true 100% trigger (not `SCOPED_SWITCH_AT`),
@@ -522,11 +480,12 @@ a single shared vault file, per the owner's third relayed quote above.
   criteria for "this scoped account is exhausted" while still letting the rotator
   trip earlier (at 90) than `/model`'s stricter 100% trigger.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
-- **Status.** AGREED.
+- **Status.** AGREED (the base rotate-away trigger formula). The `/model` fallback
+  detector's precision note — that it calls the SAME gate function with different
+  parameters (`require_active=True`, a true 100% trigger, and a sibling-headroom
+  check) — is separately **PROPOSED**.
 
-### ORH-14 — 429 policy (D4)
-
-- **Text.** Reset headers (`Retry-After`, `anthropic-ratelimit-*-reset`) decide only
+`ORH-14` **429-policy** (D4) — Reset headers (`Retry-After`, `anthropic-ratelimit-*-reset`) decide only
   WHEN to re-probe, never WHAT a 429 means. Every usage-probe 429 counts toward
   `LIVE_429_DEBOUNCE` / `ALT_429_DEBOUNCE` (see ORH-6 / M6). This is revisited jointly
   only if a real quota-wall 429's headers are captured and examined.
@@ -536,9 +495,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-15 — Burn gate (D5)
-
-- **Text.** The burn gate (janitor `burn_gate.py`) computes `projected_near` within
+`ORH-15` **burn-gate** (D5) — The burn gate (janitor `burn_gate.py`) computes `projected_near` within
   `ROTATE_HORIZON_MIN`, a learned effective cap of
   `max(EFFECTIVE_FLOOR_PCT, cap - LEARNED_CAP_MARGIN)`, an alternate-walls-soon
   filter, and a burn-only stop.
@@ -549,9 +506,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-16 — setup-token live slot (D6)
-
-- **Text.** A setup-token live slot has no refresh token; a live 403 on it means stay
+`ORH-16` **setup-token-live-slot** (D6) — A setup-token live slot has no refresh token; a live 403 on it means stay
   put (janitor `is_setup_token_slot`). This is kept until no importer of setup-token
   keys exists on either side. On the server side this is an ADDITION — a new
   behaviour being introduced there for the first time, not an alignment with
@@ -566,9 +521,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-17 — Immediate tick triggers (D7)
-
-- **Text.** An immediate tick (using the same lock, dwell, and decision code as a
+`ORH-17` **immediate-tick-triggers** (D7) — An immediate tick (using the same lock, dwell, and decision code as a
   scheduled tick) fires on: (a) a fresh statusline/usage snapshot for the live account
   at or over a switch or scoped threshold; (b) a live rate-limit wedge (the
   "Retrying in ... attempt N/M" shape, detected by shape; janitor
@@ -588,9 +541,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-29 — Triggered-tick constraints (D7-bis)
-
-- **Text.** A triggered tick (ORH-17 / D7) still respects the usage TTL cache and
+`ORH-29` **triggered-tick-constraints** (D7-bis) — A triggered tick (ORH-17 / D7) still respects the usage TTL cache and
   the cooldown that a scheduled tick would use, and at most one triggered tick runs
   per `MIN_DWELL_S` (ORH-6 / M6).
 - **Rationale.** Without these constraints, a burst of triggers — for example several
@@ -600,9 +551,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-18 — Shared decision log (D8)
-
-- **Text.** Every decision line goes to the shared `<DATA>/oauth-rotator/rotator.log`,
+`ORH-18` **shared-decision-log** (D8) — Every decision line goes to the shared `<DATA>/oauth-rotator/rotator.log`,
   tagged with the side that wrote it.
 - **Rationale.** A single shared, side-tagged log is what makes it possible to
   reconstruct the interleaved decision history of both sides after the fact, rather
@@ -612,9 +561,7 @@ a single shared vault file, per the owner's third relayed quote above.
 
 ## Residency, versioning, and handback clauses
 
-### ORH-30 — Daemon residency (R1)
-
-- **Text.** The janitor daemon stays resident while the server owns every chore. It
+`ORH-30` **daemon-residency** (R1) — The janitor daemon stays resident while the server owns every chore. It
   idles on leased chores — it does not run them, and it does not exit or uninstall
   its OS keepalive — and it takes over any chore whose lease lapses. This replaces
   the daemon's current exit/uninstall behaviour (janitor `scripts/daemon.py:3447-3449`,
@@ -626,9 +573,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-31 — Mixed versions and deploy order (R2)
-
-- **Text.** Each side publishes a capability stamp:
+`ORH-31` **mixed-versions-and-deploy-order** (R2) — Each side publishes a capability stamp:
   `<DATA>/global-state/<side>-capabilities.json` — the janitor writes
   `janitor-capabilities.json`, the server writes `server-capabilities.json`, e.g.
   `{"lease":1,"vault":1,"policy_file":1}`. Each side uses a new behaviour (the
@@ -643,9 +588,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-32 — Hand-back (R3)
-
-- **Text.** Removing the server's flag releases every lease it holds explicitly and
+`ORH-32` **hand-back** (R3) — Removing the server's flag releases every lease it holds explicitly and
   stops the server claiming anything (the kill switch). Short of that, a PLANNED
   hand-back releases a single chore's lease explicitly once the server decides to
   stop owning it; an UNPLANNED hand-back is simply the lease lapsing (ORH-3 / M2).
@@ -655,9 +598,7 @@ a single shared vault file, per the owner's third relayed quote above.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
 - **Status.** AGREED.
 
-### ORH-33 — Env overrides (R4)
-
-- **Text.** `rotation-policy.json` (ORH-6 / M6) is the single source of threshold
+`ORH-33` **env-overrides** (R4) — `rotation-policy.json` (ORH-6 / M6) is the single source of threshold
   values. `ROTATOR_*` environment variables are ignored on both sides outside of
   tests.
 - **Rationale.** Allowing an env var to override the shared policy file in production
@@ -668,9 +609,7 @@ a single shared vault file, per the owner's third relayed quote above.
 
 ## Verification and work order
 
-### ORH-34 — Verification standard (VER-1)
-
-- **Text.** Every change on either side ships with a test that fails without the
+`ORH-34` **verification-standard** (VER-1) — Every change on either side ships with a test that fails without the
   change. The end-to-end proof is ONE real automatic switch observed on the owner's
   host, with sessions continuing, in EACH ownership direction (server owns; daemon
   owns). A clause in this spec is not "implemented" until its side's test exists and
@@ -683,11 +622,12 @@ a single shared vault file, per the owner's third relayed quote above.
   requirement, actually holds. Gating "implemented" on both keeps this spec from
   being marked done on the strength of code review alone.
 - **Implementer side(s).** ai-maestro (server), ai-maestro-janitor (daemon).
-- **Status.** AGREED.
+- **Status.** AGREED (the general "every change ships with a test" / "one real
+  end-to-end switch" standard). The sentence "A clause in this spec is not
+  'implemented' until its side's test exists and the relevant end-to-end proof has
+  been observed" is separately **PROPOSED**.
 
-### ORH-35 — Work order
-
-- **Text.** The janitor first fixes its own #10 and #22 (see "Known defects
+`ORH-35` **work-order** — The janitor first fixes its own #10 and #22 (see "Known defects
   recorded" below). Next: the primary read (ORH-9 / M9), plus the mirror at
   switch-away (ORH-10 / M8). Then: the vault (ORH-19 through ORH-23), the lease
   (ORH-3 / M2, ORH-27 / M2-bis), and the policy file (ORH-6 / M6, ORH-28) per this

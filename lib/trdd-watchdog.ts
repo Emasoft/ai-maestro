@@ -258,9 +258,9 @@ export function watchdogSweep(
 
   // Pass 1 needs `created-by` for every card ANY card's `superseded-by:` names — and the
   // replacement may live in a zone outside the scan set (a superseding card is often
-  // itself archived later). Small map: two strings per card, all four zones.
+  // itself archived later). Small map: two strings per card, all three zones.
   const createdBy = new Map<string, string>()
-  for (const zone of ['tasks', 'proposals', 'archived', 'refused'] as const) {
+  for (const zone of ['tasks', 'proposals', 'archived'] as const) {
     for (const file of listTrddFiles(designDir, zone)) {
       const t = parseTrddFile(file, zone)
       if (!t || t.parseError) continue
@@ -278,6 +278,17 @@ export function watchdogSweep(
       const fm = t.frontmatter
       const id = t.id
 
+      // A `refused` proposal already went through the approval gate and was DECIDED,
+      // so the FLOOR checks below (steps 1-2 — "is this card dodging the approval
+      // queue by declaring too low a requirement?") have nothing to ask of it: there
+      // is no pending queue it could be dodging. Skip ONLY that block, not this whole
+      // card — a refused card can still carry a FORGED mandate (step 3) or a dangling
+      // supersede claim (step 7), and it can sit in `proposals/` indefinitely with no
+      // re-scan trigger (re-proposing is optional), so those two checks must keep
+      // running on it or a forged mandate refused for an unrelated reason becomes a
+      // permanent blind spot. Before owner ruling 2026-09-24 this was implicit:
+      // `refused` cards lived in their own zone, outside `WATCHDOG_ZONES` entirely.
+      if (t.column !== 'refused') {
       // ---- §D4 steps 1-2: declared floor vs the D3 objective floor ----
       const declared = declaredFloor(fm)
       const computed = objectiveFloor(fm, `${t.title}\n${t.body}`)
@@ -335,8 +346,15 @@ export function watchdogSweep(
           })
         }
       }
+      } // end `t.column !== 'refused'` — floor-dependent checks (steps 1-3) stop here.
 
       // ---- 3P-ZON-11: the mandate vs the floor of what the card actually TOUCHED ----
+      // Runs on EVERY card, refused included: unlike steps 1-3 above (which ask "is
+      // this card dodging the PENDING approval queue?" — moot once refused), this is
+      // evidence-based fraud detection from commit history the author does not
+      // control. A card refused for an unrelated reason while carrying a forged
+      // mandate must not get a permanent blind spot just because it stopped being
+      // pending (reviewer finding on TRDD-MQE5D28T's implementation).
       // The changed paths of the citing commits are the one input the author does not
       // control. TRDD-8F8PJEXI's verification: a `mandated-by: self` card whose citing
       // commit touches `.github/` MUST produce MANDATE-FORGED — and the complementary

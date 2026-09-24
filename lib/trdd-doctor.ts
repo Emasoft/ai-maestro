@@ -888,11 +888,13 @@ export function lintCorpus(designDir: string): DoctorReport {
     // linter people route around costs every finding it would ever have made.
     //
     // SCOPE, and why it is exactly this: the §D4 watchdog scans `design/tasks/` +
-    // `design/proposals/` and nothing else. Archived and refused cards are outside its scan
-    // set, so a missing field there breaks no consumer — flagging them added 218 findings
-    // that named no broken reader, which is a wall, and a wall is how a linter gets routed
-    // around. Mirroring the consumer's OWN scan set is what makes the check FP-free.
-    const watchdogScans = c.zone === 'tasks' || c.zone === 'proposals'
+    // `design/proposals/`, minus `refused` cards (already decided, not pending the
+    // gate this metadata feeds — see the skip in `lib/trdd-watchdog.ts`). Archived
+    // cards are outside its scan set entirely, so a missing field there breaks no
+    // consumer — flagging them added 218 findings that named no broken reader, which
+    // is a wall, and a wall is how a linter gets routed around. Mirroring the
+    // consumer's OWN scan set is what makes the check FP-free.
+    const watchdogScans = c.zone === 'tasks' || (c.zone === 'proposals' && c.column !== 'refused')
     const missingMeta: Array<[string, string]> = []
     if (watchdogScans && c.zone === 'tasks' && !fmHas('assignee')) {
       missingMeta.push(['assignee', 'this card is OPEN work with no owner — the D4 watchdog asserts `assignee` is set, and the board renders no one'])

@@ -48,9 +48,12 @@ export const TERMINAL_DONE: ReadonlySet<string> = new Set([
 
 /**
  * Columns whose body is DEFINITIVE (IND base trdd-design-tasks.md step 12): every
- * `TERMINAL_DONE` column PLUS the two terminal-but-not-shipped folder states
- * `cancelled` and `refused`. `failed` is DELIBERATELY excluded from this set —
- * a `failed` card in design/tasks/ stays OPEN for retry.
+ * `TERMINAL_DONE` column PLUS the terminal-but-not-shipped folder state `cancelled`.
+ * `refused` is DELIBERATELY NOT here (owner ruling 2026-09-24, TRDD-MQE5D28T): a
+ * refused proposal "remains in the proposals and can be edited and improved and
+ * proposed again to the manager" — it is OPEN, not frozen, until its author archives
+ * it. `failed` is DELIBERATELY excluded from this set too — a `failed` card in
+ * design/tasks/ stays OPEN for retry.
  *
  * Owner rulings (2026-09-24), quoted verbatim because they are the whole reason
  * this is a two-part rule (column ∪ zone) rather than a flat column set:
@@ -77,18 +80,19 @@ export const DEFINITIVE_COLUMNS: ReadonlySet<string> = new Set([
   'published',
   'live',
   'cancelled',
-  'refused',
 ])
 
 /**
  * Is this card's body DEFINITIVE (IND base §12 freeze)? True when the column is
- * in `DEFINITIVE_COLUMNS`, OR when the card's zone is `archived` or `refused` —
- * the zone half is what makes a `failed` card definitive once archived while
- * leaving a `failed` card in `tasks/` open for retry (owner ruling 2026-09-24;
- * see `DEFINITIVE_COLUMNS` above).
+ * in `DEFINITIVE_COLUMNS`, OR when the card's zone is `archived` — the zone half
+ * is what makes a `failed` card definitive once archived while leaving a `failed`
+ * card in `tasks/` open for retry (owner ruling 2026-09-24; see `DEFINITIVE_COLUMNS`
+ * above). `refused` is neither: it is a column value that stays in `proposals/`
+ * (never its own zone) and is never frozen by this predicate — a refused card is
+ * open and editable until its author moves it to `archived/`.
  */
 export function isDefinitiveCard(column: string, zone: TrddZone): boolean {
-  return DEFINITIVE_COLUMNS.has(column) || zone === 'archived' || zone === 'refused'
+  return DEFINITIVE_COLUMNS.has(column) || zone === 'archived'
 }
 
 
@@ -198,7 +202,9 @@ export const TIER_TO_REQUIREMENT: Record<string, string> = {
  */
 export function expectedZone(column: string, fm: Record<string, unknown>): TrddZone | null {
   if (column === 'proposal') return 'proposals'
-  if (column === 'refused') return 'refused'
+  // `refused` is a COLUMN, not a zone (owner ruling 2026-09-24) — a refused card
+  // stays in `proposals/`, editable and re-proposable, until its author archives it.
+  if (column === 'refused') return 'proposals'
   if (['completed', 'cancelled', 'superseded', 'published', 'live'].includes(column)) return 'archived'
   // `complete` is terminal ONLY when the TRDD ships nothing further. With
   // `release-via: publish|deploy` it still has publish/deploy stages ahead of it,

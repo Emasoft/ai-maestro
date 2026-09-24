@@ -6,8 +6,8 @@
  * 1. IT FAILS LOUD. A reader that returns `[]` on an I/O error makes an unreadable
  *    directory and an empty one the same answer, so a gate built on it passes
  *    because it read nothing. A missing ZONE is legal (a fresh project has no
- *    `refused/`); every other errno throws. An empty result must be PROVABLY empty,
- *    never merely unread. (ai-maestro#96 L2.)
+ *    `archived/` yet); every other errno throws. An empty result must be PROVABLY
+ *    empty, never merely unread. (ai-maestro#96 L2.)
  *
  * 2. THE PRIMARY READ IS AN ITERATOR, NOT AN ARRAY — and that alone was not enough.
  *    Measured end-to-end on a generated 100 000-card corpus (`yarn trdd:doctor`):

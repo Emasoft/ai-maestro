@@ -146,7 +146,7 @@ function mkDesignCorpus(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-e2e-'));
   TMP_DIRS.push(root);
   const design = path.join(root, 'design');
-  for (const zone of ['tasks', 'proposals', 'archived', 'refused']) {
+  for (const zone of ['tasks', 'proposals', 'archived']) {
     fs.mkdirSync(path.join(design, zone), { recursive: true });
   }
   return design;
@@ -232,7 +232,7 @@ function createCard(design: string, title: string, taskType = 'spike'): string {
 }
 
 function findCardFile(design: string, id: string): string | null {
-  for (const zone of ['tasks', 'proposals', 'archived', 'refused']) {
+  for (const zone of ['tasks', 'proposals', 'archived']) {
     const dir = path.join(design, zone);
     if (!fs.existsSync(dir)) continue;
     const hit = fs.readdirSync(dir).find((f) => f.includes(id));

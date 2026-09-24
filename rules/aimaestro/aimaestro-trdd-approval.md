@@ -61,8 +61,8 @@ baseline-deviation gate), this rule governs.
                                                                   │  human_review→complete  │
                                                                   │  →publish|deploy
  ┌───────────────────┐                                          │                        │
- │ design/refused/   │                                          │  • blocked  (lists its │
- │  column: refused  │                                          │    blocked-by:)        │
+ │ refused = column, NOT a folder   │                                          │  • blocked  (lists its │
+ │  stays in proposals/  │                                          │    blocked-by:)        │
  └───────────────────┘                                          │  • failed → RETRY      │
                                                                 │    (stays OPEN by      │
                                                                 │     default — see note)│
@@ -80,7 +80,9 @@ baseline-deviation gate), this rule governs.
                                                           └──────────────────────────────┘
 
   OPEN TRDD  = any file in design/tasks/  (INCLUDING `blocked` and `failed`).
-  refused/   = proposals NEVER approved.   archived/ = ONCE-approved, now terminal.
+  refused    = a COLUMN not a folder (owner ruling 2026-09-24, TRDD-MQE5D28T) — the
+               card stays in proposals/, OPEN and editable; NEVER approved means it
+               is re-proposed or archived, not moved.   archived/ = ONCE-approved, now terminal.
   `failed` stays OPEN and retryable in `tasks/` BY DEFAULT — fix the cause (often
   via other TRDDs), retry. It moves to `archived/` ONLY on an express **MANAGER
   or CHIEF-OF-STAFF** decision (outside the harness: the USER or the main
@@ -140,11 +142,13 @@ registered `project-id`s and reads each project's `design/` from its
 ## Part A — Folders and protocols: defined in the IND base
 
 The two-folder model (`design/proposals/` vs `design/tasks/`), the
-terminal folders (`design/archived/`, `design/refused/`), the OPEN-TRDD
-definition, failed-is-retryable, and the creation / promotion / refusal
-/ archival / batch-approval protocols are all defined in the IND base
-`trdd-design-tasks.md` (its "Folder lifecycle" section). This overlay
-ADDS the multi-agent specifics:
+terminal folder `design/archived/`, the OPEN-TRDD definition,
+failed-is-retryable, and the creation / promotion / refusal / archival /
+batch-approval protocols are all defined in the IND base
+`trdd-design-tasks.md` (its "Folder lifecycle" section). `refused` is a
+COLUMN, not a folder (owner ruling 2026-09-24, TRDD-MQE5D28T) — a
+refused proposal stays in `design/proposals/`, open and editable. This
+overlay ADDS the multi-agent specifics:
 
 - The approver named in those protocols is the authority Part B
   requires — T1 COS · T2 MANAGER · T3 USER — and approval-log lines

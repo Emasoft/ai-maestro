@@ -284,7 +284,7 @@ describe('N agents on one host — a second writer (TRDD-YN8EQWYP)', () => {
     // Make the FIRST corpus read fail: a zone that is a FILE raises ENOTDIR, which the
     // fail-loud reader must propagate (only ENOENT is a legally absent zone). ENOTDIR
     // rather than chmod on purpose — a permissions fixture passes VACUOUSLY as root.
-    const zone = path.join(corpus, 'refused')
+    const zone = path.join(corpus, 'archived')
     fs.rmSync(zone, { recursive: true, force: true })
     fs.writeFileSync(zone, 'not a directory')
 

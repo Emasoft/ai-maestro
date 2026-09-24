@@ -47,7 +47,7 @@ describe('the pillar CLI launcher has NO argv write gate of its own (ai-maestro#
     fs.writeFileSync(path.join(xdg, 'aimaestro', 'install-root'), fs.realpathSync(REPO), 'utf-8')
 
     const design = path.join(tmp, 'design')
-    for (const zone of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const zone of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(design, zone), { recursive: true })
     }
     const id = 'ZZLNCHR1'

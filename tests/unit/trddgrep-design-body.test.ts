@@ -97,7 +97,7 @@ const CARDS = [
 beforeAll(() => {
   fixDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trddgrep-design-'))
   designDir = path.join(fixDir, 'design')
-  for (const zone of ['tasks', 'proposals', 'archived', 'refused']) {
+  for (const zone of ['tasks', 'proposals', 'archived']) {
     fs.mkdirSync(path.join(designDir, zone), { recursive: true })
   }
   for (const c of CARDS) fs.writeFileSync(path.join(designDir, 'tasks', c.name), c.text)

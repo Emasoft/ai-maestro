@@ -112,7 +112,7 @@ describe('the CLIs enforce the gate as a subprocess (spawns THIS checkout, not a
   const specFile = () => path.join(specDesignDir(), 'specs', 'x-spec.md')
 
   function seedTrddCard() {
-    for (const zone of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const zone of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(trddDesignDir(), zone), { recursive: true })
     }
     fs.writeFileSync(

@@ -413,13 +413,14 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
 
   // #167 follow-up: the terminal-card `--create` refusal used to check the narrower
   // TERMINAL_DONE set (the flock-done columns) instead of the freeze rule's own
-  // DEFINITIVE_COLUMNS (IND base step 12), so `cancelled` and `refused` cards could
-  // still gain a brand-new section — two shapes the freeze is supposed to cover.
-  // `failed` is deliberately excluded here — see the two tests below it, which pin
-  // the owner ruling (2026-09-24) that `failed` is definitive only once archived.
+  // DEFINITIVE_COLUMNS (IND base step 12), so a `cancelled` card could still gain a
+  // brand-new section. `refused` is DELIBERATELY excluded here (owner ruling
+  // 2026-09-24, TRDD-MQE5D28T) — it is a column, not its own zone, and it is NOT
+  // definitive: see 'a refused proposal is OPEN, not frozen' below. `failed` is
+  // excluded too — see the two tests below it, which pin the owner ruling that
+  // `failed` is definitive only once archived.
   it.each([
     ['cancelled', 'archived'],
-    ['refused', 'refused'],
   ] as const)('--create is refused on a %s card (zone %s)', async (column, zone) => {
     const id = `FRZ${column.slice(0, 5).toUpperCase()}`.padEnd(8, '0').slice(0, 8)
     const file = path.join(designDir, zone, `TRDD-20260709_102705+0200-${id}-frozen-${column}.md`)
@@ -441,6 +442,23 @@ describe('appendTrddSection (#167 — CLI append verb backing function)', () => 
     const allowed = await appendTrddSection(designDir, id, 'Approval log', '- entry', { iso: isoLocal().iso, create: true })
     expect(allowed.ok).toBe(true)
     if (allowed.ok) expect(allowed.created).toBe(true)
+  })
+
+  // Owner ruling (2026-09-24, TRDD-MQE5D28T): "it remains in the proposals and can
+  // be edited and improved and proposed again to the manager" — a refused proposal
+  // is OPEN, not frozen. It lives in proposals/ (never its own zone), so `--create`
+  // must succeed there exactly as on any other open proposal.
+  it('--create is allowed on a refused card in proposals/ (open, editable, re-proposable)', async () => {
+    const id = 'REFOPEN1'
+    const file = path.join(designDir, 'proposals', `TRDD-20260709_102705+0200-${id}-refused-open.md`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      `---\ntrdd-id: ${id}\ntitle: refused open title\ncolumn: refused\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+    )
+    const r = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.created).toBe(true)
   })
 
   // Owner ruling (2026-09-24): "of course they stays open for retry" — a `failed`
@@ -520,15 +538,34 @@ describe('trdd-store lifecycle transitions', () => {
     if (!r.ok) expect(r.status).toBe(409)
   })
 
-  it('refuse moves a proposal → refused/ with column=refused', async () => {
+  it('refuse sets column=refused and stays in proposals/ — NO folder move (owner ruling 2026-09-24)', async () => {
     const id = 'REFU0001'
-    writeProposal(id, 'refuse-me')
+    const originalPath = writeProposal(id, 'refuse-me')
     const r = await refuseTrdd(designDir, id, { approver: 'manager', reason: 'out of scope', iso: ISO })
     expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.from).toBe('proposals')
+      expect(r.to).toBe('proposals')
+      expect(r.filePath).toBe(originalPath)
+    }
     const t = findTrdd(designDir, id)!
-    expect(t.zone).toBe('refused')
+    expect(t.zone).toBe('proposals')
     expect(t.column).toBe('refused')
+    expect(t.filePath).toBe(originalPath)
     expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('REFUSED by manager')
+  })
+
+  it('a refused card can be re-proposed via advanceColumn (in-zone, no folder move)', async () => {
+    const id = 'REFU0002'
+    const originalPath = writeProposal(id, 're-propose-me')
+    const refused = await refuseTrdd(designDir, id, { approver: 'manager', reason: 'needs rework', iso: ISO })
+    expect(refused.ok).toBe(true)
+    const r = await advanceColumn(designDir, id, 'proposal', { iso: ISO, approver: 'author', note: 'reworked' })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.zone).toBe('proposals')
+    expect(t.column).toBe('proposal')
+    expect(t.filePath).toBe(originalPath)
   })
 
   it('advanceColumn advances an open task in place (no move)', async () => {
@@ -539,6 +576,24 @@ describe('trdd-store lifecycle transitions', () => {
     const t = findTrdd(designDir, id)!
     expect(t.zone).toBe('tasks')
     expect(t.column).toBe('testing')
+  })
+
+  // Review finding on TRDD-MQE5D28T: generalizing advanceColumn to work FROM
+  // proposals/ must not become "any column, from proposals/" — a column whose
+  // `expectedZone` is null (e.g. `complete` with `release-via: publish`, which
+  // intentionally has no zone constraint) would otherwise slip past the
+  // `wantZone` check and land `column: complete` on a card still physically in
+  // `proposals/`, reachable for real via POST /api/trdd/[id]/promote (which calls
+  // this function with a caller-supplied column and no zone check of its own).
+  it('advanceColumn refuses any proposals/ column except the re-propose target', async () => {
+    const id = 'PRP00001'
+    writeProposal(id, 'no-shortcuts', 'proposal', 'release-via: publish\n')
+    const r = await advanceColumn(designDir, id, 'complete', { iso: ISO, approver: 'x' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/only.*tasks.*re-proposed to column 'proposal'/i)
+    const t = findTrdd(designDir, id)!
+    expect(t.zone).toBe('proposals')
+    expect(t.column).toBe('proposal')
   })
 
   // TRDD-ISGUYYLN: leaving `blocked` used to leave `blocked-by:` populated, breaking the
@@ -754,16 +809,19 @@ describe('trdd-store lifecycle transitions', () => {
     expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('SUPERSEDED by manager')
   })
 
-  it('archive refuses an already-terminal (refused) TRDD (409)', async () => {
+  // Owner ruling (2026-09-24, TRDD-MQE5D28T): "if the author decides to archive it,
+  // it can be archived" — a refused proposal is OPEN (not terminal), so `archiveTrdd`
+  // succeeds on it exactly like any other proposals/ card. `cancelled` needs no
+  // acceptance checklist (CHECKLIST_GATED_STATES excludes it), so this stays a
+  // one-field write.
+  it('archive succeeds on a refused (open, not terminal) proposal', async () => {
     const id = 'ARCH0002'
-    const f = writeProposal(id, 'refused-already')
-    // simulate it already living in refused/
-    const refusedDir = path.join(designDir, 'refused')
-    fs.mkdirSync(refusedDir, { recursive: true })
-    fs.renameSync(f, path.join(refusedDir, path.basename(f)))
-    const r = await archiveTrdd(designDir, id, { approver: 'm', state: 'completed', iso: ISO })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.status).toBe(409)
+    writeProposal(id, 'refused-already', 'refused')
+    const r = await archiveTrdd(designDir, id, { approver: 'author', state: 'cancelled', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.zone).toBe('archived')
+    expect(t.column).toBe('cancelled')
   })
 
   // TRDD-MUB7NTRF — the one terminal-to-terminal edit IND base step 12 permits:
@@ -937,11 +995,17 @@ describe('trdd-store lifecycle transitions stage the file they moved (real git r
     expect(git('diff', '--cached', '--', 'design')).toContain('APPROVED by MANAGER')
   })
 
-  it('refuseTrdd stages the column edit, not just the rename', async () => {
+  // `refuseTrdd` no longer `git mv`s (owner ruling 2026-09-24: `refused` is a column,
+  // not a zone) — so the staging concern `expectFullyStaged` exists to catch (a `git
+  // mv`'s content edit left unstaged behind an already-staged rename) cannot occur
+  // here at all. It is a plain in-place edit, same shape as `advanceColumn`: the
+  // working tree carries the change, unstaged, for the caller to commit.
+  it('refuseTrdd edits the column in place with no git mv (working tree, unstaged)', async () => {
     seedAndCommit(() => writeProposal('BBBB2222', 'refuse-me', 'proposal', '', repoDesign))
     const r = await refuseTrdd(repoDesign, 'BBBB2222', { approver: 'MANAGER', iso: ISO })
     expect(r.ok).toBe(true)
-    expectFullyStaged('refused')
+    expect(git('status', '--porcelain', '--', 'design')).toMatch(/^ M/m)
+    expect(git('diff', '--', 'design')).toContain('+column: refused')
   })
 
   it('archiveTrdd stages the column edit, not just the rename', async () => {
@@ -1001,8 +1065,8 @@ describe('trdd-store fails loud instead of reporting an empty corpus', () => {
     expect(() => assertDesignDir(designDir)).not.toThrow()
   })
 
-  it('listTrddFiles returns [] for a MISSING zone — a fresh project has no refused/', () => {
-    expect(listTrddFiles(designDir, 'refused')).toEqual([])
+  it('listTrddFiles returns [] for a MISSING zone — a fresh project has no archived/', () => {
+    expect(listTrddFiles(designDir, 'archived')).toEqual([])
   })
 
   it('listTrddFiles THROWS when the zone cannot be read, naming the zone and the errno', () => {
@@ -1203,7 +1267,7 @@ describe('the store writes atomically (TRDD-7S27HJCS)', () => {
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-atomic-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(dir, z), { recursive: true })
     }
     cardPath = path.join(dir, 'tasks', 'TRDD-20260101_000000+0100-A7A7A7A7-x.md')

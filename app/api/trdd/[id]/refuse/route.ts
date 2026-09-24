@@ -6,10 +6,11 @@ import { refuseTrdd, isoLocal } from '@/lib/trdd-store'
 import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 
 /**
- * POST /api/trdd/[id]/refuse — refuse a PROPOSAL at the gate: sets column=refused,
- * appends a "REFUSED" line to `## Approval log`, and git-mv's the file
- * design/proposals/ → design/refused/ (the overlay's refusal protocol; a refused
- * proposal is terminal and never re-approved).
+ * POST /api/trdd/[id]/refuse — refuse a PROPOSAL at the gate: sets column=refused
+ * and appends a "REFUSED" line to `## Approval log`. NO folder move — `refused` is a
+ * column value, not a zone (owner ruling 2026-09-24, TRDD-MQE5D28T); the card stays
+ * in design/proposals/, remains editable, and may be re-proposed
+ * (`trddgrep move <id> proposal`) or archived by its own author.
  *
  * Body (all optional): `{approver?, reason?, agentId?}`. STRICT.
  *

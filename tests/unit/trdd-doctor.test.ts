@@ -244,7 +244,7 @@ describe('SHIPPED excludes superseded -- a replaced blocker is not a shipped one
 describe('trdd-doctor — each rule can be made to FIRE', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -304,7 +304,7 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     const away = path.join(awayRoot, '.claude', 'local', 'design', 'tasks')
     fs.mkdirSync(away, { recursive: true })
     const linked = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-linked-'))
-    for (const z of ['proposals', 'archived', 'refused']) {
+    for (const z of ['proposals', 'archived']) {
       fs.mkdirSync(path.join(linked, z), { recursive: true })
     }
     fs.symlinkSync(away, path.join(linked, 'tasks'))
@@ -1007,7 +1007,7 @@ describe('the vocabulary is the ratified one', () => {
 
   it('expectedZone routes each column to its zone', () => {
     expect(expectedZone('proposal', {})).toBe('proposals')
-    expect(expectedZone('refused', {})).toBe('refused')
+    expect(expectedZone('refused', {})).toBe('proposals')
     expect(expectedZone('completed', {})).toBe('archived')
     expect(expectedZone('dev', {})).toBe('tasks')
     expect(expectedZone('failed', {})).toBe('tasks')   // failed is OPEN — retryable, never archived
@@ -1018,7 +1018,7 @@ describe('the vocabulary is the ratified one', () => {
 describe('the approval requirement — one rung, one spelling (TRDD-5THSI5ZB)', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -1064,7 +1064,7 @@ describe('the approval requirement — one rung, one spelling (TRDD-5THSI5ZB)', 
 describe('META-MISSING is scoped to the zones the D4 watchdog actually scans (TRDD-5THSI5ZB)', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -1118,7 +1118,7 @@ describe('META-MISSING is scoped to the zones the D4 watchdog actually scans (TR
 describe('the terminal-column checklist gate — every shape, seeded', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-gate-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -1515,7 +1515,7 @@ describe('THE GATE — the real corpus lints clean', () => {
 describe('unparseable frontmatter is REPORTED, not "repaired" (TRDD-5XJWR473)', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-unparseable-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -1607,7 +1607,7 @@ describe('unparseable frontmatter is REPORTED, not "repaired" (TRDD-5XJWR473)', 
 describe('non-local blocked-by spellings — end-to-end through lintCorpus (TRDD-PTFPGSLV)', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-extblk-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })
@@ -1683,7 +1683,7 @@ describe('non-local blocked-by spellings — end-to-end through lintCorpus (TRDD
 describe('checklist gate fails OPEN on an unparseable updated: (TRDD-PTFPGSLV)', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-gateopen-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })

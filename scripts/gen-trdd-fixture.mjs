@@ -50,13 +50,17 @@ if (outDir === realDesign || outDir.startsWith(realDesign + path.sep)) {
   process.exit(2)
 }
 
-const ZONES = ['proposals', 'tasks', 'archived', 'refused']
+// `refused` is a COLUMN, not a folder (owner ruling 2026-09-24) — a refused card
+// physically lives in `proposals/` like any other, so it is NOT in this list; the
+// ZONE_MIX entry below still generates the right SHARE of `column: refused` cards,
+// just writing them into the `proposals` directory instead of a folder of their own.
+const ZONES = ['proposals', 'tasks', 'archived']
 // Zone mix mirrors the live corpus proportions (36 / 104 / 140 / 18 of 298).
 const ZONE_MIX = [
   ['proposals', 0.12, 'proposal'],
   ['tasks', 0.35, 'dev'],
   ['archived', 0.47, 'completed'],
-  ['refused', 0.06, 'refused'],
+  ['proposals', 0.06, 'refused'],
 ]
 
 /** Deterministic 8-char base36 id from an index — unique by construction, no RNG, no collision scan. */

@@ -199,15 +199,15 @@ const mint = (dir: string, title: string) =>
 
 describe('idTaken — an unreadable zone is not an empty zone', () => {
   it('idTaken throws ENOTDIR on an unreadable zone instead of reading it as empty', () => {
-    // TRDD_ZONES (pillar/kinds module, line 119) = ['proposals', 'tasks', 'archived', 'refused'] —
-    // 'refused' is one of the zones idTaken iterates. The default mint target zone for
+    // TRDD_ZONES (pillar/kinds module) = ['proposals', 'tasks', 'archived'] — `refused`
+    // is a COLUMN, not a zone (owner ruling 2026-09-24), so it is no longer one of the
+    // three zones idTaken iterates. The default mint target zone for
     // authorAuthority: 'none' is 'backburner' -> 'tasks' (trdd-vocabulary module, expectedZone),
-    // so corrupting 'refused' instead of 'tasks' keeps this test from touching the zone the
+    // so corrupting 'archived' instead of 'tasks' keeps this test from touching the zone the
     // mint is actually about to write into.
     fs.mkdirSync(path.join(design, 'proposals'), { recursive: true })
     fs.mkdirSync(path.join(design, 'tasks'), { recursive: true })
-    fs.mkdirSync(path.join(design, 'archived'), { recursive: true })
-    fs.writeFileSync(path.join(design, 'refused'), 'not a directory')
+    fs.writeFileSync(path.join(design, 'archived'), 'not a directory')
 
     expect(fs.existsSync(design)).toBe(true)
     let thrown: unknown
@@ -223,8 +223,7 @@ describe('idTaken — an unreadable zone is not an empty zone', () => {
   it('createTrdd propagates the unreadable-zone error instead of minting', () => {
     fs.mkdirSync(path.join(design, 'proposals'), { recursive: true })
     fs.mkdirSync(path.join(design, 'tasks'), { recursive: true })
-    fs.mkdirSync(path.join(design, 'archived'), { recursive: true })
-    fs.writeFileSync(path.join(design, 'refused'), 'not a directory')
+    fs.writeFileSync(path.join(design, 'archived'), 'not a directory')
 
     // createTrdd does not wrap the idTaken call (mint call site) in a try/catch, so the
     // same error PROPAGATES all the way out of createTrdd rather than being swallowed.
@@ -236,8 +235,7 @@ describe('idTaken — an unreadable zone is not an empty zone', () => {
   it('an unreadable zone means no card file is written', () => {
     fs.mkdirSync(path.join(design, 'proposals'), { recursive: true })
     fs.mkdirSync(path.join(design, 'tasks'), { recursive: true })
-    fs.mkdirSync(path.join(design, 'archived'), { recursive: true })
-    fs.writeFileSync(path.join(design, 'refused'), 'not a directory')
+    fs.writeFileSync(path.join(design, 'archived'), 'not a directory')
 
     try {
       mint(design, 'no card written on abort')
@@ -249,14 +247,13 @@ describe('idTaken — an unreadable zone is not an empty zone', () => {
     expect(fs.readdirSync(path.join(design, 'tasks'))).toEqual([])
   })
 
-  it('positive control: a corpus missing a zone directory is legal', () => {
+  it('positive control: a corpus with every zone present is legal', () => {
     fs.mkdirSync(path.join(design, 'proposals'), { recursive: true })
     fs.mkdirSync(path.join(design, 'tasks'), { recursive: true })
     fs.mkdirSync(path.join(design, 'archived'), { recursive: true })
-    // no 'refused' directory at all — a corpus that has never had a refusal
 
     expect(idTaken('ZZZZZZZZ', [design])).toBe(false)
-    expect(() => mint(design, 'a corpus with no refused zone is fine')).not.toThrow()
+    expect(() => mint(design, 'a corpus with every zone present is fine')).not.toThrow()
   })
 })
 

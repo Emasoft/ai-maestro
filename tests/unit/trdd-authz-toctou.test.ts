@@ -74,7 +74,7 @@ describe('TRDD authorization and its write are one critical section (TRDD-6D6SQN
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-toctou-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(dir, z), { recursive: true })
     }
     cardPath = path.join(dir, 'proposals', `TRDD-20260101_000000+0100-${ID}-x.md`)

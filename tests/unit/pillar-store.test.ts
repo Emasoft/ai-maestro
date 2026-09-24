@@ -295,9 +295,9 @@ describe('fail-loud parity holds for EVERY kind, not just TRDD', () => {
     expect(() => assertCorpusRoot(path.join(tmp, 'nope'), TRDD_KIND)).toThrow(/no TRDD corpus at/)
   })
 
-  it('a missing zone is legal and yields [] — a fresh project has no refused/', () => {
+  it('a missing zone is legal and yields [] — a fresh project has no archived/', () => {
     fs.mkdirSync(path.join(tmp, 'tasks'))
-    expect(listDocuments(tmp, TRDD_KIND, 'refused')).toEqual([])
+    expect(listDocuments(tmp, TRDD_KIND, 'archived')).toEqual([])
   })
 
   it('an UNREADABLE zone THROWS rather than reading as empty', () => {

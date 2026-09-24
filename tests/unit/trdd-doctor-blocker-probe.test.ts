@@ -46,7 +46,7 @@ const find = (rule: string) => lintCorpus(tmp).findings.filter((f) => f.rule ===
 describe('TRDD-CV5KDCB7 — BLOCKED-WITHOUT-PROBE and its grammar rules', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-probe-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    for (const z of ['proposals', 'tasks', 'archived']) fs.mkdirSync(path.join(tmp, z), { recursive: true })
   })
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
 

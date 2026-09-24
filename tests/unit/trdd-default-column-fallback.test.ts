@@ -51,7 +51,7 @@ describe('trdd-doctor COLUMN-MISSING — the message names the column --fix will
   let tmp: string
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-fallback-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })

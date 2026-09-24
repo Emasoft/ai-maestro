@@ -41,7 +41,7 @@ const idsOf = (r: ReturnType<typeof lintCorpus>, rule: string) =>
 describe('trdd-doctor — 3P-TRDD-13 design fields', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-design-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })

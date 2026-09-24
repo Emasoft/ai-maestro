@@ -5,9 +5,11 @@
  * `design/{proposals,tasks,archived,refused}/*.md`, and perform the folder
  * lifecycle transitions the `aimaestro-trdd-approval.md` DEP overlay defines:
  *   - promote  proposal → planned   (git mv proposals/ → tasks/)
- *   - refuse   proposal → refused    (git mv proposals/ → refused/)
+ *   - refuse   proposal → refused    (column edit only — refused STAYS in
+ *              proposals/, editable and re-proposable; owner ruling 2026-09-24,
+ *              TRDD-MQE5D28T: "i would prefer to not have a refusal folder")
  *   - archive  → completed|cancelled|superseded (git mv → archived/)
- *   - advance  column edit within tasks/ (no folder move)
+ *   - advance  column edit within tasks/ or proposals/ (no folder move)
  *
  * PARSING uses gray-matter (robust YAML). WRITING is line-based on purpose: the
  * TRDD frontmatter is "grep-first" (one field per line, flow-style lists, bare
@@ -131,8 +133,8 @@ import { corpusRootFor } from "./pillar/kinds"
  * Fail loudly when the corpus ROOT itself is absent or unreadable.
  *
  * `listTrddFiles` below deliberately tolerates a missing ZONE — a fresh project
- * has no `refused/` yet, and that is not an error. The cost of that tolerance is
- * that a completely wrong `designDir` yields four empty zones and a confident
+ * has no `archived/` yet, and that is not an error. The cost of that tolerance is
+ * that a completely wrong `designDir` yields three empty zones and a confident
  * "0 findings". This guard is what separates "the corpus is clean" from "you are
  * not where you think you are", and any caller that GATES on a scan must call it
  * first. Without it, `greptrdd validate` run from the wrong directory reported a
@@ -160,7 +162,7 @@ function toIsoOrNull(v: unknown): string | null {
 /**
  * Every TRDD file in one zone, v1 and v2 filename shapes alike.
  *
- * A MISSING zone is legal and yields `[]` — a fresh project has no `refused/`.
+ * A MISSING zone is legal and yields `[]` — a fresh project has no `archived/`.
  * ANY OTHER read failure THROWS, and that distinction is the whole point.
  *
  * This used to be `catch { return [] }`, which made an unreadable directory and
@@ -775,7 +777,13 @@ export function promoteTrdd(
   })
 }
 
-/** REFUSE a proposal → refused (git mv proposals/ → refused/). */
+/**
+ * REFUSE a proposal → column `refused`. NO folder move: `refused` is metadata, not
+ * a zone (owner ruling 2026-09-24, TRDD-MQE5D28T) — the card stays in `proposals/`,
+ * where it remains editable and may be re-proposed (`trddgrep move <id> proposal`)
+ * or, at its author's own decision, archived. Neither MANAGER nor COS may archive
+ * it — only the author.
+ */
 export function refuseTrdd(
   designDir: string,
   id: string,
@@ -787,18 +795,13 @@ export function refuseTrdd(
   if (trdd.zone !== 'proposals') {
     return { ok: false, error: `Only a proposal can be refused; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
-  const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'refused')
   const reqStr = minApprovalSuffix(trdd.frontmatter)
-  editAfterMove(
-    designDir,
+  editAt(
     trdd.filePath,
-    newPath,
-    tracked,
     [['column', 'refused'], ['updated', opts.iso]],
     `- ${opts.iso} — REFUSED by ${opts.approver}${reqStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
   )
-  if (tracked) stageMovedFile(designDir, newPath)
-  return { ok: true, id: trdd.id, from: 'proposals', to: 'refused', column: 'refused', filePath: newPath }
+  return { ok: true, id: trdd.id, from: 'proposals', to: 'proposals', column: 'refused', filePath: trdd.filePath }
   })
 }
 
@@ -827,7 +830,16 @@ function blockedByRefs(v: unknown): string[] {
 // both now live in the leaf vocabulary module both files already import from, so there is
 // exactly one copy of each.
 
-/** ADVANCE an in-flight TRDD's column within tasks/ (no folder move); bumps `updated`. */
+/**
+ * ADVANCE an in-flight TRDD's column WITHIN ITS CURRENT ZONE (no folder move); bumps
+ * `updated`. Works from `tasks/` for any column (the usual case), and from
+ * `proposals/` for EXACTLY ONE target — `column: 'proposal'` — which is how a
+ * `refused` card is RE-PROPOSED (owner ruling 2026-09-24, TRDD-MQE5D28T: `refused`
+ * is metadata, not a folder, so moving off it is an in-place column edit like any
+ * other, never a zone move). A proposals/ card requesting any OTHER column is
+ * refused outright, not merely deferred to the `wantZone` check below — see the
+ * comment at that guard for why.
+ */
 export function advanceColumn(
   designDir: string,
   id: string,
@@ -837,8 +849,19 @@ export function advanceColumn(
   return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
-  if (trdd.zone !== 'tasks') {
-    return { ok: false, error: `Only an open (tasks/) TRDD can be advanced; ${trdd.id} is in ${trdd.zone}`, status: 409 }
+  // A proposals/ card may advance through THIS verb for exactly one transition —
+  // re-proposing (column -> 'proposal', e.g. off `refused`) — never any other column.
+  // A wider "any column, from proposals/" gate would let a column whose
+  // `expectedZone` is `null` (a genuine case: `complete` with `release-via:
+  // publish|deploy` intentionally has NO zone constraint) slip straight past the
+  // `wantZone` check below and land `column: complete` on a card still physically
+  // sitting in `proposals/` — reachable for real via `/api/trdd/[id]/promote`,
+  // which calls this function with a caller-supplied column and no zone check of
+  // its own. Naming the one legal proposals/ transition here, rather than trusting
+  // the `wantZone` check alone, closes that hole at its source.
+  const proposalsReproposeOnly = trdd.zone === 'proposals' && column === 'proposal'
+  if (trdd.zone !== 'tasks' && !proposalsReproposeOnly) {
+    return { ok: false, error: `Only an open (tasks/) TRDD can be advanced, or a proposals/ card re-proposed to column 'proposal'; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
   // TRDD-ISGUYYLN: moving OUT of `blocked` used to leave `blocked-by:` populated, so the
   // board invariant (`blocked-by` non-empty <=> `column: blocked`) broke the instant the
@@ -878,10 +901,10 @@ export function advanceColumn(
     return { ok: false, error: `Invalid column "${column}" — not one of the ratified values`, status: 400 }
   }
   const wantZone = expectedZone(column, trdd.frontmatter ?? {})
-  if (wantZone && wantZone !== 'tasks') {
+  if (wantZone && wantZone !== trdd.zone) {
     return {
       ok: false,
-      error: `Column "${column}" belongs in design/${wantZone}/, not tasks/ — advance does not move folders; use the promote/refuse/archive verb for that transition`,
+      error: `Column "${column}" belongs in design/${wantZone}/, not ${trdd.zone}/ — advance does not move folders; use the promote/refuse/archive verb for that transition`,
       status: 409,
     }
   }
@@ -1179,8 +1202,10 @@ export function archiveTrdd(
   return withTrddLock(designDir, id, async () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
-  // A refused proposal is terminal in refused/; only proposals/ or tasks/ archive —
-  // EXCEPT the one terminal-to-terminal edit IND base step 12 explicitly permits:
+  // `refused` is a column, not a zone — a refused proposal is OPEN (not terminal) and
+  // archives through this same function like any other proposals/ or tasks/ card, once
+  // its author decides to (owner ruling 2026-09-24). Only an ALREADY-archived card is
+  // refused outright — EXCEPT the one terminal-to-terminal edit IND base step 12 explicitly permits:
   // complete/completed → superseded on a card ALREADY in archived/. Step 12 says a
   // terminal card's body is frozen except `updated:` and, when superseding,
   // `superseded-by:` — and every terminal column archives AS ITSELF, so this is a
@@ -1241,7 +1266,7 @@ export function archiveTrdd(
     )
     return { ok: true, id: trdd.id, from: 'archived', to: 'archived', column: 'superseded', filePath: trdd.filePath }
   }
-  if (trdd.zone === 'archived' || trdd.zone === 'refused') {
+  if (trdd.zone === 'archived') {
     return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
   }
   // TRDD-XCQ9TDSK: `advanceColumn` (TRDD-ISGUYYLN) owns the leaving-`blocked`

@@ -1279,9 +1279,10 @@ switch (cmd) {
   // ---- MOVE. The column edit AND the zone `git mv`, as ONE operation.
   //
   // A transition is two hand steps today — edit `column:`, then `git mv` between
-  // design/proposals|tasks|archived|refused — and doing one without the other is how a
+  // design/proposals|tasks|archived — and doing one without the other is how a
   // card ends terminal in the OPEN zone, which makes the open count a lie. This session
-  // shipped exactly that defect once, and its own linter caught it.
+  // shipped exactly that defect once, and its own linter caught it. (`refused` is a
+  // column value only — moving TO or FROM it never `git mv`s, owner ruling 2026-09-24.)
   //
   // The four transitions are ALREADY implemented, with the git mv, the rollback and the
   // lock, in `lib/trdd-store.ts` — they were reachable only through the HTTP API. This
@@ -1334,13 +1335,23 @@ switch (cmd) {
     let res
     if (want === 'archived') {
       res = await archiveTrdd(designDir, card.id, { approver: who, state: targetColumn, reason, supersededBy, iso, clearBlocker })
-    } else if (want === 'refused') {
+    } else if (targetColumn === 'refused') {
+      // `refused` is a column, not a zone (owner ruling 2026-09-24) — the card stays
+      // in proposals/, so this is never a folder move.
       res = await refuseTrdd(designDir, card.id, { approver: who, reason, iso })
-    } else if (want === 'proposals') {
-      // Un-approving a card is not a transition any store verb performs, and inventing
-      // one here would be a write with no approval record. Say so rather than guess.
-      console.error(`trddgrep: moving a card BACK to column 'proposal' is not a supported transition — a card that left proposals/ was approved, and un-approving it is a governance decision, not a move`)
-      process.exit(2)
+    } else if (targetColumn === 'proposal') {
+      // `want` is 'proposals' for BOTH 'proposal' and 'refused' targets now that
+      // `refused` shares the same zone — so this branch is reached only by an actual
+      // `proposal` target, and it must distinguish RE-PROPOSING a card already in
+      // proposals/ (an in-zone column edit — e.g. refused → proposal) from
+      // UN-APPROVING one that already left proposals/ for tasks/ or archived/, which
+      // no store verb performs and inventing one here would be a write with no
+      // approval record.
+      if (card.zone !== 'proposals') {
+        console.error(`trddgrep: moving a card BACK to column 'proposal' is not a supported transition — a card that left proposals/ was approved, and un-approving it is a governance decision, not a move`)
+        process.exit(2)
+      }
+      res = await advanceColumn(designDir, card.id, targetColumn, { iso, note: reason, approver, clearBlocker })
     } else if (card.zone === 'proposals') {
       // proposals/ → tasks/ IS the approval event, and `promoteTrdd` is the verb that
       // writes the approval record for it. It lands on `planned` by definition, so a

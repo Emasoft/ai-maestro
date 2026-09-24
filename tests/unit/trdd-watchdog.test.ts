@@ -214,6 +214,32 @@ describe('mandate vs the COMPUTED floor (step 3) — content and commit-diff tie
     expect(doctor.scanned).toBe(1)
   })
 
+  // Review finding on TRDD-MQE5D28T: skipping the WHOLE card for `column: refused`
+  // would let a forged mandate evade MANDATE-FORGED forever (a refused card can sit
+  // in proposals/ indefinitely, with no re-scan trigger). Only the FLOOR checks
+  // (which ask "is this dodging the PENDING approval queue?" — moot once refused)
+  // are skipped; the evidence-based forgery check keeps running.
+  it('a REFUSED card still gets MANDATE-FORGED (forgery detection is not floor-scoped)', () => {
+    write(
+      'proposals',
+      'TRDD-20260101_000000+0100-HHHHHHHH-h.md',
+      card('HHHHHHHH', {
+        column: 'refused',
+        mandate: 'true',
+        'mandated-by': 'self',
+        'implementation-commits': '[abc1234]',
+      }),
+    )
+    const r = watchdogSweep(path.join(tmp, 'design'), {
+      supersedeSetter: () => null,
+      changedPaths: () => ['.github/workflows/ci.yml'],
+    })
+    const f = r.findings.find((x) => x.rule === 'MANDATE-FORGED')
+    expect(f?.id).toBe('HHHHHHHH')
+    // And the FLOOR checks (steps 1-2) are genuinely skipped for it, not merely quiet:
+    expect(rules(r, 'D3-FLOOR-UNDERCLASSIFIED')).toEqual([])
+  })
+
   it('positive control: an innocuous citing commit produces NO forgery finding', () => {
     write(
       'tasks',

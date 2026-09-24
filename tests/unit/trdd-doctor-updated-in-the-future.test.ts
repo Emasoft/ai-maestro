@@ -52,7 +52,7 @@ const find = () => lintCorpus(tmp).findings.filter(f => f.rule === 'UPDATED-IN-T
 describe('UPDATED-IN-THE-FUTURE', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-future-'))
-    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+    for (const z of ['proposals', 'tasks', 'archived']) {
       fs.mkdirSync(path.join(tmp, z), { recursive: true })
     }
   })

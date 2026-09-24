@@ -61,7 +61,7 @@ let emptyDir: string
 let warnOnlyDir: string
 
 function seedWarnOnlyCorpus(root: string) {
-  for (const zone of ['proposals', 'tasks', 'archived', 'refused']) {
+  for (const zone of ['proposals', 'tasks', 'archived']) {
     fs.mkdirSync(path.join(root, zone), { recursive: true })
   }
   const fm = [

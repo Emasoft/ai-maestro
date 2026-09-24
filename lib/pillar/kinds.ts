@@ -115,8 +115,14 @@ export function trddIdFromFilename(name: string): string | null {
 
 // The typed zone tuple lives HERE so `TRDD_KIND.zones` and the `TrddZone` union
 // cannot drift apart; `lib/trdd-store.ts` re-exports both as its public API.
-export type TrddZone = 'proposals' | 'tasks' | 'archived' | 'refused'
-export const TRDD_ZONES: readonly TrddZone[] = ['proposals', 'tasks', 'archived', 'refused']
+//
+// `refused` is DELIBERATELY NOT a zone (owner ruling 2026-09-24, quoted in full on
+// TRDD-MQE5D28T): "i only asked for refused to be a metadata, not a folder … i would
+// prefer to not have a refusal folder." A refused proposal stays IN `proposals/` —
+// editable, and re-proposable — it is a COLUMN VALUE only. See `expectedZone` in
+// `lib/trdd-vocabulary.ts` for where `column: refused` resolves to.
+export type TrddZone = 'proposals' | 'tasks' | 'archived'
+export const TRDD_ZONES: readonly TrddZone[] = ['proposals', 'tasks', 'archived']
 
 export const TRDD_KIND: PillarKind = {
   name: 'trdd',

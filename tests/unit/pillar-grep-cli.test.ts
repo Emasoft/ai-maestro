@@ -426,7 +426,7 @@ describe('trddgrep fix — a target is required (TRDD-9JOCY2EJ, issue 160)', () 
     fs.mkdirSync(path.join(fix, 'design', 'tasks'), { recursive: true })
     const card = path.join(fix, 'design', 'tasks', `TRDD-20260101_000000+0100-${id}-x.md`)
     fs.writeFileSync(card, [
-      '---', `trdd-id: ${id}`, 'title: a fix-guard fixture card', 'column: dev',
+      '---', `trdd-id: ${id}`, 'status: tasked', 'title: a fix-guard fixture card', 'column: dev',
       'created: 2026-01-01T00:00:00+0100', 'updated: 2026-01-01T00:00:00+0100',
       'current-owner: t', 'task-type: bugfix', '---', '', '# a fix-guard fixture card', 'body', '',
     ].join('\n'), 'utf-8')
@@ -444,12 +444,12 @@ describe('trddgrep fix — a target is required (TRDD-9JOCY2EJ, issue 160)', () 
     const bogus = runCli('trddgrep.mjs', ['--design-dir', designDir(), 'fix', '--bogus-flag'])
     expect(bogus.status).toBe(2)
     expect(bogus.stderr).not.toMatch(/requires a target/)
+    // The two REFUSED calls must never have written anything. Checked HERE, before the `named`
+    // call below, which is a REAL fix run and may legitimately repair the card.
+    expect(fs.readFileSync(card, 'utf-8')).toBe(before)
 
     const named = runCli('trddgrep.mjs', ['--design-dir', designDir(), 'fix', 'FIXGUARD'])
     expect(named.status).not.toBe(2)
-
-    // The refused (bare) call must never have written anything.
-    expect(fs.readFileSync(card, 'utf-8')).toBe(before)
   })
 
   it('`--design-dir` before `fix` does not let the flag consume the verb; a valid target runs; --dry-run writes nothing', () => {

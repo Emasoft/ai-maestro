@@ -285,3 +285,31 @@ export function parkReason(fm: Record<string, unknown>, todayDay: string): ParkR
 export function isParkedByOtherForm(fm: Record<string, unknown>, todayDay: string): boolean {
   return parkReason(fm, todayDay) !== null
 }
+
+/**
+ * The 3-stage `status:` lifecycle field (owner ruling, TRDD-MQE5D28T, 2026-09-24):
+ * "there is the 3 stage life metadata field in the frontmatter … status … enforced
+ * to the 3 values by the trddgrep linter." This is a SEPARATE aspect from `column:`
+ * (USER ruling 2026-07-30 — see `isPipelineStateValue` above): `column:` is the
+ * pipeline position within a stage, `status:` is which of the three folders the
+ * card's whole life-stage belongs to. A card in `design/tasks/` moves through many
+ * columns (`dev`, `testing`, `ai_review`, …) while its `status:` stays `tasked` the
+ * entire time.
+ *
+ * ONE mapping, keyed on `TrddZone`, so the linter, the fixer, and every writer
+ * share it — the STATUS-HOLDS-COLUMN-VALUE lesson (a linter and its own `--fix`
+ * drifted apart because each hand-copied the same rule) applies here just as much.
+ */
+export const TRDD_STATUSES = ['proposed', 'tasked', 'archived'] as const
+export type TrddStatus = (typeof TRDD_STATUSES)[number]
+
+const ZONE_TO_STATUS: Readonly<Record<TrddZone, TrddStatus>> = {
+  proposals: 'proposed',
+  tasks: 'tasked',
+  archived: 'archived',
+}
+
+/** The `status:` value a card in this zone MUST carry. */
+export function statusForZone(zone: TrddZone): TrddStatus {
+  return ZONE_TO_STATUS[zone]
+}

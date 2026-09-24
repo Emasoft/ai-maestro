@@ -29,6 +29,9 @@ function card(id: string, over: Record<string, string> = {}, extraBody = ''): st
     assignee: 'someone',
     'created-by': 'someone',
     'min-approval-requirement': 'none',
+    // Every fixture in this file writes to 'tasks/' — matches statusForZone('tasks'), so
+    // it stays out of the STATUS-MISSING/STATUS-ZONE-MISMATCH rules by default (TRDD-MQE5D28T).
+    status: 'tasked',
     ...over,
   }
   const lines = Object.entries(fm).map(([k, v]) => `${k}: ${v}`)

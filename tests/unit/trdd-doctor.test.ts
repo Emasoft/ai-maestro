@@ -183,6 +183,12 @@ function good(id: string, over: Record<string, string> = {}): string {
     assignee: 'someone',
     'created-by': 'someone',
     'min-approval-requirement': 'none',
+    // Default zone for every `good()` fixture in this file is 'tasks' (98 of ~117 `write()`
+    // calls), so `tasked` keeps them agreeing with `statusForZone('tasks')` and out of the new
+    // STATUS-MISSING/STATUS-ZONE-MISMATCH rules by default. A fixture that deliberately omits
+    // `status:` strips it explicitly (`.replace(/^status:.*\n/m, '')`), same pattern already
+    // used for `column:` above.
+    status: 'tasked',
     ...over,
   }
   const lines = Object.entries(fm).map(([k, v]) => `${k}: ${v}`)
@@ -335,13 +341,184 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   // rule keyed on the FIELD NAME and was `autofixable`, so `trdd:fix` would have DELETED a
   // legitimate field the moment one appeared. Data loss from a tool, in the one place a tool
   // must not guess. This is the guard that pins the corrected shape: value, never field name.
+  //
+  // The fixture value is `tasked`, not `normative`, per the LATER owner ruling (TRDD-MQE5D28T,
+  // 2026-09-24): a TRDD *card*'s `status:` is now enforced to exactly the 3 life-stage values,
+  // so `normative` is legitimate ONLY on a spec document (`design/specs/`, never loaded as a
+  // Card) and would be STATUS-INVALID on a card. `tasked` still proves the original point — a
+  // non-column value must not be flagged as STATUS-HOLDS-COLUMN-VALUE — while also being valid
+  // under the newer rule, so this fixture is not a casualty of the later ruling.
   it('STATUS-HOLDS-COLUMN-VALUE — a non-column `status:` is LEGITIMATE and must not be flagged at all', () => {
-    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCD-x.md', good('CCCCCCCD', { status: 'normative' }))
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCD-x.md', good('CCCCCCCD', { status: 'tasked' }))
     const findings = lintCorpus(tmp).findings.filter(f => f.id === 'CCCCCCCD')
     expect(findings.map(f => f.rule)).not.toContain('STATUS-HOLDS-COLUMN-VALUE')
     // Positive control: the card is otherwise clean, so nothing else may fire either — an
     // empty result here could otherwise mean the fixture never reached the rule at all.
     expect(findings).toEqual([])
+  })
+
+  // The spec-document case this test's comment mentions: `status: normative` is not being
+  // exercised by loadCorpus here (spec docs live in design/specs/, never one of TRDD_ZONES),
+  // but a TRDD card that copied that spelling is exactly the STATUS-INVALID this rule exists
+  // to catch — `normative` is not one of TRDD_STATUSES.
+  it('STATUS-INVALID — `status: normative` on an actual TRDD card (not a spec doc) is rejected', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCG-x.md', good('CCCCCCCG', { status: 'normative' }))
+    const f = lintCorpus(tmp).findings.find((x) => x.id === 'CCCCCCCG' && x.rule === 'STATUS-INVALID')
+    expect(f?.severity).toBe('error')
+    expect(f?.autofixable).toBe(false)
+  })
+
+  it('STATUS-ZONE-MISMATCH — a valid status VALUE that disagrees with the card\'s own folder', () => {
+    // 'proposed' is a real TRDD_STATUSES member, so STATUS-INVALID must not fire here — the
+    // ONLY thing wrong is that this card lives in tasks/, which implies 'tasked'.
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCH-x.md', good('CCCCCCCH', { status: 'proposed' }))
+    const findings = lintCorpus(tmp).findings.filter((x) => x.id === 'CCCCCCCH')
+    expect(findings.map((x) => x.rule)).not.toContain('STATUS-INVALID')
+    const f = findings.find((x) => x.rule === 'STATUS-ZONE-MISMATCH')
+    expect(f?.severity).toBe('error')
+    expect(f?.autofixable).toBe(false)
+  })
+
+  it('STATUS-ZONE-MISMATCH does NOT fire when the value agrees with the zone', () => {
+    write('proposals', 'TRDD-20260101_000000+0100-CCCCCCCI-x.md', good('CCCCCCCI', { column: 'backburner', status: 'proposed' }))
+    expect(idsOf(lintCorpus(tmp), 'STATUS-ZONE-MISMATCH')).not.toContain('CCCCCCCI')
+  })
+
+  it('STATUS-MISSING — a WARN, not an ERROR, on a tasks/ card with no `status:` at all', () => {
+    // WARN by design (orchestrator ruling): the global trddgrep binary lints every project on
+    // this machine, most of which do not carry this field yet — an ERROR would redden every
+    // other corpus's live cards the moment this rule ships.
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCJ-x.md', good('CCCCCCCJ').replace(/^status:.*\n/m, ''))
+    const f = lintCorpus(tmp).findings.find((x) => x.id === 'CCCCCCCJ' && x.rule === 'STATUS-MISSING')
+    expect(f).toBeDefined()
+    expect(f?.severity).toBe('warn')
+    expect(f?.autofixable).toBe(true)
+  })
+
+  it('STATUS-MISSING never fires on an archived/ card — IND base step 12 freezes terminal cards', () => {
+    write('archived', 'TRDD-20260101_000000+0100-CCCCCCCK-x.md',
+      good('CCCCCCCK', { column: 'complete' }).replace(/^status:.*\n/m, ''))
+    expect(idsOf(lintCorpus(tmp), 'STATUS-MISSING')).not.toContain('CCCCCCCK')
+  })
+
+  it('STATUS-MISSING never fires on a FINISHED card still in tasks/ (D5)', () => {
+    // `column: complete` (no `release-via:`) still sitting in tasks/ is a ZONE-MISMATCH and
+    // frozen by IND rule 12 / D5 — the autofix must not invent a `status:` field on it. Assert both: the
+    // exemption fires, and ZONE-MISMATCH fires too — proving the card was actually loaded
+    // and linted rather than silently skipped for some other reason.
+    write('tasks', 'TRDD-20260101_000000+0100-D5FINCOL-x.md',
+      good('D5FINCOL', { column: 'complete' }).replace(/^status:.*\n/m, ''))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'STATUS-MISSING')).not.toContain('D5FINCOL')
+    expect(idsOf(r, 'ZONE-MISMATCH')).toContain('D5FINCOL')
+  })
+
+  it('`fixCorpus` does not add `status:` to a FINISHED card still in tasks/ (D5)', () => {
+    const file = 'TRDD-20260101_000000+0100-D5FINFIX-x.md'
+    write('tasks', file, good('D5FINFIX', { column: 'complete' }).replace(/^status:.*\n/m, ''))
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    expect(out).not.toMatch(/^status:/m)
+  })
+
+  it('a body line starting `status:` does not suppress the STATUS-MISSING repair', () => {
+    // The lint reads the FRONTMATTER value; the old fixer check scanned the WHOLE file, so a
+    // body line starting `status:` made the finding permanently unfixable (TRDD-MQE5D28T
+    // step 3c). Both halves must use the same frontmatter-scoped predicate.
+    const file = 'TRDD-20260101_000000+0100-D5BODYST-x.md'
+    const before = good('D5BODYST').replace(/^status:.*\n/m, '') + 'status: see below\n'
+    write('tasks', file, before)
+    expect(idsOf(lintCorpus(tmp), 'STATUS-MISSING')).toContain('D5BODYST')
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    const fmEnd = out.indexOf('\n---', 3)
+    const fmText = fmEnd === -1 ? out : out.slice(0, fmEnd)
+    expect(fmText).toContain('status: tasked')
+  })
+
+  it('SAME PASS: a v1 `status: complete` migrated to `column: complete` gets NO `status:` (D5)', () => {
+    // The v1 branch writes `column: complete` earlier in the SAME fixCorpus pass. Judging the
+    // card by the column as LOADED (empty) added `status: tasked` to a card the pass had just
+    // made finished (TRDD-MQE5D28T step 3d). The repair must judge the column it writes.
+    const file = 'TRDD-20260101_000000+0100-D5SAMEPS-x.md'
+    write('tasks', file, good('D5SAMEPS', { status: 'complete' }).replace(/^column:.*\n/m, ''))
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    expect(out).toMatch(/^column: complete$/m) // positive control: the migration really ran
+    expect(out).not.toMatch(/^status:/m)
+  })
+
+  it('no closing `---` — the STATUS-MISSING repair FAILS CLOSED and writes nothing', () => {
+    // A YAML-only file with no closing delimiter parses cleanly (no parseError), so it DOES
+    // reach the fixer; the repair cannot locate the end of the frontmatter and must not guess.
+    const file = 'TRDD-20260101_000000+0100-D5NOCLOS-x.md'
+    const src = good('D5NOCLOS').replace(/^status:.*\n/m, '').replace(/\n---\n[\s\S]*$/, '\n')
+    write('tasks', file, src)
+    expect(idsOf(lintCorpus(tmp), 'STATUS-MISSING')).toContain('D5NOCLOS') // it IS loaded and reported
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')).toBe(src)
+  })
+
+  it('no frontmatter `trdd-id:` — `status:` lands in the FRONTMATTER, never under a body `trdd-id:` line', () => {
+    // The card loads (its id comes from the filename), and nothing earlier in the pass writes a
+    // frontmatter `trdd-id:`. A whole-text anchor search would find the BODY line instead.
+    const file = 'TRDD-20260101_000000+0100-D5NOANCH-x.md'
+    const src = good('D5NOANCH').replace(/^status:.*\n/m, '').replace(/^trdd-id:.*\n/m, '') + 'trdd-id: EXAMPLE1\n'
+    write('tasks', file, src)
+    const bodyOf = (t: string) => t.slice(t.indexOf('\n---', 3) + 4)
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    expect(out.slice(0, out.indexOf('\n---', 3))).toMatch(/^status: tasked$/m)
+    expect(bodyOf(out)).toBe(bodyOf(src))
+  })
+
+  it('`fixCorpus` adds the folder-derived `status:` to a tasks/ card, MECHANICAL (no `updated:` bump)', () => {
+    const file = 'TRDD-20260101_000000+0100-CCCCCCCL-x.md'
+    write('tasks', file, good('CCCCCCCL').replace(/^status:.*\n/m, ''))
+    const res = fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    expect(out).toMatch(/^status: tasked$/m)
+    expect(out).toContain('updated: 2026-01-01T00:00:00+0100') // NOT bumped to the injected `now`
+    expect(res.find((r) => r.id === 'CCCCCCCL')?.bumped).toBe(false)
+  })
+
+  it('`fixCorpus` leaves an archived/ card byte-identical — STATUS-MISSING never repairs a frozen card', () => {
+    const file = 'TRDD-20260101_000000+0100-CCCCCCCM-x.md'
+    const before = good('CCCCCCCM', { column: 'complete' }).replace(/^status:.*\n/m, '')
+    write('archived', file, before)
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(fs.readFileSync(path.join(tmp, 'archived', file), 'utf8')).toBe(before)
+  })
+
+  it('LEGACY-REFUSED-FOLDER — one WARN naming the count, when design/refused/ still holds cards', () => {
+    for (const id of ['REF00001', 'REF00002']) {
+      write('refused', `TRDD-20260101_000000+0100-${id}-x.md`, good(id, { column: 'refused' }))
+    }
+    const findings = lintCorpus(tmp).findings.filter((f) => f.rule === 'LEGACY-REFUSED-FOLDER')
+    expect(findings).toHaveLength(1) // ONE finding for the whole folder, not one per file
+    expect(findings[0].severity).toBe('warn')
+    expect(findings[0].autofixable).toBe(false)
+    expect(findings[0].message).toContain('2 card(s)')
+    expect(findings[0].message).toContain('ai-maestro-janitor#309')
+  })
+
+  it('LEGACY-REFUSED-FOLDER does not fire when design/refused/ does not exist', () => {
+    // The default beforeEach never creates a refused/ dir — this pins that the ABSENT case
+    // (the common one, post-migration) produces no finding at all.
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCN-x.md', good('CCCCCCCN'))
+    expect(idsOf(lintCorpus(tmp), 'LEGACY-REFUSED-FOLDER')).toEqual([])
+  })
+
+  it('a spec document (status: normative, outside every TRDD zone) is never touched by these rules', () => {
+    // design/specs/ is not one of TRDD_ZONES, so loadCorpus never walks it and no spec
+    // document is ever loaded as a Card — confirmed here by writing one directly and
+    // checking the scan count is unaffected.
+    fs.mkdirSync(path.join(tmp, 'specs'), { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'specs', 'some-spec.md'), '---\nstatus: normative\n---\n\n# A spec\n', 'utf8')
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCO-x.md', good('CCCCCCCO'))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1) // only the one real TRDD card, never the spec doc
+    expect(r.findings.filter((f) => f.filePath.includes('some-spec.md'))).toEqual([])
   })
 
   // BODY-STATE-CLAIM (3P-TRDD-10). The janitor's drift detector reported three plugin cards as
@@ -744,7 +921,11 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-QQQQQQQQ-x.md'), 'utf8')
     expect(out).toContain('column: backburner')
-    expect(out).not.toMatch(/^status:/m)
+    // The v1 pipeline-state spelling is gone — but the card is now status-less in a
+    // `tasks/` zone, so the SAME pass's STATUS-MISSING autofix (TRDD-MQE5D28T) mechanically
+    // re-adds the folder-derived value in its place. `not.toMatch` would be vacuously true
+    // for the wrong reason once that autofix exists.
+    expect(out).toMatch(/^status: tasked$/m)
   })
 
   it('an AGREEING body state claim is dropped — the duplicate line goes, the card does not', () => {
@@ -782,7 +963,9 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
       good('TTTTTTTT', { column: 'ai_review', status: 'in-progress' }))
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-TTTTTTTT-x.md'), 'utf8')
-    expect(out).not.toMatch(/^status:/m)      // the dead field is gone
+    // The dead v1 spelling is gone — replaced, in the SAME pass, by the STATUS-MISSING
+    // autofix's folder-derived value (TRDD-MQE5D28T), never by the value it removed.
+    expect(out).toMatch(/^status: tasked$/m)
     expect(out).toContain('column: ai_review') // the live one is UNTOUCHED (not 'dev' from the status map)
   })
 
@@ -912,7 +1095,10 @@ describe('trdd-doctor — the `updated:` bump is conditional on the repair being
       good('MECHSTAT', { column: 'dev', status: 'in-progress' }))
     const res = fixCorpus(tmp, { now: NOW })
     const out = read('TRDD-20260101_000000+0100-MECHSTAT-x.md')
-    expect(out).not.toMatch(/^status:/m)
+    // Dropping the agreeing v1 spelling leaves the card status-less, so the SAME pass's
+    // STATUS-MISSING autofix (also mechanical) re-adds the folder-derived value — both
+    // repairs are mechanical, so `bumped` stays false either way.
+    expect(out).toMatch(/^status: tasked$/m)
     expect(out).toContain(ORIG)
     expect(res[0].bumped).toBe(false)
   })
@@ -951,7 +1137,10 @@ describe('trdd-doctor — the `updated:` bump is conditional on the repair being
       good('SEMAFGHT', { column: 'ai_review', status: 'in-progress' }))
     const res = fixCorpus(tmp, { now: NOW })
     const out = read('TRDD-20260101_000000+0100-SEMAFGHT-x.md')
-    expect(out).not.toMatch(/^status:/m)
+    // The disagreeing v1 spelling is gone; the folder-derived STATUS-MISSING autofix
+    // (mechanical) fills the field back in, but that does not undo the SEMANTIC bump the
+    // disagreement itself caused above.
+    expect(out).toMatch(/^status: tasked$/m)
     expect(out).toContain('column: ai_review')
     expect(out).toContain(`updated: ${NOW}`)
     expect(res[0].bumped).toBe(true)

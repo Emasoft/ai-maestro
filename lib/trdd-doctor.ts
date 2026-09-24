@@ -62,6 +62,9 @@ import {
   expectedZone,
   frontmatterDay,
   parkReason,
+  TRDD_STATUSES,
+  statusForZone,
+  isDefinitiveCard,
 } from './trdd-vocabulary'
 export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT, defaultColumnForMissing }
 
@@ -576,6 +579,32 @@ export function lintCorpus(designDir: string): DoctorReport {
     }
   }
 
+  // ---- LEGACY-REFUSED-FOLDER (owner ruling 2026-09-24, Emasoft/ai-maestro-janitor#309) ----
+  // "the owner ruled there is no refused folder; refused is a column in proposals/." Since
+  // that ruling `refused` is not in `TRDD_ZONES`, so the per-card loop above never walks a
+  // sibling `design/refused/` folder and never sees whatever is still parked there — a
+  // corpus-wide check is the only way to notice cards a lifecycle migration left behind.
+  // One finding for the whole folder, not one per file: this is a single migration debt,
+  // not N separate defects, and 5 near-identical WARNs would just be noise to route around.
+  try {
+    const refusedDir = path.join(designDir, 'refused')
+    const leftover = fs.readdirSync(refusedDir).filter((f) => /^TRDD-.*\.md$/i.test(f))
+    if (leftover.length > 0) {
+      add({
+        rule: 'LEGACY-REFUSED-FOLDER',
+        severity: 'warn',
+        id: '(corpus)',
+        filePath: refusedDir,
+        message: `${leftover.length} card(s) still sit in the legacy design/refused/ folder — the owner ruled there is no refused folder; refused is a column in proposals/ (Emasoft/ai-maestro-janitor#309). Move them.`,
+        autofixable: false,
+      })
+    }
+  } catch (err) {
+    // ENOENT — no legacy folder at all, the common and desired case. Any other errno is a
+    // real fault (permissions, not-a-directory) and should not be swallowed silently.
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err
+  }
+
   for (const c of cards) {
     // Every field-based verdict below is derived from `c.fm`, and for an unparseable card
     // `c.fm` is `{}` — not because the fields are absent but because they could not be READ
@@ -626,6 +655,65 @@ export function lintCorpus(designDir: string): DoctorReport {
         id: c.id,
         filePath: c.filePath,
         message: `\`status: ${statusVal}\` holds a COLUMN value — the v1 field spelled the pipeline state, and v2 moved that to \`column:\`. Two state fields = two truths. (\`status:\` itself is legitimate for a different aspect; only a column value in it is wrong.)`,
+        autofixable: true,
+      })
+    }
+
+    // ---- the 3-stage `status:` life-stage field (TRDD-MQE5D28T, owner ruling 2026-09-24) ----
+    // "there is the 3 stage life metadata field … proposed, tasked, archived … status …
+    // enforced to the 3 values by the trddgrep linter." A SEPARATE aspect from the pipeline
+    // check just above: that one screens ONLY for a v1 column value squatting in `status:`;
+    // this one screens the field's OWN 3-value grammar and its agreement with the card's
+    // zone (`design/<zone>/` — proposals→proposed, tasks→tasked, archived→archived).
+    //
+    // `!isPipelineStateValue(statusVal)` guards against double-reporting the exact same
+    // defect under two rule names — a `status:` holding a pipeline value is already
+    // STATUS-HOLDS-COLUMN-VALUE's finding above.
+    if (statusVal && !isPipelineStateValue(statusVal)) {
+      if (!(TRDD_STATUSES as readonly string[]).includes(statusVal)) {
+        add({
+          rule: 'STATUS-INVALID',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`status: ${statusVal}\` is not one of the three life-stage values (${TRDD_STATUSES.join(', ')}) — the owner ruling enforces exactly these three`,
+          autofixable: false,
+        })
+      } else {
+        const wantStatus = statusForZone(c.zone)
+        if (statusVal !== wantStatus) {
+          add({
+            rule: 'STATUS-ZONE-MISMATCH',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: `\`status: ${statusVal}\` disagrees with the card's own folder, design/${c.zone}/ — which implies \`status: ${wantStatus}\``,
+            autofixable: false,
+          })
+        }
+      }
+    } else if (!statusVal && !isDefinitiveCard(c.column, c.zone)) {
+      // WARN, not ERROR (orchestrator ruling — supersedes an earlier ERROR draft): the
+      // global `trddgrep` binary lints EVERY project on the machine, most of which do not
+      // define this field yet — an ERROR here would redden every other corpus's live cards
+      // the instant this lands, and could trigger an unrelated agent's `--fix` to rewrite
+      // cards in a repo this change never touched. `design/archived/` is exempt (IND base
+      // step 12: terminal cards are frozen); the legacy `design/refused/` folder is exempt
+      // for free — it is not one of TRDD_ZONES, so no card from it ever reaches this loop.
+      // A FINISHED column still outside archived/ (complete/completed/superseded/published/
+      // live/cancelled) is exempt too: TRDD-MQE5D28T D5 keeps IND rule 12's freeze on a
+      // finished-but-not-yet-archived card, so this lint must not ask the fixer to invent a
+      // field on it. Most such cards are also a ZONE-MISMATCH, but not all: `complete` with
+      // `release-via: publish|deploy` legitimately stays in tasks/ (expectedZone → null) and
+      // is still frozen. `isDefinitiveCard` is the predicate shared with the fixer below — a
+      // linter and its --fix must never diverge on what "done" means. (`dateFieldRepairable`
+      // still keys on TERMINAL_DONE; unifying the two is step 5 of TRDD-MQE5D28T.)
+      add({
+        rule: 'STATUS-MISSING',
+        severity: 'warn',
+        id: c.id,
+        filePath: c.filePath,
+        message: `no \`status:\` — design/${c.zone}/ implies \`status: ${statusForZone(c.zone)}\`. Auto-fix adds it (mechanical — no \`updated:\` bump)`,
         autofixable: true,
       })
     }
@@ -1839,6 +1927,13 @@ export function fixCorpus(
         // So both branches now require the VALUE to be a recognised pipeline state. That is
         // the only shape we can PROVE is v1 residue. A `status:` holding anything else is the
         // field doing its own job and is left untouched — a fixer must never guess.
+        // The column THIS PASS leaves the card in. `c.column` is the value as LOADED; the two
+        // branches below can write a new `column:` into `text`, and the STATUS-MISSING repair
+        // further down must judge the card by the column it is about to be saved with — a
+        // `status: complete` migrated to `column: complete` in this very pass is a FINISHED
+        // card (D5), and judging it by the loaded (empty) column added `status: tasked` to it.
+        // Tracked, not re-parsed from `text`: the fixer knows exactly what it wrote.
+        let col = c.column
         const status = c.fm['status']
         const statusRaw = status === undefined ? '' : String(status).trim()
         const statusKey = statusRaw.toLowerCase()
@@ -1867,6 +1962,7 @@ export function fixCorpus(
           // ONLY because the value is a recognised state; no default, no guess.
           const mapped = mappedFromV1 ?? statusKey
           text = text.replace(/^status:.*$/m, `column: ${mapped}`)
+          col = mapped
           // SEMANTIC, though the VALUE is unchanged: no consumer reads `status:` for a pipeline
           // position, so before this repair the card was column-less to every reader and to the
           // board. It joins the board here, which is a pipeline claim it was not making.
@@ -1905,9 +2001,45 @@ export function fixCorpus(
           // and its board sort key floated to the top forever. `--fix` never converged.
           if (next !== text) {
             text = next
+            col = fallbackColumn
             // SEMANTIC, and the clearest case: this INVENTS a pipeline state nobody chose. The
             // card now claims a column on the doctor's authority, and that must be visible.
             record('semantic', `column: ${fallbackColumn} (was missing — the uncertainty law)`)
+          }
+        }
+        // STATUS-MISSING (TRDD-MQE5D28T): add the folder-derived `status:` value. NEVER
+        // touch `design/archived/` — IND base step 12 freezes a terminal card's body, and
+        // this repair is the one place a fixer could quietly violate that by inventing a
+        // field on a card nobody may edit anymore. MECHANICAL, not semantic: the value
+        // added is exactly what the card's own folder already implies (`statusForZone`
+        // shares the ONE mapping with the lint rule above), so nothing the card asserts
+        // changes — no `updated:` bump.
+        // Same predicate as the lint (D5), judged on `col` — the column this pass leaves.
+        // Both the presence check and the insert are confined to the FRONTMATTER: the lint
+        // reads the frontmatter `status:` value, so a body line starting `status:` must not
+        // suppress a repair the lint reported, and a body line starting `trdd-id:` must never
+        // become the anchor the new line is written under. No closing `---` → FAIL CLOSED
+        // (skip): a repair that cannot find the frontmatter must not guess where it ends.
+        // Measured (step 3d): a file whose unclosed "frontmatter" runs into a body parses with
+        // an error and the `c.parseError` guard above skips it; a file that is ONLY YAML with
+        // no closing `---` parses cleanly and DOES reach here — the lint still reports it as
+        // STATUS-MISSING autofixable, so for that one shape the report promises a repair this
+        // skip declines (recorded on TRDD-MQE5D28T; rare, and the safe direction).
+        const fmEnd = text.indexOf('\n---', 3)
+        if (fmEnd !== -1 && !isDefinitiveCard(col, c.zone)) {
+          const fmText = text.slice(0, fmEnd)
+          if (!/^status:/m.test(fmText)) {
+            const line = `status: ${statusForZone(c.zone)}`
+            // Under `trdd-id:` when the frontmatter has one; otherwise straight after the
+            // opening `---` line, so a frontmatter lacking the anchor still gets the repair
+            // the lint promised instead of a silent no-op reported forever.
+            const fmNext = /^trdd-id:/m.test(fmText)
+              ? fmText.replace(/^(trdd-id:.*)$/m, `$1\n${line}`)
+              : fmText.replace(/^---\r?\n/, (open) => `${open}${line}\n`)
+            if (fmNext !== fmText) {
+              text = fmNext + text.slice(fmEnd)
+              record('mechanical', `${line} (was missing — design/${c.zone}/ already implies it)`)
+            }
           }
         }
         // uppercase the id

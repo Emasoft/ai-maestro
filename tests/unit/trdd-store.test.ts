@@ -937,6 +937,85 @@ describe('trdd-store lifecycle transitions', () => {
 })
 
 /**
+ * The 3-stage `status:` life-stage field (owner ruling 2026-09-24, TRDD-MQE5D28T):
+ * proposed | tasked | archived, one per zone. Every stage-change writer either sets it
+ * unconditionally (promote, archive — the zone genuinely changes) or only when absent
+ * (refuse, advanceColumn — the zone does not change, so an existing value is left alone).
+ */
+describe('trdd-store writers set `status:` on every stage change (TRDD-MQE5D28T)', () => {
+  it('promote always overwrites status to tasked, even over a wrong existing value', async () => {
+    const id = 'STAT0001'
+    writeProposal(id, 'promote-status', 'proposal', 'status: archived\n')
+    const r = await promoteTrdd(designDir, id, { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.frontmatter.status).toBe('tasked')
+  })
+
+  it('refuse sets status: proposed when absent', async () => {
+    const id = 'STAT0002'
+    writeProposal(id, 'refuse-status-missing')
+    const r = await refuseTrdd(designDir, id, { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.frontmatter.status).toBe('proposed')
+  })
+
+  it('refuse leaves an existing status untouched', async () => {
+    const id = 'STAT0003'
+    writeProposal(id, 'refuse-status-present', 'proposal', 'status: proposed\n')
+    const r = await refuseTrdd(designDir, id, { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.frontmatter.status).toBe('proposed')
+    // the writer must not have rewritten the line (no spurious diff)
+    expect((fs.readFileSync(t.filePath, 'utf-8').match(/^status:/gm) ?? []).length).toBe(1)
+  })
+
+  it('advanceColumn on a tasks/ card sets status: tasked when absent', async () => {
+    const id = 'STAT0004'
+    writeTask(id, 'advance-status-missing', 'dev')
+    const r = await advanceColumn(designDir, id, 'testing', { iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.frontmatter.status).toBe('tasked')
+  })
+
+  it('advanceColumn leaves an existing status untouched', async () => {
+    const id = 'STAT0005'
+    writeTask(id, 'advance-status-present', 'dev', designDir, 'status: tasked\n')
+    const r = await advanceColumn(designDir, id, 'testing', { iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.frontmatter.status).toBe('tasked')
+    // matches the rigor of the sibling refuse test: a regression that always overwrote
+    // (rather than skipping when present) could still leave the RIGHT value here by
+    // coincidence (tasked -> tasked), so also rule out a duplicated `status:` line.
+    expect((fs.readFileSync(t.filePath, 'utf-8').match(/^status:/gm) ?? []).length).toBe(1)
+  })
+
+  it('advanceColumn re-proposing (proposals/ -> column proposal) sets status: proposed when absent', async () => {
+    const id = 'STAT0006'
+    writeProposal(id, 're-propose-status', 'refused')
+    const r = await advanceColumn(designDir, id, 'proposal', { iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.zone).toBe('proposals')
+    expect(t.frontmatter.status).toBe('proposed')
+  })
+
+  it('archive always sets status: archived on the move (cancelled, checklist-exempt)', async () => {
+    const id = 'STAT0007'
+    writeTask(id, 'archive-status', 'dev')
+    const r = await archiveTrdd(designDir, id, { approver: 'manager', state: 'cancelled', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, id)!
+    expect(t.zone).toBe('archived')
+    expect(t.frontmatter.status).toBe('archived')
+  })
+})
+
+/**
  * The suites above run in a plain tmpdir, where `git mv` fails and `moveZone`
  * falls back to `renameSync` — so the mv-then-edit staging bug is UNREACHABLE
  * there and no assertion in them could ever have caught it. It needs a real repo.

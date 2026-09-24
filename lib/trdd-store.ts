@@ -28,7 +28,7 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
-import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, isDefinitiveCard, isParkedByOtherForm } from './trdd-vocabulary'
+import { VALID_COLUMNS, expectedZone, TIER_TO_REQUIREMENT, TERMINAL_DONE, isDefinitiveCard, isParkedByOtherForm, statusForZone } from './trdd-vocabulary'
 import { candidateFrontmatter, introducedViolations } from './pillar/trdd-candidate'
 import { acceptanceBoxes } from './trdd-body'
 import { withJsonLock } from './json-io'
@@ -758,6 +758,10 @@ export function promoteTrdd(
     ['approved', 'true'],
     ['approval-judge', opts.approver],
     ['approval-datetime', opts.iso],
+    // status: tasked — the card now lives in design/tasks/ (owner ruling, TRDD-MQE5D28T);
+    // always overwritten here, unlike refuseTrdd/advanceColumn's "only if missing", because
+    // a promote is the one transition that actually CHANGES which zone-status applies.
+    ['status', statusForZone('tasks')],
   ]
   if (opts.approvalToken) fields.push(['approval-token', opts.approvalToken])
 
@@ -796,9 +800,14 @@ export function refuseTrdd(
     return { ok: false, error: `Only a proposal can be refused; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
   const reqStr = minApprovalSuffix(trdd.frontmatter)
+  const fields: Array<[string, string]> = [['column', 'refused'], ['updated', opts.iso]]
+  // status: proposed only when ABSENT — refuse never moves the card out of proposals/, so
+  // an already-correct status is left alone (setFrontmatterField would happily overwrite a
+  // value someone hand-corrected; there is nothing here that needs correcting).
+  if (!trdd.frontmatter?.status) fields.push(['status', statusForZone('proposals')])
   editAt(
     trdd.filePath,
-    [['column', 'refused'], ['updated', opts.iso]],
+    fields,
     `- ${opts.iso} — REFUSED by ${opts.approver}${reqStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
   )
   return { ok: true, id: trdd.id, from: 'proposals', to: 'proposals', column: 'refused', filePath: trdd.filePath }
@@ -946,6 +955,13 @@ export function advanceColumn(
   content = migrateLegacyApprovalTier(content).content
   content = setFrontmatterField(content, 'column', column)
   content = setFrontmatterField(content, 'updated', opts.iso)
+  // status: tasked (or, on the sole proposals/ transition this verb allows —
+  // re-proposing back to column 'proposal' — status: proposed), only when the card
+  // does not already carry one; advanceColumn never changes zone, so an existing
+  // status is never wrong for this move and is left untouched.
+  if (!trdd.frontmatter?.status) {
+    content = setFrontmatterField(content, 'status', statusForZone(trdd.zone))
+  }
   if (setPreBlockColumn) {
     content = setFrontmatterField(content, 'pre-block-column', setPreBlockColumn)
   }
@@ -1332,7 +1348,9 @@ const stillOpen = refs.filter((ref) => {
     }
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'archived')
-  const edits: Array<[string, string]> = [['column', opts.state], ['updated', opts.iso]]
+  // status: archived, written in the SAME edit that moves the card — before it becomes
+  // archived and (per IND base step 12) frozen for good.
+  const edits: Array<[string, string]> = [['column', opts.state], ['updated', opts.iso], ['status', statusForZone('archived')]]
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }

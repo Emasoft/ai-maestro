@@ -21,7 +21,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
-import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone } from '@/lib/trdd-vocabulary'
+import { AUTHORITY_RANK, VALID_COLUMNS, expectedZone, statusForZone } from '@/lib/trdd-vocabulary'
 import { scopeOfDesignDir } from '@/lib/pillar/kinds'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
@@ -275,6 +275,10 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     `trdd-id: ${id}`,
     `title: ${title}`,
     `column: ${column}`,
+    // status: proposed|tasked — the 3-stage life-stage field (owner ruling, TRDD-MQE5D28T).
+    // `createTrdd` only ever mints into 'proposals' or 'tasks' (never 'archived'), so
+    // `statusForZone(zone)` is always one of those two values here.
+    `status: ${statusForZone(zone)}`,
     `created: ${iso}`,
     `updated: ${iso}`,
     `current-owner: ${author}`,

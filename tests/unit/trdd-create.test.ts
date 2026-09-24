@@ -362,3 +362,20 @@ describe('TRDD-8D9ZYZX9 project-id at mint', () => {
       .toMatch(/^project-id: ai-maestro$/m)
   })
 })
+
+describe('createTrdd sets status: from the target zone (TRDD-MQE5D28T)', () => {
+  it('a mandate (minted into tasks/) carries status: tasked', () => {
+    const r = mint(design, 'a mandate card') // authorAuthority: none >= minApproval default none
+    expect(r.zone).toBe('tasks')
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^status: tasked$/m)
+  })
+
+  it('a proposal (minted into proposals/) carries status: proposed', () => {
+    const r = createTrdd(design, {
+      title: 'a proposal card', taskType: 'feature',
+      minApproval: 'manager', authorAuthority: 'none', author: 'member-1',
+    })
+    expect(r.zone).toBe('proposals')
+    expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^status: proposed$/m)
+  })
+})

@@ -11,9 +11,13 @@
  * Order (the #168 comment, revised after review):
  *   1. an explicit `--author` / `--approver`, validated against the grammar;
  *   2. a resolvable `AID_AUTH` → `<name>#<uuid>` of the registered agent it belongs to;
- *   3. `main-agent@<project-id>` ONLY on a machine with NO ai-maestro agent registry;
+ *   3. `main-agent@<project-id>` ONLY when `AID_AUTH` is UNSET and the machine has NO
+ *      ai-maestro agent registry;
  *   4. otherwise refuse.
  * Never `process.env.USER`: that is the OS login, which is exactly the leak #168 reports.
+ * An `AID_AUTH` that is SET and does not resolve (stale token, unreadable registry, or no
+ * registry at all — e.g. a different HOME, a container, a remote host) always refuses; it
+ * never falls through to the default, or a real agent gets recorded under someone else's name.
  *
  * WHY THE DEFAULT IS GATED ON THE REGISTRY, NOT ON THE CWD. A cwd/corpus test ("is this a
  * registered workdir?") is chosen by the caller: one `cd /tmp` would turn a harness agent
@@ -107,13 +111,31 @@ export function resolveCliIdentity(opts: {
 
   const harnessHere = registry.state === 'unreadable' || (registry.state === 'rows' && registry.rows.length > 0)
   if (!harnessHere) {
-    if (!opts.projectId) {
-      return {
-        ok: false,
-        error: `no ${opts.flag} given and this corpus has no project-id in its PRRD to derive \`main-agent@<project-id>\` from — pass ${opts.flag} (${TRDD_IDENTITY_FORMS})`,
+    // The default is for an UNSET AID_AUTH only. A SET-but-unresolved AID_AUTH must never
+    // fall through to the default just because THIS machine has no registry rows — that
+    // machine could be a container, a jailed HOME, or a remote host running a real
+    // registered agent whose token simply can't be checked from here, and defaulting would
+    // silently record its work under the project's main-agent identity instead.
+    if (!secret) {
+      if (!opts.projectId) {
+        return {
+          ok: false,
+          error: `no ${opts.flag} given and this corpus has no project-id in its PRRD to derive \`main-agent@<project-id>\` from — pass ${opts.flag} (${TRDD_IDENTITY_FORMS})`,
+        }
       }
+      return { ok: true, identity: `main-agent@${opts.projectId}`, source: 'default' }
     }
-    return { ok: true, identity: `main-agent@${opts.projectId}`, source: 'default' }
+    // Own text, deliberately NOT routed through the "hosts the ai-maestro harness" refusal
+    // below — that sentence would be false here: this machine has no harness registry at
+    // all, so there is nothing to call "resolving to a stale or invalid token". Never
+    // prints the token or any part of it.
+    return {
+      ok: false,
+      error:
+        `AID_AUTH is set, but there is no agent registry on this machine (absent or empty) to resolve it — ` +
+        `refusing to guess who is writing (a default here could record a harness agent under someone else's name). ` +
+        `Pass ${opts.flag} (${TRDD_IDENTITY_FORMS}); a project's main session passes \`${opts.flag} main-agent@<project-id>\`.`,
+    }
   }
   // Two different faults, two messages: a caller with NO token needs to pass the flag; a
   // caller whose token is SET but matches no live agent has a stale or invalid token and

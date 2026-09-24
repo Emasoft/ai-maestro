@@ -137,7 +137,17 @@ function run(
   // a child's HOME cannot reach it. An earlier fix added a production env var for this and
   // was reverted: it gave any caller a one-line redirect of the agent registry, governance
   // titles and AID tokens, which is a governance bypass bought to make a test tidy.
-  const env = { ...(opts.env ?? process.env), HOME: STATE_JAIL }
+  // AID_AUTH is blanked the same way tests/unit/trddgrep-new-and-move.test.ts does: it is
+  // read from the AMBIENT environment, so a runner whose shell happens to export a live
+  // AID_AUTH would otherwise leak it into the child and make resolveCliIdentity's AID_AUTH
+  // branch — and, since ai-maestro#168's fix, its unresolved-token refusal — nondeterministic
+  // here. `''` is deliberate, not `opts.env?.AID_AUTH ?? ''`: resolveCliIdentity treats
+  // AID_AUTH by TRUTHINESS (`if (secret && ...)`), so an empty string counts as unset and the
+  // registry-gated default still applies — an `??` form would instead let test 21's own env
+  // (which spreads `process.env` for USER/LOGNAME) leak the runner's real token back in.
+  // Applied unconditionally, after the spread of `opts.env`, so every caller of run() is
+  // scrubbed the same way regardless of what its own env object carries.
+  const env = { ...(opts.env ?? process.env), HOME: STATE_JAIL, AID_AUTH: '' }
   const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: opts.cwd, env })
   return { code: r.status, out: stripAnsi(r.stdout ?? ''), err: stripAnsi(r.stderr ?? '') }
 }

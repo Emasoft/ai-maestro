@@ -132,6 +132,38 @@ describe('resolveCliIdentity — explicit flag, then AID, then the registry-gate
     }
   })
 
+  it('AID_AUTH set but the registry is ABSENT — refused, never silently defaulted to main-agent@<project-id>', () => {
+    // Regression for the silent-misattribution defect: an absent registry used to make
+    // `harnessHere` false and fall through to the default, recording a real agent (whose
+    // AID_AUTH just didn't resolve on THIS machine — a different HOME, a container, a
+    // remote host) under the project's main-agent identity instead of refusing.
+    const secret = 'mst_' + 'c3e9f7'.repeat(11)
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.error).toMatch(/no agent registry on this machine/)
+    const msg = !r.ok ? r.error : ''
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      expect(msg).not.toContain(secret.slice(i, i + 8))
+    }
+  })
+
+  it('AID_AUTH set but the registry is a readable EMPTY list — refused, never silently defaulted', () => {
+    fs.writeFileSync(registryFile, '[]')
+    const secret = 'mst_' + 'd4fa08'.repeat(11)
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.error).toMatch(/no agent registry on this machine/)
+    const msg = !r.ok ? r.error : ''
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      expect(msg).not.toContain(secret.slice(i, i + 8))
+    }
+  })
+
+  it('AID_AUTH="" counts as UNSET — the default still applies (the e2e/trddgrep test harnesses scrub it to this exact value)', () => {
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: '' }, registryFile })
+    expect(r).toEqual({ ok: true, identity: 'main-agent@proj', source: 'default' })
+  })
+
   it('an explicit main-agent@X must name the PRRD project-id, compared exactly (both values named on refusal)', () => {
     const other = resolveCliIdentity({ ...base, explicit: 'main-agent@Other', registryFile })
     expect(other.ok).toBe(false)

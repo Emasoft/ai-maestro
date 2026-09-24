@@ -260,16 +260,22 @@ export function rejectIncompleteChecklist(
 
 /**
  * Reject an archive whose TARGET state is not completed | cancelled | superseded —
- * `failed` included, since archiving never marks a card failed.
+ * `failed` included, since archiving never marks a card failed. An ABSENT state is
+ * legal: it means archive AS-IS, keeping the card's column (TRDD-MQE5D28T D2) — the
+ * way a `failed` card is archived.
  *
  * This is a DATA invariant, not an authorization one, so it lives HERE and not
  * in authorize(): the human system-owner is granted unconditionally inside
  * authorize() (`!auth.agentId` → allowed) and would never reach a check placed
- * there. A rule that protects a task from being lost must bind the owner too.
+ * there. A rule about what may be written must bind the owner too.
  *
  * @returns a NextResponse the route must RETURN (400), or null to proceed.
  */
 export function rejectUnarchivableState(state: unknown): NextResponse | null {
+  // Only a genuinely ABSENT value means "as-is" — a boolean or an object is a malformed
+  // request, not an omission, and must not be read as one.
+  const absent = state === undefined || state === null || (typeof state === 'string' && state.trim() === '')
+  if (absent) return null
   const s = str(state)?.toLowerCase() ?? ''
   if (ARCHIVABLE_STATES.has(s)) return null
 
@@ -277,8 +283,8 @@ export function rejectUnarchivableState(state: unknown): NextResponse | null {
     {
       error: 'trdd_not_archivable',
       message:
-        `archive requires state ${[...ARCHIVABLE_STATES].join(' | ')} (got ${s || 'nothing'}). ` +
-        `A 'failed' TRDD is retryable and stays on the board — giving up on it is an explicit 'cancelled'.`,
+        `archive state must be ${[...ARCHIVABLE_STATES].join(' | ')}, or omitted (got ${s || typeof state}). ` +
+        `To archive a failed card, omit \`state\` — it is archived as-is, keeping \`failed\` (definitive).`,
     },
     { status: 400 }
   )

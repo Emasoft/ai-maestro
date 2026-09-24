@@ -8,12 +8,14 @@ import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
 
 /**
- * POST /api/trdd/[id]/archive — move a once-approved TRDD to a terminal-DONE
- * state: sets column to completed|cancelled|superseded, appends the log line, and
- * git-mv's the file (from proposals/ or tasks/) → design/archived/. `failed` is
- * NOT here — it is retryable and stays in tasks/ (overlay rule).
+ * POST /api/trdd/[id]/archive — archive a TRDD: git-mv the file (from proposals/ or
+ * tasks/) → design/archived/, write `status: archived`, append the log line.
+ * - `state` given (completed|cancelled|superseded) → the column is set to it.
+ * - `state` omitted → archive AS-IS: the column is kept (TRDD-MQE5D28T D2). This is how
+ *   a `failed` card is archived — it stays `failed`, now definitive.
+ * WHO may archive what is decided in authorize() on the card as on disk (D3).
  *
- * Body: `{state (required), reason?, supersededBy?, approver?, agentId?}`. STRICT.
+ * Body: `{state?, reason?, supersededBy?, approver?, agentId?}`. STRICT.
  */
 export async function POST(
   request: NextRequest,
@@ -38,10 +40,12 @@ export async function POST(
     body = {}
   }
 
-  const state = body.state
-  if (typeof state !== 'string' || !ARCHIVE_STATES.includes(state as (typeof ARCHIVE_STATES)[number])) {
+  // Absent → archive as-is (D2). Present → must be one of ARCHIVE_STATES.
+  // `null` counts as absent, matching rejectUnarchivableState.
+  const state = body.state ?? undefined
+  if (state !== undefined && (typeof state !== 'string' || !ARCHIVE_STATES.includes(state as (typeof ARCHIVE_STATES)[number]))) {
     return NextResponse.json(
-      { error: `Body must include {state}: one of ${ARCHIVE_STATES.join(', ')}` },
+      { error: `{state}, when given, must be one of ${ARCHIVE_STATES.join(', ')} — omit it to archive the card as-is` },
       { status: 400 },
     )
   }
@@ -50,10 +54,10 @@ export async function POST(
 
   // TRDD-K2WJH7RF. Two gates, and they are deliberately different in KIND:
   //
-  //  1. DATA invariant — `archive failed` is refused for EVERYONE, the human
-  //     owner included. A failed TRDD is retryable and stays on the board;
-  //     giving up on it is an explicit `cancelled`. This cannot live in
-  //     authorize(), which grants the system-owner unconditionally.
+  //  1. DATA invariant — a TARGET state outside completed|cancelled|superseded
+  //     (e.g. `failed`) is refused for EVERYONE, the human owner included; an
+  //     absent state means archive as-is. This cannot live in authorize(), which
+  //     grants the system-owner unconditionally.
   const stateErr = rejectUnarchivableState((body as Record<string, unknown>).state)
   if (stateErr) return stateErr
 
@@ -73,7 +77,7 @@ export async function POST(
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', () =>
     archiveTrdd(designDir, id, {
       approver: auth.agentId || 'user',
-      state: state as (typeof ARCHIVE_STATES)[number],
+      state: state as (typeof ARCHIVE_STATES)[number] | undefined,
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,
       iso: isoLocal().iso,

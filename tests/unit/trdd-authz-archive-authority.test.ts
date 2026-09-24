@@ -82,4 +82,22 @@ describe('archive authority judges the column on disk (TRDD-MQE5D28T D3)', () =>
     expect(outcome.denied).toBeNull()
     expect(write).toHaveBeenCalledOnce()
   })
+
+  // 920d4361d pinned "an archived card cannot be archived again" only through a HAND-BUILT
+  // context. This drives the real withAuthorizedTrdd over a card that is really in archived/,
+  // so it also proves the zone read from disk reaches authorize().
+  it('an ON-DISK archived card (even failed) cannot be archived again — MANAGER and owner both denied', async () => {
+    fs.writeFileSync(
+      path.join(dir, 'archived', 'TRDD-20260101_000000+0100-ARCFAIL1-x.md'),
+      card('ARCFAIL1', 'failed').replace('status: tasked', 'status: archived'),
+    )
+    for (const who of [MANAGER, OWNER]) {
+      const write = vi.fn(() => 'rewritten')
+      const outcome = await withAuthorizedTrdd(who, dir, 'ARCFAIL1', 'archive', write)
+      expect(outcome.denied?.status).toBe(403)
+      const body = await outcome.denied!.json()
+      expect(body.message).toMatch(/Archived cards are immutable/)
+      expect(write).not.toHaveBeenCalled()
+    }
+  })
 })

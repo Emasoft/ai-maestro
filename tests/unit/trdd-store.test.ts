@@ -809,6 +809,59 @@ describe('trdd-store lifecycle transitions', () => {
     expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('SUPERSEDED by manager')
   })
 
+  // ARCHIVE AS-IS (TRDD-MQE5D28T D2): no `state` → the card keeps the column it had,
+  // "photographed forever in the state it was when it was archived".
+  it('archive as-is keeps column: dev, writes status: archived + updated, moves to archived/', async () => {
+    writeTask('ASIS0001', 'as-is-dev', 'dev')
+    const r = await archiveTrdd(designDir, 'ASIS0001', { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ASIS0001')!
+    expect(t.zone).toBe('archived')
+    expect(t.column).toBe('dev')
+    expect(t.frontmatter['status']).toBe('archived')
+    const text = fs.readFileSync(t.filePath, 'utf-8')
+    expect(text).toContain(`updated: ${ISO}`)
+    expect(text).toContain('ARCHIVED (column kept: dev) by manager')
+  })
+
+  it('a failed card archives as-is and stays column: failed (definitive)', async () => {
+    writeTask('ASIS0002', 'as-is-failed', 'failed')
+    const r = await archiveTrdd(designDir, 'ASIS0002', { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ASIS0002')!
+    expect(t.zone).toBe('archived')
+    expect(t.column).toBe('failed')
+  })
+
+  it('a blocked card archives as-is: blocked-by and pre-block-column kept, open blockers do not refuse', async () => {
+    writeTask('OPEN0009', 'still-open-9', 'dev')
+    writeTask('ASIS0003', 'as-is-blocked', 'blocked', designDir, 'blocked-by: [TRDD-OPEN0009]\npre-block-column: dev\n')
+    const r = await archiveTrdd(designDir, 'ASIS0003', { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(true)
+    const t = findTrdd(designDir, 'ASIS0003')!
+    expect(t.zone).toBe('archived')
+    expect(t.column).toBe('blocked')
+    expect(t.frontmatter['blocked-by']).toEqual(['TRDD-OPEN0009'])
+    expect(t.frontmatter['pre-block-column']).toBe('dev')
+  })
+
+  it('archive as-is of a complete (release-via publish) card with an open box is refused, file untouched', async () => {
+    const f = writeTask('ASIS0004', 'as-is-complete', 'complete', designDir, 'release-via: publish\n')
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf-8').replace('## Approval log', '## Acceptance\n\n- [ ] not done\n\n## Approval log'))
+    const before = fs.readFileSync(f, 'utf-8')
+    const r = await archiveTrdd(designDir, 'ASIS0004', { approver: 'manager', iso: ISO })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.status).toBe(409)
+    expect(fs.readFileSync(f, 'utf-8')).toBe(before)
+  })
+
+  it('archive WITH state: completed still rewrites the column (the D7 path — positive control)', async () => {
+    withChecklist(writeTask('ASIS0005', 'with-state', 'dev'))
+    const r = await archiveTrdd(designDir, 'ASIS0005', { approver: 'manager', state: 'completed', iso: ISO })
+    expect(r.ok).toBe(true)
+    expect(findTrdd(designDir, 'ASIS0005')!.column).toBe('completed')
+  })
+
   // Owner ruling (2026-09-24, TRDD-MQE5D28T): "if the author decides to archive it,
   // it can be archived" — a refused proposal is OPEN (not terminal), so `archiveTrdd`
   // succeeds on it exactly like any other proposals/ card. `cancelled` needs no

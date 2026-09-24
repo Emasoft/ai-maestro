@@ -244,16 +244,25 @@ describe('manage-trdd — archive', () => {
   })
 })
 
-describe('archive state — a failed TRDD is retryable and must never be archived', () => {
+describe('archive state — `failed` is never a TARGET; an absent state archives the card as-is (D2)', () => {
   it('refuses `failed`', () => {
     const res = rejectUnarchivableState('failed')
     expect(res).not.toBeNull()
     expect(res!.status).toBe(400)
   })
 
-  it('refuses any non-terminal column, and anything missing', () => {
-    for (const bad of ['dev', 'testing', 'blocked', 'planned', '', null, undefined, 42]) {
+  // INVERTED in part 2026-09-24 by TRDD-MQE5D28T D2: an ABSENT state is now legal — it means
+  // archive AS-IS, keeping the card's column (how a failed card is archived). A non-terminal
+  // or `failed` TARGET, or a malformed value, is still refused.
+  it('refuses any non-terminal or failed TARGET, and a malformed (non-string) state', () => {
+    for (const bad of ['dev', 'testing', 'blocked', 'planned', 'failed', 42, true, {}]) {
       expect(rejectUnarchivableState(bad), String(bad)).not.toBeNull()
+    }
+  })
+
+  it('an ABSENT state is archive-as-is (D2) — undefined, null and blank are allowed', () => {
+    for (const absent of [undefined, null, '', '   ']) {
+      expect(rejectUnarchivableState(absent), String(absent)).toBeNull()
     }
   })
 

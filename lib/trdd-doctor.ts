@@ -1049,8 +1049,12 @@ export function lintCorpus(designDir: string): DoctorReport {
     }
 
     // ---- zone ⇄ column agreement ----
+    // An ARCHIVED card may carry ANY column: archiving keeps the column it had, "photographed
+    // forever" (TRDD-MQE5D28T D2), so archived/ agrees with every column. The other direction
+    // still fires — a finished column left in tasks/ or proposals/ is an ERROR. expectedZone
+    // itself stays "where does an OPEN card with this column live", which its other callers need.
     const want = expectedZone(c.column, c.fm)
-    if (want && want !== c.zone) {
+    if (want && want !== c.zone && c.zone !== 'archived') {
       add({
         rule: 'ZONE-MISMATCH',
         severity: 'error',
@@ -1163,8 +1167,12 @@ export function lintCorpus(designDir: string): DoctorReport {
     // this function surfaces them. I originally re-implemented both, which is how this
     // file briefly became the second truth it exists to prevent.
     const blockedBy = asList(c.fm['blocked-by']).map((x) => normalizeTrddRef(x))
+    // An archived card is never unparked (definitive, D2/D8), so a parking finding on one is a
+    // finding nobody may fix — the same reason dateFieldRepairable refuses frozen fields. The
+    // three parking rules below therefore skip archived/.
+    const archived = c.zone === 'archived'
 
-    if (c.column === 'blocked' && blockedBy.length === 0) {
+    if (!archived && c.column === 'blocked' && blockedBy.length === 0) {
       add({
         rule: 'BLOCKED-WITHOUT-BLOCKER',
         severity: 'error',
@@ -1175,7 +1183,7 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
-    if (c.column === 'blocked' && !fmHas('pre-block-column')) {
+    if (!archived && c.column === 'blocked' && !fmHas('pre-block-column')) {
       add({
         rule: 'BLOCKED-NO-RESTORE-POINT',
         severity: 'warn',
@@ -1221,7 +1229,7 @@ export function lintCorpus(designDir: string): DoctorReport {
       // too, never re-derived here from the fields, so the message below can only name a form
       // the predicate actually honoured.
       const otherReason = parkReason(c.fm, todayDay)
-      const parked = c.column === 'blocked' || blockedBy.length > 0 || otherReason !== null
+      const parked = !archived && (c.column === 'blocked' || blockedBy.length > 0 || otherReason !== null)
       if (parked) {
         const probe = String(c.fm['blocker-probe'] ?? '').trim()
         const holds = String(c.fm['blocker-holds-if'] ?? '').trim()

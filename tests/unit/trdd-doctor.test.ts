@@ -625,9 +625,27 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   //       ZONE-MISMATCH — a WORKING card parked in design/archived hides live work in the done pile
   // Both read the same branch, which is the point: the mapping test alone would have stayed the
   // ONLY guard, and it cannot see whether lintCorpus ever emits.
-  it('ZONE-MISMATCH — a WORKING card parked in design/archived hides live work in the done pile', () => {
-    write('archived', 'TRDD-20260101_000000+0100-EFEFEFEF-x.md', good('EFEFEFEF', { column: 'dev' }))
+  // INVERTED 2026-09-24 by TRDD-MQE5D28T D2 ("an archived card can be in any column state …
+  // photographed forever"): a `dev` card in archived/ is now LEGAL — archive as-is keeps the
+  // column. The emit path the old test guarded (lintCorpus actually emitting for a misplaced
+  // WORKING card) is kept by the proposals/ case below, which the WORKING_COLUMNS neuter above
+  // still reddens.
+  it('ZONE-MISMATCH — a WORKING card left in design/proposals is flagged (the emit path for a misplaced working card)', () => {
+    write('proposals', 'TRDD-20260101_000000+0100-EFEFEFEF-x.md', good('EFEFEFEF', { column: 'dev' }))
     expect(idsOf(lintCorpus(tmp), 'ZONE-MISMATCH')).toContain('EFEFEFEF')
+  })
+
+  it('ZONE-MISMATCH never fires in design/archived — ANY column is legal there (D2); a finished column in tasks/ still fires', () => {
+    const ids: string[] = []
+    VALID_COLUMNS.forEach((column, i) => {
+      const id = `ARC${String(i).padStart(5, '0')}`
+      ids.push(id)
+      write('archived', `TRDD-20260101_000000+0100-${id}-x.md`, good(id, { column }))
+    })
+    write('tasks', 'TRDD-20260101_000000+0100-ARCPOSCT-x.md', good('ARCPOSCT', { column: 'completed' }))
+    const flagged = idsOf(lintCorpus(tmp), 'ZONE-MISMATCH')
+    expect(flagged.filter((id) => ids.includes(id))).toEqual([])
+    expect(flagged).toContain('ARCPOSCT') // positive control: the other direction still fires
   })
 
   it('ZONE-MISMATCH does NOT fire for `complete` with release-via — it still has stages ahead', () => {
@@ -790,6 +808,28 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     write('tasks', 'TRDD-20260101_000000+0100-PRKFLT01-x.md',
       good('PRKFLT01', { column: 'dev', 'blocked-by': '[]', labels: '[fleet-ask]' }))
     expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).toContain('PRKFLT01')
+  })
+
+  // TRDD-MQE5D28T D2/D8: a blocked card archived AS-IS keeps its parking fields, and an
+  // archived card is never unparked — so a parking finding on it is one nobody may fix.
+  // `updated:` is today, which would make BLOCKED-WITHOUT-PROBE an ERROR on an open card.
+  // One `it()` per rule, so each exemption's neuter reddens only its own test.
+  function archivedBlocked(id: string, extra: Record<string, string> = {}): void {
+    const today = new Date().toISOString().slice(0, 10)
+    write('archived', `TRDD-20260101_000000+0100-${id}-x.md`,
+      good(id, { column: 'blocked', updated: `${today}T12:00:00+0200`, ...extra }))
+  }
+  it('BLOCKED-WITHOUT-PROBE never fires on an ARCHIVED blocked card (definitive, never unparked)', () => {
+    archivedBlocked('ARCBLK01', { 'blocked-by': '[C1C1C1C1]', 'pre-block-column': 'dev' })
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-PROBE')).not.toContain('ARCBLK01')
+  })
+  it('BLOCKED-NO-RESTORE-POINT never fires on an ARCHIVED blocked card', () => {
+    archivedBlocked('ARCBLK02', { 'blocked-by': '[C1C1C1C1]' })
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-NO-RESTORE-POINT')).not.toContain('ARCBLK02')
+  })
+  it('BLOCKED-WITHOUT-BLOCKER never fires on an ARCHIVED blocked card', () => {
+    archivedBlocked('ARCBLK03', { 'blocked-by': '[]', 'pre-block-column': 'dev' })
+    expect(idsOf(lintCorpus(tmp), 'BLOCKED-WITHOUT-BLOCKER')).not.toContain('ARCBLK03')
   })
 
   it('BLOCKED-WITHOUT-PROBE does NOT fire for a card with no park form at all', () => {
@@ -1199,7 +1239,7 @@ describe('the vocabulary is the ratified one', () => {
     expect(expectedZone('refused', {})).toBe('proposals')
     expect(expectedZone('completed', {})).toBe('archived')
     expect(expectedZone('dev', {})).toBe('tasks')
-    expect(expectedZone('failed', {})).toBe('tasks')   // failed is OPEN — retryable, never archived
+    expect(expectedZone('failed', {})).toBe('tasks')   // an OPEN failed card lives in tasks/; archiving it is a separate, definitive act (D2)
     expect(expectedZone('blocked', {})).toBe('tasks')
   })
 })

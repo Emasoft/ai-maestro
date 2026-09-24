@@ -1202,13 +1202,19 @@ export function checkTrddBox(
   })
 }
 
-/** ARCHIVE a once-approved TRDD → an archived column (git mv → archived/). */
+/**
+ * ARCHIVE a TRDD (git mv → archived/). Two modes (TRDD-MQE5D28T D2/D7):
+ * - `state` given → the card is archived AS that finished column (the `move <id> completed` path).
+ * - `state` omitted → ARCHIVE AS-IS: the column is kept byte-for-byte, because an archived card is
+ *   "photographed forever in the state it was when it was archived" (owner ruling 2026-09-24).
+ *   This is how a `failed` card is archived: it stays `failed`, now definitive.
+ */
 export function archiveTrdd(
   designDir: string,
   id: string,
   opts: {
     approver: string
-    state: ArchiveState
+    state?: ArchiveState
     reason?: string
     supersededBy?: string
     iso: string
@@ -1233,8 +1239,9 @@ export function archiveTrdd(
   if (trdd.zone === 'archived' && opts.state === 'superseded') {
     // `published`/`live`/`failed` are release-pipeline statements — force-superseding
     // one is NON-EXEMPT (PRRD R-Y) and routes through the approval flow, never a bare
-    // CLI move. (`failed` cards live in tasks/, not archived/, but a drifted corpus
-    // could still carry one here, so the check is column-based, not zone-based.)
+    // CLI move. (Since D2 an archived `failed` card is DEFINITIVE and keeps its column,
+    // so this refusal is also what stops that forensic column being overwritten here.
+    // Removing this whole in-place branch is step 5 G9, not this step.)
     const RELEASE_PIPELINE_COLUMNS = new Set(['published', 'live', 'failed'])
     if (RELEASE_PIPELINE_COLUMNS.has(trdd.column ?? '')) {
       return {
@@ -1295,8 +1302,14 @@ export function archiveTrdd(
   // shared (the card says extraction into a helper is not required): refuse while
   // a named blocker is still open or unresolvable, unless `clearBlocker` overrides;
   // otherwise clear it in THIS write, before the card leaves tasks/ for good.
+  // The column the card will carry in archived/: the requested finished column, or — archive
+  // as-is — the one it has now.
+  const finalColumn = opts.state ?? trdd.column ?? ''
   let clearBlockedBy = false
-  if (trdd.column === 'blocked') {
+  // Only when a finished column is REQUESTED: archiving a blocked card as-is is giving up on it,
+  // so open blockers must not refuse it, and its blocked-by/pre-block-column are part of the
+  // photograph (D2) — never cleared.
+  if (opts.state && trdd.column === 'blocked') {
     const refs = blockedByRefs(trdd.frontmatter?.['blocked-by'])
     if (refs.length > 0) {
       if (opts.clearBlocker) {
@@ -1329,28 +1342,33 @@ const stillOpen = refs.filter((ref) => {
   // The doctor is imported LAZILY because it imports this module: a top-level import
   // would close the cycle, while a call-time one runs long after both are loaded. Only
   // the body-grammar counter is taken from it.
-  if (CHECKLIST_GATED_STATES.has(opts.state)) {
+  //
+  // Keyed on the FINAL column, not the request: a card archived as-is while `complete`
+  // (release-via publish, so still in tasks/) still claims completion and must prove it.
+  if (CHECKLIST_GATED_STATES.has(finalColumn)) {
     const { countAcceptanceBoxes } = await import('./trdd-doctor')
     const boxes = countAcceptanceBoxes(trdd.body ?? '')
     if (boxes.total === 0) {
       return {
         ok: false,
         status: 409,
-        error: `${trdd.id} has NO acceptance checklist, so archiving it as '${opts.state}' would record a completion that proves nothing: nothing states what the card promised or whether it delivered. Write the checklist first, then archive`,
+        error: `${trdd.id} has NO acceptance checklist, so archiving it as '${finalColumn}' would record a completion that proves nothing: nothing states what the card promised or whether it delivered. Write the checklist first, then archive`,
       }
     }
     if (boxes.open > 0) {
       return {
         ok: false,
         status: 409,
-        error: `${trdd.id} has ${boxes.open} of ${boxes.total} acceptance box(es) still unchecked — archiving it as '${opts.state}' would be a false completion. Either the work is not done, or an obsolete box must be struck through with its reason (never silently ticked)`,
+        error: `${trdd.id} has ${boxes.open} of ${boxes.total} acceptance box(es) still unchecked — archiving it as '${finalColumn}' would be a false completion. Either the work is not done, or an obsolete box must be struck through with its reason (never silently ticked)`,
       }
     }
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'archived')
   // status: archived, written in the SAME edit that moves the card — before it becomes
   // archived and (per IND base step 12) frozen for good.
-  const edits: Array<[string, string]> = [['column', opts.state], ['updated', opts.iso], ['status', statusForZone('archived')]]
+  // `column` is written ONLY when a finished column was requested; as-is keeps it untouched.
+  const edits: Array<[string, string]> = [['updated', opts.iso], ['status', statusForZone('archived')]]
+  if (opts.state) edits.unshift(['column', opts.state])
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }
@@ -1370,9 +1388,11 @@ const stillOpen = refs.filter((ref) => {
     newPath,
     tracked,
     edits,
-    `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.${clearNote}`,
+    opts.state
+      ? `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.${clearNote}`
+      : `- ${opts.iso} — ARCHIVED (column kept: ${finalColumn}) by ${opts.approver}. ${opts.reason ?? 'archived as-is — definitive'}.`,
   )
   if (tracked) stageMovedFile(designDir, newPath)
-  return { ok: true, id: trdd.id, from: trdd.zone, to: 'archived', column: opts.state, filePath: newPath }
+  return { ok: true, id: trdd.id, from: trdd.zone, to: 'archived', column: finalColumn, filePath: newPath }
   })
 }

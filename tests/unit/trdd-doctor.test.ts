@@ -1964,3 +1964,136 @@ describe('autofixable is a promise the fixer keeps', () => {
     fs.rmSync(dir, { recursive: true, force: true })
   })
 })
+
+// TRDD-MQE5D28T step 5 (doctor + graph half). Since 79e724982 an archived card keeps ANY
+// column (D2) and is immutable (D8): no repair may touch it, no finding may promise one, an
+// unrepairable finding on it is a WARN, and a column it kept never reads as open work.
+describe('archived cards are immutable history (TRDD-MQE5D28T D2/D8)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-d8-'))
+    for (const z of ['proposals', 'tasks', 'archived']) fs.mkdirSync(path.join(tmp, z), { recursive: true })
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const file = (id: string) => `TRDD-20260101_000000+0100-${id}-x.md`
+  const read = (zone: string, id: string) => fs.readFileSync(path.join(tmp, zone, file(id)), 'utf8')
+  // One card that trips four repair branches at once: an off-format `updated:` (a UTC `Z`
+  // instant), a lowercase id, no title, and a missing `derived:` back-link (a parent claims it).
+  const repairable = (id: string, column: string) =>
+    `---\ntrdd-id: ${id.toLowerCase()}\ncolumn: ${column}\ncreated: 2026-01-01T00:00:00+0100\nupdated: 2026-01-01T10:00:00Z\nassignee: a\ncreated-by: a\nmin-approval-requirement: none\nstatus: ${column === 'dev' ? 'tasked' : 'archived'}\n---\n\n# A heading to lift\n\nbody\n`
+
+  it('G6: fixCorpus leaves an archived card byte-identical; the same card in tasks/ IS repaired (positive control)', () => {
+    write('tasks', file('PARENTG6'), good('PARENTG6', { eht: '[ARCHG6AA, OPENG6AA]' }))
+    write('archived', file('ARCHG6AA'), repairable('ARCHG6AA', 'cancelled'))
+    write('tasks', file('OPENG6AA'), repairable('OPENG6AA', 'dev'))
+    const before = read('archived', 'ARCHG6AA')
+    const res = fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(read('archived', 'ARCHG6AA')).toBe(before)
+    expect(res.find((r) => r.id === 'ARCHG6AA')).toBeUndefined()
+    expect(res.find((r) => r.id === 'OPENG6AA')?.changes.length ?? 0).toBeGreaterThanOrEqual(3)
+  })
+
+  it('G7: no finding on an archived card is autofixable; the tasks twin keeps its promise (positive control)', () => {
+    write('tasks', file('PARENTG7'), good('PARENTG7', { eht: '[ARCHG7AA, OPENG7AA]' }))
+    write('archived', file('ARCHG7AA'), repairable('ARCHG7AA', 'cancelled'))
+    write('tasks', file('OPENG7AA'), repairable('OPENG7AA', 'dev'))
+    const findings = lintCorpus(tmp).findings
+    const archived = findings.filter((f) => f.id === 'ARCHG7AA')
+    expect(archived.length).toBeGreaterThan(0)
+    expect(archived.every((f) => f.autofixable === false)).toBe(true)
+    expect(findings.some((f) => f.id === 'OPENG7AA' && f.autofixable)).toBe(true)
+  })
+
+  it('G7: a YAML-only card with no closing `---` — STATUS-MISSING is reported NOT autofixable, and fix leaves it alone', () => {
+    const yamlOnly = '---\ntrdd-id: YAMLONLY\ntitle: t\ncolumn: dev\ncreated: 2026-01-01T00:00:00+0100\nupdated: 2026-01-01T00:00:00+0100\nassignee: a\ncreated-by: a\nmin-approval-requirement: none\n'
+    write('tasks', file('YAMLONLY'), yamlOnly)
+    write('tasks', file('CLOSEDAA'), good('CLOSEDAA').replace(/^status:.*\n/m, ''))
+    const findings = lintCorpus(tmp).findings.filter((f) => f.rule === 'STATUS-MISSING')
+    expect(findings.find((f) => f.id === 'YAMLONLY')?.autofixable).toBe(false)
+    expect(findings.find((f) => f.id === 'CLOSEDAA')?.autofixable).toBe(true) // positive control
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(read('tasks', 'YAMLONLY')).toBe(yamlOnly)
+  })
+
+  it('G8: an archived terminal card with an open box is a WARN; the same card in tasks/ stays an ERROR', () => {
+    const body = '\n## Acceptance\n\n- [ ] still open\n'
+    write('archived', file('ARCHG8AA'), good('ARCHG8AA', { column: 'completed', status: 'archived', updated: '2026-08-15T00:00:00+0200' }) + body)
+    write('tasks', file('OPENG8AA'), good('OPENG8AA', { column: 'complete', 'release-via': 'publish', updated: '2026-08-15T00:00:00+0200' }) + body)
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'TERMINAL-WITH-OPEN-BOX')
+    expect(f.find((x) => x.id === 'ARCHG8AA')?.severity).toBe('warn')
+    expect(f.find((x) => x.id === 'ARCHG8AA')?.message).not.toMatch(/move it back/i)
+    expect(f.find((x) => x.id === 'OPENG8AA')?.severity).toBe('error')
+  })
+
+  it('STATUS-ZONE-MISMATCH on an archived card is a WARN (history); on an open card it stays an ERROR', () => {
+    write('archived', file('ARCHSZAA'), good('ARCHSZAA', { column: 'completed', status: 'tasked' }))
+    write('tasks', file('OPENSZAA'), good('OPENSZAA', { status: 'proposed' }))
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'STATUS-ZONE-MISMATCH')
+    expect(f.find((x) => x.id === 'ARCHSZAA')?.severity).toBe('warn')
+    expect(f.find((x) => x.id === 'OPENSZAA')?.severity).toBe('error')
+  })
+
+  it('DANGLING-REF covers `supersedes:` too; a resolving one is clean (positive control)', () => {
+    write('tasks', file('SUPDANGL'), good('SUPDANGL', { supersedes: '[ZZZZZZZZ]' }))
+    write('tasks', file('SUPOKAAA'), good('SUPOKAAA', { supersedes: '[SUPDANGL]' }))
+    const ids = idsOf(lintCorpus(tmp), 'DANGLING-REF')
+    expect(ids).toContain('SUPDANGL')
+    expect(ids).not.toContain('SUPOKAAA')
+  })
+
+  it('readyQueue never offers an archived card as ready work, whatever column it kept', () => {
+    write('archived', file('ARCHRDYA'), good('ARCHRDYA', { status: 'archived' }))
+    write('tasks', file('LIVERDYA'), good('LIVERDYA'))
+    const ids = readyQueue(tmp).map((c) => c.id)
+    expect(ids).toContain('LIVERDYA') // positive control: the live twin is ready
+    expect(ids).not.toContain('ARCHRDYA')
+  })
+
+  it('the date repair judges the column THIS pass leaves — a v1 `status: complete` is finished, its `created` untouched', () => {
+    const v1 = (id: string, status: string) =>
+      `---\ntrdd-id: ${id}\ntitle: t\nstatus: ${status}\ncreated: 2026-01-01T10:00:00Z\nupdated: 2026-01-01T00:00:00+0100\nassignee: a\ncreated-by: a\nmin-approval-requirement: none\n---\n\n# t\n`
+    write('tasks', file('V1DONEAA'), v1('V1DONEAA', 'complete'))
+    write('tasks', file('V1OPENAA'), v1('V1OPENAA', 'in-progress'))
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(read('tasks', 'V1DONEAA')).toMatch(/^column: complete$/m)
+    expect(read('tasks', 'V1DONEAA')).toMatch(/^created: 2026-01-01T10:00:00Z$/m)
+    expect(read('tasks', 'V1OPENAA')).not.toMatch(/^created: 2026-01-01T10:00:00Z$/m) // positive control
+  })
+
+  it('GRAPH-BLOCKED-BY-DEFINITIVE: an open card waiting on a card archived undelivered is told to re-plan', () => {
+    write('archived', file('ARCHDEVA'), good('ARCHDEVA', { status: 'archived' }))
+    write('archived', file('ARCHDONE'), good('ARCHDONE', { column: 'completed', status: 'archived' }))
+    write('tasks', file('WAITDEVA'), good('WAITDEVA', { column: 'blocked', 'blocked-by': '[ARCHDEVA]', 'pre-block-column': 'dev' }))
+    write('tasks', file('WAITDONE'), good('WAITDONE', { column: 'blocked', 'blocked-by': '[ARCHDONE]', 'pre-block-column': 'dev' }))
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'GRAPH-BLOCKED-BY-DEFINITIVE')
+    expect(f.map((x) => x.id)).toEqual(['WAITDEVA'])
+    expect(f[0].severity).toBe('warn')
+    expect(f[0].message).toMatch(/re-plan/i)
+  })
+
+  it('graph: an archived child never makes its parent a false completion; a live open child still does', () => {
+    write('tasks', file('PARFLOCK'), good('PARFLOCK', { column: 'complete', 'release-via': 'publish', eht: '[ARCHKIDA]' }) + '\n## Acceptance\n\n- [x] ok\n')
+    write('archived', file('ARCHKIDA'), good('ARCHKIDA', { status: 'archived', derived: 'true', 'derived-kind': 'eht', 'parent-trdd': 'PARFLOCK' }))
+    write('tasks', file('PARFLOCB'), good('PARFLOCB', { column: 'complete', 'release-via': 'publish', eht: '[LIVEKIDA]' }) + '\n## Acceptance\n\n- [x] ok\n')
+    write('tasks', file('LIVEKIDA'), good('LIVEKIDA', { derived: 'true', 'derived-kind': 'eht', 'parent-trdd': 'PARFLOCB' }))
+    const ids = idsOf(lintCorpus(tmp), 'GRAPH-FALSE-COMPLETE')
+    expect(ids).not.toContain('PARFLOCK')
+    expect(ids).toContain('PARFLOCB')
+  })
+
+  it('graph: an archived card is never a blocked-not-blocked or a stale blocker; open twins still are', () => {
+    write('archived', file('DONEBLKA'), good('DONEBLKA', { column: 'completed', status: 'archived' }))
+    write('archived', file('ARCHBNBA'), good('ARCHBNBA', { status: 'archived', 'blocked-by': '[DONEBLKA]' }))
+    write('tasks', file('OPENBNBA'), good('OPENBNBA', { 'blocked-by': '[DONEBLKA]' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'GRAPH-BLOCKED-NOT-BLOCKED')).toEqual(['OPENBNBA'])
+    expect(idsOf(r, 'GRAPH-DANGLING-BLOCKER')).toEqual(['OPENBNBA'])
+  })
+
+  it('a graph finding ON an archived card is a WARN (history), the same finding on an open card an ERROR', () => {
+    write('archived', file('ARCHPARA'), good('ARCHPARA', { column: 'completed', status: 'archived', eht: '[OPENKIDA]' }))
+    write('tasks', file('OPENKIDA'), good('OPENKIDA', { derived: 'true', 'derived-kind': 'eht', 'parent-trdd': 'ARCHPARA' }))
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'GRAPH-FALSE-COMPLETE')
+    expect(f.find((x) => x.id === 'ARCHPARA')?.severity).toBe('warn')
+  })
+})

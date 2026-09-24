@@ -402,6 +402,15 @@ function dateFieldRepairable(field: string, column: string): boolean {
   return field === 'updated' || !TERMINAL_DONE.includes(column)
 }
 
+/**
+ * Where the frontmatter ends: the index of the closing `\n---`, or -1 when there is none.
+ * ONE definition for the STATUS-MISSING lint and its fix — the fix fails closed on -1, so
+ * the lint must not promise an autofix for that file (TRDD-MQE5D28T step 5, G7).
+ */
+function frontmatterEnd(text: string): number {
+  return text.indexOf('\n---', 3)
+}
+
 function offFormatDatetime(v: unknown): Date | null {
   if (!(v instanceof Date) || Number.isNaN(v.getTime())) return null
   const noTimeOfDay =
@@ -496,7 +505,12 @@ export { expectedZone }
 export function lintCorpus(designDir: string): DoctorReport {
   const { cards, unparsed, nodes } = loadCorpus(designDir)
   const findings: Finding[] = []
-  const add = (f: Finding) => findings.push(f)
+  // G7 (TRDD-MQE5D28T D8): an archived card is immutable and `fixCorpus` skips archived/
+  // at its loop head, so no finding on one may promise a repair. ONE choke point here, so
+  // every current and future `autofixable: true` site agrees with the fixer — a linter and
+  // its --fix must never diverge on what they will touch.
+  const archivedPaths = new Set(cards.filter((c) => c.zone === 'archived').map((c) => c.filePath))
+  const add = (f: Finding) => findings.push(archivedPaths.has(f.filePath) ? { ...f, autofixable: false } : f)
   // Classified ONCE, from the walk root, never per card. A card found under this root
   // is in this corpus by construction, so per-file classification would ask a path-shape
   // question 659 times and get it wrong wherever a card's own path happens to carry a
@@ -682,12 +696,18 @@ export function lintCorpus(designDir: string): DoctorReport {
       } else {
         const wantStatus = statusForZone(c.zone)
         if (statusVal !== wantStatus) {
+          // An ARCHIVED card is immutable history (D8): a mismatch there can never be repaired,
+          // only recorded — e.g. a card archived by a mover that does not write `status:`
+          // (ai-maestro-assistant-manager-agent#40). An ERROR nobody may fix would keep the
+          // corpus red forever, so on archived/ it is a WARN; on an open card it stays an ERROR.
+          const archived = c.zone === 'archived'
           add({
             rule: 'STATUS-ZONE-MISMATCH',
-            severity: 'error',
+            severity: archived ? 'warn' : 'error',
             id: c.id,
             filePath: c.filePath,
-            message: `\`status: ${statusVal}\` disagrees with the card's own folder, design/${c.zone}/ — which implies \`status: ${wantStatus}\``,
+            message: `\`status: ${statusVal}\` disagrees with the card's own folder, design/${c.zone}/ — which implies \`status: ${wantStatus}\`` +
+              (archived ? ' (history — archived cards are immutable, D8; recorded, not repairable)' : ''),
             autofixable: false,
           })
         }
@@ -708,13 +728,20 @@ export function lintCorpus(designDir: string): DoctorReport {
       // is still frozen. `isDefinitiveCard` is the predicate shared with the fixer below — a
       // linter and its --fix must never diverge on what "done" means. (`dateFieldRepairable`
       // still keys on TERMINAL_DONE; unifying the two is step 5 of TRDD-MQE5D28T.)
+      // The fix skips a file whose frontmatter has no closing `---` (fail closed), so the
+      // lint must not promise a repair for it. Same `frontmatterEnd` predicate on both sides;
+      // the file is re-read only for the (rare) cards that reach this finding.
+      // ponytail: one extra read per STATUS-MISSING card; carry a flag on Card if this ever runs hot.
+      const fixable = frontmatterEnd(fs.readFileSync(c.filePath, 'utf8')) !== -1
       add({
         rule: 'STATUS-MISSING',
         severity: 'warn',
         id: c.id,
         filePath: c.filePath,
-        message: `no \`status:\` — design/${c.zone}/ implies \`status: ${statusForZone(c.zone)}\`. Auto-fix adds it (mechanical — no \`updated:\` bump)`,
-        autofixable: true,
+        message: fixable
+          ? `no \`status:\` — design/${c.zone}/ implies \`status: ${statusForZone(c.zone)}\`. Auto-fix adds it (mechanical — no \`updated:\` bump)`
+          : `no \`status:\` — design/${c.zone}/ implies \`status: ${statusForZone(c.zone)}\`. Not auto-fixable: the frontmatter has no closing \`---\`, so add both by hand`,
+        autofixable: fixable,
       })
     }
 
@@ -1102,22 +1129,32 @@ export function lintCorpus(designDir: string): DoctorReport {
         : ' (the 2026-07-31 grandfather boundary could not be evaluated: `updated:` is unparseable — failing open; the boundary reads `updated:` as a proxy for the terminal transition)'
       if (!day || day >= CHECKLIST_GATE_SINCE) {
         const back = String(c.fm['pre-block-column'] ?? '').trim() || 'dev'
+        // G8 (TRDD-MQE5D28T D8): on an ARCHIVED card the remedy these messages name — "move it
+        // back" — is an un-archive, which D8 forbids, so the finding is unfixable by design. It
+        // stays as a forensic detector (a hand-`git mv`'d card, or one archived before the
+        // transition gate existed) but as a WARN: an ERROR nobody may fix keeps the corpus red forever.
+        const archived = c.zone === 'archived'
+        const history = ' — history: archived cards are immutable (D8); the archive transition gate should have refused this'
         if (c.boxes.total === 0) {
           add({
             rule: 'TERMINAL-WITHOUT-CHECKLIST',
-            severity: 'error',
+            severity: archived ? 'warn' : 'error',
             id: c.id,
             filePath: c.filePath,
-            message: `is '${c.column}' with NO acceptance checklist — the completion gate is written over boxes that are unchecked, so a card with no boxes passes it having PROVEN NOTHING. Nothing records what this card promised or whether it delivered. Move it back to '${back}', write the checklist, then close it${boundaryNote}`,
+            message: archived
+              ? `is '${c.column}' with NO acceptance checklist${history}${boundaryNote}`
+              : `is '${c.column}' with NO acceptance checklist — the completion gate is written over boxes that are unchecked, so a card with no boxes passes it having PROVEN NOTHING. Nothing records what this card promised or whether it delivered. Move it back to '${back}', write the checklist, then close it${boundaryNote}`,
             autofixable: false,
           })
         } else if (c.boxes.open > 0) {
           add({
             rule: 'TERMINAL-WITH-OPEN-BOX',
-            severity: 'error',
+            severity: archived ? 'warn' : 'error',
             id: c.id,
             filePath: c.filePath,
-            message: `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked — a false completion. Either the work is not done (move it back to '${back}') or the box is obsolete and must be struck through with its reason, never silently ticked${boundaryNote}`,
+            message: archived
+              ? `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked${history}${boundaryNote}`
+              : `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked — a false completion. Either the work is not done (move it back to '${back}') or the box is obsolete and must be struck through with its reason, never silently ticked${boundaryNote}`,
             autofixable: false,
           })
         }
@@ -1450,20 +1487,46 @@ if (resolved.every((r) => SHIPPED.has(r.card.column))) {
       })
     }
 
-    // `superseded-by:` is the one reference field trdd-graph does NOT walk (it checks
-    // npt/eht/blocked-by/parent-trdd). Kept here for that field alone — everything else
-    // comes from the delegation below.
-    for (const ref of asList(c.fm['superseded-by'])) {
-      const k = normalizeTrddRef(ref)
-      if (!known.has(k)) {
-        add({
-          rule: 'DANGLING-REF',
-          severity: 'error',
-          id: c.id,
-          filePath: c.filePath,
-          message: `\`superseded-by:\` cites TRDD-${k}, which does not exist in either root — a card superseded by nothing is a card silently removed from the board`,
-          autofixable: false,
-        })
+    // `superseded-by:` and `supersedes:` are the reference fields trdd-graph does NOT walk
+    // (it checks npt/eht/blocked-by/parent-trdd). Kept here for those two alone — everything
+    // else comes from the delegation below. `supersedes:` joined 2026-09-24: an archived card
+    // is immutable (D8), so a supersession is now recorded on the REPLACEMENT (`supersedes:`),
+    // and a dangling one would otherwise go unreported.
+    for (const field of ['superseded-by', 'supersedes'] as const) {
+      for (const ref of asList(c.fm[field])) {
+        const k = normalizeTrddRef(ref)
+        if (!known.has(k)) {
+          add({
+            rule: 'DANGLING-REF',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: field === 'superseded-by'
+              ? `\`superseded-by:\` cites TRDD-${k}, which does not exist in either root — a card superseded by nothing is a card silently removed from the board`
+              : `\`supersedes:\` cites TRDD-${k}, which does not exist in either root — the replacement names a card nobody can find`,
+            autofixable: false,
+          })
+        }
+      }
+    }
+
+    // GRAPH-BLOCKED-BY-DEFINITIVE (A9, TRDD-MQE5D28T). Since archiving keeps a card's column
+    // (79e724982), a prerequisite can be archived as dev/failed/blocked: never delivered, and
+    // never coming back (D8). Every readiness check correctly keeps its dependents blocked —
+    // forever. Say so, so the owner re-plans instead of waiting on history.
+    if (c.zone !== 'archived') {
+      for (const ref of orderEdges(c)) {
+        const dep = byId.get(ref)?.[0]
+        if (dep && dep.zone === 'archived' && !SHIPPED.has(dep.column)) {
+          add({
+            rule: 'GRAPH-BLOCKED-BY-DEFINITIVE',
+            severity: 'warn',
+            id: c.id,
+            filePath: c.filePath,
+            message: `waits on TRDD-${dep.id}, which was archived as '${dep.column}' — definitive and never delivered, so it will never unblock this card. Re-plan: drop the dependency or point it at the work that replaces it`,
+            autofixable: false,
+          })
+        }
       }
     }
 
@@ -1514,9 +1577,13 @@ if (resolved.every((r) => SHIPPED.has(r.card.column))) {
   const GRAPH_WARN_KINDS = new Set(['externalBlocker', 'crossProjectBlocker', 'danglingV1Slug'])
   for (const v of checkTrddInvariants(nodes)) {
     const id = normalizeTrddRef(v.id)
+    // A graph finding ON an archived card (e.g. an archived `completed` parent with an open
+    // child) is history: D8 forbids the edit that would repair it, so it is a WARN — kept as a
+    // forensic detector, never an ERROR that keeps the corpus red forever (same as G8).
+    const onArchived = byId.get(id)?.[0]?.zone === 'archived'
     add({
       rule: `GRAPH-${v.kind.replace(/([A-Z])/g, '-$1').toUpperCase()}`,
-      severity: GRAPH_WARN_KINDS.has(v.kind) ? 'warn' : 'error',
+      severity: GRAPH_WARN_KINDS.has(v.kind) || onArchived ? 'warn' : 'error',
       id,
       filePath: byId.get(id)?.[0]?.filePath ?? '?',
       message: v.detail,
@@ -1561,6 +1628,10 @@ export interface ReadyInput {
   title: string
   priority: unknown
   orderEdges: string[]
+  /** The card's folder. An ARCHIVED card keeps whatever column it had (D2), so the column
+   *  alone cannot say "open": an archived `dev` card is history, never ready work. Optional
+   *  only so a feeder that does not pass it yet keeps today's behaviour. */
+  zone?: string
 }
 
 /**
@@ -1588,12 +1659,16 @@ export function readyQueueFrom(inputs: readonly ReadyInput[]): ReadyCard[] {
   // How many OPEN cards each card would unblock if it were finished.
   const unblocks = new Map<string, number>()
   for (const c of inputs) {
-    if (TERMINAL_DONE.includes(c.column)) continue
+    // An archived card is never OPEN, whatever column it kept (D2) — it unblocks nothing.
+    if (TERMINAL_DONE.includes(c.column) || c.zone === 'archived') continue
     for (const dep of c.orderEdges) unblocks.set(dep, (unblocks.get(dep) ?? 0) + 1)
   }
 
+  // `isDone` above deliberately stays column-only: a card archived as `dev` or `failed` was
+  // never DELIVERED, so its dependents stay blocked (A9) — GRAPH-BLOCKED-BY-DEFINITIVE tells
+  // them to re-plan.
   return inputs
-    .filter((c) => WORKING_COLUMNS.includes(c.column) && c.column !== 'blocked')
+    .filter((c) => c.zone !== 'archived' && WORKING_COLUMNS.includes(c.column) && c.column !== 'blocked')
     .filter((c) => c.orderEdges.every(isDone))
     .map((c) => ({
       id: c.id,
@@ -1619,6 +1694,7 @@ export function readyQueue(designDir: string): ReadyCard[] {
       title: c.title,
       priority: c.fm['priority'],
       orderEdges: orderEdges(c),
+      zone: c.zone,
     })),
   )
 }
@@ -1790,6 +1866,11 @@ export function fixCorpus(
     // Broken frontmatter is a judgement call — which of the two `column:` lines is real
     // is not something a mechanical pass can know.
     if (c.parseError) continue
+    // G6 (TRDD-MQE5D28T D8): an ARCHIVED card is immutable history — no repair of any kind,
+    // current or future, may touch it. ONE guard at the loop head rather than a zone check
+    // in every repair branch, so a branch added later cannot forget it. The lint's `add`
+    // choke point marks every archived finding non-autofixable to match.
+    if (c.zone === 'archived') continue
     // NARROWING THE WRITE, NOT THE READ. `cards` above is the WHOLE corpus (`loadCorpus`)
     // and `claimedBy` above is built over EVERY card, both unfiltered — the repairs below
     // are partly CROSS-CARD (the `derived:` back-link needs every parent's `npt:`/`eht:`).
@@ -1894,30 +1975,6 @@ export function fixCorpus(
       // local to THIS card alone — it reads and writes nothing on any other card, so on a
       // neighbour it would be intervention the plan does not ask for.
       if (isTarget) {
-        // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
-        //
-        // MECHANICAL, and the distinction is the entire point: this CONVERTS the instant the
-        // card already holds (`isoLocal` takes the parsed Date) rather than stamping `now`.
-        // The same instant, re-spelled — which is the canonical mechanical repair described
-        // in `record`'s own contract, and why the bump below stays off. Stamping `now` here
-        // would be TRDD-R6R9XHZI a second time: a format pass rewriting the board's sort key
-        // into an artefact of when someone last ran the fixer.
-        //
-        // Conversion truncates to the second (the mandated format has no sub-second slot).
-        // Accepted and stated rather than discovered — measured 2026-08-22, re-derive with
-        // the two greps in TRDD-S13L6R9R: of 1383 frontmatter datetime lines, exactly 25
-        // carry milliseconds, and they are precisely the off-format ones this repairs. So
-        // no conforming value loses precision, because none of them ever had any.
-        for (const [field, value] of Object.entries(c.fm)) {
-          const dt = offFormatDatetime(value)
-          if (!dt || !dateFieldRepairable(field, c.column)) continue
-          const line = new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:.*$`, 'm')
-          if (!line.test(text)) continue
-          const converted = isoLocal(dt).iso
-          text = text.replace(line, `${field}: ${converted}`)
-          record('mechanical', `${field}: re-spelled from a UTC-\`Z\` instant to the mandated local offset (${converted}) — same instant`)
-        }
-
         // A COLUMN VALUE sitting in the `status:` field.
         //
         // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it
@@ -2015,6 +2072,34 @@ export function fixCorpus(
             record('semantic', `column: ${fallbackColumn} (was missing — the uncertainty law)`)
           }
         }
+        // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
+        //
+        // MECHANICAL, and the distinction is the entire point: this CONVERTS the instant the
+        // card already holds (`isoLocal` takes the parsed Date) rather than stamping `now`.
+        // The same instant, re-spelled — which is the canonical mechanical repair described
+        // in `record`'s own contract, and why the bump below stays off. Stamping `now` here
+        // would be TRDD-R6R9XHZI a second time: a format pass rewriting the board's sort key
+        // into an artefact of when someone last ran the fixer.
+        //
+        // Conversion truncates to the second (the mandated format has no sub-second slot).
+        // Accepted and stated rather than discovered — measured 2026-08-22, re-derive with
+        // the two greps in TRDD-S13L6R9R: of 1383 frontmatter datetime lines, exactly 25
+        // carry milliseconds, and they are precisely the off-format ones this repairs. So
+        // no conforming value loses precision, because none of them ever had any.
+        //
+        // Runs AFTER the column repairs and judges `col`, the column THIS PASS leaves — not the
+        // loaded `c.column`. A v1 `status: complete` migrated to `column: complete` above is a
+        // FINISHED card, and its dated fields are then out of reach exactly as if it had been
+        // loaded that way (step 5, the same same-pass rule the STATUS-MISSING repair follows).
+        for (const [field, value] of Object.entries(c.fm)) {
+          const dt = offFormatDatetime(value)
+          if (!dt || !dateFieldRepairable(field, col)) continue
+          const line = new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:.*$`, 'm')
+          if (!line.test(text)) continue
+          const converted = isoLocal(dt).iso
+          text = text.replace(line, `${field}: ${converted}`)
+          record('mechanical', `${field}: re-spelled from a UTC-\`Z\` instant to the mandated local offset (${converted}) — same instant`)
+        }
         // STATUS-MISSING (TRDD-MQE5D28T): add the folder-derived `status:` value. NEVER
         // touch `design/archived/` — IND base step 12 freezes a terminal card's body, and
         // this repair is the one place a fixer could quietly violate that by inventing a
@@ -2030,10 +2115,9 @@ export function fixCorpus(
         // (skip): a repair that cannot find the frontmatter must not guess where it ends.
         // Measured (step 3d): a file whose unclosed "frontmatter" runs into a body parses with
         // an error and the `c.parseError` guard above skips it; a file that is ONLY YAML with
-        // no closing `---` parses cleanly and DOES reach here — the lint still reports it as
-        // STATUS-MISSING autofixable, so for that one shape the report promises a repair this
-        // skip declines (recorded on TRDD-MQE5D28T; rare, and the safe direction).
-        const fmEnd = text.indexOf('\n---', 3)
+        // no closing `---` parses cleanly and DOES reach here. The lint judges that shape with
+        // the same `frontmatterEnd` and reports it NOT autofixable, so report and fix agree.
+        const fmEnd = frontmatterEnd(text)
         if (fmEnd !== -1 && !isDefinitiveCard(col, c.zone)) {
           const fmText = text.slice(0, fmEnd)
           if (!/^status:/m.test(fmText)) {

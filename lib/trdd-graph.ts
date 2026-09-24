@@ -359,25 +359,33 @@ export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
       }
     }
 
+    // An ARCHIVED card keeps whatever column it had (D2, TRDD-MQE5D28T), so the column alone
+    // no longer says "open": an archived `dev` card is definitive history, not live work. It is
+    // never an OPEN child and never a stale block to repair. The flock gate still judges an
+    // archived PARENT — `completed`/`published`/`live` parents all live in archived/, so
+    // exempting them would switch the gate off for nearly every parent; the doctor reports a
+    // finding on an archived card as a WARN (history, D8), since it can no longer be repaired.
+    const archived = n.zone === 'archived'
+
     // The flock gate: a terminal parent whose child is still open has not finished
     // — it shipped a change and left the hole it opened. Its honest column is
     // `blocked`, on itself. A non-terminal parent claims nothing, so it is exempt.
     if (TERMINAL_DONE.has(n.column)) {
       const open = [...n.npt, ...n.eht].filter((c) => {
         const k = byId.get(c)
-        return k && !TERMINAL_DONE.has(k.column)
+        return k && k.zone !== 'archived' && !TERMINAL_DONE.has(k.column)
       })
       if (open.length) v.push({ kind: 'falseComplete', id: n.id, detail: `column=${n.column} with open children: ${open}` })
     }
 
     if (n.blockedBy.length || n.externalBlockers.length) {
-      if (!TERMINAL_DONE.has(n.column) && n.column !== 'blocked') {
+      if (!archived && !TERMINAL_DONE.has(n.column) && n.column !== 'blocked') {
         v.push({ kind: 'blockedNotBlocked', id: n.id, detail: `column=${n.column} with blocked-by=[${[...n.blockedBy, ...n.externalBlockers]}]` })
       }
       for (const b of n.blockedBy) {
         const bd = byId.get(b)
         if (!bd) v.push({ kind: 'unknownBlocker', id: n.id, detail: `blocked-by ${b}, which does not exist` })
-        else if (TERMINAL_DONE.has(bd.column)) {
+        else if (!archived && TERMINAL_DONE.has(bd.column)) {
           v.push({ kind: 'danglingBlocker', id: n.id, detail: `blocked-by ${b}, which is ${bd.column} — stale` })
         }
       }

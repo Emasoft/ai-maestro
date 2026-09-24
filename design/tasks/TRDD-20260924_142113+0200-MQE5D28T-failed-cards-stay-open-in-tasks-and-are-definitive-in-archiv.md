@@ -3,7 +3,7 @@ trdd-id: MQE5D28T
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T14:28:03+0200
+updated: 2026-09-24T15:41:38+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: docs
@@ -62,3 +62,8 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 ## Provenance correction
 
 mandated-by corrected from the default 'none' to 'user': the content of this card (the Part B2/section-Y authority-table changes) is the owner's own direct ruling, quoted verbatim above, not this session's Tier-0 judgement call - so the true authority behind it is the USER, not a self-mandate, and the frontmatter now says so explicitly rather than reading as a possible under-classified Tier-2 edit.
+
+## USER rulings — 2026-09-24
+
+USER 2026-09-24 (verbatim): "a failed TRDD can still be kept in the tasks folder if its not archived. because a failed TRDD can always be tried again (it can be put back to dev or design). but if a card is archived, no matter if it is failed or any other column, its definitive: no more tries. the 3 life-stages are all irreversible: 1. proposed (in proposals/), 2. tasked (in tasks/), 3. archived (in archived/). this is why they are 3 folders and not just a frontmatter metadata (but they also have the metadata indicating the stage of life). The stage 3 is definitive and irreversible. Even if a similar task should be done again, a new card must be created. So failed is just a temporary column state. A trdd can fail hundreds of times before succeeding. Only when the agent or the MANAGER / COS decide to give up, it becomes an archived card. Is it clear? write this in the specs of the 3 pillars and update all 3-pilllars rule files and skills files."
+USER 2026-09-24 (verbatim): "also there should be a special option to archive a trdd card in the trddgrep tool, so that it is not possible to be ambiguous. if the MANAGER decides to archive a card, no matter the column it is in, it must simply execute `trddgrep archive <TRDD-ID>` or `trddgrep archive <TRDD FILE PATH>` in the root of the project it belongs and it will be archived."

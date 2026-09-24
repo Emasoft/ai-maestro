@@ -131,10 +131,14 @@ describe('buildKanbanIndex reads the TRDD, which IS the card', () => {
     write('archived', 'ARCHDEV1', 'title: archived dev\ncolumn: dev\n')
     write('archived', 'ARCHFAIL', 'title: archived failed\ncolumn: failed\n')
     write('archived', 'ARCHDONE', 'title: archived done\ncolumn: completed\n')
+    // A proposal its author archived keeps `column: refused` (refused is a COLUMN, not a
+    // finished one) — it is history too, never a live refused proposal awaiting rework.
+    write('archived', 'ARCHREFU', 'title: archived refused\ncolumn: refused\n')
     const { byColumn } = buildKanbanIndex(dir, ISO)
     expect(byColumn.dev).toEqual(['LIVEDEV1'])
     expect(byColumn.failed).toEqual([])
-    expect(byColumn[ARCHIVED_COLUMN]).toEqual(['ARCHDEV1', 'ARCHFAIL'])
+    expect(byColumn.refused).toEqual([])
+    expect([...byColumn[ARCHIVED_COLUMN]].sort()).toEqual(['ARCHDEV1', 'ARCHFAIL', 'ARCHREFU'])
     expect(byColumn.completed).toEqual(['ARCHDONE'])
   })
 

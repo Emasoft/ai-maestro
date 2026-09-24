@@ -93,6 +93,10 @@ describe('headless /api/trdd route ORDER — static `kanban` beats the `[id]` ca
     // The index's own shape — the [id] handler can never produce this.
     expect(Array.isArray(res.bodyJson()?.columns)).toBe(true)
     expect(res.bodyJson()?.error).toBeUndefined()
+    // The route names the bucket an archived card with an unfinished column lands in
+    // (TRDD-MQE5D28T D2), beside `unknownColumn`, so a consumer can label it.
+    expect(res.bodyJson()?.archivedColumn).toBe('(archived)')
+    expect(res.bodyJson()?.byColumn?.['(archived)']).toBeDefined()
   })
 
   it('GET /api/trdd/notanid DOES 400 on a non-8-char segment (so the 200 above could only be kanban)', async () => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/route-auth'
 import { resolveDesignDir } from '@/lib/trdd-design-dir'
-import { getKanbanIndex, KANBAN_INDEX_COLUMNS, UNKNOWN_COLUMN } from '@/lib/kanban-index'
+import { getKanbanIndex, KANBAN_INDEX_COLUMNS, UNKNOWN_COLUMN, ARCHIVED_COLUMN } from '@/lib/kanban-index'
 
 /**
  * GET /api/trdd/kanban — the kanban index buffer for a project's TRDD corpus.
@@ -35,5 +35,8 @@ export async function GET(request: NextRequest) {
     ...index,
     columns: KANBAN_INDEX_COLUMNS,
     unknownColumn: UNKNOWN_COLUMN,
+    // Names the bucket an archived card with an unfinished column lands in (TRDD-MQE5D28T
+    // D2), so a consumer can label it the same way it labels `unknownColumn`.
+    archivedColumn: ARCHIVED_COLUMN,
   })
 }

@@ -21,31 +21,48 @@ password in-product. It is the fix for a leaked credential, and it is what makes
 rotation cheap enough to actually happen (before it, rotation had no in-product
 path — you edited `governance.json` by hand).
 
-^T9Y6WNNW [desc:"the invalidate route is two POSTs on the same endpoint: first verifies possession and sends a desktop code, second verifies the code and destroys the password", keywords:"two_POST_invalidate_flow password_then_code_request one-shot_code_sent_to_desktop codeRequired_channel_hint_response code_not_returned_in_response second_POST_password_code_invalidatePassword next_login_asks_to_create_new_password credential_never_replaced_with_known_value no_window_where_leaked_password_still_live invalidate_password_two_step_flow", ocd:2026-07-13, lmd:2026-08-02]
+^T9Y6WNNW [desc: "the invalidate route is two POSTs on the same endpoint: first verifies possession and sends a desktop code, second verifies the code and destroys the password", keywords: two_POST_invalidate_flow password_then_code_request one-shot_code_sent_to_desktop codeRequired_channel_hint_response code_not_returned_in_response second_POST_password_code_invalidatePassword next_login_asks_to_create_new_password no_known_replacement_value_issued leaked_password_valid_until_second_POST old_password_still_works_between_the_two_POSTs verifyPassword_may_rehash_same_password, ocd: 2026-07-13, lmd: 2026-09-24]
 **The flow — two POSTs to the same route:**
 1. `{ password }` → the server verifies possession, dispatches a one-shot CODE to
    this machine's desktop, replies `{ codeRequired, channel, hint }` — **the code
    is NOT in the response.**
 2. `{ password, code }` → verified ⇒ `invalidatePassword()` runs ⇒ `{ invalidated }`.
 
-Next login then asks the user to CREATE a new password. The credential is never
-replaced with a known value, so there is no window in which a leaked password is
-still live.
+Next login then asks the user to CREATE a new password. **Between the two POSTs
+the OLD password stays fully valid for login** — step 1 only VERIFIES it via
+`verifyPassword()` (`lib/governance.ts:334`), which does not invalidate or revoke
+anything. Note: `verifyPassword()` CAN write `passwordHash` on a successful check —
+it opportunistically rehashes the SAME plaintext to a fresher hash when
+`needsRehash()` says so (`lib/governance.ts:341-347`) — but that write does not
+change WHICH password is valid; it re-encodes the same one.[^4] What the flow
+actually guarantees is narrower: `invalidatePassword()` DESTROYS the hash instead
+of replacing it with a new known value, so no replacement credential is ever
+issued that could itself leak.
 
-^4GCNGDYE [desc:"two factors gate the rotation: knowing the password and a one-shot code delivered via the OS desktop notification channel, never HTTP", keywords:"two_factor_password_rotation password_proves_knowledge desktop_code_proves_presence_at_machine OS_notification_channel_not_HTTP macOS_Linux_Windows_notification_code attacker_with_password_but_not_at_console_blocked why_is_a_route_denied_only_from_my_phone console_presence_factor_security_property code_over_HTTP_would_be_theater possession_alone_must_not_rotate_credential", ocd:2026-07-13, lmd:2026-08-02]
+^4GCNGDYE [desc: "two factors gate the rotation: knowing the password and a one-shot code delivered to a local 0600 host file (best-effort desktop notification on top), never over HTTP for this route", keywords: two_factor_password_rotation password_proves_knowledge desktop_code_proves_presence_at_machine code_delivered_via_local_file_not_notification notification_is_best-effort_only attacker_with_password_but_not_at_console_blocked why_is_a_route_denied_only_from_my_phone console_presence_factor_security_property code_over_HTTP_would_be_theater possession_alone_must_not_rotate_credential invalidate_route_does_not_pass_email_opt, ocd: 2026-07-13, lmd: 2026-09-24]
 **Two factors, because possession alone must not rotate the master credential:**
 - the **password** proves you KNOW the secret;
-- a **code on the desktop** proves you are AT the machine. It rides the host OS's
-  own notification channel (macOS/Linux/Windows), never HTTP. An attacker holding
-  the password but not sitting at the console cannot read it. **That is the whole
-  security property** — the moment the code travels over HTTP, the feature is theater.
+- a **code on the desktop** proves you are AT the machine. `dispatchCode()`
+  writes it UNCONDITIONALLY to a local 0600 file (`~/.aimaestro/setup-code.txt`)
+  first — the reliable channel — and only attempts a desktop notification as a
+  best-effort convenience on top (a daemonized pm2/launchd/systemd process has no
+  GUI session, so `osascript`/`notify-send` report success while no banner ever
+  appears).[^6] `dispatchCode()` also supports an EMAIL channel for callers that
+  pass one, but the invalidate route calls `startSetupFlow()` with no options, so
+  it never opts in — for THIS route the code never leaves the host. An attacker
+  holding the password but not sitting at the console cannot read it. **That is the
+  whole security property** — the moment the code travels over HTTP, the feature is
+  theater.
 
-^D3ZBD6TJ [desc:"the invalidate flow reuses lib/setup-bootstrap.ts's OS-notification code mechanism from first-run setup, plus lib/rate-limit.ts throttling — no new code written", keywords:"reuse_setup-bootstrap_startSetupFlow_verifySetupCode SEC-PHASE-6_code_mechanism first-run_setup_same_code_as_invalidate hashed_record_timing-safe_compare_one-shot_consume attempt_cap_on_code_verification lib_rate-limit_checkAndRecordAttempt_throttling do_not_write_new_notification_code do_not_write_new_throttle_code shared_setup_bootstrap_code_path code_reuse_invalidate_password", ocd:2026-07-13, lmd:2026-08-02]
+^D3ZBD6TJ [desc: "the invalidate route's route handler is new code that reuses lib/setup-bootstrap.ts's verification-code mechanism from first-run setup, plus lib/rate-limit.ts throttling", keywords: reuse_setup-bootstrap_startSetupFlow_verifySetupCode SEC-PHASE-6_code_mechanism first-run_setup_same_code_as_invalidate hashed_record_timing-safe_compare_one-shot_consume attempt_cap_on_code_verification lib_rate-limit_checkAndRecordAttempt_throttling do_not_rewrite_notification_or_throttle_code shared_setup_bootstrap_code_path code_reuse_invalidate_password route_handler_itself_is_new_code, ocd: 2026-07-13, lmd: 2026-09-24]
 **Reuse, not reinvention:** the code mechanism is `lib/setup-bootstrap.ts`
-(`startSetupFlow` / `verifySetupCode`, SEC-PHASE-6) — the SAME OS-notification
-code that first-run setup uses (hashed record, timing-safe compare, one-shot
-consume, attempt cap). Throttling is `lib/rate-limit.ts` (`checkAndRecordAttempt`).
-Do not write new notification or throttle code — these already exist.
+(`startSetupFlow` / `verifySetupCode`, SEC-PHASE-6) — the SAME verification-code
+flow that first-run setup uses (hashed record, timing-safe compare, one-shot
+consume, attempt cap; see ^4GCNGDYE for what channel it actually uses).
+Throttling is `lib/rate-limit.ts` (`checkAndRecordAttempt`).
+Do not rewrite the notification-code or throttle mechanisms — reuse them as-is.[^5]
+The route handler itself (app/api/governance/password/invalidate/route.ts — gate
+ordering, input validation, wiring these pieces together) is new code.
 
 ^PGG5E7QM [desc:"invalidatePassword() sets passwordHash null and passwordInvalidatedAt instead of a revoked flag; setPassword() clears passwordInvalidatedAt or the host bricks in reset mode", keywords:"invalidatePassword_destroys_hash passwordHash_set_to_null passwordInvalidatedAt_field no_revoked_flag_beside_valid_hash bypassable_credential_risk_of_flag setPassword_clears_passwordInvalidatedAt host_bricked_in_reset_mode_forever api_auth_session_returns_passwordInvalidatedAt UI_explains_why_asking_for_new_password forced_revocation_vs_fresh_install_distinction", ocd:2026-07-13, lmd:2026-08-02]
 **`invalidatePassword()` DESTROYS the hash** (sets `passwordHash: null` +
@@ -146,3 +163,6 @@ password-change half was ever built.
   caller landed. A comment that miscounts its own callers is worse than none"* — so the
   correction existed and this copy never received it. DO link to the source and re-derive
   with a grep. Corrected 2026-08-02.
+[^4]: [id: ATOM-GY0P-77IF, status: valid, supersedes: T9Y6WNNW, keywords: "leaked_password_still_valid_before_invalidation window_before_invalidatePassword_runs old_password_works_until_second_POST verifyPassword_does_not_revoke_credential invalidate_route_race_window no_known_replacement_value_issued credential_destroyed_not_swapped two_POST_flow_timing_gap password_still_active_between_calls step_one_never_touches_passwordHash", ocd: 2026-09-24, lmd: 2026-09-24] DO NOT state the invalidate flow leaves 'no window in which a leaked password is still live', BECAUSE the OLD password remains fully valid for login between the first POST (verifyPassword succeeds, a code is dispatched) and the second POST that actually calls invalidatePassword() — step 1 never touches passwordHash (app/api/governance/password/invalidate/route.ts:95-118, lib/governance.ts:227-234). DO state the narrower, true guarantee instead: invalidatePassword() DESTROYS the hash rather than replacing it with a new known value, so no replacement credential is ever issued that could itself leak; the leaked password stays valid until invalidation actually runs at step two. SUPERSEDED BODY: **The flow — two POSTs to the same route:** 1. `{ password }` → the server verifies possession, dispatches a one-shot CODE to this machine's desktop, replies `{ codeRequired, channel, hint }` — **the code is NOT in the response.** 2. `{ password, code }` → verified ⇒ `invalidatePassword()` runs ⇒ `{ invalidated }`. Next login then asks the user to CREATE a new password. The credential is never replaced with a known value, so there is no window in which a leaked password is still live.
+[^5]: [id: ATOM-X7G7-6N3J, status: valid, supersedes: D3ZBD6TJ, keywords: "route_handler_is_new_code only_mechanisms_reused_not_whole_feature do_not_overclaim_zero_new_code notification_code_reused_not_new throttle_reused_not_new invalidate_route_is_new_wiring gate_ordering_written_for_this_endpoint reuse_means_the_mechanism_not_the_route setup-bootstrap_reused_route_is_not rate-limit_reused_route_is_not", ocd: 2026-09-24, lmd: 2026-09-24] DO NOT say the invalidate flow required 'no new code written', BECAUSE the route handler itself (app/api/governance/password/invalidate/route.ts) IS new code — gate ordering, input validation, throttle key construction, and wiring the reused pieces together were all written for this endpoint. Only two MECHANISMS are reused, not rewritten: the OS-notification code (lib/setup-bootstrap.ts startSetupFlow/verifySetupCode) and the rate limiter (lib/rate-limit.ts checkAndRecordAttempt). DO say those two mechanisms are reused, and stop short of claiming the feature itself needed no new code. SUPERSEDED BODY: **Reuse, not reinvention:** the code mechanism is `lib/setup-bootstrap.ts` (`startSetupFlow` / `verifySetupCode`, SEC-PHASE-6) — the SAME OS-notification code that first-run setup uses (hashed record, timing-safe compare, one-shot consume, attempt cap). Throttling is `lib/rate-limit.ts` (`checkAndRecordAttempt`). Do not write new notification or throttle code — these already exist.
+[^6]: [id: ATOM-4LJ7-4YCA, status: valid, supersedes: 4GCNGDYE, keywords: "code_delivered_via_local_file_not_notification setup-code.txt_0600_file_is_the_reliable_channel notification_is_best-effort_only daemonized_server_has_no_GUI_session dispatchCode_also_has_an_email_channel invalidate_route_does_not_pass_email_opt startSetupFlow_no_opts_in_invalidate_route osascript_notify-send_silently_stranded_headless channel_claim_was_imprecise file_channel_not_notification_channel", ocd: 2026-09-24, lmd: 2026-09-24] DO NOT say the code 'rides the host OS's own notification channel, never HTTP' as the mechanism, BECAUSE lib/setup-bootstrap.ts's dispatchCode() writes the code UNCONDITIONALLY to a 0600 local file (~/.aimaestro/setup-code.txt) FIRST — that is the reliable channel — and only attempts a desktop notification as a best-effort convenience on top (a daemonized pm2/launchd/systemd process has no GUI session, so osascript/notify-send report success while the banner never appears). dispatchCode() also supports an EMAIL channel to a registered remote address for OTHER callers that pass an email option — the invalidate route (app/api/governance/password/invalidate/route.ts:103, 'await startSetupFlow()') does NOT pass one, so for THIS route specifically no code ever leaves the host. DO describe the channel as 'a local 0600 file on the host, plus a best-effort desktop notification — never HTTP for this route (it does not opt into the email channel)'. SUPERSEDED BODY: **Two factors, because possession alone must not rotate the master credential:** - the **password** proves you KNOW the secret; - a **code on the desktop** proves you are AT the machine. It rides the host OS's own notification channel (macOS/Linux/Windows), never HTTP. An attacker holding the password but not sitting at the console cannot read it. **That is the whole security property** — the moment the code travels over HTTP, the feature is theater.

@@ -468,17 +468,21 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep new — ai-maestro#168 identity resolu
 
   it('21 · PRRD with project-id, no --author → defaults to main-agent@<project-id>', () => {
     const design = mkPrrdCorpusWithProjectId('e2e-probe');
-    const r = run('trddgrep', ['--design-dir', design, 'new', '--title', 'Defaulted Identity Card', '--task-type', 'spike']);
+    // #168: the leak was process.env.USER (not os.userInfo().username — the two differ
+    // under sudo, containers and CI), so the sentinel is injected via USER/LOGNAME and
+    // must never appear in the card, only the resolved main-agent@<project-id> identity.
+    const SENTINEL = 'OSLOGIN-SENTINEL-Q7';
+    const r = run(
+      'trddgrep',
+      ['--design-dir', design, 'new', '--title', 'Defaulted Identity Card', '--task-type', 'spike'],
+      { env: { ...process.env, USER: SENTINEL, LOGNAME: SENTINEL } }
+    );
     expect(r.code).toBe(0);
     const m = r.out.match(/created\s+([A-Z0-9]{8})\b/);
     expect(m).not.toBeNull();
     const content = fs.readFileSync(findCardFile(design, m![1])!, 'utf8');
     expect(content).toMatch(/^created-by: main-agent@e2e-probe$/m);
-    // #168: the default must never leak the OS login (process.env.USER-equivalent) into
-    // the card, only the resolved main-agent@<project-id> identity.
-    const osLogin = os.userInfo().username;
-    expect(osLogin.length).toBeGreaterThan(0); // positive control: the login itself is non-empty
-    expect(content).not.toContain(osLogin);
+    expect(content).not.toContain(SENTINEL);
   });
 
   it('22 · PRRD with project-id, --author main-agent@other → exits 2 with the project mismatch refusal', () => {

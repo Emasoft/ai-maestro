@@ -83,11 +83,10 @@ baseline-deviation gate), this rule governs.
   refused/   = proposals NEVER approved.   archived/ = ONCE-approved, now terminal.
   `failed` stays OPEN and retryable in `tasks/` BY DEFAULT — fix the cause (often
   via other TRDDs), retry. It moves to `archived/` ONLY on an express **MANAGER
-  or CHIEF-OF-STAFF** decision (outside the harness: the USER or the main agent)
-  — never mechanically or automatically — and once so archived it is
-  **DEFINITIVE**: never retried, never resurrected (owner ruling 2026-09-24,
-  quoted in full in Part B2 below). Giving up on one WITHOUT that authority is
-  still the DISTINCT act `cancelled`, and only that moves unilaterally.
+  or CHIEF-OF-STAFF** decision (outside the harness: not ruled — the user
+  decides) — never mechanically or automatically — and once so archived it is
+  **DEFINITIVE**: never retried (owner ruling 2026-09-24, quoted in full in
+  Part B2 below).
 ```
 
 ---
@@ -675,8 +674,8 @@ multi-agent system, WHO may trigger each transition:
 | `deploy → live` | DEPLOYER (via INTEGRATOR) | — |
 | `live → live_auditing` (soak) | INTEGRATOR | — |
 | `<any working> → blocked` / back | owner | — |
-| `<any> → failed` | MANAGER or USER | abandon-for-now; card stays OPEN/retryable (see the definitive-archive row below) |
-| `failed (tasks/) → archived/` (DEFINITIVE) | MANAGER or CHIEF-OF-STAFF (explicit decision); outside the harness, the USER or the main agent | never mechanical, never automatic — see the owner ruling below |
+| `<any> → failed` | MANAGER or CHIEF-OF-STAFF (explicit decision); outside the harness, the USER or the main agent | abandon-for-now; card stays OPEN/retryable in `tasks/` (owner ruling R1, see below) |
+| `failed (tasks/) → archived/` (DEFINITIVE) | MANAGER or CHIEF-OF-STAFF | never mechanical, never automatic (owner ruling R3, see below); outside the harness: not ruled — the user decides |
 | `<any> → superseded` | ARCHITECT (during split) | — |
 
 Which of these transitions are EXEMPT from MANAGER approval vs
@@ -685,31 +684,32 @@ NON-EXEMPT is defined in `aimaestro-manager-approval-defaults.md`.
 ### `failed` stays open by default; archiving it is a definitive act (owner ruling, 2026-09-24)
 
 A `failed` TRDD in `design/tasks/` is OPEN and retryable — the default, requiring
-no authority to leave alone or to retry once its blocking cause is fixed. Moving
-it to `design/archived/` is a SEPARATE, deliberate act that only the MANAGER or
-the CHIEF-OF-STAFF may take by explicit decision (outside the ai-maestro harness:
-the USER or the main agent acting alone), and it makes the card **DEFINITIVE** —
-never retried, never resurrected, never moved back out of `archived/`. Quoted
-verbatim from the owner:
+no authority to leave alone or to retry once its blocking cause is fixed.
+**Marking a card `failed` in the first place** requires an express MANAGER or
+CHIEF-OF-STAFF decision (outside the ai-maestro harness: the USER or the main
+agent acting alone) — R1 below. **Moving a `failed` card to `design/archived/`**
+is a SEPARATE, later, deliberate act that only the MANAGER or the CHIEF-OF-STAFF
+may take (outside the harness: not ruled — the user decides) — R3 below — and it
+makes the card **DEFINITIVE**: never retried. Quoted verbatim from the owner:
 
-> "of course they stays open for retry. they can only marked as filed on an
+> R1: "of course they stays open for retry. they can only marked as filed on an
 > express MANAGER or CHIEF-OF-STAFF decision. Or, outside the harness, by a user
 > or main agent decision."
 >
-> "failed in tasks -> retry / failed in archived -> frozen/ended (wrong road,
+> R2: "failed in tasks -> retry / failed in archived -> frozen/ended (wrong road,
 > never try again, lesson learned)"
 >
-> "frozen is an ambiguous term. it could suggest that the trdd can be unfrozen in
+> R3: "frozen is an ambiguous term. it could suggest that the trdd can be unfrozen in
 > the future. but if the MANAGER or the CHIEF-OF-STAFF archive a failed card,
 > that card must never be tried anymore. so use another terminology."
 >
-> "why ended? don't we have failed? just failed in archived -> definitive"
+> R4: "why ended? don't we have failed? just failed in archived -> definitive"
 
-**"Definitive", not "frozen" or "ended"**: `archived/` also holds `superseded`
-and `cancelled` cards, and "frozen" reads as reversible (a state that could be
-"unfrozen") when the whole point of this act is that it is not. "Definitive" says
-plainly that the road was tried, rejected, and is never to be tried again — a
-closed verdict, not a pause.
+**"Definitive", not "frozen" or "ended"** (R3, R4): "frozen" reads as reversible
+— a state that could be "unfrozen" — which is exactly what the owner rejected,
+since once the MANAGER or CHIEF-OF-STAFF archives a failed card it must never be
+tried again. "Definitive" was the owner's own choice of word (R4) once "frozen"
+and "ended" were both ruled out.
 
 ### The dispatch precondition — never dispatch against an unsatisfiable NPT (TRDD-BYCN5PB7)
 

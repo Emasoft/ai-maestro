@@ -1015,7 +1015,7 @@ one `unreviewed residue` heading unless one meets (1), (2) or (3).
   recorded neuter run. Every OTHER claim in rounds 5-12 is a reading of a running system, so
   "measured" there never means "guarded against regression".
 
-The pipeline position stays unchanged, per the owner's call. Three drafts of this block argued the column and
+On 2026-09-10 the owner chose to leave the pipeline position unchanged. Three drafts of this block argued the column and
 each introduced a false or over-read claim; that argument is in git, not here.
 
 ## Problem

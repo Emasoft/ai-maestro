@@ -3,7 +3,7 @@ trdd-id: MQE5D28T
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T15:46:28+0200
+updated: 2026-09-24T15:55:53+0200
 current-owner: emanuelesabetta
 created-by: emanuelesabetta
 task-type: docs
@@ -56,7 +56,7 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [x] Overlay rule aimaestro-manager-approval-defaults.md section Y updated with a dedicated definitive-archive row
 - [x] Governance/spec sweep run (docs/GOVERNANCE-RULES.md, design/specs/) and conflicts listed above rather than edited (specgrep-only surface)
 - [ ] proposed: reconcile design/specs/3-pillars-spec.md clause 3P-ZON-06 with this ruling via specgrep, bumping spec-version per 3P-VER-01 (a MUST changes)
-- [ ] proposed: the corpus tooling's archive-eligibility check should accept a failed card moving into archived/ when the move is attributed to the MANAGER or CHIEF-OF-STAFF (or, outside the harness, the USER or main agent) — today's zone-mismatch logic (ZONE-MISMATCH / expectedZone) treats failed as tasks/-only and would need to allow this one exception, not a general one
+- ~~proposed: the corpus tooling's archive-eligibility check should accept a failed card moving into archived/ when the move is attributed to the MANAGER or CHIEF-OF-STAFF (or, outside the harness, the USER or main agent) — today's zone-mismatch logic (ZONE-MISMATCH / expectedZone) treats failed as tasks/-only and would need to allow this one exception, not a general one~~ SUPERSEDED 2026-09-24 by the second USER ruling on this card ("no matter the column it is in ... it will be archived"); the zone-rule change is owned by TRDD-4NISAY49.
 - [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
 - [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
 
@@ -72,3 +72,8 @@ USER 2026-09-24 (verbatim): "also there should be a special option to archive a 
 ## Related
 
 The trddgrep archive verb is tracked in TRDD-4NISAY49.
+
+## Owner rulings — 2026-09-24 (session 2)
+
+USER 2026-09-24 (verbatim): "an archived trdd is automatically cancelled, but if the state column is failed, it must be preserved to show that when it was archived it was failed. An archived card can be in any column state. The archived cards are like corpses: you cannot change them anymore, since they become history that can be used by forensic to reconstruct the iter of an issue or the action of a malicious agent. The archived card is photographed forever in the state it was when it was archived. you can search with trddgrep among all archived cards, but no option in the trddgredp must exist to un-archive a trdd. its definitive. there is the 3 stage life metadata field in the frontmatter too that reports the 3 possible stages: proposed, tasked, archived. (but i don't remember the exact naming at the moment. maybe status? or life-stage?. Anyway, it can be a field that only has those 3 possible states."
+USER 2026-09-24 (verbatim, second ruling): "refused means that a card is not approved to become a task, but it does not become archived. it remains in the proposals and can be edited and improved and proposed again to the manager. if the author decides to archive it, it can be archived. but the manager and the cos never archive a proposal. only the author can. (outside of the harness or for local scoped trdd these figures are replaced by the main agent of the project, of course, so he can do all of it by itself). this is important: a MANAGER or a COS cannot archive a TRDD in the proposed stage. Only the author can."

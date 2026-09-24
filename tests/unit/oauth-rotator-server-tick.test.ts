@@ -4,7 +4,8 @@ import * as os from 'os'
 import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
 import { globalStateDir } from '@/lib/oauth-rotator/global-state'
-import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP } from '@/lib/oauth-rotator/server-tick'
+import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP, ROOT_UNRESOLVED_CODE, ownsTickAlert } from '@/lib/oauth-rotator/server-tick'
+import { legacyRotatorRoot } from '@/lib/oauth-rotator/slots'
 import { readChoreStamp, choreStampPath } from '@/lib/janitor-chore-stamp'
 import type { RepairResult } from '@/lib/oauth-rotator/reauth-repair'
 import { deriveDecision } from '@/lib/oauth-rotator/tick'
@@ -345,6 +346,27 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
       }),
       deliverImpl: () => { throw new Error('notifier exploded') },
     })).resolves.toBeUndefined()
+  })
+
+  it('a REFUSED rotator root reaches the alert channel as rotator-root-unresolved, even when the tick throws (ai-maestro#153)', async () => {
+    // The real condition, no seam: HOME is a fresh temp dir, so the canonical state.json is absent,
+    // and a legacy one is present — rotatorRoot() fails closed and every state write is refused.
+    // Before the fix this reached only the outer catch's console.warn, i.e. pm2 stderr.
+    fs.mkdirSync(legacyRotatorRoot(), { recursive: true })
+    fs.writeFileSync(path.join(legacyRotatorRoot(), 'state.json'), '{}')
+    const sent: Array<ReadonlyArray<{ code: string; message: string }>> = []
+    await runOneTick({
+      ...armed,
+      // What the real tick does with a refused root: its first state write throws.
+      runTickImpl: async () => { throw new Error('rotator-state-write-refused: stub') },
+      deliverImpl: (f) => { sent.push(f) },
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0].map(f => f.code)).toEqual([ROOT_UNRESOLVED_CODE])
+    // The refusal text itself, which names the human step (restore the DATA dir or opt in).
+    expect(sent[0][0].message).toContain('rotator-root-fallback')
+    // Owned by this beat, so it is reaped once the root resolves instead of lingering.
+    expect(ownsTickAlert(ROOT_UNRESOLVED_CODE)).toBe(true)
   })
 })
 

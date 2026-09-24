@@ -30,6 +30,7 @@ import { runTick } from './tick'
 import type { TickResult } from './tick'
 import { writeTickStatus } from './tick-status'
 import { deliverAlerts } from './alert-delivery'
+import { rotatorRoot, lastRootFallbackRefusal } from './slots'
 import { stampChoreRun } from '../janitor-chore-stamp'
 
 /**
@@ -40,16 +41,34 @@ import { stampChoreRun } from '../janitor-chore-stamp'
  * the other. A `null` (lock held by another process) and an unshaped stub both answer `null` here,
  * which reads as "nothing to deliver" rather than as an error.
  */
-/** The two namespaces every code this beat emits is built from — see the `const code` expression
- *  in `runOneTick`. Kept beside `ownsTickAlert` so the builder and the ownership claim cannot
- *  drift: a claim narrower than the vocabulary stops reaping a real code, and one wider evicts the
- *  supervisor beat's alerts, which is the defect TRDD-W6PHZFC9 fixes. */
-export const TICK_ALERT_PREFIXES = ['rotator-stuck:', 'reauth-needed:'] as const
+/** The code for a REFUSED rotator root (ai-maestro#153). One fault, one literal code — not a
+ *  prefix family like the two below. */
+export const ROOT_UNRESOLVED_CODE = 'rotator-root-unresolved'
+
+/** Every code this beat emits is built from these — the `const code` expression in `runOneTick`,
+ *  plus `ROOT_UNRESOLVED_CODE`. Kept beside `ownsTickAlert` so the builder and the ownership claim
+ *  cannot drift: a claim narrower than the vocabulary stops reaping a real code, and one wider
+ *  evicts the supervisor beat's alerts, which is the defect TRDD-W6PHZFC9 fixes. */
+export const TICK_ALERT_PREFIXES = ['rotator-stuck:', 'reauth-needed:', ROOT_UNRESOLVED_CODE] as const
 
 /** Does the 60s rotation beat own `code`? Prefix-derived rather than a literal set because the
  *  suffix is a runtime `TickReason` / `StuckReason`, so the vocabulary is open by construction. */
 export function ownsTickAlert(code: string): boolean {
   return TICK_ALERT_PREFIXES.some(p => code.startsWith(p))
+}
+
+/**
+ * The root refusal as a deliverable finding, or null when the root resolves (ai-maestro#153).
+ * `rotatorRoot()` fails CLOSED — a missing canonical state.json beside a present legacy one is
+ * refused, never adopted — and every state write then throws. Before this, the only trace of that
+ * refusal was the outer catch's `server tick failed` line in pm2 stderr: exactly the "log line
+ * nobody reads" that the chosen option, fail LOUD, exists to rule out. The refusal text already
+ * names the human step (restore the janitor DATA dir, or opt in to the legacy root).
+ * `rotatorRoot()` is called first because `lastRootFallbackRefusal` is a cache only it refreshes.
+ */
+export function rootUnresolvedFinding(): { code: string; message: string } | null {
+  rotatorRoot()
+  return lastRootFallbackRefusal ? { code: ROOT_UNRESOLVED_CODE, message: lastRootFallbackRefusal } : null
 }
 
 export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision' | 'identities'> | null {
@@ -220,7 +239,30 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.
-    const result = await lockImpl(() => runTickImpl()) // serialise; concurrent tick → null.
+    const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
+      void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: ownsTickAlert })
+        .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
+    })
+    const deliverSafely = (f: ReadonlyArray<{ code: string; message: string }>): void => {
+      try {
+        deliver(f)
+      } catch (derr) {
+        // Its OWN catch, NOT the outer one. The outer catch reports "server tick failed", which
+        // would be a FALSE attribution when the tick succeeded and only the notifier threw — and a
+        // false attribution on a credential subsystem sends the next reader to the wrong file.
+        console.warn(`[oauth-rotator] alert delivery threw (non-fatal, tick unaffected): ${(derr as Error)?.message ?? derr}`)
+      }
+    }
+    // ai-maestro#153: read BEFORE the tick, because with a refused root the tick throws the moment
+    // it tries to write state, and then the outer catch would be the only thing to see it.
+    const rootFinding = rootUnresolvedFinding()
+    let result: unknown
+    try {
+      result = await lockImpl(() => runTickImpl()) // serialise; concurrent tick → null.
+    } catch (err) {
+      if (rootFinding) deliverSafely([rootFinding])
+      throw err
+    }
     // PERSIST-THEN-READ (TRDD-1GGQ4HWY → DXJZM3BW): stamp the cascade next_action so the continuity
     // `status` verb can READ it without ever running the tick (R16). A null (lock held) / undefined
     // (stub) / shapeless result is a silent no-op inside writeTickStatus — the last good value stays.
@@ -236,6 +278,10 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
     // alert-delivery was deliberately built standalone rather than inlined in the supervisor, so it
     // takes this second caller unchanged: same always-written file, same escalating backoff, same
     // resolved-codes-dropped semantics. A code that stops firing stops being reported.
+    // ONE delivery per beat, carrying every finding of the beat. Two calls would each reap the
+    // other's code (a producer reaps every owned code absent from its call), so the root alert and
+    // a reauth alert would ONSET/CLEAR each other every beat — the TRDD-W6PHZFC9 flap.
+    const findings: Array<{ code: string; message: string }> = rootFinding ? [rootFinding] : []
     const alertable = alertableTick(result)
     if (alertable) {
       // The code carries the SPECIFIC fault, not a generic bucket, because the backoff and the
@@ -255,21 +301,11 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
       // message on every line. Code and message must derive from the SAME precedence, or the alert
       // channel's own dedup (per-code backoff, resolved-codes-dropped) is defeated by construction.
       const code = alertable.reason ? `reauth-needed:${alertable.reason}` : alertable.stuck ? `rotator-stuck:${alertable.stuck}` : 'reauth-needed:unknown'
-      const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
-        void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: ownsTickAlert })
-          .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
-      })
-      try {
-        // The message is the decision line PLUS the identities and the command — never the bare
-        // decision line, which is counts-only for the LOG's sake, not the alert's (TRDD-JDXTJXE7).
-        deliver([{ code, message: composeTickAlert(alertable) }])
-      } catch (derr) {
-        // Its OWN catch, NOT the outer one. The outer catch reports "server tick failed", which
-        // would be a FALSE attribution when the tick succeeded and only the notifier threw — and a
-        // false attribution on a credential subsystem sends the next reader to the wrong file.
-        console.warn(`[oauth-rotator] alert delivery threw (non-fatal, tick unaffected): ${(derr as Error)?.message ?? derr}`)
-      }
+      // The message is the decision line PLUS the identities and the command — never the bare
+      // decision line, which is counts-only for the LOG's sake, not the alert's (TRDD-JDXTJXE7).
+      findings.push({ code, message: composeTickAlert(alertable) })
     }
+    if (findings.length > 0) deliverSafely(findings)
     // REPAIR (TRDD-CVQJNW3A). The beat above can DETECT a dead slot and has nowhere to go —
     // re-capture is the one repair it cannot perform, and on 2026-07-31 that gap cost the owner a
     // manual login while the rotator watched it happen every 60 s. This is that leg.

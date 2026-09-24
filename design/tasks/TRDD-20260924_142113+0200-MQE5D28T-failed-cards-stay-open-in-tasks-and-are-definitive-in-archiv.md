@@ -68,7 +68,7 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [ ] step 6: reconcile design/specs/3-pillars-spec.md and GOVERNANCE-RULES.md via specgrep, close janitor #308, run full verification
 - step 2 is PARTIAL (unticked 2026-09-24 after review): 26 cards moved in bc02c5129, not 32; design/refused/ still holds 5 janitor ticket cards pending ai-maestro-janitor#309, so the folder is not removed yet. Tick it when #309 lands and the 5 cards move.
 - step-5 queue addition (2026-09-24): STATUS-ZONE-MISMATCH on an ARCHIVED card becomes a WARN (history — the card is immutable, e.g. archived by AMAMA's mover, which never writes status: — Emasoft/ai-maestro-assistant-manager-agent#40). Same treatment as step-5 G8 for the checklist gate. Also: readyQueueFrom (trddgrep next) must skip zone archived (deferred from the kanban follow-ups; lives in lib/trdd-doctor.ts).
-- D3 gap (2026-09-24, found by review): created-by is rewritable after creation (trddgrep set has no authority check; no write gate makes it write-once), so the author-only proposal-archive rule is not yet enforceable. Fix queued with #168: created-by and created become write-once in the shared write gates (CLI set/edit and API PATCH).
+- D3 gap (2026-09-24, found by review): identity fields that authorization relies on are not yet protected from later rewriting, so the author-only proposal-archive rule is not yet enforceable. Fix queued with #168 (a server-side creator record, plus write-once identity fields); details tracked privately in LOCAL scope.
 
 ## Provenance correction
 

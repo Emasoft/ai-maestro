@@ -531,6 +531,17 @@ export function authorize(
           // cannot be applied, and guessing "tasked" would grant MANAGER a proposal.
           return { allowed: false, reason: 'archive requires the card\'s folder (zone) to decide who may archive it' }
         }
+        if (trdd.zone === 'archived') {
+          // An archived card is definitive history (TRDD-MQE5D28T D8): archiving it AGAIN
+          // could only rewrite it. Until step-5 G9 removes the store's in-place
+          // archived→superseded rewrite, this is the cheap gate that stops an archived
+          // `failed` card from having its forensic column overwritten. It binds AGENTS only:
+          // the human-owner bypass above the matrix still reaches the store — G9 closes that.
+          return {
+            allowed: false,
+            reason: 'Archived cards are immutable, definitive history — they cannot be archived again (owner ruling 2026-09-24: no option may exist to un-archive a TRDD)',
+          }
+        }
         if (trdd.zone === 'proposals') {
           if (trdd.createdByAgentId && trdd.createdByAgentId === auth.agentId) return { allowed: true }
           return {

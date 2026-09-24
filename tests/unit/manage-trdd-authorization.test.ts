@@ -227,6 +227,21 @@ describe('manage-trdd — archive', () => {
     teams.list = [{ id: 'team-a', agentIds: [MEMBER_ID], chiefOfStaffId: COS_ID }]
     expect(can(COS, ctx({ verb: 'archive', zone: 'tasks', column: 'failed', assigneeAgentId: null }))).toBe(false)
   })
+
+  // D8: an archived card is definitive history. Every agent that the rules above WOULD
+  // allow on the same card outside archived/ — MANAGER, the same-team COS, the owner —
+  // is denied once it sits in archived/, whatever its column.
+  it('an ARCHIVED card cannot be archived again — MANAGER, same-team COS and owner all denied', () => {
+    teams.list = [{ id: 'team-a', agentIds: [MEMBER_ID], chiefOfStaffId: COS_ID }]
+    for (const column of ['completed', 'failed']) {
+      const archived = ctx({ verb: 'archive', zone: 'archived', column, assigneeAgentId: MEMBER_ID, createdByAgentId: MEMBER_ID })
+      for (const who of [MANAGER, COS, MEMBER]) {
+        const res = authorize(who, 'manage-trdd', undefined, archived)
+        expect(res.allowed, `${who.governanceTitle} on archived ${column}`).toBe(false)
+        expect(res.reason).toMatch(/Archived cards are immutable/)
+      }
+    }
+  })
 })
 
 describe('archive state — a failed TRDD is retryable and must never be archived', () => {

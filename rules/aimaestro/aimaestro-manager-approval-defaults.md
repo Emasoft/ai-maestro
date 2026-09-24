@@ -218,7 +218,8 @@ These are enforced by `caller_is_manager()` in `prrd_lib.py`.
 | `publish → published` (on RELEASER success) | Confirms artifact is live to users |
 | `deploy → live` (on DEPLOYER success) | Confirms service is live to users |
 | `live_auditing (entry) → dev` | Audit confirmed an issue; entering fix flow requires alignment |
-| `<any> → failed` | Abandoning a TRDD; permanent decision |
+| `<any> → failed` | Abandoning a TRDD for now — the card stays OPEN and retryable in `design/tasks/` by default; this is NOT yet the permanent decision (see the next row) |
+| `failed (design/tasks/) → design/archived/` (DEFINITIVE) | The act that ends retry forever. MANAGER or CHIEF-OF-STAFF only (explicit decision); outside the harness, the USER or the main agent. Owner ruling 2026-09-24: *"they can only marked as filed on an express MANAGER or CHIEF-OF-STAFF decision. Or, outside the harness, by a user or main agent decision."* — quoted in full in `aimaestro-trdd-approval.md` Part B2 |
 | `<any non-design> → superseded` | Force-supersede (ARCH's design split is exempt; force-supersede is not) |
 
 ### Z. Escalation gates

@@ -64,22 +64,30 @@ baseline-deviation gate), this rule governs.
  │ design/refused/   │                                          │  • blocked  (lists its │
  │  column: refused  │                                          │    blocked-by:)        │
  └───────────────────┘                                          │  • failed → RETRY      │
-                                                                │    (stays OPEN, never  │
-                                                                │     archived)          │
+                                                                │    (stays OPEN by      │
+                                                                │     default — see note)│
                                                                 └───────────┬────────────┘
                                                                             │ terminal-DONE
-                                                                            │ (was approved)
+                                                                            │ (was approved,
+                                                                            │  or failed made
+                                                                            │  DEFINITIVE)
                                                                             ▼
                                                           ┌──────────────────────────────┐
                                                           │  design/archived/            │
                                                           │  completed · cancelled ·     │
-                                                          │  superseded                  │
+                                                          │  superseded · failed         │
+                                                          │  (DEFINITIVE)                │
                                                           └──────────────────────────────┘
 
   OPEN TRDD  = any file in design/tasks/  (INCLUDING `blocked` and `failed`).
   refused/   = proposals NEVER approved.   archived/ = ONCE-approved, now terminal.
-  `failed` is OPEN and retryable — fix the cause (often via other TRDDs), retry;
-  it is NEVER moved to archived. Giving up on a failed TRDD = cancel → archived.
+  `failed` stays OPEN and retryable in `tasks/` BY DEFAULT — fix the cause (often
+  via other TRDDs), retry. It moves to `archived/` ONLY on an express **MANAGER
+  or CHIEF-OF-STAFF** decision (outside the harness: the USER or the main agent)
+  — never mechanically or automatically — and once so archived it is
+  **DEFINITIVE**: never retried, never resurrected (owner ruling 2026-09-24,
+  quoted in full in Part B2 below). Giving up on one WITHOUT that authority is
+  still the DISTINCT act `cancelled`, and only that moves unilaterally.
 ```
 
 ---
@@ -667,11 +675,41 @@ multi-agent system, WHO may trigger each transition:
 | `deploy → live` | DEPLOYER (via INTEGRATOR) | — |
 | `live → live_auditing` (soak) | INTEGRATOR | — |
 | `<any working> → blocked` / back | owner | — |
-| `<any> → failed` | MANAGER or USER | permanent-abandon decision |
+| `<any> → failed` | MANAGER or USER | abandon-for-now; card stays OPEN/retryable (see the definitive-archive row below) |
+| `failed (tasks/) → archived/` (DEFINITIVE) | MANAGER or CHIEF-OF-STAFF (explicit decision); outside the harness, the USER or the main agent | never mechanical, never automatic — see the owner ruling below |
 | `<any> → superseded` | ARCHITECT (during split) | — |
 
 Which of these transitions are EXEMPT from MANAGER approval vs
 NON-EXEMPT is defined in `aimaestro-manager-approval-defaults.md`.
+
+### `failed` stays open by default; archiving it is a definitive act (owner ruling, 2026-09-24)
+
+A `failed` TRDD in `design/tasks/` is OPEN and retryable — the default, requiring
+no authority to leave alone or to retry once its blocking cause is fixed. Moving
+it to `design/archived/` is a SEPARATE, deliberate act that only the MANAGER or
+the CHIEF-OF-STAFF may take by explicit decision (outside the ai-maestro harness:
+the USER or the main agent acting alone), and it makes the card **DEFINITIVE** —
+never retried, never resurrected, never moved back out of `archived/`. Quoted
+verbatim from the owner:
+
+> "of course they stays open for retry. they can only marked as filed on an
+> express MANAGER or CHIEF-OF-STAFF decision. Or, outside the harness, by a user
+> or main agent decision."
+>
+> "failed in tasks -> retry / failed in archived -> frozen/ended (wrong road,
+> never try again, lesson learned)"
+>
+> "frozen is an ambiguous term. it could suggest that the trdd can be unfrozen in
+> the future. but if the MANAGER or the CHIEF-OF-STAFF archive a failed card,
+> that card must never be tried anymore. so use another terminology."
+>
+> "why ended? don't we have failed? just failed in archived -> definitive"
+
+**"Definitive", not "frozen" or "ended"**: `archived/` also holds `superseded`
+and `cancelled` cards, and "frozen" reads as reversible (a state that could be
+"unfrozen") when the whole point of this act is that it is not. "Definitive" says
+plainly that the road was tried, rejected, and is never to be tried again — a
+closed verdict, not a pause.
 
 ### The dispatch precondition — never dispatch against an unsatisfiable NPT (TRDD-BYCN5PB7)
 

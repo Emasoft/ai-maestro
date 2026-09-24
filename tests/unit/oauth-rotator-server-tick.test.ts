@@ -5,8 +5,15 @@ import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
 import { globalStateDir } from '@/lib/oauth-rotator/global-state'
 import { oauthTickEnabled, runOneTick, alertableTick, composeTickAlert, REAUTH_HUMAN_STEP } from '@/lib/oauth-rotator/server-tick'
+import { readChoreStamp, choreStampPath } from '@/lib/janitor-chore-stamp'
 import type { RepairResult } from '@/lib/oauth-rotator/reauth-repair'
 import { deriveDecision } from '@/lib/oauth-rotator/tick'
+// Side-effect only: registers the REAL chore-claim predicate `stampChoreRun` gates on
+// (janitor-chore-stamp.ts::registerChoreClaimPredicate, wired by server-liveness.ts at module
+// load). Without this import in THIS file's own module graph the predicate stays unregistered
+// and the central guard fails OPEN — see the describe block below, which needs it registered to
+// exercise the real gate rather than pass vacuously.
+import '@/lib/server-liveness'
 
 // 0-IMPACT / R16 SAFETY (copied from oauth-rotator-tick.test.ts). The gate is a FLAG FILE under
 // ~/.aimaestro and the tick lock lives under the janitor global-state dir — BOTH anchored on
@@ -91,6 +98,39 @@ describe('server-tick — runOneTick gating (never actuates when it should not)'
       runOneTick({ enabledCheck: () => true, claudeRunningCheck: async () => true, runTickImpl }),
     ).resolves.toBeUndefined()
     expect(runTickImpl).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * `runOneTick` itself is unchanged (it always calls `stampChoreRun('oauth-rotator-tick')`, as
+ * before) — the ORH R3 fix lives entirely in the CENTRAL guard the stamp now goes through
+ * (janitor-chore-stamp.ts::stampChoreRun, gated on the real `isChoreClaimed`, which for this
+ * chore reads the SAME `oauth-rotator-tick.enabled` flag file `oauthTickEnabled()` reads). These
+ * tests drive that real flag — not `runOneTick`'s injected `enabledCheck`, which only controls
+ * whether `runTickImpl` fires, never the stamp — to prove the central guard actually reaches this
+ * caller.
+ */
+describe('server-tick — the real chore stamp only tracks the flag, never a mere beat (ORH-4/M3)', () => {
+  // Other tests in this file (and elsewhere) may leave a real stamp behind under
+  // $JANITOR_CONTROL_DIR, which — unlike $HOME above — is contained once for the whole run, not
+  // reset per test (tests/setup/janitor-control-containment.ts). Clear it first so "absent" means
+  // THIS test, not a leftover.
+  beforeEach(() => { fs.rmSync(choreStampPath('oauth-rotator-tick'), { force: true }) })
+
+  it('flag OFF: the real oauth-rotator-tick stamp is never written', async () => {
+    removeFlag()
+    await runOneTick({ enabledCheck: () => true, claudeRunningCheck: async () => true, runTickImpl: async () => {} })
+    expect(readChoreStamp('oauth-rotator-tick')).toBeNull()
+  })
+
+  it('flag ON: the real oauth-rotator-tick stamp is written, even if the injected enabledCheck disagrees', async () => {
+    // The injected `enabledCheck` is a TEST seam on `runTickImpl`'s own gate, distinct from the
+    // real flag file the central guard reads — deliberately mismatched here to prove the stamp
+    // tracks the FLAG, not whatever `runOneTick`'s own dependency happened to say.
+    createFlag()
+    await runOneTick({ enabledCheck: () => false, claudeRunningCheck: async () => true, runTickImpl: async () => {} })
+    expect(readChoreStamp('oauth-rotator-tick')).not.toBeNull()
+    fs.rmSync(choreStampPath('oauth-rotator-tick'), { force: true })
   })
 })
 

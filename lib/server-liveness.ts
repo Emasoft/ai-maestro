@@ -17,7 +17,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
-import { activeAbsorbedChores, CONDITIONAL_CHORES } from './janitor-chore-stamp'
+import { activeAbsorbedChores, CONDITIONAL_CHORES, registerChoreClaimPredicate } from './janitor-chore-stamp'
+import type { AbsorbedChore } from './janitor-chore-stamp'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
 import { isGithubConfigAuditSchedulerRunning } from './github-config-audit'
@@ -121,6 +122,58 @@ export function currentCapabilities(deps: {
   caps.push(...liveConditionalChores())
   return caps
 }
+
+/**
+ * Is `chore` currently CLAIMED — i.e. would it be a member of `currentCapabilities()` right now?
+ *
+ * THE SINGLE AUTHORITY both the liveness beat (this file, published to the janitor) and the
+ * chore-stamp writer (`janitor-chore-stamp.ts::stampChoreRun`) must agree on. Before this existed
+ * the two had drifted: `stampChoreRun` wrote a stamp on every ATTEMPT regardless of whether the
+ * chore's own gate (a flag file, a scheduler-running check, an armed conditional lane) actually
+ * held, while `currentCapabilities` only ever claimed the chore when that same gate held. So a
+ * chore this server had disclaimed — the OAuth rotator's flag turned off being the concrete case,
+ * spec `design/specs/oauth-rotation-and-chore-handover-spec.md` ORH-4/M3 ("the server claims a
+ * chore only when able") and ORH-32/R3 (the flag removal is the deliberate kill switch) — still
+ * got a fresh stamp every beat, telling the janitor "still owned" for a chore nobody was running.
+ * The janitor's suppressed daemon then never resumed it, and NEITHER side ran the chore.
+ *
+ * This supersedes the "stamp on attempt regardless of gate" half of TRDD-14HI8ZPR /
+ * ai-maestro#111's original design — that card's INTENT (let the janitor tell an absorbed chore
+ * from an unowned one) is exactly why a disclaimed chore must not be stamped as owned. The
+ * after-completion refinement ORH-4/M3 also asks for (moving the janitor-control stamp to fire
+ * only once a run has actually COMPLETED, not merely attempted) is a separate, still-open
+ * implementation step — tracked as its own card (C8) — this function only closes the R3
+ * kill-switch half: never claim what the gate says we do not currently own.
+ *
+ * `deps` forwards to `currentCapabilities` unchanged so a caller (or a test) can stub the same
+ * seams without this function inventing a second copy of them.
+ */
+export function isChoreClaimed(
+  chore: AbsorbedChore | string,
+  deps: Parameters<typeof currentCapabilities>[0] = {},
+): boolean {
+  return currentCapabilities(deps).includes(chore)
+}
+
+// Wire the REAL predicate into `janitor-chore-stamp.ts::stampChoreRun` — a runtime registration,
+// not a static import, because that module is imported BY this one (`activeAbsorbedChores`,
+// `CONDITIONAL_CHORES` above), so importing it back here would be a real 2-file cycle.
+// `registerChoreClaimPredicate`'s doc comment covers the alternatives tried and why this is the
+// one that survives every module runtime this app runs under (production bundling AND vitest).
+//
+// PRODUCTION LOAD-ORDER, VERIFIED (not assumed) against `server.mjs` as of this change: this
+// file's `await import('./lib/server-liveness.ts')` sits inside the shared `startServer()`
+// function (server.mjs:585-2579), which BOTH `MAESTRO_MODE=full` and `MAESTRO_MODE=headless`
+// call — so this registration runs on every boot, in every mode, not only the dashboard one. Each
+// chore's own `await import(...)` (oauth tick, oauth supervisor, this file, ...) is wrapped in its
+// OWN try/catch that logs and continues, so one import throwing never skips a later one; and a
+// dynamic `import()` fully evaluates a module's top-level code (this line included) before
+// resolving, so even if `startServerLiveness()` itself later throws, this registration has
+// already landed. No chore beat fires for 60s+ after boot, so registration is always complete in
+// time. If `server.mjs`'s import order or structure changes, re-verify this comment's premise —
+// `stampChoreRun` degrades to its pre-fix unconditional-write behaviour, silently, if this file
+// is never loaded before a real beat fires.
+registerChoreClaimPredicate(isChoreClaimed)
 
 /** The running build's git identity — the server-side deploy oracle (TRDD-T2DVNWVI). */
 export interface BuildSha {

@@ -59,6 +59,11 @@ import {
 import { MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { readChoreStamp } from '@/lib/janitor-chore-stamp'
 import { workRequestPath } from '@/lib/janitor-work-request'
+// Side-effect only: registers the REAL chore-claim predicate `stampChoreRun` now gates on
+// (janitor-chore-stamp.ts::registerChoreClaimPredicate). Without this import in THIS file's own
+// module graph (vitest isolates each test file by default) the predicate stays unregistered and
+// the guard silently fails OPEN — which would make the two tests below pass for the wrong reason.
+import '@/lib/server-liveness'
 
 const JANITOR = 'ai-maestro-janitor'
 
@@ -107,6 +112,17 @@ afterEach(() => {
 })
 
 describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
+  // `stampChoreRun` is now centrally gated on `isChoreClaimed` (janitor-chore-stamp.ts, the ORH
+  // R3 fix), which for 'version-update' reads the REAL `isAbsorbedDutySchedulerRunning()` — true
+  // only while the scheduler's own setInterval is live. In production that is always true here
+  // (the scheduler starts unconditionally at boot and only ever calls this tick from inside its
+  // own callback), but a test that calls `runAbsorbedDutyTick` directly, bypassing the scheduler,
+  // makes that signal false — a test artifact, not a real "unclaimed" scenario. Start the
+  // scheduler (an unref'd, harmless-to-leave-running timer in this synchronous test) so the claim
+  // check sees what production always sees, and stop it immediately after.
+  beforeEach(() => { startAbsorbedDutyScheduler() })
+  afterEach(() => { stopAbsorbedDutyScheduler() })
+
   it('writes a last-run stamp for each chore this lane owns — and NOT for the returned one', async () => {
     // The defect this pins: the server absorbed these chores and never told the janitor, whose
     // daemon it had suppressed. Every one read as dark for weeks while all ran hourly.

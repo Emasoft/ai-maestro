@@ -107,6 +107,34 @@ describe('resolveCliIdentity — explicit flag, then AID, then the registry-gate
     ]))
     expect(resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile }).ok).toBe(false)
   })
+
+  it('an explicit main-agent@X must name the PRRD project-id, compared exactly (both values named on refusal)', () => {
+    const other = resolveCliIdentity({ ...base, explicit: 'main-agent@Other', registryFile })
+    expect(other.ok).toBe(false)
+    expect(!other.ok && other.error).toMatch(/"Other".*"proj"/)
+    // case-sensitive: `Proj` is not `proj`
+    expect(resolveCliIdentity({ ...base, explicit: 'main-agent@Proj', registryFile }).ok).toBe(false)
+    // positive control: the corpus's own id passes
+    expect(resolveCliIdentity({ ...base, explicit: 'main-agent@proj', registryFile }))
+      .toEqual({ ok: true, identity: 'main-agent@proj', source: 'flag' })
+  })
+
+  it('with NO PRRD project-id any well-formed main-agent@X is still accepted (interim rule, open on #168)', () => {
+    expect(resolveCliIdentity({ ...base, projectId: null, explicit: 'main-agent@Other', registryFile }))
+      .toEqual({ ok: true, identity: 'main-agent@Other', source: 'flag' })
+  })
+
+  it('on a harness machine, "no AID_AUTH" and "AID_AUTH set but unresolvable" are different refusals that never print the token', () => {
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: generateSessionSecret().secretHash } }]))
+    const none = resolveCliIdentity({ ...base, registryFile })
+    expect(!none.ok && none.error).toMatch(/no --author given and no AID_AUTH set/)
+    const { secret } = generateSessionSecret()
+    const stale = resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile })
+    expect(!stale.ok && stale.error).toMatch(/AID_AUTH is set but does not resolve to a registered agent \(stale or invalid token\)/)
+    expect(!stale.ok && stale.error).not.toMatch(/no AID_AUTH set/)
+    expect(!stale.ok && stale.error).not.toContain(secret)
+    expect(!stale.ok && stale.error).not.toContain(secret.slice(4, 12)) // past the fixed `mst_` prefix
+  })
 })
 
 describe('resolveActor — owner rights follow the grammar (via the real withAuthorizedTrdd)', () => {

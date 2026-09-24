@@ -1148,11 +1148,20 @@ switch (cmd) {
     // WHO IS WRITING (ai-maestro#168): explicit --author, else the caller's AID, else
     // `main-agent@<project-id>` only on a machine with no agent registry, else refuse.
     // Never `process.env.USER` — the OS login is the leak #168 reports.
-    const { resolveCliIdentity } = await import('../lib/trdd-identity.ts')
+    const { resolveCliIdentity, mainAgentProjectMismatch } = await import('../lib/trdd-identity.ts')
     const pid = readProjectId(designDir)
-    const who = resolveCliIdentity({ explicit: author, flag: '--author', projectId: 'id' in pid ? pid.id : null })
+    const projectId = 'id' in pid ? pid.id : null
+    const who = resolveCliIdentity({ explicit: author, flag: '--author', projectId })
     if (!who.ok) {
       console.error(`trddgrep: refusing to create — ${who.error}`)
+      process.exit(2)
+    }
+    // --assignee is not resolved (it names someone else), so it gets the same project check
+    // here; createTrdd checks only its grammar. The check lives at the CLI rather than in
+    // createTrdd because the API's author is always `<name>#<uuid>` or `user`, never main-agent.
+    const assigneeMismatch = assignee ? mainAgentProjectMismatch(assignee, projectId) : null
+    if (assigneeMismatch) {
+      console.error(`trddgrep: refusing to create — --assignee ${assigneeMismatch}`)
       process.exit(2)
     }
     let result
@@ -1223,6 +1232,25 @@ switch (cmd) {
     if (setRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`set\`: ${setRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
+    }
+    // Identity fields (ai-maestro#168) take the identity grammar on every NEW write: before
+    // this, `set <id> assignee agent` wrote a free string into the field that confers owner
+    // rights. Only the value being written is checked — legacy values already on cards stay
+    // readable. An empty value (clearing the field) is not an identity and is let through.
+    if (['created-by', 'current-owner', 'assignee', 'approval-judge'].includes(field) && value !== '') {
+      const { parseTrddIdentity, TRDD_IDENTITY_FORMS } = await import('../lib/trdd-vocabulary.ts')
+      const { mainAgentProjectMismatch } = await import('../lib/trdd-identity.ts')
+      const { readProjectId } = await import('../lib/trdd-create.ts')
+      if (!parseTrddIdentity(value)) {
+        console.error(`trddgrep: refusing to set ${field} — ${JSON.stringify(value)} is not an identity — use ${TRDD_IDENTITY_FORMS} (ai-maestro#168)`)
+        process.exit(2)
+      }
+      const pid = readProjectId(designDir)
+      const mismatch = mainAgentProjectMismatch(value, 'id' in pid ? pid.id : null)
+      if (mismatch) {
+        console.error(`trddgrep: refusing to set ${field} — ${mismatch}`)
+        process.exit(2)
+      }
     }
     const { setTrddField, isoLocal } = await import('../lib/trdd-store.ts')
     const res = await setTrddField(designDir, setId, field, value, { iso: isoLocal().iso, bump: !noBump })

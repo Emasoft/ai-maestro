@@ -75,14 +75,14 @@ afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
 
 describe('trddgrep new', () => {
   it('mints a card carrying the fields whose absence IS the corpus-wide META-MISSING', () => {
-    const r = cli('new', '--title', 'a minted card', '--task-type', 'infra', '--author', 'main-agent@probe')
+    const r = cli('new', '--title', 'a minted card', '--task-type', 'infra', '--author', 'main-agent@fixture-project')
     expect(r.status).toBe(0)
     const file = only('tasks')
     expect(file).not.toBe('')
     const text = fs.readFileSync(file, 'utf-8')
     // The three the D4 watchdog reads and no other field can supply.
-    expect(text).toMatch(/^assignee: main-agent@probe$/m)
-    expect(text).toMatch(/^created-by: main-agent@probe$/m)
+    expect(text).toMatch(/^assignee: main-agent@fixture-project$/m)
+    expect(text).toMatch(/^created-by: main-agent@fixture-project$/m)
     expect(text).toMatch(/^min-approval-requirement: none$/m)
     // ISO 8601 with a LOCAL offset — never bare, never `Z` (TRDD-ZRRDCQ52).
     expect(text).toMatch(/^created: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4}$/m)
@@ -92,7 +92,7 @@ describe('trddgrep new', () => {
   it('refuses an unrecognised argument instead of silently dropping it', () => {
     // A mutating verb that ignores a token performs a DIFFERENT write than the one asked
     // for and reports success — `--titel` would otherwise mint an "untitled" card at 0.
-    const r = cli('new', '--titel', 'typo', '--task-type', 'infra', '--author', 'main-agent@probe')
+    const r = cli('new', '--titel', 'typo', '--task-type', 'infra', '--author', 'main-agent@fixture-project')
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/unrecognised argument/)
     expect(only('tasks')).toBe('')
@@ -100,7 +100,7 @@ describe('trddgrep new', () => {
 
   it('routes an author BELOW the floor to proposals/, and the flag cannot override it', () => {
     const r = cli(
-      'new', '--title', 'needs a manager', '--task-type', 'infra', '--author', 'main-agent@member-1',
+      'new', '--title', 'needs a manager', '--task-type', 'infra', '--author', 'main-agent@fixture-project',
       '--min-approval', 'manager', '--column', 'dev',
     )
     expect(r.status).toBe(0)
@@ -111,7 +111,7 @@ describe('trddgrep new', () => {
 
 describe('trddgrep move', () => {
   const seed = (title = 'a card to move') => {
-    expect(cli('new', '--title', title, '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', title, '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     fs.appendFileSync(file, '\n## Acceptance\n\n- [x] done\n')
     git('add', '-A')
@@ -162,7 +162,7 @@ describe('trddgrep move', () => {
   })
 
   it('promotes a proposal to planned, and refuses to skip the approval by advancing past it', () => {
-    expect(cli('new', '--title', 'a proposal', '--task-type', 'infra', '--author', 'main-agent@m',
+    expect(cli('new', '--title', 'a proposal', '--task-type', 'infra', '--author', 'main-agent@fixture-project',
       '--min-approval', 'manager').status).toBe(0)
     const id = idOf(only('proposals'))
     git('add', '-A'); git('commit', '-qm', 'seed proposal')
@@ -196,7 +196,7 @@ describe('trddgrep move', () => {
  */
 describe('trddgrep move — the on-touch approval-tier migration', () => {
   const seedWithTier = (frontmatterExtra: string[]) => {
-    expect(cli('new', '--title', 'a legacy card', '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', 'a legacy card', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     const text = fs.readFileSync(file, 'utf-8')
       .replace(/^min-approval-requirement: none$/m, frontmatterExtra.join('\n'))
@@ -252,7 +252,7 @@ describe('trddgrep move — the on-touch approval-tier migration', () => {
    */
   it('never touches an `approval-tier:` line in the BODY when the frontmatter has none', () => {
     expect(cli('new', '--title', 'a card documenting the legacy field', '--task-type', 'docs',
-      '--author', 'main-agent@probe').status).toBe(0)
+      '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     // `0` decodes to `none`, which is what the minted card's frontmatter already declares.
     // That is deliberate and load-bearing: with a DISAGREEING value (say `2` = manager) the
@@ -305,7 +305,7 @@ describe('trddgrep move — the on-touch approval-tier migration', () => {
  */
 describe('trddgrep set', () => {
   const seed = () => {
-    expect(cli('new', '--title', 'a card to set', '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', 'a card to set', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     git('add', '-A'); git('commit', '-qm', 'seed')
     return idOf(file)
@@ -435,7 +435,7 @@ describe('trddgrep help renders', () => {
  */
 describe('trddgrep append / check-box', () => {
   const seed = (extra = '') => {
-    expect(cli('new', '--title', 'a body-setter card', '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', 'a body-setter card', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     fs.appendFileSync(file, `\n## Acceptance\n\n- [ ] one\n- [ ] two\n${extra}`)
     git('add', '-A'); git('commit', '-qm', 'seed')
@@ -566,7 +566,7 @@ describe('trddgrep append / check-box', () => {
     const id = seed()
     expect(cli('check-box', id, '1').status).toBe(0)
     expect(cli('check-box', id, '2').status).toBe(0)
-    expect(cli('move', id, 'complete', '--approver', 'main-agent@test').status).toBe(0)
+    expect(cli('move', id, 'complete', '--approver', 'main-agent@fixture-project').status).toBe(0)
     git('add', '-A'); git('commit', '-qm', 'archive')
     const file = only('archived')
     expect(file).not.toBe('') // positive control: the move really archived it
@@ -668,7 +668,7 @@ describe('trddgrep append / check-box', () => {
 // than refuse it.
 describe('trddgrep edit --no-bump', () => {
   it('is accepted (not refused as an unrecognised option) and leaves `updated:` byte-identical while applying the replacement', () => {
-    const r0 = cli('new', '--title', 'edit no-bump target', '--task-type', 'infra', '--author', 'main-agent@probe')
+    const r0 = cli('new', '--title', 'edit no-bump target', '--task-type', 'infra', '--author', 'main-agent@fixture-project')
     expect(r0.status).toBe(0)
     const file = only('tasks')
     const before = fs.readFileSync(file, 'utf-8')
@@ -700,7 +700,7 @@ describe('trddgrep edit --no-bump', () => {
   })
 
   it('still refuses a genuinely unrecognised option', () => {
-    const r0 = cli('new', '--title', 'edit stray target', '--task-type', 'infra', '--author', 'main-agent@probe')
+    const r0 = cli('new', '--title', 'edit stray target', '--task-type', 'infra', '--author', 'main-agent@fixture-project')
     expect(r0.status).toBe(0)
     const id = only('tasks').match(/-([A-Z0-9]{8})-/)?.[1] ?? ''
     const r = cli('edit', id, '--at-line', '1', '--expect', 'x', '--replace', 'y', '--totally-unknown')
@@ -753,7 +753,7 @@ describe('trddgrep identity (ai-maestro#168)', () => {
   })
 
   it('`move` to a recording column with no --approver on a harness machine is refused and the card is untouched', () => {
-    expect(cli('new', '--title', 'to archive', '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', 'to archive', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     fs.appendFileSync(file, '\n## Acceptance\n\n- [x] done\n')
     const before = fs.readFileSync(file, 'utf-8')
@@ -763,12 +763,76 @@ describe('trddgrep identity (ai-maestro#168)', () => {
     expect(r.stderr).toMatch(/refusing to move/)
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
   })
+
+  it('`new --author main-agent@X` in a corpus whose PRRD project-id is not X is refused, naming both, and writes nothing', () => {
+    const r = cli('new', '--title', 'wrong project', '--task-type', 'infra', '--author', 'main-agent@Other')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/"Other".*"fixture-project"/)
+    expect(only('tasks')).toBe('')
+    expect(only('proposals')).toBe('')
+  })
+
+  it('`new --assignee main-agent@X` gets the same project check', () => {
+    const r = cli('new', '--title', 'wrong assignee', '--task-type', 'infra',
+      '--author', 'main-agent@fixture-project', '--assignee', 'main-agent@Other')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/--assignee .*"Other".*"fixture-project"/)
+    expect(only('tasks')).toBe('')
+  })
+
+  it('`move --approver main-agent@X` gets the same project check, card untouched', () => {
+    expect(cli('new', '--title', 'to approve', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
+    const file = only('tasks')
+    fs.appendFileSync(file, '\n## Acceptance\n\n- [x] done\n')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = cli('move', idOf(file), 'complete', '--approver', 'main-agent@Other')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/refusing to move .*"Other".*"fixture-project"/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('with NO PRRD project-id, any well-formed main-agent@X is accepted (interim rule, open on #168)', () => {
+    fs.rmSync(path.join(design, 'requirements', 'PRRD.md'))
+    expect(cli('new', '--title', 'no prrd', '--task-type', 'infra', '--author', 'main-agent@Other').status).toBe(0)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/^created-by: main-agent@Other$/m)
+  })
+
+  it('`set <id> assignee` takes the identity grammar and the project check; a legacy value on the card is still readable', () => {
+    expect(cli('new', '--title', 'set identity', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
+    const file = only('tasks')
+    const id = idOf(file)
+    // a LEGACY free-string owner already on the card: reads must not trip on it
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf-8').replace(/^assignee: .*$/m, 'assignee: legacy-session'))
+    expect(cli('show', id).status).toBe(0)
+    const before = fs.readFileSync(file, 'utf-8')
+    const bad = cli('set', id, 'assignee', 'agent')
+    expect(bad.status).toBe(2)
+    expect(bad.stderr).toMatch(/is not an identity/)
+    const wrong = cli('set', id, 'assignee', 'main-agent@Other')
+    expect(wrong.status).toBe(2)
+    expect(wrong.stderr).toMatch(/"Other".*"fixture-project"/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    // positive control: a valid value is written
+    expect(cli('set', id, 'assignee', 'main-agent@fixture-project').status).toBe(0)
+    expect(fs.readFileSync(file, 'utf-8')).toMatch(/^assignee: main-agent@fixture-project$/m)
+  })
+
+  it('on a harness machine, a set-but-unresolvable AID_AUTH gets its own message, never the token', async () => {
+    const { generateSessionSecret } = await import('@/lib/session-secret')
+    writeRegistry([{ id: '44444444-4444-4444-8444-444444444444', name: 'bob', metadata: { sessionSecretHash: generateSessionSecret().secretHash } }])
+    const { secret } = generateSessionSecret()
+    const r = cliWith({ AID_AUTH: secret }, 'new', '--title', 'stale token', '--task-type', 'infra')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/stale or invalid token/)
+    expect(r.stderr).not.toContain(secret.slice(4, 12))
+    expect(only('tasks')).toBe('')
+  })
 })
 
 // ── `next` never offers history as work (TRDD-MQE5D28T D2) ───────────────────
 describe('trddgrep next', () => {
   it('lists a live dev card but never an ARCHIVED card that kept its dev column', () => {
-    expect(cli('new', '--title', 'live work', '--task-type', 'infra', '--author', 'main-agent@probe', '--column', 'dev').status).toBe(0)
+    expect(cli('new', '--title', 'live work', '--task-type', 'infra', '--author', 'main-agent@fixture-project', '--column', 'dev').status).toBe(0)
     const liveId = idOf(only('tasks'))
     // An archived card keeps whatever column it had (D2), written as the store writes one.
     fs.writeFileSync(path.join(design, 'archived', 'TRDD-20260101_000000+0100-ARCHDEV1-x.md'), [
@@ -787,7 +851,7 @@ describe('trddgrep next', () => {
 // ── a verb's switches may sit anywhere (observed 2026-09-24) ─────────────────
 describe('append/check-box: a valueless switch is never read as a positional', () => {
   it('`append <id> <heading> --create <line>` and `append --create <id> <heading> <line>` both write the line', () => {
-    expect(cli('new', '--title', 'switch order', '--task-type', 'infra', '--author', 'main-agent@probe').status).toBe(0)
+    expect(cli('new', '--title', 'switch order', '--task-type', 'infra', '--author', 'main-agent@fixture-project').status).toBe(0)
     const file = only('tasks')
     const id = idOf(file)
     const mid = cli('append', id, 'Notes A', '--create', '- a dash line')

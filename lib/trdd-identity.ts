@@ -50,6 +50,22 @@ function readRegistry(file: string): { state: 'absent' } | { state: 'unreadable'
   }
 }
 
+/**
+ * A `main-agent@X` identity must name THIS corpus's project when the corpus declares one
+ * (its PRRD `project-id:`): the shape alone let a card in project `probe` be signed
+ * `main-agent@Other`, and identity fields are write-once — a wrong name is permanent.
+ * Returns the refusal text, or null when there is nothing to refuse.
+ *
+ * With NO PRRD project-id any well-formed `main-agent@X` is accepted: the interim rule
+ * for PRRD-less projects is an open point on ai-maestro#168 (derive a default id from
+ * the repo, or keep requiring an explicit author) — do not tighten it here unilaterally.
+ */
+export function mainAgentProjectMismatch(value: string, projectId: string | null): string | null {
+  const id = parseTrddIdentity(value)
+  if (!id || id.kind !== 'main-agent' || !projectId || id.projectId === projectId) return null
+  return `\`${value}\` names project "${id.projectId}", but this corpus's PRRD project-id is "${projectId}" — use \`main-agent@${projectId}\``
+}
+
 export function resolveCliIdentity(opts: {
   /** The explicit flag value, if the caller passed one. */
   explicit?: string
@@ -70,6 +86,8 @@ export function resolveCliIdentity(opts: {
         error: `${opts.flag} ${JSON.stringify(opts.explicit)} is not an identity — use ${TRDD_IDENTITY_FORMS} (ai-maestro#168)`,
       }
     }
+    const mismatch = mainAgentProjectMismatch(opts.explicit, opts.projectId)
+    if (mismatch) return { ok: false, error: `${opts.flag} ${mismatch}` }
     return { ok: true, identity: formatTrddIdentity(parsed), source: 'flag' }
   }
 
@@ -97,10 +115,19 @@ export function resolveCliIdentity(opts: {
     }
     return { ok: true, identity: `main-agent@${opts.projectId}`, source: 'default' }
   }
+  // Two different faults, two messages: a caller with NO token needs to pass the flag; a
+  // caller whose token is SET but matches no live agent has a stale or invalid token and
+  // needs to know that, not be told to "pass the flag" as if it had sent nothing. Neither
+  // message ever prints the token or any part of it.
+  const why = secret
+    ? registry.state === 'unreadable'
+      ? 'AID_AUTH is set, but the agent registry could not be read to resolve it'
+      : 'AID_AUTH is set but does not resolve to a registered agent (stale or invalid token)'
+    : `no ${opts.flag} given and no AID_AUTH set`
   return {
     ok: false,
     error:
-      `no ${opts.flag} given and no resolvable AID_AUTH, on a machine that hosts the ai-maestro harness — ` +
+      `${why}, on a machine that hosts the ai-maestro harness — ` +
       `refusing to guess who is writing (a default here could record a harness agent under someone else's name). ` +
       `Pass ${opts.flag} (${TRDD_IDENTITY_FORMS}); a project's main session passes \`${opts.flag} main-agent@<project-id>\`.`,
   }

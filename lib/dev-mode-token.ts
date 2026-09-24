@@ -164,11 +164,14 @@ export async function revokeDevToken(): Promise<void> {
  * just an active bypass, because a parked token is still a live secret an
  * owner could re-enable with one `PATCH`.
  *
- * This is the CHECK, not the wiring: the caller is the server boot sequence
- * (server.mjs / a Next `instrumentation.ts` `register()`), which is outside
- * this file's ownership. Nothing in this repo invokes it yet — see the
- * card's Findings section for the follow-up that must call this before the
- * production server starts serving requests.
+ * This is the CHECK, not the wiring: it has no caller right now. server.mjs
+ * called it at boot until the owner's ruling (2026-09-24, TRDD-7IJ08EUV's
+ * `## Approval log`) removed that call: a dev-mode token normally requires
+ * passing the passkey check to mint, and agents need one to drive this
+ * server's UI while development is under way — though a hand-written
+ * governance.json can self-mint one outside that flow (the card's own
+ * Findings). This function is kept, unchanged, so the boot call can be
+ * re-wired into server.mjs once development ends.
  */
 export function assertDevModeAbsentInProduction(): void {
   if (process.env.NODE_ENV !== 'production') return

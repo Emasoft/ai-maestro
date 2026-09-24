@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-10T09:52:07+0200
+updated: 2026-09-24T10:18:28+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -65,7 +65,7 @@ That is exactly the failure mode to avoid here.
 - [x] A measured answer to whether an agent can obtain or forge one.
 - [x] The enable gate is pinned by a test with a NAMED neuter that reddens it.
 - [x] Token use is recorded where the human can audit it.
-- [x] A production build refuses to start if a dev-mode token is present. Wired at `server.mjs:106-112` (guard called as the very first executable statement, before hostname/port/next-import — pinned by static-ordering test); real subprocess spawn + pure-check positive control in `tests/unit/server-boot-dev-mode-guard.test.ts`; commit 77744dcf.
+- [ ] A production build refuses to start if a dev-mode token is present. REVERSED 2026-09-24 by owner ruling (see Approval log): the boot call was removed while development is under way — this box no longer holds. The check function itself is still wired at `lib/dev-mode-token.ts` (assertDevModeAbsentInProduction, uncalled) for re-wiring when development ends; was previously called from `server.mjs:106-112`, pinned by `tests/unit/server-boot-dev-mode-guard.test.ts` (that file's tests now assert the negative outcome instead); commit 77744dcf (original wiring).
 
 ## Approval log
 
@@ -80,6 +80,7 @@ That is exactly the failure mode to avoid here.
 - 2026-09-05T21:47:18+0200 — column → dev by ai-maestro-hub-session. mono-agent collapse of the self-assignment edges; code landed 8db78d42, box 5 held on the operator's dev-token decision
 - 2026-09-05T21:47:24+0200 — supersedes the 21:28:23 entry: the server.mjs call exists only in the working tree; no commit carries it and none will until the USER decides on the enabled dev-mode token (revoke via DELETE /api/auth/dev-token, then land; or land without restarting; or drop). Column set to dev: code landed, one box open. By ai-maestro-hub-session.
 - 2026-09-10T09:52:07+0200 — box 5 (last open box) closed by worker-7IJ08EUV in an isolated worktree, distinct from this project's own dev-mode-token state: added `tests/unit/server-boot-dev-mode-guard.test.ts` (real subprocess spawn of `tsx server.mjs` with a fake, obviously-non-secret token hash under a throwaway `$HOME`, asserting non-zero exit AND the exact `[SECURITY]`/`FATAL:` refusal message — not just exit code; a pure-check positive control with no token present; a static-ordering test proving the guard call precedes hostname/port/next/headless-router in server.mjs's own source). Neutered twice: a comment-based neuter falsely left the static-ordering test green (matched the commented-out literal) — caught and corrected before recording; the corrected delete-based neuter reddened exactly 2/3 tests (subprocess + static-ordering), positive control stayed green. `tsc --noEmit` 0 errors; `node --check server.mjs` OK; existing `tests/unit/dev-mode-token.test.ts` (13 tests) + new file (3 tests) = 16/16 pass. Committed 77744dcf. All 5 acceptance boxes now closed; column left at `dev` for this worker's report to reach the user (mono-agent collapse elsewhere already handles column progression). By worker-7IJ08EUV.
+2026-09-24T10:18:24+0200 — OWNER RULING: "why? the presence itself od the dev token in the env file will trigger the auto skip of the passkey check. this is always true. since the user must create the dev token from the settings page passing the passkey verification to mint the dev token, so the dev token is proof of the passkey being verified. this is necessary when the agents must control the ai-maestro server to test the ui." — boot call removed; check function kept for re-wiring when development ends. box 5's production hard-fail superseded while development is under way. Measured caveat (also this measurement's own Findings): an agent with write access to governance.json can self-mint a token, so the token proves passkey verification only if that file was never hand-written.
 
 ## Findings
 

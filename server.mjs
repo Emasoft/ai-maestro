@@ -96,20 +96,12 @@ process.on('SIGPIPE', () => {
 
 // =============================================================================
 
-// TRDD-7IJ08EUV: a dev-mode login token bypasses the keychain custody root, so
-// a production process must never run with one present (enabled, or merely
-// minted-but-parked). This is checked before ANYTHING else in this file —
-// before hostname/port are even read — so it fires identically for both
-// server modes (`yarn start` full mode and `yarn headless`, both `tsx
-// server.mjs`) and can never race a bound listener. Fail fast: one-line
-// reason to stderr, non-zero exit, no partial startup.
-try {
-  const { assertDevModeAbsentInProduction } = await import('./lib/dev-mode-token.ts')
-  assertDevModeAbsentInProduction()
-} catch (err) {
-  console.error(`[SECURITY] ${err?.message || err}`)
-  process.exit(1)
-}
+// TRDD-7IJ08EUV: the boot-time call to assertDevModeAbsentInProduction was removed here
+// per the owner's ruling (2026-09-24, `## Approval log`): a dev-mode login token normally
+// requires passing the passkey check to mint, and agents need one to drive this server's
+// UI while development is under way — though a governance.json hand-written outside that
+// flow can self-mint one (the card's own Findings). The check stays in lib/dev-mode-token.ts
+// for re-wiring once development ends.
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = process.env.HOSTNAME || '127.0.0.1' // Primary bind address (localhost-only by default)

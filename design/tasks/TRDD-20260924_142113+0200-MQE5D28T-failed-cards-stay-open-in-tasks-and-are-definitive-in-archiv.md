@@ -4,7 +4,7 @@ status: tasked
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T19:02:13+0200
+updated: 2026-09-24T19:07:06+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: docs
@@ -67,6 +67,7 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [ ] step 5: close immutability gaps on archived cards (no Approval-log append, no bump, no in-place rewrite, no check-box, no doctor --fix)
 - [ ] step 6: reconcile design/specs/3-pillars-spec.md and GOVERNANCE-RULES.md via specgrep, close janitor #308, run full verification
 - step 2 is PARTIAL (unticked 2026-09-24 after review): 26 cards moved in bc02c5129, not 32; design/refused/ still holds 5 janitor ticket cards pending ai-maestro-janitor#309, so the folder is not removed yet. Tick it when #309 lands and the 5 cards move.
+- step-5 queue addition (2026-09-24): STATUS-ZONE-MISMATCH on an ARCHIVED card becomes a WARN (history — the card is immutable, e.g. archived by AMAMA's mover, which never writes status: — Emasoft/ai-maestro-assistant-manager-agent#40). Same treatment as step-5 G8 for the checklist gate. Also: readyQueueFrom (trddgrep next) must skip zone archived (deferred from the kanban follow-ups; lives in lib/trdd-doctor.ts).
 
 ## Provenance correction
 

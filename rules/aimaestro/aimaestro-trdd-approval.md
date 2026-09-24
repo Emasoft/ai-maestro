@@ -689,8 +689,9 @@ NON-EXEMPT is defined in `aimaestro-manager-approval-defaults.md`.
 
 A `failed` TRDD in `design/tasks/` is OPEN and retryable — the default, requiring
 no authority to leave alone or to retry once its blocking cause is fixed:
-**marking a card `failed` in the first place** is MANAGER or USER, same as any
-other terminal-column verdict. **Moving a `failed` card to `design/archived/`**
+**marking a card `failed` in the first place** is MANAGER or USER, unchanged
+by the 2026-09-24 rulings — `failed` is not a terminal column, so the card
+stays open. **Moving a `failed` card to `design/archived/`**
 is a SEPARATE, later, deliberate act that only the MANAGER or the CHIEF-OF-STAFF
 may take (outside the harness: the USER or the main agent) — R1 and R3 below —
 and it makes the card **DEFINITIVE**: never retried.

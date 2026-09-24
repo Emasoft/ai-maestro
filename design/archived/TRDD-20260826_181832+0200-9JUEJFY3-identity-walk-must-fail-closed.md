@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-24T10:08:38+0200
+updated: 2026-09-24T10:24:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -89,3 +89,4 @@ which converts an unforgeable design into a forgeable one through an ordinary bu
 - 2026-09-05T10:21:21+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  fail-closed on severed identity walk still unimplemented . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
 - 2026-09-24T10:08:33+0200 — COMPLETE by emanuelesabetta. boxes all checked (4/4), sha 048476cf verified merged ancestor of HEAD, no open owner action in STATE/body.
 2026-09-24T10:08:38+0200 — closed by ai-maestro-hub-session: boxes all checked (4/4), sha 048476cf verified merged ancestor of HEAD, no open owner action in STATE/body
+2026-09-24T10:24:14+0200 — note: blocked-by [048476cf] holds a merged implementation sha, mis-filed (not a card id); left as-is because the card is terminal; see the repair card.

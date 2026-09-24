@@ -100,12 +100,36 @@ describe('resolveCliIdentity — explicit flag, then AID, then the registry-gate
     expect(r).toEqual({ ok: true, identity: `bob#${BOB_ID}`, source: 'aid' })
   })
 
-  it('an AID that matches no live agent does not resolve — and on a harness machine that is a refusal', () => {
+  it('an AID that matches no live agent does not resolve — and on a harness machine that is a refusal, never leaking the token', () => {
+    // deletedAt makes the row absent from resolution (it is `continue`d before the hash
+    // check), so this exercises a DIFFERENT code path than the "hash mismatch" fake-token
+    // test below even though both land on the same "stale or invalid token" message.
     const { secret, secretHash } = generateSessionSecret()
     fs.writeFileSync(registryFile, JSON.stringify([
       { id: BOB_ID, name: 'bob', deletedAt: '2026-01-01T00:00:00Z', metadata: { sessionSecretHash: secretHash } },
     ]))
-    expect(resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile }).ok).toBe(false)
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.error).toMatch(/stale or invalid token/)
+    const msg = !r.ok ? r.error : ''
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      expect(msg).not.toContain(secret.slice(i, i + 8))
+    }
+  })
+
+  it('AID_AUTH set but the registry is UNREADABLE (a directory at that path, not chmod) — refused, never leaking the token', () => {
+    // fs.readFileSync on a directory throws EISDIR, caught by readRegistry's own try/catch,
+    // same as a JSON-parse failure — this is the 'unreadable' branch's OWN message, distinct
+    // from the 'rows, no match' message the other tests here pin.
+    fs.mkdirSync(registryFile)
+    const fake = 'mst_' + 'b2d8e6'.repeat(11)
+    const r = resolveCliIdentity({ ...base, env: { AID_AUTH: fake }, registryFile })
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.error).toMatch(/agent registry could not be read/)
+    const msg = !r.ok ? r.error : ''
+    for (let i = 0; i + 8 <= fake.length; i++) {
+      expect(msg).not.toContain(fake.slice(i, i + 8))
+    }
   })
 
   it('an explicit main-agent@X must name the PRRD project-id, compared exactly (both values named on refusal)', () => {

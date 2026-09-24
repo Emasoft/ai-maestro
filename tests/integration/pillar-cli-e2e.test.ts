@@ -474,6 +474,11 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep new — ai-maestro#168 identity resolu
     expect(m).not.toBeNull();
     const content = fs.readFileSync(findCardFile(design, m![1])!, 'utf8');
     expect(content).toMatch(/^created-by: main-agent@e2e-probe$/m);
+    // #168: the default must never leak the OS login (process.env.USER-equivalent) into
+    // the card, only the resolved main-agent@<project-id> identity.
+    const osLogin = os.userInfo().username;
+    expect(osLogin.length).toBeGreaterThan(0); // positive control: the login itself is non-empty
+    expect(content).not.toContain(osLogin);
   });
 
   it('22 · PRRD with project-id, --author main-agent@other → exits 2 with the project mismatch refusal', () => {

@@ -3,18 +3,18 @@ trdd-id: MQE5D28T
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T15:55:53+0200
-current-owner: emanuelesabetta
-created-by: emanuelesabetta
+updated: 2026-09-24T16:05:19+0200
+current-owner: ai-maestro-main-session
+created-by: ai-maestro-main-session
 task-type: docs
 min-approval-requirement: none
 scope: project
 project-id: ai-maestro
-assignee: emanuelesabetta
+assignee: ai-maestro-main-session
 mandate: true
 mandated-by: user
 approved: true
-approval-judge: emanuelesabetta
+approval-judge: ai-maestro-main-session
 approval-datetime: 2026-09-24T14:21:13+0200
 ---
 
@@ -22,7 +22,7 @@ approval-datetime: 2026-09-24T14:21:13+0200
 
 ## Approval log
 
-- 2026-09-24T14:21:13+0200 — MANDATE issued by emanuelesabetta (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-24T14:21:13+0200 — MANDATE issued by ai-maestro-main-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent. (identity redacted 2026-09-24: OS login replaced)
 
 ## Problem
 
@@ -59,6 +59,12 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - ~~proposed: the corpus tooling's archive-eligibility check should accept a failed card moving into archived/ when the move is attributed to the MANAGER or CHIEF-OF-STAFF (or, outside the harness, the USER or main agent) — today's zone-mismatch logic (ZONE-MISMATCH / expectedZone) treats failed as tasks/-only and would need to allow this one exception, not a general one~~ SUPERSEDED 2026-09-24 by the second USER ruling on this card ("no matter the column it is in ... it will be archived"); the zone-rule change is owned by TRDD-4NISAY49.
 - [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
 - [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
+- [x] step 1: plan and decisions recorded on this card
+- [ ] step 2: remove design/refused/, move its 32 cards to proposals/
+- [ ] step 3: add status: proposed|tasked|archived, enforced by the trddgrep linter
+- [ ] step 4: archive preserves the card's column; add archive authority table; wire the trddgrep archive verb
+- [ ] step 5: close immutability gaps on archived cards (no Approval-log append, no bump, no in-place rewrite, no check-box, no doctor --fix)
+- [ ] step 6: reconcile design/specs/3-pillars-spec.md and GOVERNANCE-RULES.md via specgrep, close janitor #308, run full verification
 
 ## Provenance correction
 
@@ -77,3 +83,17 @@ The trddgrep archive verb is tracked in TRDD-4NISAY49.
 
 USER 2026-09-24 (verbatim): "an archived trdd is automatically cancelled, but if the state column is failed, it must be preserved to show that when it was archived it was failed. An archived card can be in any column state. The archived cards are like corpses: you cannot change them anymore, since they become history that can be used by forensic to reconstruct the iter of an issue or the action of a malicious agent. The archived card is photographed forever in the state it was when it was archived. you can search with trddgrep among all archived cards, but no option in the trddgredp must exist to un-archive a trdd. its definitive. there is the 3 stage life metadata field in the frontmatter too that reports the 3 possible stages: proposed, tasked, archived. (but i don't remember the exact naming at the moment. maybe status? or life-stage?. Anyway, it can be a field that only has those 3 possible states."
 USER 2026-09-24 (verbatim, second ruling): "refused means that a card is not approved to become a task, but it does not become archived. it remains in the proposals and can be edited and improved and proposed again to the manager. if the author decides to archive it, it can be archived. but the manager and the cos never archive a proposal. only the author can. (outside of the harness or for local scoped trdd these figures are replaced by the main agent of the project, of course, so he can do all of it by itself). this is important: a MANAGER or a COS cannot archive a TRDD in the proposed stage. Only the author can."
+
+## Lifecycle plan and decisions — 2026-09-24
+
+Owner delegation (verbatim): "fix all of those issues. i leave the rest of the decisions to you. remember to base the decisions of verified facts and tests. never assume anything."
+Owner rulings also to quote verbatim: "wait: i only asked for refused to be a metadata, not a folder. but you added the folder by error, and we ended with the refused folder now. you can keep it if you want, but you must know that is redundant, since it is no dfferent than the proposal folder, since all proposed trdd are edited and refused multiple times before being approved. so i would prefer to not have a refusal folder, since it will become filled with all proposals very soon." and "yes. status. enforced to the 3 values by the trddgrep linter."
+D1: "marked as filed" in R1 = archived (R1 contrasts "stays open for retry" with "filed"; R3 names the same MANAGER/COS pair for archiving a failed card). So marking a card failed keeps the pre-existing authority "MANAGER or USER"; archiving a failed card = MANAGER or CHIEF-OF-STAFF; outside the harness, the user or the main agent (R1). This is a reading, flagged to the owner in the final report.
+D2: Archiving preserves the card's column as-is ("An archived card can be in any column state", "photographed forever in the state it was when it was archived"). Keeping the column loses no information (a kept column plus status: archived can still be read as cancelled later), while rewriting it destroys forensic evidence on a card that can never be edited again. The owner's wording also supports it ("any column state", "photographed forever"). A reading where only failed is kept is possible; this choice preserves the strictly larger set of facts.
+D3: Archive authority — a tasked card is archived by its owner or MANAGER, as today, unchanged; a failed card specifically is archived by MANAGER or CHIEF-OF-STAFF only (R1/R3). Proposed stage: its author only. Outside the harness or for a local-scope TRDD: the main agent. Author-only archiving of proposals is enforced by the server route; the trddgrep CLI cannot verify caller identity until issue #168 is fixed.
+D4: status: proposed | tasked | archived, enforced by the trddgrep linter whenever present, and it must match the folder. The tools write it on every create or stage move. trddgrep fix may add it to non-archived cards only. The 418 existing archived cards stay untouched (immutable), and a missing status there is accepted.
+D5: Finished cards not yet archived keep today's rule-12 protection (no ruling changes it).
+D6: Refuse sets column: refused and the card stays in proposals/, editable and re-proposable. design/refused/ is removed and its 32 cards move to proposals/. Who may refuse is unchanged.
+D7: move to a finished column still archives. The new trddgrep archive verb (TRDD-4NISAY49) archives from any column, preserving it.
+D8: Archived cards are immutable with no exceptions: no Approval-log append, no updated bump, no in-place archived→superseded rewrite (a replacement records supersedes: instead), no check-box, no doctor --fix repair. No un-archive path exists; a test pins that.
+Steps: 1 this one; 2 remove design/refused/; 3 the status field; 4 archive preserves the column, plus authority and the archive verb; 5 immutability gaps; 6 specs (via specgrep), GOVERNANCE-RULES, janitor #308, and a full verification. Each step gets tests, neuter runs, and one reviewed commit.

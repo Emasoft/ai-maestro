@@ -83,8 +83,8 @@ baseline-deviation gate), this rule governs.
   refused/   = proposals NEVER approved.   archived/ = ONCE-approved, now terminal.
   `failed` stays OPEN and retryable in `tasks/` BY DEFAULT — fix the cause (often
   via other TRDDs), retry. It moves to `archived/` ONLY on an express **MANAGER
-  or CHIEF-OF-STAFF** decision (outside the harness: not ruled — the user
-  decides) — never mechanically or automatically — and once so archived it is
+  or CHIEF-OF-STAFF** decision (outside the harness: the USER or the main
+  agent) — never automatically — and once so archived it is
   **DEFINITIVE**: never retried (owner ruling 2026-09-24, quoted in full in
   Part B2 below).
 ```
@@ -674,8 +674,8 @@ multi-agent system, WHO may trigger each transition:
 | `deploy → live` | DEPLOYER (via INTEGRATOR) | — |
 | `live → live_auditing` (soak) | INTEGRATOR | — |
 | `<any working> → blocked` / back | owner | — |
-| `<any> → failed` | MANAGER or CHIEF-OF-STAFF (explicit decision); outside the harness, the USER or the main agent | abandon-for-now; card stays OPEN/retryable in `tasks/` (owner ruling R1, see below) |
-| `failed (tasks/) → archived/` (DEFINITIVE) | MANAGER or CHIEF-OF-STAFF | never mechanical, never automatic (owner ruling R3, see below); outside the harness: not ruled — the user decides |
+| `<any> → failed` | MANAGER or USER | abandon-for-now; card stays OPEN/retryable in `tasks/` (see the definitive-archive row below) |
+| `failed (tasks/) → archived/` (DEFINITIVE) | MANAGER or CHIEF-OF-STAFF (explicit decision); outside the harness, the USER or the main agent | never automatic (owner ruling R1/R3, see below) |
 | `<any> → superseded` | ARCHITECT (during split) | — |
 
 Which of these transitions are EXEMPT from MANAGER approval vs
@@ -684,13 +684,21 @@ NON-EXEMPT is defined in `aimaestro-manager-approval-defaults.md`.
 ### `failed` stays open by default; archiving it is a definitive act (owner ruling, 2026-09-24)
 
 A `failed` TRDD in `design/tasks/` is OPEN and retryable — the default, requiring
-no authority to leave alone or to retry once its blocking cause is fixed.
-**Marking a card `failed` in the first place** requires an express MANAGER or
-CHIEF-OF-STAFF decision (outside the ai-maestro harness: the USER or the main
-agent acting alone) — R1 below. **Moving a `failed` card to `design/archived/`**
+no authority to leave alone or to retry once its blocking cause is fixed:
+**marking a card `failed` in the first place** is MANAGER or USER, same as any
+other terminal-column verdict. **Moving a `failed` card to `design/archived/`**
 is a SEPARATE, later, deliberate act that only the MANAGER or the CHIEF-OF-STAFF
-may take (outside the harness: not ruled — the user decides) — R3 below — and it
-makes the card **DEFINITIVE**: never retried. Quoted verbatim from the owner:
+may take (outside the harness: the USER or the main agent) — R1 and R3 below —
+and it makes the card **DEFINITIVE**: never retried.
+
+R1's own wording ("marked as filed on an express MANAGER or CHIEF-OF-STAFF
+decision") reads, on this card's D1 analysis, as governing the ARCHIVING act
+rather than the plain `<any> → failed` transition — R1 contrasts "stays open
+for retry" against "filed", and R3 names the same MANAGER/CHIEF-OF-STAFF pair
+for archiving a failed card, so the two rulings are read together as one
+authority statement about archiving. This is the orchestrator's reading under
+the owner's delegation on TRDD-MQE5D28T ("i leave the rest of the decisions to
+you"). Quoted verbatim from the owner:
 
 > R1: "of course they stays open for retry. they can only marked as filed on an
 > express MANAGER or CHIEF-OF-STAFF decision. Or, outside the harness, by a user

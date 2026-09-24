@@ -4,7 +4,7 @@ status: tasked
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: backburner
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-24T16:05:19+0200
+updated: 2026-09-24T18:56:02+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: docs
@@ -61,8 +61,8 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
 - [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
 - [x] step 1: plan and decisions recorded on this card
-- [ ] step 2: remove design/refused/, move its 32 cards to proposals/
-- [ ] step 3: add status: proposed|tasked|archived, enforced by the trddgrep linter
+- [x] step 2: remove design/refused/, move its 32 cards to proposals/
+- [x] step 3: add status: proposed|tasked|archived, enforced by the trddgrep linter
 - [ ] step 4: archive preserves the card's column; add archive authority table; wire the trddgrep archive verb
 - [ ] step 5: close immutability gaps on archived cards (no Approval-log append, no bump, no in-place rewrite, no check-box, no doctor --fix)
 - [ ] step 6: reconcile design/specs/3-pillars-spec.md and GOVERNANCE-RULES.md via specgrep, close janitor #308, run full verification
@@ -98,3 +98,13 @@ D6: Refuse sets column: refused and the card stays in proposals/, editable and r
 D7: move to a finished column still archives. The new trddgrep archive verb (TRDD-4NISAY49) archives from any column, preserving it.
 D8: Archived cards are immutable with no exceptions: no Approval-log append, no updated bump, no in-place archived→superseded rewrite (a replacement records supersedes: instead), no check-box, no doctor --fix repair. No un-archive path exists; a test pins that.
 Steps: 1 this one; 2 remove design/refused/; 3 the status field; 4 archive preserves the column, plus authority and the archive verb; 5 immutability gaps; 6 specs (via specgrep), GOVERNANCE-RULES, janitor #308, and a full verification. Each step gets tests, neuter runs, and one reviewed commit.
+A2 (decided 2026-09-24, landed in 470da9cb2): a CHIEF-OF-STAFF may archive a failed card only when the assignee of the card is in its own team; an unresolvable assignee is denied (fail closed). Consequence: TRDD-G6EBLBIQ has no assignee, so only MANAGER or the human owner can archive it.
+A3: owner means assignee OR created-by, unchanged.
+A4: the human owner is granted before the authorization matrix; the author-only rule for proposals binds agents only.
+A5: the owner cannot archive its own failed card (the column is read from disk, so `state: cancelled` cannot launder it in one step). A retry (failed → dev) followed by a cancel is accepted as a legitimate retry-then-give-up.
+D9 (a reading, open question to the owner): in "Only when the agent or the MANAGER / COS decide to give up", the code reads "the agent" as the main agent outside the harness (R1). The agent assigned to a card may NOT archive its failed card until the owner confirms otherwise.
+Commit 920d4361d withdrew, for agents, the in-place archived→superseded API path delivered by TRDD-MUB7NTRF (D8). The human owner and the trddgrep CLI still reach the store until step-5 G9 closes it.
+Queued for step 5: (a) the write gate (validateTrddCandidate, used by `set` and the API PATCH) does not enforce the three status values or folder agreement; (b) the fixer date block uses the loaded column and runs before the v1 migration; (c) the v1 migration writes to a card that the same pass makes finished; (d) the lint promises autofix on a YAML-only card with no closing `---`, but the fix skips it.
+D6 correction: of the 32 cards in design/refused/, 26 moved to proposals/ (bc02c5129); 5 janitor ticket cards remain there (D49OPVWP, Q47OTJ14, V630G4CY, VCEWKBQX, XOHLHQOF) pending Emasoft/ai-maestro-janitor#309; ECOPBKN6 was deleted by the janitor (a dedupe, inferred from its keys).
+Owner ruling 2026-09-24 on card authorship (verbatim): "how can a session name be the author of a card? there is something wrong with that. author can only be a main agent from a specific project folder, or the user (rare, the user delegate the writing of trdd to the main agent usually), or (when inside the ai-maestro harness) an agent with a specific name and id." Tracked with Emasoft/ai-maestro#168. The created-by of this very card (`ai-maestro-main-session`) is an instance of that defect.
+Commits for this card on branch fix/pillar-cli-issues-165-167 (no implementation-commits field exists): step 2 bc02c5129; step 3 f84851018 (code) and ff28129be (239-card status backfill); overlay wording 23fdb2348; archive authority 470da9cb2 and 920d4361d; kanban index 7bf577be0.

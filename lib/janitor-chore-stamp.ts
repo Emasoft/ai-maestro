@@ -175,6 +175,18 @@ export function declareChoreBounds(bounds: Record<string, number>): void {
  */
 let choreClaimPredicate: ((chore: AbsorbedChore) => boolean) | null = null
 
+// Logged once per process (not once per chore) — the cause is module-instance load order, not
+// any one chore, so repeating it per chore would just be noise about the same root cause.
+let warnedUnregistered = false
+function warnUnregisteredOnce(chore: AbsorbedChore): void {
+  if (warnedUnregistered) return
+  warnedUnregistered = true
+  console.warn(
+    `[chore-stamp] claim predicate not registered in this module instance — not stamping '${chore}' ` +
+      `(fail-closed; see design/specs/oauth-rotation-and-chore-handover-spec.md R3)`,
+  )
+}
+
 /**
  * Wire the real chore-claim predicate — `lib/server-liveness.ts` calls this with its own
  * `isChoreClaimed` at module load, as a runtime registration rather than a static import.
@@ -192,21 +204,26 @@ let choreClaimPredicate: ((chore: AbsorbedChore) => boolean) | null = null
  * `server-liveness.ts` — production boot (`server.mjs`) or a test that explicitly imports it —
  * calls the setter once, and `stampChoreRun` reads the registered closure directly.
  *
- * UNREGISTERED FAILS OPEN (treated as claimed, i.e. the OLD unconditional-stamp behaviour) —
- * deliberately, not fail-closed: dozens of existing callers and their tests exercise the real
- * `stampChoreRun` without ever loading `server-liveness.ts` (they gate at their OWN call site
- * instead, e.g. `armed ? () => stampChoreRun(...) : undefined` in `fleet-stop.ts`), and those are
- * not wrong — they just don't need this shared predicate. Failing closed by default would silence
- * every one of them the moment `server-liveness.ts` merely wasn't the first thing loaded, which is
- * worse than the bug this guard exists to fix.
+ * UNREGISTERED FAILS CLOSED (no stamp written) — reversed from the original fail-open design
+ * after the janitor's maintainer traced a real starvation: `server.mjs` loads `server-liveness.ts`
+ * (the tsx runtime), but code bundled into `.next` — e.g. `app/api/statusline/ingest/route.ts`,
+ * which calls `runOneTick()` from the bundle — gets its OWN module instance of this file, where
+ * `choreClaimPredicate` is still null, because ES modules are cached per RESOLVED PATH and the
+ * bundler's copy resolves to a different path than the tsx one. Under the old fail-open default
+ * that bundled instance stamped 'oauth-rotator-tick' unconditionally on every ingest call — even
+ * while the real rotation flag is OFF — which is exactly the ORH R3 kill-switch bug this guard was
+ * built to close, reintroduced through the one caller that never goes through the registered
+ * instance (fixed in the commit alongside this comment).
  *
- * KNOWN LIMITATION, STATED PLAINLY (not glossed over): this makes the guard's effectiveness for
- * the OAuth chores depend on `server-liveness.ts` having been loaded before the first real beat —
- * a load-order property this file cannot verify from inside itself. `server-liveness.ts`'s own
- * registration call documents where that is verified for the CURRENT `server.mjs` boot sequence
- * and what to re-check if that sequence ever changes. A caller that needs a hard guarantee rather
- * than this best-effort default should pass `deps.isClaimed` explicitly instead of relying on
- * registration.
+ * The cost of failing closed is bounded and one-sided: an unwritten stamp only makes the janitor
+ * treat the chore as unowned and run it itself — correct whenever this server truly hasn't claimed
+ * it, and merely redundant (a possible claimed-chore-stale alarm on the janitor side) for a chore
+ * genuinely claimed but stamped only from an unregistered bundle instance. The server's real,
+ * timer-driven stamps run in the registered tsx instance and are unaffected. That is a strictly
+ * safer failure mode than reporting an unowned chore as healthy.
+ *
+ * A caller that needs a hard guarantee regardless of module-instance load order should pass
+ * `deps.isClaimed` explicitly instead of relying on registration.
  */
 export function registerChoreClaimPredicate(fn: (chore: AbsorbedChore) => boolean): void {
   choreClaimPredicate = fn
@@ -239,6 +256,10 @@ export function registerChoreClaimPredicate(fn: (chore: AbsorbedChore) => boolea
  * `deps.isClaimed` is a test seam that overrides even a registered predicate — production always
  * uses the registered `isChoreClaimed`, which reads real scheduler/flag state; a test that wants a
  * specific chore claimed or not without touching that real state injects a stub here instead.
+ *
+ * NO PREDICATE AT ALL (neither `deps.isClaimed` nor a registered one) FAILS CLOSED: nothing is
+ * written. See `registerChoreClaimPredicate`'s doc comment for why — in short, an unregistered
+ * module instance (the `.next` bundle) must not be able to claim a chore on the janitor's behalf.
  */
 export function stampChoreRun(
   chore: AbsorbedChore,
@@ -247,7 +268,11 @@ export function stampChoreRun(
 ): void {
   try {
     const isClaimed = deps.isClaimed ?? choreClaimPredicate
-    if (isClaimed && !isClaimed(chore)) return
+    if (!isClaimed) {
+      warnUnregisteredOnce(chore)
+      return
+    }
+    if (!isClaimed(chore)) return
     const p = choreStampPath(chore)
     fs.mkdirSync(path.dirname(p), { recursive: true })
     // Epoch SECONDS — the janitor parses this as an integer second count. Writing milliseconds

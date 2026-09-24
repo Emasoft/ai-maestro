@@ -12,7 +12,7 @@
  * globally by `tests/setup/janitor-control-containment.ts` for every test file, so the stamp
  * writes below never touch the developer's real `~/.claude/janitor-control/`.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { stampChoreRun, readChoreStamp } from '@/lib/janitor-chore-stamp'
 
 describe('stampChoreRun — gated on the claim predicate (deps.isClaimed seam)', () => {
@@ -48,13 +48,19 @@ describe('stampChoreRun — gated on the claim predicate (deps.isClaimed seam)',
     expect(readChoreStamp('fleet-plugins-update')).toBeNull()
   })
 
-  it('with NO predicate registered and none injected, fails OPEN (writes) — the pre-existing default for every caller that gates itself', () => {
+  it('with NO predicate registered and none injected, fails CLOSED (writes nothing) and warns exactly once across two calls', () => {
     // registerChoreClaimPredicate is never called in this file's isolated module graph (vitest
     // gives each test file its own module registry by default), so the module-level predicate
-    // stays null here. Dozens of real callers (fleet-stop.ts, rules-cleanup.ts, ...) already gate
-    // themselves before ever calling stampChoreRun and never load server-liveness.ts — failing
-    // closed by default would silently stop all of them from stamping.
-    stampChoreRun('cold-cache-clear', Date.now())
-    expect(readChoreStamp('cold-cache-clear')).not.toBeNull()
+    // stays null here — the same shape a `.next`-bundled module instance is in at runtime, which
+    // is the exact starvation this reversal closes (see stampChoreRun's doc comment).
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      stampChoreRun('cold-cache-clear', Date.now())
+      stampChoreRun('cold-cache-clear', Date.now())
+      expect(readChoreStamp('cold-cache-clear')).toBeNull()
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

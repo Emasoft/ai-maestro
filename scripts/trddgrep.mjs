@@ -48,7 +48,7 @@ import path from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
 
-const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
+const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir, STATE_HEADING_SOURCE } =
   await import('../lib/trdd-store.ts')
 const { SHIPPED, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIELDS } =
   await import('../lib/trdd-graph.ts')
@@ -172,6 +172,13 @@ rest = rest.filter((t) => t !== '--design-body' && t !== '--no-design-body')
  * this reader's to adjudicate, and taking the first keeps the original body correct (it is
  * bounded by the first divider under either interpretation).
  */
+/** Does `body` carry a `@trdd:design-body` divider at all? The ONE divider predicate — both
+ * `bodySlice` (below) and `show`'s no-flag rendering (#165 follow-up, #167 review) call this
+ * instead of each running its own `.find`/`.some` over the same marker. */
+function hasDesignDivider(body) {
+  return body.split('\n').some((l) => l.trim() === DESIGN_DIVIDER)
+}
+
 function bodySlice(body) {
   if (bodyScope === 'all') return body
   const lines = body.split('\n')
@@ -765,7 +772,11 @@ switch (cmd) {
     // "elsewhere": summarizing down to just STATE (or to nothing, absent a STATE block)
     // silently dropped the rest of the card — a 254-line acceptance-checklist card rendered
     // as 20 lines. So a no-divider card renders whole; only a divided card gets the summary.
-    const hasDivider = bodyScope === 'all' && fresh.body.split('\n').some((l) => l.trim() === DESIGN_DIVIDER)
+    // #167 review: ONE divider predicate — `bodyScope === 'all'` is still required here
+    // because `bodySlice` short-circuits to "has a divider" for any OTHER scope (it has
+    // already sliced the body down to one side of it by then), so calling it unguarded
+    // would read as "yes" under `--no-design-body` regardless of the real body.
+    const hasDivider = bodyScope === 'all' && hasDesignDivider(fresh.body)
     if (bodyScope === 'all' && !hasDivider) {
       console.log(C.b('\n  ⏵ BODY (no design-body divider — full card shown)\n'))
       for (const l of fresh.body.trim().split('\n')) console.log(`  ${l}`)
@@ -774,7 +785,11 @@ switch (cmd) {
     }
     // The STATE block is AUTHORITATIVE on resume — it supersedes the body, so it is the
     // only part worth printing by default.
-    const state = fresh.body.match(/##\s*⏵?\s*STATE[^\n]*\n([\s\S]*?)(?=\n## |\n$)/i)
+    // #167: STATE_HEADING_SOURCE is anchored + tightened (line-start `m` flag; STATE must
+    // not be followed by a word char or hyphen) so `## STATE-notes`/`## Statement of
+    // work`/`### STATE` are never mistaken for the STATE block — the SAME pattern the
+    // `append` verb's STATE alias uses to locate this exact heading (lib/trdd-store.ts).
+    const state = fresh.body.match(new RegExp(`${STATE_HEADING_SOURCE}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |\\n$)`, 'im'))
     if (state) {
       console.log(C.b('\n  ⏵ STATE (authoritative — supersedes the body)\n'))
       for (const l of state[1].trim().split('\n').slice(0, 30)) console.log(`  ${l}`)
@@ -1200,18 +1215,27 @@ switch (cmd) {
     }
     let aRest = argv.slice(4)
     const aNoBump = aRest.includes('--no-bump')
-    aRest = aRest.filter((t) => t !== '--no-bump')
+    // #167: an unmatched heading used to silently CREATE a new `## <heading>` section at
+    // EOF — even on a frozen terminal card — which is how a typo'd or stale heading (e.g.
+    // addressing `## ⏵ STATE — READ THIS FIRST ON RESUME` by its old plain name) produced a
+    // duplicate section instead of an error. Default is now refuse; `--create` opts in.
+    const aCreate = aRest.includes('--create')
+    aRest = aRest.filter((t) => t !== '--no-bump' && t !== '--create')
     if (aRest.length > 0) {
       console.error(`trddgrep: unrecognised argument(s) on \`append\`: ${aRest.join(' ')} — see \`trddgrep help\``)
       process.exit(2)
     }
     const { appendTrddSection, isoLocal } = await import('../lib/trdd-store.ts')
-    const res = await appendTrddSection(designDir, arg, heading, text, { iso: isoLocal().iso, bump: !aNoBump })
+    const res = await appendTrddSection(designDir, arg, heading, text, { iso: isoLocal().iso, bump: !aNoBump, create: aCreate })
     if (!res.ok) {
       console.error(`trddgrep: ${res.error}`)
       process.exit(res.status === 404 ? 1 : 2)
     }
-    console.log(C.g(`${C.b(res.id)}  appended to ${heading.startsWith('## ') ? heading : `## ${heading}`}`))
+    // The confirmation names which of the two happened — a caller addressing the STATE
+    // alias, or any other heading, needs to know whether it hit an existing section or just
+    // minted one, since the latter is the exact silent-duplicate shape #167 reports.
+    const marker = heading.startsWith('## ') ? heading : `## ${heading}`
+    console.log(C.g(`${C.b(res.id)}  ${res.created ? 'created' : 'appended to existing'} ${marker}`))
     console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}`))
     process.exit(0)
   }
@@ -1395,6 +1419,12 @@ ${C.b('trddgrep')} — query, CREATE, MOVE AND validate the TRDD corpus (offline
   ${C.d('  happen. Refuses `column` — that is half a transition; use move.')}
 
   ${C.c('trddgrep append <id> <heading> <line>')}   add a line to the END of a named section
+  ${C.d('  [--create] [--no-bump]. Refuses an unmatched heading by default (exit 2, file')}
+  ${C.d('  untouched) — it will NOT invent a `## <heading>` for you; pass --create to add a')}
+  ${C.d('  new section (refused on a terminal-column card, except `## Approval log`, which is')}
+  ${C.d('  append-only and exempt). `STATE` (any case, with or without `## `) is a built-in')}
+  ${C.d('  alias for the `## ⏵ STATE — ...` block, matched by heading, not by exact text —')}
+  ${C.d('  it never matches `## STATE-notes` or similar.')}
   ${C.c('trddgrep check-box <id> <n>')}   tick the Nth acceptance box  [--uncheck] [--no-bump]
   ${C.d('  Both address what you MEAN — a section, a box ordinal — instead of a line number.')}
   ${C.d('  check-box counts exactly what the terminal gate counts, fenced code excluded, and')}

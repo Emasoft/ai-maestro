@@ -113,7 +113,7 @@ export interface SearchOpts {
 }
 
 export type TrddResult =
-  | { ok: true; id: string; from?: TrddZone; to?: TrddZone; column?: string; filePath: string }
+  | { ok: true; id: string; from?: TrddZone; to?: TrddZone; column?: string; filePath: string; created?: boolean }
   | { ok: false; error: string; status: number }
 
 // The default corpus is the SERVER's own repo (process.cwd() is the project root
@@ -359,13 +359,68 @@ export function appendApprovalLog(content: string, logLine: string): string {
  * least one in this corpus does, so appending at EOF would silently file the entry under
  * whatever section happens to be last.
  */
-export function appendToSection(content: string, marker: string, logLine: string): string {
+/**
+ * The `## STATE` heading, matched loosely enough to accept the real spellings this corpus
+ * carries (measured 2026-09-24 across `design/`, `.claude/local/design/` and the janitor
+ * plugin's own `design/`: `## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative;
+ * supersedes the body) — <date>` and ~19 sibling variants, all of them `## ⏵? STATE`
+ * followed by a space, an em dash, or end of line) while refusing every near-miss: `##
+ * STATE-notes`, `## Statement of work`, and `### STATE` (heading level 3) must NOT match
+ * (#167). Anchored at line start; STATE must be followed by anything that is not a word
+ * character or a hyphen, so a heading that merely STARTS WITH the same five letters is a
+ * different heading, not an alias hit. Shared with `show`'s STATE-block extraction in
+ * scripts/trddgrep.mjs so the two only ever agree by construction.
+ */
+export const STATE_HEADING_SOURCE = String.raw`^##[ \t]*⏵?[ \t]*STATE(?![\w-])`
+
+/** True when `heading` (with or without a `## ` prefix) is exactly the bare word "state" —
+ * the one heading callers may address by name instead of its dated, marker-carrying text. */
+function isStateAlias(heading: string): boolean {
+  return heading.replace(/^##\s*/, '').trim().toLowerCase() === 'state'
+}
+
+/** Every `## ` heading line in `content`, verbatim (for a "no such section" error message). */
+export function existingSectionHeadings(content: string): string[] {
+  return content.split('\n').filter((l) => /^##\s+\S/.test(l.trimEnd())).map((l) => l.trim())
+}
+
+/** Thrown by `appendToSection` when `opts.create` is `false` and the heading has no match. */
+export class SectionNotFoundError extends Error {
+  constructor(heading: string, existing: string[]) {
+    super(`no section named "${heading}"; existing sections: ${existing.length ? existing.join(', ') : '(none)'}`)
+    this.name = 'SectionNotFoundError'
+  }
+}
+
+/** Locate the line index of `heading`'s `## ` section, honoring the STATE alias (#167).
+ * Every other heading matches by exact text, case-insensitive — the STATE alias is the one
+ * heading a caller may address without typing its dated, marker-carrying full text. */
+function findHeadingLine(lines: string[], heading: string): number {
+  if (isStateAlias(heading)) {
+    const re = new RegExp(STATE_HEADING_SOURCE, 'i')
+    return lines.findIndex((l) => re.test(l.trimEnd()))
+  }
+  const wanted = (heading.startsWith('## ') ? heading : `## ${heading}`).trim().toLowerCase()
+  return lines.findIndex((l) => l.trim().toLowerCase() === wanted)
+}
+
+export function appendToSection(content: string, marker: string, logLine: string, opts?: { create?: boolean }): string {
+  const create = opts?.create ?? true
   const lines = content.split('\n')
-  const start = lines.findIndex(l => l.trimEnd() === marker)
+  const start = findHeadingLine(lines, marker)
 
   if (start === -1) {
+    // #167 CLARIFICATION (review): this default (implicit creation) is UNCHANGED for every
+    // existing library caller (`appendApprovalLog`, and anything else that never passes
+    // `opts.create`) — `move`'s approval-log writes and the server's manage-trdd routes all
+    // rely on it. Only the CLI `append` verb (via `appendTrddSection`) opts OUT by passing
+    // `create: false`.
+    if (!create) {
+      throw new SectionNotFoundError(marker, existingSectionHeadings(content))
+    }
     const sep = content.endsWith('\n') ? '' : '\n'
-    return `${content}${sep}\n${marker}\n\n${logLine}\n`
+    const canonicalMarker = marker.startsWith('## ') ? marker : `## ${marker}`
+    return `${content}${sep}\n${canonicalMarker}\n\n${logLine}\n`
   }
 
   // The section ends at the next `## ` heading, or at EOF.
@@ -1002,13 +1057,22 @@ export function setTrddField(
  *
  * `updated:` is bumped by default for the same reason `set` bumps it: prose appended to a
  * card changes what the card asserts, and the board sorts on `updated:`.
+ *
+ * #167: this is the CLI `append` verb's backing function, and it — alone among callers of
+ * `appendToSection` — defaults to `create: false`. An unmatched heading used to silently
+ * append a brand-new `## <heading>` at EOF, so `append <id> STATE "x"` on a card whose
+ * heading is `## ⏵ STATE — READ THIS FIRST ON RESUME` (no exact-text match) minted a
+ * duplicate `## STATE` section instead of erroring — observed 4 times in one session. The
+ * caller now must pass `--create` to opt back into that. Creating a NEW section on a
+ * terminal-column card is refused too (IND base §12 freezes the body), except for
+ * `## Approval log`, which is append-only and exempt from the freeze.
  */
 export function appendTrddSection(
   designDir: string,
   id: string,
   heading: string,
   text: string,
-  opts: { iso: string; bump?: boolean },
+  opts: { iso: string; bump?: boolean; create?: boolean },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, () => {
     const trdd = findTrdd(designDir, id)
@@ -1018,10 +1082,29 @@ export function appendTrddSection(
       return { ok: false, status: 400, error: 'the heading and the text must each be one line — a newline here could open a second `---` fence and everything after it would read as frontmatter' }
     }
     let content = fs.readFileSync(trdd.filePath, 'utf-8')
-    content = appendToSection(content, marker, text)
+    const willCreate = findHeadingLine(content.split('\n'), heading) === -1
+    if (willCreate && !opts.create) {
+      return {
+        ok: false,
+        status: 400,
+        error: `no section named "${heading}"; existing sections: ${existingSectionHeadings(content).join(', ') || '(none)'} — pass --create to add it`,
+      }
+    }
+    // The `## Approval log` heading is append-only and explicitly exempt from the terminal
+    // freeze (IND base §12) — every other heading is ordinary body prose, so creating one on
+    // a card whose body is otherwise frozen would be the freeze's exact violation.
+    const isApprovalLog = heading.replace(/^##\s*/, '').trim().toLowerCase() === 'approval log'
+    if (willCreate && !isApprovalLog && TERMINAL_DONE.has(trdd.column)) {
+      return {
+        ok: false,
+        status: 409,
+        error: `refusing to create "## ${heading.replace(/^##\s*/, '')}" on a terminal card (column: ${trdd.column}) — only "## Approval log" may be created here`,
+      }
+    }
+    content = appendToSection(content, marker, text, { create: true })
     if (opts.bump !== false) content = setFrontmatterField(content, 'updated', opts.iso)
     atomicWriteSync(trdd.filePath, content)
-    return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath }
+    return { ok: true, id: trdd.id, column: trdd.column ?? '', filePath: trdd.filePath, created: willCreate }
   })
 }
 

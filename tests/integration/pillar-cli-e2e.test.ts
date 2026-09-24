@@ -305,7 +305,8 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
   it('06 · append adds a line under the named heading', () => {
     const design = mkDesignCorpus();
     const id = createCard(design, 'Append Card');
-    const r = run('trddgrep', ['--design-dir', design, 'append', id, 'Notes', 'This is a test note line.']);
+    // #167: a fresh card has no `## Notes` heading, so creating it needs `--create`.
+    const r = run('trddgrep', ['--design-dir', design, 'append', id, 'Notes', 'This is a test note line.', '--create']);
     expect(r.code).toBe(0);
     const content = fs.readFileSync(findCardFile(design, id)!, 'utf8');
     expect(content).toContain('## Notes');
@@ -315,7 +316,8 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
   it('07 · check-box ticks box 1; --uncheck reverses it', () => {
     const design = mkDesignCorpus();
     const id = createCard(design, 'Checkbox Card');
-    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] First criterion']);
+    // #167: a fresh card has no `## Acceptance` heading yet.
+    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] First criterion', '--create']);
     const tick = run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
     expect(tick.code).toBe(0);
     let content = fs.readFileSync(findCardFile(design, id)!, 'utf8');
@@ -329,7 +331,9 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
   it('08 · the D4 gate refuses to archive as complete while an acceptance box is unchecked', () => {
     const design = mkDesignCorpus();
     const id = createCard(design, 'Gate Card');
-    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] First criterion']);
+    // #167: the FIRST append creates `## Acceptance` (needs --create); the second appends
+    // to the now-existing section, exercising that path with no flag.
+    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] First criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Second criterion']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
     const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
@@ -341,7 +345,8 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — lifecycle (real CLI, real temp cor
   it('09 · once every acceptance box is checked, move complete succeeds and archives the file', () => {
     const design = mkDesignCorpus();
     const id = createCard(design, 'Completable Card');
-    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion']);
+    // #167: a fresh card has no `## Acceptance` heading yet.
+    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
     const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
     expect(r.code).toBe(0);
@@ -441,7 +446,8 @@ describe.skipIf(!HAVE_TRDDGREP)('trddgrep — CHARACTERIZATION of known defects 
     // move. If this assertion goes red, the defect was fixed.
     const design = mkDesignCorpus();
     const id = createCard(design, 'Non Git Card');
-    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion']);
+    // #167: a fresh card has no `## Acceptance` heading yet.
+    run('trddgrep', ['--design-dir', design, 'append', id, 'Acceptance', '- [ ] Only criterion', '--create']);
     run('trddgrep', ['--design-dir', design, 'check-box', id, '1']);
     const r = run('trddgrep', ['--design-dir', design, 'move', id, 'complete']);
     expect(r.code).toBe(0);

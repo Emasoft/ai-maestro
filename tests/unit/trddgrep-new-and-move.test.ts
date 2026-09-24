@@ -445,15 +445,82 @@ describe('trddgrep append / check-box', () => {
     expect(added).toBeLessThan(notes)
   })
 
-  it('creates the section when it does not exist', () => {
+  it('creates the section when --create is passed and it does not exist', () => {
     // NOT `## Approval log`: `trddgrep new` already writes that section, so the first
     // version of this test exercised the APPEND path while claiming to test creation, and
     // reddened on the mandate line already sitting there. The premise has to be checked,
     // not assumed.
+    //
+    // #167: creation is no longer the default — a caller must opt in with `--create`, or an
+    // unmatched heading used to silently mint a duplicate section instead of erroring.
     const id = seed()
     expect(fs.readFileSync(only('tasks'), 'utf-8')).not.toContain('## Notes and lessons learned')
-    expect(cli('append', id, '## Notes and lessons learned', '- a lesson').status).toBe(0)
+    expect(cli('append', id, '## Notes and lessons learned', '- a lesson', '--create').status).toBe(0)
     expect(fs.readFileSync(only('tasks'), 'utf-8')).toMatch(/## Notes and lessons learned\n\n- a lesson/)
+  })
+
+  it('#167 (a): refuses an unmatched heading by default, leaving the file byte-identical', () => {
+    const id = seed()
+    const before = fs.readFileSync(only('tasks'), 'utf-8')
+    const r = cli('append', id, '## Nonexistent Heading', '- x')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/no section named "## Nonexistent Heading"/)
+    expect(r.stderr).toMatch(/existing sections:/)
+    expect(r.stderr).toMatch(/--create/)
+    expect(fs.readFileSync(only('tasks'), 'utf-8')).toBe(before)
+  })
+
+  it('#167 (b): `STATE` appends into the `## ⏵ STATE — ...` block, creating no new section', () => {
+    const id = seed()
+    const file = only('tasks')
+    // A synthetic heading mirroring the real convention (`## ⏵ STATE — READ THIS FIRST
+    // ON RESUME (authoritative; supersedes the body) — <date>`, measured 2026-09-24 across
+    // design/, .claude/local/design/ and the janitor plugin's design/) — never a real card's
+    // heading text, since this repo is public.
+    fs.appendFileSync(file, '\n## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-01-01\n\n- prior state\n')
+    git('add', '-A'); git('commit', '-qm', 'seed state block')
+    const r = cli('append', id, 'STATE', '- alias landed')
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/appended to existing/)
+    const text = fs.readFileSync(file, 'utf-8')
+    expect(text.match(/^## .*/gm)?.filter((h) => /STATE/i.test(h)).length).toBe(1)
+    expect(text).toMatch(/- prior state\n- alias landed/)
+  })
+
+  it('#167 (c): `STATE` does NOT match `## STATE-notes`', () => {
+    const id = seed()
+    const file = only('tasks')
+    fs.appendFileSync(file, '\n## STATE-notes\n\n- unrelated\n')
+    git('add', '-A'); git('commit', '-qm', 'seed state-notes')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = cli('append', id, 'STATE', '- x')
+    // No `## STATE`/`## ⏵ STATE ...` heading exists on this card — only `## STATE-notes`,
+    // which must NOT be treated as a match — so the default refusal applies unchanged.
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/no section named "STATE"/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('#167 (e): --create is refused on a terminal card, except for `## Approval log`', () => {
+    const id = seed()
+    expect(cli('check-box', id, '1').status).toBe(0)
+    expect(cli('check-box', id, '2').status).toBe(0)
+    expect(cli('move', id, 'complete', '--approver', 'test').status).toBe(0)
+    git('add', '-A'); git('commit', '-qm', 'archive')
+    const file = only('archived')
+    const before = fs.readFileSync(file, 'utf-8')
+    const refused = cli('append', id, '## Some New Heading', '- x', '--create')
+    expect(refused.status).toBe(2)
+    expect(refused.stderr).toMatch(/terminal card \(column: complete\)/)
+    expect(refused.stderr).toMatch(/Approval log/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    // `move` already emits `## Approval log` (with the MANDATE line) as part of archiving,
+    // so this is the append-to-EXISTING path — the create-on-a-frozen-card exemption itself
+    // is pinned directly against `appendTrddSection` in trdd-store.test.ts (no CLI-level
+    // fixture puts a terminal card through `move` yet still lacks the section).
+    const allowed = cli('append', id, 'Approval log', '- extra entry', '--create')
+    expect(allowed.status).toBe(0)
+    expect(fs.readFileSync(file, 'utf-8')).toMatch(/- extra entry/)
   })
 
   it('refuses a newline in the text — it could open a second `---` fence', () => {

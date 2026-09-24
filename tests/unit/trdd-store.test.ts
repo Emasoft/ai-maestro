@@ -16,6 +16,9 @@ import {
   archiveTrdd,
   setFrontmatterField,
   appendApprovalLog,
+  appendTrddSection,
+  isoLocal,
+  STATE_HEADING_SOURCE,
 } from '@/lib/trdd-store'
 import { withJsonLock } from '@/lib/json-io'
 import { documentLockKey } from '@/lib/pillar/edit'
@@ -284,6 +287,109 @@ describe('trdd-store pure writers preserve the grep-first format', () => {
     expect(out).toContain('## Approval log\n- first')
     expect(out.indexOf('- first')).toBeLessThan(out.indexOf('## Notes and lessons learned'))
     expect(out).toContain('note')
+  })
+})
+
+/**
+ * appendTrddSection (#167) — the CLI `append` verb's backing function. `appendApprovalLog`
+ * above (a plain `appendToSection` caller) is untouched: it still creates implicitly,
+ * because it never passes `opts.create`. These tests are for the verb-specific opt-in and
+ * the terminal-column exemption, which have no other coverage — the CLI-spawn tests in
+ * tests/unit/trddgrep-new-and-move.test.ts pin the same behavior through the binary.
+ */
+/**
+ * The regex directly, no card/CLI machinery — synthetic headings only (never a real card's
+ * heading text; this repo is public). Measured 2026-09-24 across design/,
+ * .claude/local/design/, and the janitor plugin's design/: every real STATE heading found
+ * is one of the first three matching cases below (`## ⏵ STATE — ...`, plain `## STATE`,
+ * mixed-case `## State`) — anchored, so `### STATE` (a level-3 heading) must not match either.
+ */
+describe('STATE_HEADING_SOURCE (#167)', () => {
+  const re = () => new RegExp(STATE_HEADING_SOURCE, 'i')
+  it.each([
+    ['## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-01-01', true],
+    ['## STATE', true],
+    ['## State', true],
+    ['## STATE-notes', false],
+    ['## Statement of work', false],
+    ['### STATE', false],
+  ])('%s -> %s', (line, expected) => {
+    expect(re().test(line)).toBe(expected)
+  })
+})
+
+describe('appendTrddSection (#167 — CLI append verb backing function)', () => {
+  it('refuses an unmatched heading when create is not requested, leaving the file untouched', async () => {
+    const id = 'NOSEC001'
+    const file = writeTask(id, 'no-section', 'dev')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await appendTrddSection(designDir, id, '## Nonexistent Heading', '- x', { iso: isoLocal().iso })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.error).toMatch(/no section named "## Nonexistent Heading"/)
+      expect(r.error).toMatch(/existing sections:/)
+    }
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('creates the section, and reports `created: true`, only when create is requested', async () => {
+    const id = 'CREATE01'
+    writeTask(id, 'create-me', 'dev')
+    const r = await appendTrddSection(designDir, id, '## New Section', '- x', { iso: isoLocal().iso, create: true })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.created).toBe(true)
+  })
+
+  it('appending to an EXISTING section reports `created: false`, whether or not create was passed', async () => {
+    const id = 'MATCH001'
+    writeTask(id, 'match-me', 'dev')
+    const r = await appendTrddSection(designDir, id, '## Approval log', '- x', { iso: isoLocal().iso, create: true })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.created).toBe(false)
+  })
+
+  it('the STATE alias matches a real STATE heading and does NOT match `## STATE-notes`', async () => {
+    // A synthetic heading mirroring the real convention (measured 2026-09-24 across
+    // design/, .claude/local/design/ and the janitor plugin's design/) — never a real
+    // card's heading text, since this repo is public.
+    const id = 'STATE001'
+    const file = writeTask(id, 'state-card', 'dev')
+    fs.appendFileSync(
+      file,
+      '\n## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-01-01\n\n- prior\n\n## STATE-notes\n\n- unrelated\n',
+    )
+    const hit = await appendTrddSection(designDir, id, 'STATE', '- new', { iso: isoLocal().iso })
+    expect(hit.ok).toBe(true)
+    if (hit.ok) expect(hit.created).toBe(false)
+    const text = fs.readFileSync(file, 'utf-8')
+    expect(text).toMatch(/- prior\n- new/)
+    expect(text).not.toMatch(/## STATE-notes\n\n- unrelated\n- new/)
+  })
+
+  it('--create is refused on a terminal card for any heading except `## Approval log`', async () => {
+    const id = 'FROZEN01'
+    const file = path.join(designDir, 'archived', `TRDD-20260709_102705+0200-${id}-frozen.md`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    // Deliberately built WITHOUT `## Approval log` — `writeArchived`/`writeTask` always
+    // include it, and the exemption is only observable on a card that lacks the section.
+    fs.writeFileSync(
+      file,
+      `---\ntrdd-id: ${id}\ntitle: frozen title\ncolumn: complete\ncreated: 2026-07-09T10:27:08+0200\nupdated: 2026-07-09T10:27:08+0200\n---\n\n# ${id} — body\n`,
+    )
+    const before = fs.readFileSync(file, 'utf-8')
+    const refused = await appendTrddSection(designDir, id, '## Some New Heading', '- x', { iso: isoLocal().iso, create: true })
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) {
+      expect(refused.status).toBe(409)
+      expect(refused.error).toMatch(/terminal card \(column: complete\)/)
+      expect(refused.error).toMatch(/Approval log/)
+    }
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+
+    const allowed = await appendTrddSection(designDir, id, 'Approval log', '- entry', { iso: isoLocal().iso, create: true })
+    expect(allowed.ok).toBe(true)
+    if (allowed.ok) expect(allowed.created).toBe(true)
+    expect(fs.readFileSync(file, 'utf-8')).toMatch(/## Approval log\n\n- entry/)
   })
 })
 

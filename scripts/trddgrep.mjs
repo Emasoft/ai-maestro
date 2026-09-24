@@ -723,7 +723,10 @@ switch (cmd) {
       }
       scoped = bodySlice(pre.body ?? '')
       if (scoped === null) {
-        console.error(`trddgrep: ${c.id} has no design body — the file carries no ${DESIGN_DIVIDER} divider`)
+        console.error(
+          `trddgrep: ${c.id} has no design body — the file carries no ${DESIGN_DIVIDER} divider ` +
+            `(plain \`show ${c.id}\`, with no flag, prints the whole body)`,
+        )
         process.exit(1)
       }
     }
@@ -752,6 +755,19 @@ switch (cmd) {
       // from it. (A STATE block belongs to the original body; 3P-TRDD-13 puts the design
       // after the divider.)
       console.log(C.b(`\n  ⏵ DESIGN BODY (after ${DESIGN_DIVIDER})\n`))
+      for (const l of fresh.body.trim().split('\n')) console.log(`  ${l}`)
+      console.log()
+      break
+    }
+    // #165: a card with NO divider has no design half hidden behind a marker — the STATE
+    // extraction below is a SUMMARY of a body that is also readable in full elsewhere (via
+    // `--design-body`/`--no-design-body` on a divided card). Without a divider there is no
+    // "elsewhere": summarizing down to just STATE (or to nothing, absent a STATE block)
+    // silently dropped the rest of the card — a 254-line acceptance-checklist card rendered
+    // as 20 lines. So a no-divider card renders whole; only a divided card gets the summary.
+    const hasDivider = bodyScope === 'all' && fresh.body.split('\n').some((l) => l.trim() === DESIGN_DIVIDER)
+    if (bodyScope === 'all' && !hasDivider) {
+      console.log(C.b('\n  ⏵ BODY (no design-body divider — full card shown)\n'))
       for (const l of fresh.body.trim().split('\n')) console.log(`  ${l}`)
       console.log()
       break

@@ -72,6 +72,16 @@ const CARDS = [
     'card whose STATE sits in the design body',
     'ORIGINALMARK original body.\n\n<!-- @trdd:design-body -->\n\n## STATE — read first\n\nSTATEMARK the design-side state.',
   ),
+  // #165 regression: a pre-divider card with a STATE block followed by more body (an
+  // acceptance checklist). `show` used to print ONLY the STATE match, silently dropping
+  // everything after it — with no divider there is no "--design-body" escape hatch to read
+  // the rest, so the checklist was unreachable through any sanctioned verb.
+  card(
+    'EEEE5555',
+    'state-then-checklist-no-divider',
+    'card with STATE then a checklist, no divider',
+    '## STATE — read first\n\nSTATEMARK the state.\n\n## Acceptance\n\n- [x] CHECKLISTMARK one\n- [ ] CHECKLISTMARK two',
+  ),
 ]
 
 beforeAll(() => {
@@ -91,7 +101,7 @@ describe('trddgrep --design-body / --no-design-body (3P-TRDD-13)', () => {
   it('the fixture corpus is readable — a zero below must mean "no match", never "no corpus"', () => {
     const r = run(['board'])
     expect(r.status).toBe(0)
-    expect(r.stdout).toContain('4 open cards')
+    expect(r.stdout).toContain('5 open cards')
   })
 
   it('with NEITHER flag the search reads the whole body — every card matches either marker', () => {
@@ -166,6 +176,26 @@ describe('trddgrep --design-body / --no-design-body (3P-TRDD-13)', () => {
     const whole = run(['show', 'DDDD4444'])
     expect(whole.status).toBe(0)
     expect(whole.stdout).toContain('STATEMARK')
+  })
+
+  it('#165: show on a no-divider card prints the WHOLE body, not just the STATE match', () => {
+    const r = run(['show', 'EEEE5555'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('STATEMARK')
+    // Before the fix, everything after the STATE block was silently dropped — this is
+    // the exact shape (STATE, then an acceptance checklist) the issue was filed against.
+    expect(r.stdout).toContain('CHECKLISTMARK one')
+    expect(r.stdout).toContain('CHECKLISTMARK two')
+  })
+
+  it('#165: a card WITH a divider is unaffected — show still prints the STATE-only summary', () => {
+    // AAAA1111 has a divider and no STATE block, so plain `show` must still fall through
+    // to the pre-existing "(no STATE block — read the file)" summary rather than dumping
+    // the whole body — the fix is scoped to divider-less cards only.
+    const r = run(['show', 'AAAA1111'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('no STATE block')
+    expect(r.stdout).not.toContain('DESIGNMARK')
   })
 
   it('both flags together is a could-not-run (2), never a silent pick', () => {

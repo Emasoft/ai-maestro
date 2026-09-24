@@ -271,7 +271,10 @@ describe('non-local blocked-by spellings (TRDD-PTFPGSLV)', () => {
     expect(localRefList('blocked-by', ['gh:Emasoft/ai-maestro#145', 'TRDD-AAAA1111'])).toEqual(['AAAA1111'])
     // Scoped to blocked-by on purpose: silently dropping a bogus `gh:` from `npt:` would
     // soften `childMissing` — the parent's completion gate would stop counting it.
-    expect(localRefList('npt', ['gh:Emasoft/ai-maestro#145'])).toEqual(['GH:EMASO'])
+    // Kept as the FULL uppercased ref, not sliced to 8 chars (#166): only a v1 UUID
+    // remainder may fold into its leading 8 chars, so this stays distinguishable and
+    // still resolves to no card.
+    expect(localRefList('npt', ['gh:Emasoft/ai-maestro#145'])).toEqual(['GH:EMASOFT/AI-MAESTRO#145'])
   })
 
   it('externalRefList keeps the RAW spelling — the raw ref IS the information', () => {

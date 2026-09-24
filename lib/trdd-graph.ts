@@ -59,6 +59,7 @@ export type ViolationKind =
   | 'kindMismatch'
   | 'parentMismatch'
   | 'childMissing'
+  | 'danglingV1Slug'
   | 'childDerivedFalse'
   | 'falseComplete'
   | 'orderCycle'
@@ -79,9 +80,38 @@ export interface TrddViolation {
  * `trdd-id:`. The corpus mixes v1 full-UUID ids (`903b7a20-bddf-4368-…`) with v2
  * 8-char base36 ids, and every cross-reference cites the first eight characters.
  * Matching on the full id invents missing children that are sitting right there.
+ *
+ * Only a v1 UUID REMAINDER (`-xxxx-xxxx-xxxx-xxxxxxxxxxxx`, all hex) may be folded
+ * into its leading 8 chars — it names one whole v1 TRDD. Anything else with an
+ * 8-char-then-dash shape does NOT fold: most commonly a v1-era DERIVED-TASK slug
+ * (`TRDD-<id8>-npt-<slug>` / `-eht-<slug>`), which names a prerequisite that was
+ * never minted as its own card. Folding it anyway makes the ref equal the CARD
+ * THAT WROTE IT — a phantom self-edge that `findOrderCycles` then reports as a
+ * self-ring (#166: `TRDD-dccb0b8a-npt-pane-record` on card DCCB0B8A folded to
+ * `DCCB0B8A`, its own id). Returning the whole ref, uppercased and unsliced, keeps
+ * it distinguishable: it resolves to no card (`childMissing`-shaped, reported as
+ * `danglingV1Slug` below) instead of silently becoming its author.
  */
+const UUID_REMAINDER_RE = /^-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The SPECIFIC v1-era derived-task slug shape (`<id8>-npt-<slug>` / `-eht-<slug>`),
+ * matched on the value `normalizeTrddRef` already returned (8 id-shaped chars, a
+ * dash, then the kind word). Deliberately NARROWER than "contains a dash": a bare
+ * `c.includes('-')` would also downgrade a genuinely broken reference that merely
+ * happens to contain one (a typo'd suffix, a `gh:`/cross-project-shaped string
+ * misplaced into `npt:`/`eht:` instead of `blocked-by:`) from the ERROR a real
+ * lineage bug deserves to the WARN this rule reserves for a known-benign v1
+ * artifact — silently softening `childMissing` for a class of input #166 never
+ * asked to grandfather (review finding on #166's own fix).
+ */
+const V1_DERIVED_SLUG_RE = /^[A-Z0-9]{8}-(?:NPT|EHT)-/
+
 export function normalizeTrddRef(ref: unknown): string {
-  return String(ref).trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
+  const stripped = String(ref).trim().replace(/^TRDD-/i, '')
+  const tail = stripped.slice(8)
+  if (tail && !UUID_REMAINDER_RE.test(tail)) return stripped.toUpperCase()
+  return stripped.slice(0, 8).toUpperCase()
 }
 
 export { SHIPPED }
@@ -286,8 +316,16 @@ export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
     for (const kind of ['npt', 'eht'] as const) {
       for (const c of n[kind]) {
         const child = byId.get(c)
-        if (!child) v.push({ kind: 'childMissing', id: n.id, detail: `${kind} names ${c}, which does not exist` })
-        else if (child.hasDerivedField && !child.derived) {
+        if (!child) {
+          // Only the SPECIFIC v1 derived-task slug shape is grandfathered to WARN —
+          // any other unresolved ref (a typo, a misplaced gh:/cross-project string,
+          // anything else) stays the ERROR a genuinely broken reference deserves.
+          v.push(
+            V1_DERIVED_SLUG_RE.test(c)
+              ? { kind: 'danglingV1Slug', id: n.id, detail: `${kind} names ${c} — a v1-era derived-task slug never minted as its own card` }
+              : { kind: 'childMissing', id: n.id, detail: `${kind} names ${c}, which does not exist` },
+          )
+        } else if (child.hasDerivedField && !child.derived) {
           v.push({ kind: 'childDerivedFalse', id: n.id, detail: `${kind} names ${c}, which says derived: false` })
         }
       }

@@ -541,6 +541,35 @@ describe('v3 — the first migration the REAL shape spec can exercise (TRDD-L55I
   })
 })
 
+describe('v4 — normalizeTrddRef no longer folds a v1 slug into its parent (#166)', () => {
+  it('migrating v3 → v4 clears records, edges, FTS and files — a stale phantom self-edge cannot survive', () => {
+    // Simulate a v3 index built under the OLD normalizeTrddRef: card DCCB0B8A's
+    // `npt: [TRDD-dccb0b8a-npt-pane-record]` was folded to its own id, so `edges`
+    // persisted a self-referencing npt row — exactly the phantom `syncIndex` would
+    // have written before the fix. No shape change at v4, so nothing to ALTER.
+    const db = openIndex(db1)
+    db.pragma('user_version = 3')
+    db.prepare(`INSERT INTO files VALUES ('/dccb.md','trdd','tasks','i',0)`).run()
+    db.prepare(
+      `INSERT INTO records (kind,id,path,line,col,title,priority) VALUES ('trdd','DCCB0B8A','/dccb.md',NULL,'complete','t',NULL)`,
+    ).run()
+    db.prepare(`INSERT INTO edges VALUES ('trdd','DCCB0B8A','npt','trdd','DCCB0B8A','/dccb.md')`).run()
+    db.close()
+
+    const fresh = openIndex(db1)
+    const count = (t: string) =>
+      (fresh.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n
+    // The phantom self-edge is gone with everything else — a fresh sync (out of
+    // scope for this unit test) re-derives it correctly under the fixed function.
+    expect(count('files')).toBe(0)
+    expect(count('records')).toBe(0)
+    expect(count('edges')).toBe(0)
+    expect(count('records_fts')).toBe(0)
+    expect(validate(fresh)).toEqual({ ok: true })
+    fresh.close()
+  })
+})
+
 describe('validate depth — a SCHEDULE change, not a weakening (TRDD-4VCXRHAY)', () => {
   /**
    * The full pass ran on EVERY open, and two of its checks scan the whole index:

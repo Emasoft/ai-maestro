@@ -31,7 +31,7 @@ import Database from 'better-sqlite3'
  */
 import { corpusIdentity } from '@/lib/corpus-identity'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export type IndexFaultCode =
   /** DB newer than this binary. The repair is the OPPOSITE one: upgrade the code. */
@@ -160,6 +160,30 @@ const MIGRATIONS: readonly Migration[] = [
       // class, one level down.
       db.exec(`
         ALTER TABLE records ADD COLUMN priority TEXT;
+        DELETE FROM records;
+        DELETE FROM edges;
+        DELETE FROM records_fts;
+        DELETE FROM files;
+      `)
+    },
+  },
+  {
+    to: 4,
+    name: 'normalizeTrddRef no longer folds a v1 derived-task slug into its parent id (#166)',
+    run: (db) => {
+      // NO SHAPE CHANGE — every REQUIRED_TABLES column is unchanged at v4. This step
+      // exists purely to force a full re-derivation: `edges` rows were written by
+      // `index-build.ts` through `normalizeTrddRef`, and a card whose `npt:`/`eht:`
+      // held a v1-era derived-task slug (`TRDD-<id8>-npt-<slug>`) had that slug
+      // FOLDED into its own parent's id, so `syncIndex` persisted a phantom self-edge
+      // that the fixed function no longer produces. `freshness.ts` is per-FILE
+      // content identity (git blob sha / stat) — it cannot see a pure CODE change,
+      // so an index built under the old logic serves the old, wrong edge FOREVER for
+      // any file whose content never changes again. Same trap the v2 migration's own
+      // comment names for `files` alone: clear all four tables TOGETHER (not just
+      // `edges`) so `freshness.ts` computes every live file as `added` and nothing
+      // for a since-deleted file survives as a phantom record.
+      db.exec(`
         DELETE FROM records;
         DELETE FROM edges;
         DELETE FROM records_fts;

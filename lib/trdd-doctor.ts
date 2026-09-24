@@ -1410,8 +1410,10 @@ if (resolved.every((r) => SHIPPED.has(r.card.column))) {
   // The nodes come from `loadCorpus`'s single read, not from a second
   // `loadTrddGraph(designDir)` walk of the same files (TRDD-BQC8NQSW).
   // The two non-local-blocker kinds are WARN, not ERROR: the blocker is real and correctly
-  // recorded — the local graph just cannot resolve it (TRDD-PTFPGSLV).
-  const GRAPH_WARN_KINDS = new Set(['externalBlocker', 'crossProjectBlocker'])
+  // recorded — the local graph just cannot resolve it (TRDD-PTFPGSLV). `danglingV1Slug` is
+  // WARN for the same reason: a grandfathered v1-era derived-task slug, not a lineage bug
+  // (#166 — normalizeTrddRef used to fold it into a phantom self-cycle instead).
+  const GRAPH_WARN_KINDS = new Set(['externalBlocker', 'crossProjectBlocker', 'danglingV1Slug'])
   for (const v of checkTrddInvariants(nodes)) {
     const id = normalizeTrddRef(v.id)
     add({

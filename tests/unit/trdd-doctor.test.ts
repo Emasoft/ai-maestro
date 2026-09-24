@@ -1651,6 +1651,33 @@ describe('non-local blocked-by spellings — end-to-end through lintCorpus (TRDD
     const r = lintCorpus(tmp)
     expect(idsOf(r, 'BLOCKED-WITHOUT-BLOCKER')).toEqual([])
   })
+
+  it('a v1-era derived-task npt slug is GRAPH-DANGLING-V1-SLUG at WARN, names the slug, and never GRAPH-ORDER-CYCLE (#166)', () => {
+    // The live-corpus symptom: a card names its OWN NPT prerequisite as an unmintied
+    // v1 slug (`TRDD-<its-own-id>-npt-<name>`). `normalizeTrddRef` used to slice that
+    // down to the card's own 8-char id, wiring a self-edge that findOrderCycles then
+    // reported as a wait-for ring nothing can ever leave.
+    write('tasks', 'TRDD-20260101_000000+0100-DCCB0B8A-x.md',
+      good('DCCB0B8A', { column: 'complete', npt: '[TRDD-dccb0b8a-npt-pane-record]' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'GRAPH-ORDER-CYCLE')).toEqual([])
+    expect(idsOf(r, 'GRAPH-DANGLING-V1-SLUG')).toEqual(['DCCB0B8A'])
+    expect(sevOf(r, 'GRAPH-DANGLING-V1-SLUG')).toEqual(['warn'])
+    const finding = r.findings.find((f) => f.rule === 'GRAPH-DANGLING-V1-SLUG')
+    expect(finding?.message).toContain('DCCB0B8A-NPT-PANE-RECORD')
+  })
+
+  it('a dash-containing npt ref that is NOT the v1 slug shape still ERRORs as GRAPH-CHILD-MISSING (review finding)', () => {
+    // The discriminator is the SPECIFIC `<id8>-npt-`/`-eht-` shape, never a bare
+    // "contains a dash" — otherwise a typo'd or misplaced non-local-looking ref
+    // would be silently downgraded from a real lineage bug to a grandfathered WARN.
+    write('tasks', 'TRDD-20260101_000000+0100-FFFFFFFF-x.md',
+      good('FFFFFFFF', { npt: '[TRDD-not-a-real-child-at-all]' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'GRAPH-CHILD-MISSING')).toEqual(['FFFFFFFF'])
+    expect(sevOf(r, 'GRAPH-CHILD-MISSING')).toEqual(['error'])
+    expect(idsOf(r, 'GRAPH-DANGLING-V1-SLUG')).toEqual([])
+  })
 })
 
 describe('checklist gate fails OPEN on an unparseable updated: (TRDD-PTFPGSLV)', () => {

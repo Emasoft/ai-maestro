@@ -4,7 +4,7 @@ status: tasked
 title: trddgrep archive verb - archive a card from any column, definitively
 column: design
 created: 2026-09-24T15:46:06+0200
-updated: 2026-09-25T06:05:48+0200
+updated: 2026-09-25T06:12:15+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: feature
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: ai-maestro-main-session
 approval-datetime: 2026-09-24T15:46:06+0200
+implementation-commits: [4bc408427]
 ---
 
 # trddgrep archive verb - archive a card from any column, definitively

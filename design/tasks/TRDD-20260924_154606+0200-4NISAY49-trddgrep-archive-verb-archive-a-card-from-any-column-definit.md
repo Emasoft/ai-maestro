@@ -4,7 +4,7 @@ status: tasked
 title: trddgrep archive verb - archive a card from any column, definitively
 column: design
 created: 2026-09-24T15:46:06+0200
-updated: 2026-09-24T15:55:39+0200
+updated: 2026-09-25T06:05:48+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: feature
@@ -33,3 +33,7 @@ Owner ruling 2026-09-24, quoted verbatim in TRDD-MQE5D28T under "USER rulings â€
 ## Acceptance
 
 - [ ] Implemented per the reviewed proposal (pending: the verb, the zone arbiter's rule for archived/, tests, and the verb lists in docs/rules/skills; which columns may be archived is decided in that proposal)
+
+## Implementation
+
+2026-09-25T06:05:41+0200 â€” code landed ahead of this card in 4bc408427 (Part B of TRDD-MQE5D28T step 4.6); the column was not advanced. Open gaps: same-zone duplicate-id filenames, mixed-case --as, no route-level archive tests.

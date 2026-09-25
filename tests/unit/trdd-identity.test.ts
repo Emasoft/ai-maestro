@@ -192,6 +192,67 @@ describe('resolveCliIdentity — explicit flag, then AID, then the registry-gate
     expect(!stale.ok && stale.error).not.toContain(secret.slice(4, 12)) // past the fixed `mst_` prefix
   })
 
+  it('AID_AUTH resolves to a live agent AND an explicit flag disagrees → refused, naming both (never the token)', () => {
+    const { secret, secretHash } = generateSessionSecret()
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: secretHash } }]))
+    const r = resolveCliIdentity({ ...base, explicit: 'user', env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    const msg = !r.ok ? r.error : ''
+    expect(msg).toMatch(/"user"/)
+    expect(msg).toMatch(new RegExp(`bob#${BOB_ID}`))
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      expect(msg).not.toContain(secret.slice(i, i + 8))
+    }
+  })
+
+  it('AID_AUTH resolves to bob and an explicit main-agent@<pid> disagrees → refused, naming both', () => {
+    const { secret, secretHash } = generateSessionSecret()
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: secretHash } }]))
+    const r = resolveCliIdentity({ ...base, explicit: 'main-agent@proj', env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    const msg = !r.ok ? r.error : ''
+    expect(msg).toMatch(/main-agent@proj/)
+    expect(msg).toMatch(new RegExp(`bob#${BOB_ID}`))
+  })
+
+  it('AID_AUTH resolves to bob and an explicit flag naming the SAME identity is accepted', () => {
+    const { secret, secretHash } = generateSessionSecret()
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: secretHash } }]))
+    // source is 'aid': the value is agreed, but it is the AID_AUTH verification (not the
+    // caller-supplied flag alone) that makes it trustworthy — the flag could have been
+    // typed by anyone, the agreement with the authenticated token is what is load-bearing.
+    const r = resolveCliIdentity({ ...base, explicit: `bob#${BOB_ID}`, env: { AID_AUTH: secret }, registryFile })
+    expect(r).toEqual({ ok: true, identity: `bob#${BOB_ID}`, source: 'aid' })
+  })
+
+  it('AID_AUTH is SET but does not resolve (stale token) AND an explicit flag is given → refused, not the flag', () => {
+    const { secret } = generateSessionSecret() // no matching row written — resolves to nothing
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: generateSessionSecret().secretHash } }]))
+    const r = resolveCliIdentity({ ...base, explicit: 'user', env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    const msg = !r.ok ? r.error : ''
+    expect(msg).toMatch(/stale or invalid token/)
+    expect(msg).toMatch(/unset AID_AUTH, or omit --author/)
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      expect(msg).not.toContain(secret.slice(i, i + 8))
+    }
+  })
+
+  it('AID_AUTH is SET but does not resolve AND the explicit flag is malformed → the AID-unresolved refusal wins, not the grammar error (checked first per the comment at lib/trdd-identity.ts ~159-166)', () => {
+    const { secret } = generateSessionSecret() // no matching row written — resolves to nothing
+    fs.writeFileSync(registryFile, JSON.stringify([{ id: BOB_ID, name: 'bob', metadata: { sessionSecretHash: generateSessionSecret().secretHash } }]))
+    const r = resolveCliIdentity({ ...base, explicit: 'not an identity!!', env: { AID_AUTH: secret }, registryFile })
+    expect(r.ok).toBe(false)
+    const msg = !r.ok ? r.error : ''
+    expect(msg).toMatch(/AID_AUTH is set/)
+    expect(msg).not.toMatch(/is not an identity/)
+  })
+
+  it('AID_AUTH="" (unset) with an explicit flag is accepted unchanged — nothing to agree with', () => {
+    const r = resolveCliIdentity({ ...base, explicit: 'user', env: { AID_AUTH: '' }, registryFile })
+    expect(r).toEqual({ ok: true, identity: 'user', source: 'flag' })
+  })
+
   it('a token that matches no registry secret never leaks any 8-char window of itself into the refusal', () => {
     // A distinctive fake AID_AUTH — real shape (mst_ + 64 hex), but hashes to nothing any
     // seeded row carries, so it takes the "stale or invalid token" branch.

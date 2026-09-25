@@ -475,3 +475,44 @@ describe('trddgrep archive — case 12: unresolvable identity', () => {
     expect(fs.existsSync(fileFor('tasks', 'OOOOOOOO'))).toBe(true)
   })
 })
+
+// Gap 2 from the Part B adversarial review (reports/pillar-cli-fixes/20260925_001748+0200-archive-verb.md
+// item 2): the duplicate-id guard was only fixture-tested with a cross-zone pair (tasks/ + proposals/).
+// The untested shape was a SAME-ZONE collision — a v2 filename and a v1 filename in one folder
+// whose 8-char ids agree (`trddIdFromFilename` normalizes both to the same id). Archive refuses
+// any duplicate pair, so it must refuse this one too. A v1 filename's id is HEX-ONLY
+// (TRDD_V1_FILENAME_RE), so the id must be hex for the v1 name to parse.
+describe('trddgrep archive — gap 2: same-zone v1/v2 filename collision on one id', () => {
+  it('refuses — the duplicate-id guard sees the v1 name through trddIdFromFilename', () => {
+    seedCard({ zone: 'tasks', id: 'ABCDEF12', column: 'dev' })
+    // A v1-shaped filename (TRDD-<8hex>-<slug>.md, no timestamp) in the SAME folder,
+    // carrying the same 8-char id.
+    const v1Name = path.join(design, 'tasks', 'TRDD-abcdef12-a-v1-clone.md')
+    fs.writeFileSync(v1Name, '---\ntrdd-id: ABCDEF12\ntitle: v1 clone\ncolumn: dev\n---\n\nbody\n')
+    git('add', '-A'); git('commit', '-qm', 'seed same-zone v1/v2 duplicate id')
+
+    const r = cli('archive', 'ABCDEF12', '--approver', 'user')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/more than one file/)
+    // Both files untouched — the refusal fired before any move.
+    expect(fs.existsSync(fileFor('tasks', 'ABCDEF12'))).toBe(true)
+    expect(fs.existsSync(v1Name)).toBe(true)
+  })
+})
+
+// Gap 3 from the same review: `--as Completed` (mixed case) was read, never fixture-tested.
+// `asState.toLowerCase()` must normalize the value through the ARCHIVABLE_STATES check AND
+// pass the NORMALIZED value to archiveTrdd — an upper-case value leaking into the column
+// write would mint `column: Completed`, a spelling outside the ratified 22-column vocabulary.
+describe('trddgrep archive — gap 3: mixed-case --as normalizes', () => {
+  it('--as Completed archives as completed — the column line is the lowercase value', () => {
+    seedCard({ zone: 'tasks', id: 'TTTTTTTT', column: 'dev', acceptance: DONE_CHECKLIST })
+    git('add', '-A'); git('commit', '-qm', 'seed card for mixed-case --as test')
+
+    const r = cli('archive', 'TTTTTTTT', '--as', 'Completed', '--approver', 'user')
+    expect(r.status, r.stderr).toBe(0)
+    const archived = path.join(design, 'archived', path.basename(fileFor('tasks', 'TTTTTTTT')))
+    expect(fs.existsSync(archived)).toBe(true)
+    expect(fs.readFileSync(archived, 'utf-8')).toMatch(/^column: completed$/m)
+  })
+})

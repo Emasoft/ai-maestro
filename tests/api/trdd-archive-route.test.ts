@@ -33,14 +33,26 @@
  * same call chain this file proves, and the decision itself is pinned in
  * trdd-authz-archive-authority.test.ts.
  *
- * NEUTER RUNS (2026-09-25, restore verified byte-identical against the backup):
- *   - `rejectUnarchivableState((body...).state)` → `rejectUnarchivableState(undefined)` in the
- *     route: case 2 (409 checklist gate on `state: completed`) turns 200 — the card archives,
- *     proving the assertion pins the route's own state-invariant call and not the checklist
- *     guard alone. Restored.
- *   - `state as ...` inside the `archiveTrdd(...)` call → `state: undefined`: the archived
- *     card's column stays `dev` instead of becoming `completed`, reddening case 2's column
- *     assertion and case 1's passed-unmodified control. Restored.
+ * NEUTER RUNS (2026-09-25, restore verified byte-identical against git after each):
+ *   - Inline state gate neutered ALONE (`if (state !== undefined && …)` → `if (false && …)`):
+ *     the `state: 'failed'` test REDDENS (400 arrives from rejectUnarchivableState instead,
+ *     whose `error: 'trdd_not_archivable'` does not match the test's message regex). The test
+ *     therefore pins the route's INLINE gate and its message specifically.
+ *   - `rejectUnarchivableState` neutered ALONE (→ `rejectUnarchivableState(undefined)`):
+ *     the `state: 'failed'` test still PASSES — the inline gate fires first with a message
+ *     the regex matches. This gate is defense-in-depth behind the inline check for THIS
+ *     route's callers; its decision semantics are pinned in trdd-authz-archive-authority.
+ *   - BOTH state gates neutered (pair): the `state: 'failed'` test REDDENS. At least one of
+ *     the two must stand for a `failed` state to be refused through the route.
+ *   - Checklist gate neutered: the open-box test REDDENS (the 409 goes away).
+ *   - The sudo short-circuit test is itself the wiring proof for the sudo gate (it mocks the
+ *     guard to a 403 response and asserts the short-circuit), so no separate neuter applies.
+ *
+ * HOME JAIL: beforeAll redirects `process.env.HOME` to a throwaway dir (restored in afterAll).
+ * The cookie path reaches `validateSessionWithUser` → `isUserAuthorityModelEnabled()` →
+ * `loadGovernance()`, which on a machine with no `~/.aimaestro/governance.json` performs
+ * first-run initialization and WRITES it. The jail turns that write into the fixture dir; the
+ * `real-state-dir-untouched` global watcher would otherwise be the only backstop.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
 import fs from 'fs'
@@ -111,13 +123,24 @@ const DONE_CHECKLIST = '\n## Acceptance\n\n- [x] done\n'
 describe('POST /api/trdd/[id]/archive — the route wiring (TRDD-MQE5D28T step 4)', () => {
   let root: string
   let savedCwd: string
+  let savedHome: string | undefined
   let assertHomeUntouched: () => void
 
   beforeAll(async () => {
     assertHomeUntouched = guardRealUserSettings()
+    // HOME JAIL (see header): loadGovernance() creates ~/.aimaestro/governance.json on a
+    // machine without one; point HOME at a throwaway so that first-run write lands here.
+    // governance.ts resolves getStateDir() at MODULE LOAD, so the jail must be set before
+    // the route's import chain first loads it — it is: this runs before `post`'s first
+    // dynamic import, and no earlier import in this file touches governance.
+    savedHome = process.env.HOME
+    process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-archive-route-home-'))
     validCookie = `aim_session=${await createSession()}`
   })
   afterAll(() => {
+    const jailedHome = process.env.HOME
+    process.env.HOME = savedHome
+    if (jailedHome) fs.rmSync(jailedHome, { recursive: true, force: true })
     assertHomeUntouched()
     const token = validCookie.slice('aim_session='.length)
     if (token) invalidateSession(token)

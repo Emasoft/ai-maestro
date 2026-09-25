@@ -173,10 +173,15 @@ describe('server.mjs boot wiring — dev-mode token guard (TRDD-7IJ08EUV)', () =
           }
           child.stdout?.on('data', onFirstData)
           child.stderr?.on('data', onFirstData)
+          // 45s, not 10s (measured 2026-09-25): in a full parallel suite run the machine
+          // can be ~3.4x slower than solo (292s wall vs 86s for the same suite), and the
+          // child's tsx compile of server.mjs then misses a 10s no-output deadline (the
+          // test failed at 10044ms in the full run, passed solo at 969ms). The kill-at-
+          // first-byte safety design is unaffected by the longer deadline.
           const timer = setTimeout(() => {
             killGroup()
-            reject(new Error('server.mjs produced no output within 10s — cannot prove forward progress'))
-          }, 10_000)
+            reject(new Error('server.mjs produced no output within 45s — cannot prove forward progress'))
+          }, 45_000)
           child.on('error', (err) => {
             clearTimeout(timer)
             killGroup()
@@ -200,7 +205,7 @@ describe('server.mjs boot wiring — dev-mode token guard (TRDD-7IJ08EUV)', () =
         rmSync(home, { recursive: true, force: true })
       }
     },
-    15_000
+    60_000
   )
 
   it('does not block boot in production when no dev-mode token is present — pure-check positive control', async () => {

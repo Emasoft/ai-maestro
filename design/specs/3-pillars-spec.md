@@ -502,7 +502,7 @@ that it stopped and never why, which is the single question an archive is consul
 
 `3P-ZON-06` **failed-is-open** — `failed` is an OPEN, retryable state and stays in `tasks/`, and it
 returns to `dev` or `design` when its blocking cause is fixed. `MUST NOT` archive a `failed` card
-AUTOMATICALLY or as a routine step; but an EXPRESS give-up decision — `trddgrep archive <id>` (3P-ZON-12) by MANAGER or the assignee-team CHIEF-OF-STAFF (in harness), or the USER/main agent (outside it) — archives it AS-IS, and an archived `failed` card is DEFINITIVE: never retried, no un-archive; a similar future task is a NEW card (owner rulings 2026-09-24 verbatim in `aimaestro-trdd-approval.md` Part B2; spec-version 3.0.0→4.0.0 per 3P-VER-01, a MUST changed). `cancelled` is the NON-archiving way out.
+AUTOMATICALLY or as a routine step; but an EXPRESS give-up decision — `trddgrep archive <id>` (3P-ZON-12) by MANAGER or CHIEF-OF-STAFF (in harness; the assignee-TEAM scope of the COS is the implementation's reading per R6 v3, not a quoted ruling), or the USER/main agent (outside it) — archives it AS-IS, and an archived `failed` card is DEFINITIVE: never retried, no un-archive; a similar future task is a NEW card (owner rulings 2026-09-24 verbatim in `aimaestro-trdd-approval.md` Part B2; spec-version 3.0.0→4.0.0 per 3P-VER-01, a MUST changed). `cancelled` is the NON-archiving way out.
 
 `3P-ZON-07` **terminal-freeze-boundary** — `MUST`: a card in `archived/` is frozen. Three clauses,
 without which the rule forbids the very edit that closes a card: the closing edit is the LAST

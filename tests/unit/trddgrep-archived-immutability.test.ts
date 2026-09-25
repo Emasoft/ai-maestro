@@ -104,6 +104,57 @@ describe('trddgrep write verbs refuse an ARCHIVED card (D8, step 5 G1/G2/G3/G5)'
   })
 })
 
+// `move` does not fit the shared `verbs` table above: its two archived-card refusals come
+// from TWO DIFFERENT guards with two different messages, and its "succeeds on tasks/" shape
+// differs per target column (advancing within tasks/ keeps the file path; archiving moves it),
+// so each gets its own it.each with its own positive control (step 5 measured-fact items 5/6).
+describe('trddgrep move ARCHIVE1 <live-column> is refused by the zone gate (advanceColumn)', () => {
+  it.each([['dev'], ['testing']])('move to %s is refused, file byte-identical and still archived', (targetColumn) => {
+    const file = card('archived', 'ARCHIVE1', 'complete')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = runCli(['move', 'ARCHIVE1', targetColumn])
+    expect(r.status).not.toBe(0)
+    // lib/trdd-store.ts advanceColumn's zone gate (~871-874), distinct from the
+    // `archivedWriteRefusal` text the other write verbs share.
+    expect(r.stdout + r.stderr).toMatch(/Only an open \(tasks\/\) TRDD can be advanced/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it.each([['dev'], ['testing']])('move to %s succeeds on a tasks/ card (positive control)', (targetColumn) => {
+    const file = card('tasks', 'LIVEMOV1', 'todo')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = runCli(['move', 'LIVEMOV1', targetColumn])
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    // advancing within tasks/ never moves the file — same path, new column line.
+    expect(fs.readFileSync(file, 'utf-8')).not.toBe(before)
+  })
+})
+
+describe('trddgrep move ARCHIVE2 superseded is refused by the already-archived gate (archiveTrdd)', () => {
+  it('is refused, file byte-identical and still archived', () => {
+    const file = card('archived', 'ARCHIVE2', 'complete')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = runCli(['move', 'ARCHIVE2', 'superseded', '--approver', 'user'])
+    expect(r.status).not.toBe(0)
+    // lib/trdd-store.ts archiveTrdd's `trdd.zone === 'archived'` refusal (~1244-1251) —
+    // "no exception (D8, G9)", never an in-place rewrite of an already-photographed card.
+    expect(r.stdout + r.stderr).toMatch(/already archived — refusing a second archive/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+  })
+
+  it('succeeds on a tasks/ card (positive control) — moves the file into archived/', () => {
+    const file = card('tasks', 'LIVEMOV2', 'dev')
+    const r = runCli(['move', 'LIVEMOV2', 'superseded', '--approver', 'user'])
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    // archiving DOES move the file — unlike the advanceColumn positive control above,
+    // the old tasks/ path is gone and the content now lives under archived/.
+    expect(fs.existsSync(file)).toBe(false)
+    const archivedFile = path.join(designDir(), 'archived', path.basename(file))
+    expect(fs.existsSync(archivedFile)).toBe(true)
+    expect(fs.readFileSync(archivedFile, 'utf-8')).toMatch(/^column: superseded$/m)
+  })
+})
+
 describe('trddgrep set refuses the #168 protected fields', () => {
   it.each([
     // Values must satisfy the #168 identity grammar (`user` | `main-agent@<project-id>` |

@@ -825,7 +825,7 @@ findings).
 
 | tool | invocation | verbs / purpose |
 |---|---|---|
-| trddgrep | `yarn trddgrep <verb>` | TRDD corpus: `why unblocks roots next show board doctor lint validate index-verify fix edit env help` |
+| trddgrep | `yarn trddgrep <verb>` | TRDD corpus: `why unblocks roots next show board doctor lint validate index-verify fix new set append check-box move archive edit env help` |
 | trdd-doctor | `yarn trdd:doctor` / `:fix` / `:board` | lint + safe auto-repair + kanban render |
 | trdd-watchdog | `yarn trdd:watchdog` | the consolidated §D4 approval-ladder sweep (doctor engine + objective-floor/mandate/supersede engine); also scheduled server-side every 6h, report to `reports/trdd-watchdog/` |
 | prrdgrep | `node --import tsx scripts/prrdgrep.mjs <verb>` | PRRD documents: `edit show list` (lint/validate verbs: TRDD-BL0W6LGY, pending) |

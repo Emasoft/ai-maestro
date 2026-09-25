@@ -51,7 +51,7 @@ PRRD G12.1 (GOLDEN): tool-only access to TRDD/PRRD/spec files.
 **FORBIDDEN:** `cat sed awk head tail grep find less` · `Read`/`Edit`/`Write` tools · `sed -i perl -pi`
 heredoc/redirect.
 
-## trddgrep — 18 verbs
+## trddgrep — 19 verbs
 
 | cmd | does | R/W |
 |---|---|---|
@@ -70,6 +70,7 @@ heredoc/redirect.
 | `append <id> <heading> <line>` | append | W |
 | `check-box <id> <n>` | tick/untick | W |
 | `move <id> <column>` | col+zone mv | W |
+| `archive <id\|path> [--approver][--as][--reason][--superseded-by][--clear-blocker]` | authorized terminal archive (TRDD-4NISAY49) | W |
 | `edit <id> [--at-line N] --expect X --replace Y` | guarded replace | W |
 | `env` | corpus kind | R |
 | `index-verify [--repair\|--all]` | integrity | R/W |

@@ -264,7 +264,7 @@ const KNOWN_FLAGS = new Set([
 // `new` and `move` join `edit` in the exemption for the same stated reason: a MUTATING
 // verb must never IGNORE a token, and an allowlist can only ever ignore. Each rejects
 // every token it did not consume, which is strictly stronger than this check.
-const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move', 'set', 'append', 'check-box'])
+const STRICT_PARSE_VERBS = new Set(['edit', 'new', 'move', 'set', 'append', 'check-box', 'archive'])
 if (!STRICT_PARSE_VERBS.has(cmd)) {
   const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
   if (unknownFlag) {
@@ -1440,6 +1440,164 @@ switch (cmd) {
     console.log(C.g(`${C.b(res.id)} → column ${res.column}${moved ? `  (design/${res.from}/ → design/${res.to}/)` : ''}`))
     console.log(C.d(`  ${path.relative(process.cwd(), res.filePath)}`))
     if (moved) console.log(C.y('  the rename is STAGED — commit it with the content in one commit'))
+    process.exit(0)
+  }
+
+  // ---- ARCHIVE. A dedicated verb for the terminal move `move` already performs when the
+  // target column is a finished one (TRDD-4NISAY49) — but `move` never authorizes: it
+  // trusts whoever is holding the keyboard. `archive` is the FIRST CLI write verb that
+  // decides who may act, because the act it performs is IRREVERSIBLE (TRDD-MQE5D28T D8 —
+  // an archived card can never be un-archived). It reuses `decideTrddVerb`
+  // (lib/trdd-authz.ts), the exact decision the HTTP route makes, so the CLI and the API
+  // cannot disagree about who may archive a card.
+  //
+  // Target may be an id OR a file path (a worker handed a path by its own tooling should
+  // not have to reverse-engineer the id first). A path is realpath-resolved and MUST
+  // land inside proposals/, tasks/ or archived/ of the resolved corpus — never used to
+  // reach outside it.
+  //
+  // WHO MAY ARCHIVE, from the CLI's identity (ai-maestro#168 grammar):
+  //   `user`             → the human owner — always allowed (mirrors authorize()'s
+  //                         own `!auth.agentId` system-owner grant).
+  //   `main-agent@<pid>` → a project's main session — same grant, no registered agentId.
+  //   AID-resolved        → the ONE verifiable agent identity a CLI can produce: the
+  //                         caller proved it holds a live agent's session secret. Runs
+  //                         through `decideTrddVerb` exactly as the route would.
+  //   an explicit `--approver <name>#<uuid>` → SELF-DECLARED, unverifiable from a CLI
+  //                         with no session to check it against — refused. An agent
+  //                         proves who it is with AID_AUTH, not by typing a name.
+  case 'archive': {
+    const target = argv[1]
+    if (!target) {
+      console.error('trddgrep: `archive` needs an id or a file path — `trddgrep archive <TRDD-ID | file path> [--approver <identity>] [--as completed|cancelled|superseded] [--reason <text>] [--superseded-by <id>] [--clear-blocker]`')
+      process.exit(2)
+    }
+    const [arSw, arRest0] = splitSwitches(argv.slice(2), ['--clear-blocker'])
+    const clearBlocker = arSw.has('--clear-blocker')
+    let arRest = arRest0
+    const takeAr = (name) => {
+      const i = arRest.indexOf(name)
+      if (i < 0) return undefined
+      const v = arRest[i + 1]
+      if (v === undefined) { console.error(`trddgrep: ${name} needs a value`); process.exit(2) }
+      arRest = [...arRest.slice(0, i), ...arRest.slice(i + 2)]
+      return v
+    }
+    const approver = takeAr('--approver')
+    const asState = takeAr('--as')
+    const reason = takeAr('--reason')
+    const supersededBy = takeAr('--superseded-by')
+    if (arRest.length > 0) {
+      console.error(`trddgrep: unrecognised argument(s) on \`archive\`: ${arRest.join(' ')} — see \`trddgrep help\``)
+      process.exit(2)
+    }
+
+    const { TRDD_ZONES, trddIdFromFilename, TRDD_KIND } = await import('../lib/pillar/kinds.ts')
+    const { listTrddFiles, isoLocal, archiveTrdd, withTrddLock } = await import('../lib/trdd-store.ts')
+
+    // Resolve the target to an id. A path must exist, realpath inside the corpus, and
+    // land in one of the three TRDD zones — never used to escape the corpus root.
+    let id
+    const asPath = path.resolve(process.cwd(), target)
+    if (fs.existsSync(asPath) && fs.statSync(asPath).isFile()) {
+      let resolved
+      try {
+        resolved = fs.realpathSync.native(asPath)
+      } catch {
+        console.error(`trddgrep: could not resolve path '${target}'`)
+        process.exit(2)
+      }
+      const corpusReal = fs.realpathSync.native(designDir)
+      const rel = path.relative(corpusReal, resolved)
+      const zoneDir = rel.split(path.sep)[0]
+      if (rel.startsWith('..') || path.isAbsolute(rel) || !TRDD_ZONES.includes(zoneDir)) {
+        console.error(`trddgrep: '${target}' is not inside ${designDir}/{${TRDD_ZONES.join(',')}} — refusing to archive a path outside the corpus`)
+        process.exit(2)
+      }
+      const fromName = trddIdFromFilename(path.basename(resolved))
+      if (!fromName) {
+        console.error(`trddgrep: '${target}' is not a TRDD file`)
+        process.exit(2)
+      }
+      id = fromName
+    } else {
+      id = target
+    }
+
+    // Duplicate-id guard: archiving is irreversible, so never silently pick one.
+    const want = TRDD_KIND.normalizeId(id)
+    const matches = []
+    for (const zone of TRDD_ZONES) {
+      for (const file of listTrddFiles(designDir, zone)) {
+        if (trddIdFromFilename(path.basename(file)) === want) matches.push(file)
+      }
+    }
+    if (matches.length > 1) {
+      console.error(`trddgrep: more than one file carries id ${want} — refusing to archive (irreversible, never picks one): ${matches.join(', ')}`)
+      process.exit(2)
+    }
+    if (matches.length === 0) {
+      console.error(`trddgrep: no TRDD ${JSON.stringify(target)} under ${designDir}`)
+      process.exit(1)
+    }
+
+    const { iso } = isoLocal()
+    const { resolveCliIdentity } = await import('../lib/trdd-identity.ts')
+    const { readProjectId } = await import('../lib/trdd-create.ts')
+    const { parseTrddIdentity } = await import('../lib/trdd-vocabulary.ts')
+    const { decideTrddVerb, ARCHIVABLE_STATES } = await import('../lib/trdd-authz.ts')
+
+    // The same DATA invariant the API route enforces (trdd-authz.ts's own
+    // `rejectUnarchivableState`, reimplemented here because that one returns a
+    // `NextResponse`): an ABSENT --as means archive AS-IS, keeping the card's column
+    // (TRDD-MQE5D28T D2) — the way a `failed` card is archived. A given value must be
+    // one of the three finished states; `failed` is never a --as target.
+    const asStateNorm = asState === undefined ? undefined : asState.toLowerCase()
+    if (asStateNorm !== undefined && !ARCHIVABLE_STATES.has(asStateNorm)) {
+      console.error(`trddgrep: --as must be one of ${[...ARCHIVABLE_STATES].join(' | ')} (got '${asState}'). To archive a failed card, omit --as — it is archived as-is, keeping 'failed' (definitive).`)
+      process.exit(2)
+    }
+
+    const pid = readProjectId(designDir)
+    const who = resolveCliIdentity({ explicit: approver, flag: '--approver', projectId: 'id' in pid ? pid.id : null })
+    if (!who.ok) {
+      console.error(`trddgrep: refusing to archive — ${who.error}`)
+      process.exit(2)
+    }
+    const identity = parseTrddIdentity(who.identity)
+
+    // Authorize and archive as ONE critical section (TRDD-6D6SQNI6's own reasoning
+    // applied here): `withTrddLock` is reentrant, so nesting inside `archiveTrdd`'s own
+    // acquisition is safe, and it means the decision is made against the exact on-disk
+    // state the write then acts on.
+    const outcome = await withTrddLock(designDir, id, async () => {
+      if (who.source === 'flag' && identity?.kind === 'agent') {
+        return {
+          ok: false,
+          status: 2,
+          error: 'an agent must prove its identity with AID_AUTH to archive — a self-declared --approver name#uuid cannot be verified from the CLI',
+        }
+      }
+      if (who.source === 'aid') {
+        if (!identity || identity.kind !== 'agent') {
+          return { ok: false, status: 2, error: 'internal error — AID-resolved identity is not an agent identity' }
+        }
+        const decision = decideTrddVerb({ agentId: identity.uuid }, designDir, id, 'archive')
+        if (!decision.allowed) {
+          return { ok: false, status: decision.status === 404 ? 1 : 2, error: decision.reason }
+        }
+      }
+      // 'default' (main-agent@<pid>) and 'flag' + user/main-agent bypass — no registered
+      // agentId, same grant `authorize()` itself gives the human/main-agent caller.
+      return await archiveTrdd(designDir, id, { approver: who.identity, state: asStateNorm, reason, supersededBy, iso, clearBlocker })
+    })
+
+    if (!outcome.ok) {
+      console.error(`trddgrep: ${outcome.error}`)
+      process.exit(outcome.status === 404 ? 1 : 2)
+    }
+    console.log(C.g(`${C.b(outcome.id)}  archived (design/${outcome.from}/ → design/${outcome.to}/)  column: ${outcome.column}`))
+    console.log(C.d(`  ${path.relative(process.cwd(), outcome.filePath)}`))
     process.exit(0)
   }
 

@@ -132,23 +132,24 @@ export function trddActorIdentity(agentId: string | null | undefined): string {
 }
 
 /**
- * Read the target TRDD, then authorize `verb` against it.
+ * A pure `manage-trdd` decision — no `NextResponse`, no HTTP status, so a caller that
+ * is not a route (the `trddgrep archive` CLI verb, TRDD-4NISAY49) can use the exact
+ * same decision `withAuthorizedTrdd` uses, without dragging `next/server` into a
+ * standalone script.
  *
- * NOT EXPORTED — call {@link withAuthorizedTrdd}, which runs this and the write it
- * authorises inside ONE document lock. See that function for why the unlocked spelling
- * was deliberately taken away rather than left beside the locked one.
- *
- * @returns a NextResponse the route must RETURN (404 / 403), or null to proceed.
+ * Not found is `{allowed:false, status:404, reason:…}` rather than a thrown error —
+ * the two route-facing statuses (404 / 403) are both ordinary refusals here, and the
+ * wrapper below is the only place that turns either into a `NextResponse`.
  */
-function authorizeTrddVerb(
+export function decideTrddVerb(
   auth: AgentAuthResult,
   designDir: string,
   id: string,
   verb: TrddVerb
-): NextResponse | null {
+): { allowed: true } | { allowed: false; status: number; reason: string } {
   const trdd = readTrdd(designDir, id)
   if (!trdd) {
-    return NextResponse.json({ error: `TRDD ${id} not found` }, { status: 404 })
+    return { allowed: false, status: 404, reason: `TRDD ${id} not found` }
   }
 
   const fm = trdd.frontmatter ?? {}
@@ -166,12 +167,39 @@ function authorizeTrddVerb(
   })
 
   if (!decision.allowed) {
-    return NextResponse.json(
-      { error: 'trdd_forbidden', message: decision.reason, trdd: id, verb },
-      { status: 403 }
-    )
+    return { allowed: false, status: 403, reason: decision.reason ?? `${verb} not authorized` }
   }
-  return null
+  return { allowed: true }
+}
+
+/**
+ * Read the target TRDD, then authorize `verb` against it.
+ *
+ * NOT EXPORTED — call {@link withAuthorizedTrdd}, which runs this and the write it
+ * authorises inside ONE document lock. See that function for why the unlocked spelling
+ * was deliberately taken away rather than left beside the locked one.
+ *
+ * A thin `NextResponse` wrapper over {@link decideTrddVerb} — the route-shaped bodies
+ * (`{error: ...}` / `{error: 'trdd_forbidden', message, trdd, verb}`) are UNCHANGED from
+ * before the split, byte-for-byte, so every existing route test still passes.
+ *
+ * @returns a NextResponse the route must RETURN (404 / 403), or null to proceed.
+ */
+function authorizeTrddVerb(
+  auth: AgentAuthResult,
+  designDir: string,
+  id: string,
+  verb: TrddVerb
+): NextResponse | null {
+  const decision = decideTrddVerb(auth, designDir, id, verb)
+  if (decision.allowed) return null
+  if (decision.status === 404) {
+    return NextResponse.json({ error: decision.reason }, { status: 404 })
+  }
+  return NextResponse.json(
+    { error: 'trdd_forbidden', message: decision.reason, trdd: id, verb },
+    { status: 403 }
+  )
 }
 
 /**

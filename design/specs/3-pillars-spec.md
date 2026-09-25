@@ -1,6 +1,6 @@
 ---
 spec: 3-pillars
-spec-version: 3.0.0
+spec-version: 4.0.0
 status: normative
 created: 2026-07-22T07:54:21+0200
 updated: 2026-08-23T16:10:00+0200
@@ -232,7 +232,7 @@ return to `dev` on rejection; `design_ai_review` and `design_human_review` may r
 `3P-KAN-06` **blocked** — entered from any working column whenever `blocked-by:` is
 non-empty; record `pre-block-column:` and restore to it when it clears.
 
-`3P-KAN-07` **failed** — retryable; stays on the board; NEVER auto-archived.
+`3P-KAN-07` **failed** — retryable; stays on the board; NEVER auto-archived (an EXPRESS give-up archive is 3P-ZON-06, never an automatic one).
 
 `3P-KAN-08` **superseded** — terminal; leaves the board on the next archival pass.
 
@@ -500,9 +500,9 @@ archived** — what shipped, what was abandoned and on whose call, or which card
 archive entry whose body does not say why it ended is a file, not a record: the next reader can see
 that it stopped and never why, which is the single question an archive is consulted for.
 
-`3P-ZON-06` **failed-is-open** — `MUST NOT`: move a `failed` card to `archived/`. `failed` is an
-OPEN, retryable state and stays in `tasks/`. Giving up on one is a DISTINCT act — `cancelled` — and
-only that moves. An archived `failed` card is indistinguishable from work abandoned silently.
+`3P-ZON-06` **failed-is-open** — `failed` is an OPEN, retryable state and stays in `tasks/`, and it
+returns to `dev` or `design` when its blocking cause is fixed. `MUST NOT` archive a `failed` card
+AUTOMATICALLY or as a routine step; but an EXPRESS give-up decision — `trddgrep archive <id>` (3P-ZON-12) by MANAGER or the assignee-team CHIEF-OF-STAFF (in harness), or the USER/main agent (outside it) — archives it AS-IS, and an archived `failed` card is DEFINITIVE: never retried, no un-archive; a similar future task is a NEW card (owner rulings 2026-09-24 verbatim in `aimaestro-trdd-approval.md` Part B2; spec-version 3.0.0→4.0.0 per 3P-VER-01, a MUST changed). `cancelled` is the NON-archiving way out.
 
 `3P-ZON-07` **terminal-freeze-boundary** — `MUST`: a card in `archived/` is frozen. Three clauses,
 without which the rule forbids the very edit that closes a card: the closing edit is the LAST

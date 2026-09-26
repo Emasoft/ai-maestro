@@ -533,7 +533,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 
 ## Coverage as of 2026-07-26
 
-**GATED 23 · ENFORCED 14 · DOC-ONLY 15 · UNMAPPED 0 · total 52.**
+**GATED 24 · ENFORCED 14 · DOC-ONLY 14 · UNMAPPED 0 · total 52.**
 
 | Rule | Verdict | Where |
 |---|---|---|
@@ -567,7 +567,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 | R28 Three-Check API Authorization | **GATED** | `element-management-service.ts` |
 | R29 MANAGER Lifecycle Authority | ENFORCED | teams routes |
 | R30 COS Creation Requires a Mandate | ENFORCED | `lib/authorization.ts`, `lib/portfolio-issue-guard.ts` |
-| R31 Incomplete-Team Freeze | ENFORCED | `lib/portfolio-check.ts` |
+| R31 Incomplete-Team Freeze | **GATED** | `element-management-service.ts` |
 | R32 No Sudo Gates for Agents | ENFORCED | message + agent routes |
 | R33 Signed-Ledger Recovery | ENFORCED | `aid-recover`, `v1/auth/token` |
 | R34 Ledger Is Source of Truth | **GATED** | `element-management-service.ts` |
@@ -586,7 +586,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 | R47 VPN-Unique User Names | DOC-ONLY | — |
 | R48 MAESTRO Console-Presence | ENFORCED | `lib/peer-address.mjs` (`isConsolePeer`) |
 | R49 The Refusal Protocol | DOC-ONLY | — (behavioural) |
-| R50 One Operation, One AIO Function | DOC-ONLY | — but ratcheted by `tests/unit/all-in-one-single-path.test.ts` |
+| R50 One Operation, One AIO Function | **ENFORCED** | `lib/team-registry.ts`; ratcheted by `tests/unit/all-in-one-single-path.test.ts` |
 | R51 All-Or-Nothing Transaction | GATED | `lib/gate-transaction.ts`, `services/element-management-service.ts` (ChangeClient::G07-G09, the runner's first production caller) |
 | R52 The Write Boundary | DOC-ONLY | no pipeline gate BY DESIGN — enforced by a source-scanning gate (`lib/write-boundary.ts` + `tests/unit/write-boundary.test.ts`), which is the right altitude for a rule about the tree's own write sites rather than about one operation |
 

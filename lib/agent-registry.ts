@@ -3,6 +3,7 @@ import path from 'path'
 import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import { compare as jsonPatchCompare } from 'fast-json-patch'
+import { readJsonArray } from '@/lib/json-io'
 import type { Agent, AgentSummary, AgentSession, CreateAgentRequest, UpdateAgentRequest, UpdateAgentMetricsRequest, DeploymentType } from '@/types/agent'
 import { parseSessionName, computeSessionName } from '@/types/agent'
 import { getSelfHost, getSelfHostId } from '@/lib/hosts-config'
@@ -265,6 +266,37 @@ export function loadAgents(): Agent[] {
     console.error('[agent-registry] loadAgents failed — returning empty list:', error)
     return []
   }
+}
+
+/**
+ * The LOUD registry read: valid / unreadable / missing, never silently `[]` (TRDD-DQ6XN2VP).
+ *
+ * `loadAgents` is deliberately LENIENT — its `catch` logs and returns `[]` because "callers expect
+ * a list" — which is exactly right for the dashboard and exactly WRONG for an R51.7 invariant: a
+ * post-condition reading through it sees "agent not found" whenever the registry is unreadable for
+ * ANY unrelated reason, and would roll back a CORRECT operation. The third instance of that shape
+ * on the card (after `loadJsonSafe` in ChangePlugin G11 and the two-valued
+ * `PluginAdapter.detectState`), which is why the reader, not the consumer, is the fix.
+ *
+ * Reads through `readJsonArray` (`@/lib/json-io`) — the ONE strict JSON reader, array-shaped,
+ * rather than a hand-rolled parse. MISSING stays `ok: false` here too: a caller that needs
+ * "empty is legal" can branch on `reason === 'missing'`; an invariant that acts on a missing
+ * registry is still acting on UNKNOWN, which is the whole point. No cache, no migration, no
+ * mutation of `_cachedAgents` — this read observes, it never rewires the lenient path.
+ *
+ * SCOPE OF "ok" (review finding, pinned by test): `ok: true` means "parsed as a JSON array" —
+ * the ELEMENT shape is NOT validated, exactly matching `loadAgents`' own `Array.isArray` cast.
+ * A registry that is an array of non-agents (`["oops"]`) reads ok:true with garbage members, so
+ * an invariant must look agents up by id and treat not-found there as a CONTRADICTION, not as
+ * unknown. Whether a stricter element check belongs here is part of the USER ruling this
+ * prerequisite is for — do not tighten it unilaterally.
+ */
+export async function loadAgentsLoud(): Promise<{ ok: true; agents: Agent[] } | { ok: false; reason: 'missing' | 'unreadable'; error?: string }> {
+  const read = await readJsonArray(REGISTRY_FILE)
+  if (read.ok) {
+    return { ok: true, agents: read.data as Agent[] }
+  }
+  return { ok: false, reason: read.reason, error: read.error }
 }
 
 /**

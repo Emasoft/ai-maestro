@@ -55,6 +55,11 @@ export type JsonRead =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; reason: 'missing' | 'unreadable'; error?: string }
 
+/** `readJson` for an ARRAY-shaped file — same three-valued shape (see `readJsonArray`). */
+export type JsonArrayRead =
+  | { ok: true; data: unknown[] }
+  | { ok: false; reason: 'missing' | 'unreadable'; error?: string }
+
 export async function readJson(path: string): Promise<JsonRead> {
   if (!existsSync(path)) return { ok: false, reason: 'missing' }
   let parsed: unknown
@@ -87,6 +92,39 @@ export async function readJson(path: string): Promise<JsonRead> {
 export async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
   const read = await readJson(path)
   return read.ok ? read.data : {}
+}
+
+
+/**
+ * The array-shaped strict reader, DERIVED from `readJson` — same one-parse, one-place contract.
+ *
+ * WHY IT EXISTS. The agent registry file is a JSON ARRAY of agents, and `readJson` deliberately
+ * refuses arrays (its `data` type is an object, so returning one would be a type LIE — the same
+ * ruling `[]`/`null`/`42` get below). Without an array sibling, the only alternative is a caller
+ * hand-rolling its own parse — a fifth reader, exactly what this module exists to prevent
+ * (TRDD-CS25TA6W) — or a caller that cannot use the strict answer at all.
+ *
+ * WHY THE AGENT REGISTRY NEEDS IT (TRDD-DQ6XN2VP, the R51.7 invariant prerequisite): an invariant
+ * must distinguish "valid" from "contradicted" from "UNKNOWN, do not act". `loadAgents` is lenient
+ * by design (catch → `[]`), so an unreadable registry is indistinguishable from an empty one there.
+ * `loadAgentsLoud` reads through this to get the three-valued answer.
+ */
+export async function readJsonArray(path: string): Promise<JsonArrayRead> {
+  if (!existsSync(path)) return { ok: false, reason: 'missing' }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(await readFile(path, 'utf-8'))
+  } catch (err) {
+    return { ok: false, reason: 'unreadable', error: err instanceof Error ? err.message : String(err) }
+  }
+  if (!Array.isArray(parsed)) {
+    return {
+      ok: false,
+      reason: 'unreadable',
+      error: `parses as ${parsed === null ? 'null' : typeof parsed}, not a JSON array`,
+    }
+  }
+  return { ok: true, data: parsed }
 }
 
 /** Thrown by `saveJsonSafe` when the target exists and cannot be read. Its own class so a caller can

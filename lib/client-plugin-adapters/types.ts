@@ -15,6 +15,15 @@ import type { ProviderId } from '@/lib/converter/types'
 export interface PluginInstallState {
   installed: boolean
   enabled: boolean
+  /**
+   * THREE-VALUED probe result (TRDD-DQ6XN2VP prerequisite). `installed` alone is two-valued, so a
+   * failed probe is indistinguishable from "not installed" — the false-positive shape that would
+   * abort a correct client migration on a transient read. An adapter that genuinely could not
+   * determine the state sets `unreadable` to WHY (existing adapters omit it: absent = the probe
+   * ran and answered, which is every adapter's behaviour today). An R51.7 invariant must treat
+   * `unreadable` as UNKNOWN and refuse to act, never as `installed: false`.
+   */
+  unreadable?: string
   /** How the plugin was installed */
   method: 'native-cli' | 'settings-write' | 'element-simulation'
   /** Paths of installed elements (for element-simulation tracking) */

@@ -8507,7 +8507,38 @@ export async function ChangeClient(
       },
     ]
 
-    const txn = await runGateSequence(gates, mig)
+    // R51.7 — the success-path invariant (TRDD-DQ6XN2VP). G08's belt-and-braces verification is
+    // claude-only (the settings write-back below is claude-shaped), so for any OTHER target
+    // client a silently no-op install would still let G09 write `program: <new client>` — the
+    // registry claiming a client whose plugins are not on disk. That is a CONTRADICTION, not a
+    // leftover, which is exactly what the invariants hook is for. The read goes through
+    // `loadAgentsLoud`, NOT `getAgent`: the registry is unreadable for an unrelated reason in
+    // three distinct ways the lenient reader collapses to "agent not found", and rolling back a
+    // correct migration over a transient read failure is the false-positive the three-valued
+    // reader exists to prevent (TRDD-DQ6XN2VP wave 1). UNKNOWN aborts with its own message —
+    // neither "verified" nor "violated" — and names the reason so the operator can distinguish
+    // "the migration is wrong" from "we could not tell".
+    const txn = await runGateSequence(gates, mig, {
+      invariants: async (): Promise<string[]> => {
+        const { loadAgentsLoud } = await import('@/lib/agent-registry')
+        const read = await loadAgentsLoud()
+        if (!read.ok) {
+          ops.push(`G09: post-condition verification unavailable (registry ${read.reason})`)
+          throw new Error(
+            `ChangeClient: could not verify the program change — registry ${read.reason}` +
+              (read.error ? ` (${read.error})` : '') +
+              `; migration rolled back because the result could not be confirmed`,
+          )
+        }
+        const final = read.agents.find((a) => a.id === agentId)
+        if (!final || final.program !== normalized) {
+          const found = final ? final.program : 'absent from the registry'
+          ops.push(`G09: DENIED — final registry program drift`)
+          return [`G09: final registry program is "${found}", expected "${normalized}" — G08's install did not actually land`]
+        }
+        return []
+      },
+    })
     ops.push(...txn.ops)
     if (!txn.ok) {
       result.error = txn.message

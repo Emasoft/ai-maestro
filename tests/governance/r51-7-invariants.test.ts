@@ -141,10 +141,10 @@ function pipelinesWithInvariants(): string[] {
  * evidence that its check cannot false-positive — see the `ChangePlugin` G11 note at the top of
  * this file for one that did not qualify.
  */
-const MIN_WITH_INVARIANTS = 2
+const MIN_WITH_INVARIANTS = 3
 
 /** Pinned BY NAME: a count alone cannot see one pipeline losing its hook while another gains one. */
-const MUST_DECLARE_INVARIANTS = ['ChangeName', 'ChangeTitle']
+const MUST_DECLARE_INVARIANTS = ['ChangeName', 'ChangeTitle', 'ChangeClient']
 
 describe('R51.7 — the invariants ratchet', () => {
   const declared = pipelinesWithInvariants()

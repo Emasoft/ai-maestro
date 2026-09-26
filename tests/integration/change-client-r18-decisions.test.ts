@@ -73,6 +73,10 @@ vi.mock('@/lib/agent-registry', () => ({
   getAgent: mockGetAgent,
   updateAgent: mockUpdateAgent,
   loadAgents: vi.fn(() => []),
+  loadAgentsLoud: vi.fn(async () => ({
+    ok: true,
+    agents: [{ id: TEST_AGENT_ID, program: 'codex' }],
+  })),
   saveAgents: vi.fn(),
 }))
 

@@ -1,16 +1,16 @@
 ---
-trdd-id: Q47OTJ14
+trdd-id: V630G4CY
 title: an auto-loaded agent-context file carries an injection pattern — .claude/rules/SCENARIOS_TESTS_RULES.md
 column: refused
 created: 2026-08-05T18:21:30+0200
-updated: 2026-09-24T16:36:22+0200
+updated: 2026-09-26T20:40:44+0200
 current-owner: janitor
 task-type: security
 severity: high
 ticket-kind: security-workflow
 ticket-severity: high
 ticket-evidence: [.claude/rules/SCENARIOS_TESTS_RULES.md]
-ticket-dedupe-key: AICTX-003:.claude/rules/SCENARIOS_TESTS_RULES.md:112
+ticket-dedupe-key: AICTX-003:.claude/rules/SCENARIOS_TESTS_RULES.md:47
 ticket-origin: agent-context-integrity
 ---
 
@@ -26,7 +26,7 @@ The janitor detected this in code the **USER owns**, so it may only propose. It 
 anything and will not, until a human or the main Claude approves by running:
 
 ```
-/janitor-support-open-ticket TRDD-Q47OTJ14
+/janitor-support-open-ticket TRDD-V630G4CY
 ```
 
 That command opens a support ticket, promotes this TRDD `proposal → planned`, and the janitor's
@@ -57,18 +57,19 @@ path, and closes the ticket with an explicit status.
 ## Approval log
 
 - 2026-08-05T22:03:29+0200 — **REFUSED** by ai-maestro (main Claude). Same finding as
-  TRDD-ECOPBKN6, cited at `.claude/rules/SCENARIOS_TESTS_RULES.md:112` — the same
-  troubleshooting table row exists in both the rules file and the agent file, so one authored
-  line produced two findings.
+  TRDD-XOHLHQOF, cited at `.claude/rules/SCENARIOS_TESTS_RULES.md:47` — the rules file carries
+  the same sentence as the agent file, so one authored line produced two findings.
 
-  **Defect:** `cross-skill-shadowing` fires on `never` + a skill name, but the row is the
-  **symptom column of a failure-mode matrix** (*"Agent never invoked a skill it should have"*),
-  not a mandate. It is matching a diagnostic table.
+  **Provenance:** commit **`7582465c`**, author **Emasoft** (owner), 2026-07-11, subject
+  *"test(scenarios): Rule 0.b — never puppet the agents; brief the MANAGER and observe"*. Single
+  author on the file. Clean.
 
-  **Provenance:** single author (owner, `Emasoft`). Clean.
+  **Defect:** the `authority-override` rule reads *"you have BECOME the system"* as a role-switch
+  directive. It is a PROHIBITION against the runner acting as the fleet — the detector flagged
+  the anti-puppeting rule as a puppeting attempt. Removing it would delete Rule 0.b, which is
+  what stops a runner from hand-driving agents and manufacturing a false PASS.
 
-  **Bar for acceptance:** do not fire inside a markdown table row whose leading cell is a
-  symptom; distinguish a mandate from a description of behaviour. Full reasoning on
-  TRDD-XOHLHQOF; filed upstream as a precision defect.
+  **Bar for acceptance:** score negation/prohibition context, or support a provenance allowlist.
+  Full reasoning on TRDD-XOHLHQOF; filed upstream as a precision defect.
 
 ## Notes and lessons learned

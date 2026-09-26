@@ -1,16 +1,16 @@
 ---
-trdd-id: VCEWKBQX
+trdd-id: Q47OTJ14
 title: an auto-loaded agent-context file carries an injection pattern — .claude/rules/SCENARIOS_TESTS_RULES.md
 column: refused
 created: 2026-08-05T18:21:30+0200
-updated: 2026-09-24T16:36:22+0200
+updated: 2026-09-26T20:40:44+0200
 current-owner: janitor
 task-type: security
 severity: high
 ticket-kind: security-workflow
 ticket-severity: high
 ticket-evidence: [.claude/rules/SCENARIOS_TESTS_RULES.md]
-ticket-dedupe-key: AICTX-003:.claude/rules/SCENARIOS_TESTS_RULES.md:145
+ticket-dedupe-key: AICTX-003:.claude/rules/SCENARIOS_TESTS_RULES.md:112
 ticket-origin: agent-context-integrity
 ---
 
@@ -26,7 +26,7 @@ The janitor detected this in code the **USER owns**, so it may only propose. It 
 anything and will not, until a human or the main Claude approves by running:
 
 ```
-/janitor-support-open-ticket TRDD-VCEWKBQX
+/janitor-support-open-ticket TRDD-Q47OTJ14
 ```
 
 That command opens a support ticket, promotes this TRDD `proposal → planned`, and the janitor's
@@ -56,29 +56,19 @@ path, and closes the ticket with an explicit status.
 
 ## Approval log
 
-- 2026-08-05T22:03:29+0200 — **REFUSED** by ai-maestro (main Claude), and this is the one where
-  acting on the finding would have been most dangerous.
+- 2026-08-05T22:03:29+0200 — **REFUSED** by ai-maestro (main Claude). Same finding as
+  TRDD-ECOPBKN6, cited at `.claude/rules/SCENARIOS_TESTS_RULES.md:112` — the same
+  troubleshooting table row exists in both the rules file and the agent file, so one authored
+  line produced two findings.
 
-  **The cited line** (`.claude/rules/SCENARIOS_TESTS_RULES.md:145`) is the **protective blacklist
-  of the USER's own real agents** — the rule that tells a scenario runner which agents it must
-  never create, modify, or delete, because they are the owner's pre-fork work under `~/Code/*`
-  and a cleanup pass would destroy them. It carries a dated CORRECTION explaining that they must
-  be identified STRUCTURALLY (workdir outside `~/agents/`, no governance title, no role-plugin)
-  rather than by a hand-kept name list that silently goes stale.
+  **Defect:** `cross-skill-shadowing` fires on `never` + a skill name, but the row is the
+  **symptom column of a failure-mode matrix** (*"Agent never invoked a skill it should have"*),
+  not a mandate. It is matching a diagnostic table.
 
-  **Defect:** the rule matched a prohibition (*"never touch …"*) plus named entities and scored
-  it as a behavioural mandate. It is a mandate — a mandate NOT to act, which is the shape of
-  every safety rule ever written. The detector cannot currently tell a guardrail from an
-  injected order.
+  **Provenance:** single author (owner, `Emasoft`). Clean.
 
-  **Why acting on it would cause harm:** the prescribed remediation for untrusted content is
-  "remove it". Removing this line removes the only thing standing between an automated cleanup
-  pass and the owner's real agents. The finding's own severity (`high`) would have been earned
-  — by the fix, not by the content.
-
-  **Provenance:** single author (owner, `Emasoft`) on every commit touching this file.
-
-  **Bar for acceptance:** score prohibition/negation context so a safety rule is not read as an
-  injected command. Full reasoning on TRDD-XOHLHQOF; filed upstream as a precision defect.
+  **Bar for acceptance:** do not fire inside a markdown table row whose leading cell is a
+  symptom; distinguish a mandate from a description of behaviour. Full reasoning on
+  TRDD-XOHLHQOF; filed upstream as a precision defect.
 
 ## Notes and lessons learned

@@ -29,6 +29,6 @@ Read memory-scope-leak-proposed.md; per page: genericize the private content in 
 memory-scope-leak detector re-run over PROJECT scope reports 0 flagged pages; every moved fact still recallable from its new scope (memgrep recall on the moved symptom).
 
 ## Estimated risk
-MED — edits 7 shared pages; transaction-gated, non-destructive (relocate, never delete). Should be dispatched as a janitor-memory-update chore, one page per run.
+MED — edits 7 shared pages; transaction-gated, non-destructive (relocate, never delete). Should be dispatched as a janitor-memory-update chore, one page per run. PUSH-ORDERING HAZARD: a commit message on this branch names the leak count ('7 PROJECT pages carry private data') — before this branch is ever pushed, this fix must land first, or that commit message must be scrubbed; the hazard was previously recorded only in that commit's own message prose.
 
 ## Approval log

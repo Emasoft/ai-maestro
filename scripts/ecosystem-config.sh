@@ -67,6 +67,17 @@ ROLE_PLUGIN_AUTONOMOUS="ai-maestro-autonomous-agent"
 AI_MAESTRO_REPO="https://github.com/23blocks-OS/ai-maestro"
 MARKETPLACE_REPO_URL="https://github.com/${MARKETPLACE_REPO}"
 
+# ── Semantic repo identity (TRDD-U27WXLWT) ───────────────────
+# Which repo this checkout pulls FROM and which it publishes TO, named by ROLE, never by
+# remote NAME. This repo's remotes are INVERTED vs convention (origin = 23blocks-OS upstream,
+# fork = Emasoft), so "origin" cannot answer "where do issues/pushes go". The janitor global
+# report and issue-filing flows key on these, not on `git remote get-url origin`.
+# Mirrors lib/ecosystem-constants.ts AI_MAESTRO_UPSTREAM_REPO / AI_MAESTRO_PUSH_TARGET_REPO
+# (TS carries URLs, this file slugs — same convention as MARKETPLACE_REPO). The upstream slug
+# is DERIVED from AI_MAESTRO_REPO above so the URL keeps exactly one definition.
+AI_MAESTRO_UPSTREAM_REPO="${AI_MAESTRO_REPO#https://github.com/}"
+AI_MAESTRO_PUSH_TARGET_REPO="Emasoft/ai-maestro"
+
 # AgentlensPro — official observability CLI dependency (TRDD-WF0UE9BC).
 # Mirrors lib/ecosystem-constants.ts AGENTLENS_* (source of truth). npm CLI,
 # installed by scripts/install-agentlens.sh, which tracks the NEWEST published release

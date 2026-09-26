@@ -380,6 +380,19 @@ export const PLUGIN_COMPATIBLE_TITLES: Record<string, string[]> = {
 /** Official AI Maestro repo */
 export const AI_MAESTRO_REPO = 'https://github.com/23blocks-OS/ai-maestro'
 
+
+/**
+ * SEMANTIC repo identity - which GitHub repo this checkout pulls FROM and which it publishes
+ * TO, named by ROLE, never by remote NAME. This repo's remotes are INVERTED vs convention
+ * (origin = 23blocks-OS upstream, fork = Emasoft), so "origin" cannot answer "where do
+ * issues/pushes go" (TRDD-U27WXLWT). Consumers (the janitor global report, issue-filing flows)
+ * must key on these constants, not on `git remote get-url origin`. AI_MAESTRO_REPO above IS
+ * the upstream — this constant names its ROLE (update-remote-guard.sh consumes it there), so
+ * the upstream URL keeps exactly one definition.
+ */
+export const AI_MAESTRO_UPSTREAM_REPO = AI_MAESTRO_REPO
+export const AI_MAESTRO_PUSH_TARGET_REPO = 'https://github.com/Emasoft/ai-maestro'
+
 /** Marketplace repo (fork — temporary) */
 export const MARKETPLACE_REPO_URL = `https://github.com/${MARKETPLACE_REPO}`
 

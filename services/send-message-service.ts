@@ -280,6 +280,9 @@ export async function SendMessage(
     // ── G05: Resolve recipient agent ──────────────────────────
     let recipientTitle = 'unknown'
     let recipientAgentId: string | null = null
+    // Whether the recipient resolved to the human user (R6 node H). Set inside
+    // the G06 branches below; consumed by PG00's reply-only enforcement.
+    let recipientIsHuman = false
     // The `@hostId` half of a qualified name. G06 needs it: without it, a recipient
     // on another host is indistinguishable from a name that does not exist — both
     // keep the 'unknown' title — and the graph refuses BOTH. The refusal is right
@@ -339,7 +342,7 @@ export async function SendMessage(
           const us = await resolveUserSenderContext(senderUserId, recipientAgentId, recipientTitle, to)
           const { validateMessageRoute } = await import('@/lib/communication-graph')
           const recipientTitleStr = String(recipientTitle ?? '')
-          const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user' || us.recipientIsUser
+          recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user' || us.recipientIsUser
           const graphResult = validateMessageRoute(senderTitle, recipientTitle, {
             userSender: us,
             recipientIsHuman,
@@ -377,7 +380,7 @@ export async function SendMessage(
       // include 'human' or 'user', but legacy flows may pass either sentinel on the
       // wire. Normalise by string-cast before comparison.
       const recipientTitleStr = String(recipientTitle ?? '')
-      const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
+      recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
       // R38.2 — when the model is on, tell the graph the recipient user's title so
       // the inbound "normal users don't receive from agents" rule fires. Resolve
       // only when the recipient is a user (cheap no-op otherwise).
@@ -457,6 +460,24 @@ export async function SendMessage(
     // ═══════════════════════════════════════════════════════════
     // POST-EXECUTION GATES
     // ═══════════════════════════════════════════════════════════
+
+    // ── PG00: R6.10 reply-only enforcement (TRDD-80557822) ────
+    // When this send rode a reply-only edge to the human user, verify the
+    // referenced inbound message is real and mark it replied=true under a
+    // lock. `to` names the human user — the identity the ORIGINAL inbound
+    // message was sent from, which is what the guard checks the inbox
+    // envelope's from-part against. Fail-CLOSED.
+    if (inReplyTo && recipientIsHuman && senderAgentId) {
+      try {
+        const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
+        await assertReplyToInbound(inReplyTo, senderAgentId, to.split('@')[0])
+        ops.push(`PG00: Reply-only verified — inbound ${inReplyTo} marked replied=true`)
+      } catch (replyErr) {
+        result.error = replyErr instanceof Error ? replyErr.message : 'reply_only_enforcement_failed'
+        ops.push(`PG00: DENIED — ${result.error}`)
+        return result
+      }
+    }
 
     // ── PG01: Verify message was written ──────────────────────
     if (recipientAgentId && result.messageId) {

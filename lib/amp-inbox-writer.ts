@@ -26,6 +26,9 @@ const AMP_DIR = path.join(os.homedir(), '.agent-messaging')
 const AMP_AGENTS_DIR = path.join(AMP_DIR, 'agents')
 const AMP_INDEX_FILE = path.join(AMP_AGENTS_DIR, '.index.json')
 
+// Lazy-resolved registry module (see assertReplyToInbound for why it is cached).
+let agentRegistryModule: typeof import('@/lib/agent-registry') | null = null
+
 // ============================================================================
 // Name → UUID Index
 // ============================================================================
@@ -632,6 +635,130 @@ export async function isAMPInitialized(): Promise<boolean> {
       return false
     }
   }
+}
+
+
+/**
+ * Locate an inbound message file by id inside an agent's inbox.
+ *
+ * The inbox is nested per-sender (`inbox/<sanitized-from>/<id>.json`), so a
+ * flat read is not possible; walk the per-sender dirs. Returns null when the
+ * id does not exist anywhere in the inbox.
+ */
+export async function findInboxMessagePath(
+  agentName: string,
+  agentId: string,
+  messageId: string
+): Promise<string | null> {
+  let agentHome: string
+  try {
+    agentHome = resolveAgentAMPHome(agentName, agentId)
+  } catch {
+    return null
+  }
+  const inboxDir = path.join(agentHome, 'messages', 'inbox')
+  let senderDirs: string[] = []
+  try {
+    senderDirs = await fs.readdir(inboxDir)
+  } catch {
+    return null
+  }
+  for (const senderDir of senderDirs) {
+    const candidate = path.join(inboxDir, senderDir, `${messageId}.json`)
+    try {
+      await fs.access(candidate)
+      return candidate
+    } catch {
+      // Not in this sender dir — keep walking.
+    }
+  }
+  return null
+}
+
+/**
+ * R6.10 reply-only enforcement (TRDD-80557822 boxes 3+4).
+ *
+ * Called from the two reply-only consumers — `SendMessage` G06
+ * (services/send-message-service.ts) and the AMP route handler
+ * (services/amp-service.ts) — AFTER the graph has allowed the send on a
+ * reply-only edge. It closes the AUTH-MAJ-02 forge surface the graph
+ * deliberately leaves open: it (a) verifies the referenced message really
+ * is an inbound message to THIS agent FROM the human user, and (b) marks
+ * it replied=true under a lock so a second reply to the same inbound id
+ * is rejected. The graph gate stays pure-data by design; this is the
+ * inbox-layer re-validation its ADVISORY-ONLY comment demands.
+ *
+ * ATOMICITY: the replied check-and-set is ONE read-modify-write inside
+ * withLock — never two sequential writes — so two concurrent replies
+ * cannot both see replied=false.
+ *
+ * FAIL-CLOSED: unknown message, wrong sender/recipient pair, unreadable
+ * file, or an already-replied message all throw. A reply-only send must
+ * prove its reply is real or it does not happen.
+ */
+export async function assertReplyToInbound(
+  messageId: string,
+  senderAgentId: string,
+  humanUserId: string
+): Promise<void> {
+  // WHY cached: two CONCURRENT reply-guard calls each doing a dynamic import
+  // of the mocked registry can race the mock factory under vitest and one arm
+  // silently resolves the REAL module (whose getAgent finds no registry in a
+  // redirected HOME). A module-level memo makes every call after the first
+  // share one resolved module — deterministic under test, one less lookup in
+  // production.
+  if (!agentRegistryModule) {
+    agentRegistryModule = await import('@/lib/agent-registry')
+  }
+  const agent = agentRegistryModule.getAgent(senderAgentId)
+  if (!agent) {
+    throw new Error(`reply_to_inbound_unverifiable: sender agent ${senderAgentId} not found in registry`)
+  }
+  const filePath = await findInboxMessagePath(agent.name || senderAgentId, senderAgentId, messageId)
+  if (!filePath) {
+    throw new Error(`reply_to_inbound_unknown: message ${messageId} not found in agent ${senderAgentId} inbox`)
+  }
+
+  await withLock(`amp-msg-${messageId}`, async () => {
+    let raw: string
+    try {
+      raw = await fs.readFile(filePath, 'utf-8')
+    } catch (err) {
+      throw new Error(`reply_to_inbound_unreadable: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    let msg: {
+      envelope?: { id?: string; from?: string; to?: string; in_reply_to?: string | null }
+      metadata?: Record<string, unknown>
+    }
+    try {
+      msg = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`reply_to_inbound_corrupt: ${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    // (a) Verify the referenced message is genuinely inbound to THIS agent
+    // from the human user. The human user's AMP address is not
+    // registry-resolvable, so compare on the agent name part of the
+    // addresses: the human user sends as its own name.
+    const fromAgentPart = (msg.envelope?.from || '').split('@')[0]
+    if (!fromAgentPart || fromAgentPart !== humanUserId) {
+      throw new Error(`reply_to_inbound_pair_mismatch: message ${messageId} was not sent by ${humanUserId}`)
+    }
+    const toAgentPart = (msg.envelope?.to || '').split('@')[0]
+    if (toAgentPart !== (agent.name || agent.alias || senderAgentId)) {
+      throw new Error(`reply_to_inbound_pair_mismatch: message ${messageId} was not addressed to ${agent.name}`)
+    }
+
+    // (b) One reply per inbound id — check-and-set under the SAME lock
+    // section as the read above.
+    if (msg.metadata?.replied === true) {
+      throw new Error(`reply_to_inbound_already_replied: message ${messageId} has already been replied to`)
+    }
+    msg.metadata = { ...msg.metadata, replied: true }
+    const tmpPath = filePath + '.tmp'
+    await fs.writeFile(tmpPath, JSON.stringify(msg, null, 2))
+    await fs.rename(tmpPath, filePath)
+  })
 }
 
 /**

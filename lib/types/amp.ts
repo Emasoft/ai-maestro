@@ -471,6 +471,7 @@ export type AMPErrorCode =
   | 'missing_header'        // Required HTTP header is missing
   | 'duplicate_message'     // Message ID has already been delivered (replay protection)
   | 'title_communication_forbidden'  // Sender's governance title cannot message recipient's title
+  | 'reply_only_enforcement_failed'  // R6.10: reply-only send failed inbox-layer verification (TRDD-80557822)
 
 /**
  * AMP error response

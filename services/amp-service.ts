@@ -1328,6 +1328,28 @@ export async function routeMessage(
         senderAgent, senderName, forwardedFrom, senderPublicKeyHex: senderKeyPair?.publicHex, body
       })
 
+      // R6.10 reply-only enforcement (TRDD-80557822): when the graph allowed
+      // this send on a reply-only edge, verify the referenced inbound message
+      // is real and mark it replied=true under a lock. The referenced message
+      // was sent BY the human user (the reply's recipient, `recipientName`) —
+      // the guard checks the inbox envelope's from-part against that identity.
+      if (graphCheck.edgeType === 'reply-only') {
+        try {
+          const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
+          await assertReplyToInbound(inReplyToId!, senderAgent!.id, recipientName)
+        } catch (replyErr) {
+          console.error('[AMP Route] Reply-only enforcement failed:', replyErr)
+          return {
+            data: {
+              error: 'reply_only_enforcement_failed',
+              message: replyErr instanceof Error ? replyErr.message : 'reply could not be verified against the inbound message'
+            } as AMPError,
+            status: 403,
+            headers: rateLimitHeaders,
+          }
+        }
+      }
+
       return {
         data: { id: messageId, status: 'delivered', method: 'local', delivered_at: now } as AMPRouteResponse,
         status: 200,

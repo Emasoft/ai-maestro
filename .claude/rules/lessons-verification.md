@@ -149,8 +149,6 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - "One discontinuity" and "702 duplicate values in one file" are different diagnoses of the same scan — I reported the gap and only found the DUPLICATES by asking separately; a contiguity check cannot see an overlap.
 - A dependency's module-level cache defeats streaming outright — gray-matter keys a cache on each file's full text, so a reader retaining NOTHING still accumulated the whole corpus; grep the parser for `cache` before believing a streaming rewrite.
 - Peak RSS is not the live set: RSS counts uncollected garbage, so measure RETENTION with `--expose-gc` + `heapUsed`, or a heap-cap sweep — mine dropped 57% while the retained set barely moved.
-- A memory correlation has more than one plausible cause: identical frontmatter + 4.4x memory looked exactly like V8 sliced strings, and deep-flattening every string moved it −3%, refuting it — run the candidate fix as a PROBE before editing any source.
-- Extrapolation can be wrong in KIND, not degree — a projected "~6.5 GB, 80-90 s" was in fact an OOM CRASH at 4.45 GB; generate the real 10^5 fixture, because "slow" and "dead" are different verdicts.
 - When a refactor must preserve output ORDER, say which alternative you rejected for it: evaluating rules inside the stream would have moved every cross-card finding into a trailing block, and that is invisible on a corpus whose cross-card rules all pass.
 - Super-linear wall time near the limit is a SYMPTOM of the memory wall (GC pressure), not a second problem to optimize.
 - "Do we need an index?" is usually "is the index rebuilt in RAM every run, or persisted?" — grep for the Maps first; this linter already built one, and that in-memory index WAS the 6.5 GB.
@@ -217,6 +215,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 ## Second-hand reports (sub-agents, prior sessions, TRDD verdicts, audit findings)
 - A report from a sub-agent, a prior session, or a recorded TRDD verdict is a HYPOTHESIS — demand the exact file:line, grep it YOURSELF, and only then call it a fact.
+- A "zero X" claim measured by ONE needle is only as broad as that needle: I reported "0 keychain-latch false alarms" for MFTDMSJY while the latch's OTHER signature ("denied-latch is set, so this beat did not read any slot") sat 68 times in the same log — the card's own warning about needle-staleness, recurred one generation later. Enumerate every signature a class can emit and grep each, or drop the "zero".
 - Never propagate a citation you did not run: I copied SF4's "wakeAgent enforces the roleMissing 409 (~:1958-1973)" into a new TRDD under the word "verified" — the gate was in the ROUTE and that range holds zero `roleMissing`.
 - The reporter's confidence is not evidence; a verdict labelled REFUTED / CONFIRMED / VERIFIED still needs the grep, and this one was wrong in the REFUTED direction for five weeks.
 - A quoted line RANGE rots even when the claim was once true — re-resolve it against the current file before citing it forward.

@@ -7,7 +7,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: human_review
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-22T23:52:25+0200
+updated: 2026-09-27T01:11:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -248,3 +248,4 @@ Two smaller notes for whoever picks this up:
   because the card's own log reserved this decision — a comm-graph security edge whose failure mode
   is an agent commanding a user's ASSISTANT — and because a USER's impatience at the pace is not an
   approval. Scope approved: the FULL card, both halves in one commit. `column: todo` -> `dev`.
+- 2026-09-27 — AUTONOMY-ROUND ASSESSMENT (no column move, per review F5's advice to read before advancing): the card's OWN 2026-08-22 ruling already decided storage (UserRecord field beside assistantAgentId, types/user.ts:69) and default (false, deny-by-default, asymmetric failure modes) — under an earlier standing autonomy grant. What remains open is the GRANT SURFACE (route/setting/UI), explicitly ruled a FEATURE ('HALF 2 IS NOT A WIRING COMMIT') and the one thing the ruling declined to invent. NEXT ACTION therefore: a separate feature TRDD for the grant surface, authored from the ruling's constraints; the producer wiring + lock-test deletion + map-row re-upgrade ride inside it per the card's own acceptance list. Dispatching the feature-card authoring now; this card holds at human_review until that card exists.

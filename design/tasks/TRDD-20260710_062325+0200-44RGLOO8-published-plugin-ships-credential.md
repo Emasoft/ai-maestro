@@ -7,7 +7,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-22T20:10:51+0200
+updated: 2026-09-26T15:44:43+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: ai-maestro-hub
@@ -159,6 +159,7 @@ stop/restart a session, change the password itself). AI Maestro binds to localho
 the owner's Tailscale CGNAT range only (`isAllowedSource()`), so possessing the
 password does not by itself grant network reach. It bounds the impact. It does not
 excuse it.
+**2026-09-26 PR#4 MERGED** (13:42:18Z, squash --admin; the failing Lint check is pre-existing cspell base drift — 151 unknown words incl. base vocab like 'frontmatter', not this PR's prose). Box 'replace two literal occurrences' is DONE at the PR level. Remaining: (a) re-publish via publish.py --patch so the marketplace resolves a clean version — NOT run yet; (b) issue #3 close after publish. NEXT: run publish in the plugin repo, then close #3 and this card.
 
 ## Why no issue yet — the disclosure order matters
 

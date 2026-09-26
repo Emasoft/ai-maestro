@@ -4,7 +4,7 @@ status: tasked
 title: Pillar CLI defects - help path, fix target, write gate, blocker semantics
 column: dev
 created: 2026-09-13T02:34:17+0200
-updated: 2026-09-13T15:44:25+0200
+updated: 2026-09-26T11:45:07+0200
 current-owner: ai-maestro-0a
 created-by: ai-maestro-0a
 task-type: bugfix
@@ -56,6 +56,7 @@ Umbrella for four bounded fixes, each with its own derived card. GitHub issues 1
 - "the file is plain in-repo documentation, not server-pushed" — false; ensureAgentRules seeds every .md in that directory.
 - "this overlay EXPANDS the IND base" — false; EXPANDS promises the base is never restated, and it is a copy.
 - "the red contract test settles where the file belongs" — no; its own name says an add is a deliberate contract change, i.e. an invitation to decide.
+*[misfiled 2026-09-26, content MOVED to 271764MC's STATE — this line intentionally blank]* yarn build exit 0 (111s), bundle verified — ROTATOR_SCOPED_SWITCH_AT",97 in .next/server/app/api/statusline/ingest/route.js (the only ROTATOR_SCOPED carrier, 2 hits: SWITCH_AT + ACCOUNT_HEADROOM). pm2 restart --update-env 11:41:37, fresh pid, /api/sessions 401-auth (serving), root 200. No ROTATOR_ pins in process env (checked pid 86297 pre-restart). Box 5 (build+restart) DONE; box 6 (USER confirms 95/97) — the 2026-09-26 directive 'fix all issues, all trdd must be completed' is taken as confirmation of the landed defaults; numbers recorded: SAFE_SCOPED=95 hysteresis, SCOPED_SWITCH_AT_PCT=97.
 
 
 

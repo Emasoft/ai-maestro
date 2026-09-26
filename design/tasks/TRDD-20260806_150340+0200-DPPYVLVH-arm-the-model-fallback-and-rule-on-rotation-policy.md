@@ -4,7 +4,7 @@ status: tasked
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-22T16:59:40+0200
+updated: 2026-09-27T01:10:43+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -280,6 +280,7 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
   change. An acceptance box naming another card's work or this card's own closure-consequence is
   not a gate; left as `- [ ]` it makes the card permanently unclosable. Text preserved verbatim,
   reason appended.
+- 2026-09-27 — AUTONOMY-ROUND RE-MEASUREMENT, conclusion DOWNGRADED per adversarial review F1: the flag IS armed (config since 56047fa52 2026-08-15, live pm2 env '1' after the 2026-09-26T11:41 restart) but ACTUATION REMAINS UNOBSERVED — the 2026-09-11 log lines are the rotator RECOMMENDING the lane ('staying put... the model-fallback lane is the remedy'), not a confirmed switch; the one receiver-side line ([FleetLiveness] model-fallback could not read 9 panes, pm2-error.log same day) shows the receiver RAN but FAILED pane reads — consistent with 'armed and broken', not 'lit and working'. No '/model' switch event found in logs through 2026-09-27. The card's own acceptance procedure (arm + observe ONE confirmed switch) is therefore still OPEN. Card stays in human_review; the stale-premise closure is REFUTED. Next observation window: next Fable scoped-wall event.
 
 ## Live observation 2026-08-16T00:50 — the TRIGGER fired for real, and the lane still could not act
 

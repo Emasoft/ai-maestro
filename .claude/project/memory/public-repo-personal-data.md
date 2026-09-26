@@ -2,7 +2,7 @@
 name: public-repo-personal-data
 description: "this repo is PUBLIC and a personal email / account name reached a tracked file — how it happens without anyone deciding to / what test enforces the no-personal-address rule and where the line between a fixture address and a real one falls / why the fix is a role label and never an ignore list / redacting the file forward does not undo a push, and wildcard git add is the sibling leak vector"
 ocd: 2026-08-07
-lmd: 2026-09-05
+lmd: 2026-09-25
 metadata:
   node_type: memory
   type: project
@@ -63,6 +63,11 @@ machine-private page from it publishes that page's existence.** Caught by `memgr
 `link-downward-cross-scope` on this page's own first draft: a privacy page whose first link was a
 privacy violation. Worth remembering that the check only fires on the UNION of scopes — linting
 this file alone reported clean, because a cross-scope finding is a property of the pair. [^1]
+
+
+## See also
+
+- [[memory-scope-leak]]
 
 ## Notes and lessons learned
 

@@ -1,10 +1,10 @@
 ---
 trdd-id: MQE5D28T
-status: tasked
+status: archived
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
-column: dev
+column: complete
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-26T06:44:41+0200
+updated: 2026-09-26T12:53:05+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: docs
@@ -48,6 +48,7 @@ Review of ecbf60c3+ce10d457 (2026-09-26, no blocker) — three carry-forwards ap
 ## Approval log
 
 - 2026-09-24T14:21:13+0200 — MANDATE issued by ai-maestro-main-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent. (identity redacted 2026-09-24: OS login replaced)
+- 2026-09-26T12:53:05+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
 
 ## Problem
 
@@ -80,10 +81,10 @@ docs/GOVERNANCE-RULES.md: grepped for 'failed'/'archived'/'frozen' near terminal
 - [x] Overlay rule aimaestro-trdd-approval.md updated to reflect owner rulings 1-4, verbatim-quoted
 - [x] Overlay rule aimaestro-manager-approval-defaults.md section Y updated with a dedicated definitive-archive row
 - [x] Governance/spec sweep run (docs/GOVERNANCE-RULES.md, design/specs/) and conflicts listed above rather than edited (specgrep-only surface)
-- [ ] proposed: reconcile design/specs/3-pillars-spec.md clause 3P-ZON-06 with this ruling via specgrep, bumping spec-version per 3P-VER-01 (a MUST changes)
+- [x] proposed: reconcile 3P-ZON-06 via specgrep + spec-version bump — ALREADY LANDED at spec 4.0.0 during step 6 (3P-ZON-06:503-505 carries the express-give-up carve-out, DEFINITIVE, no-un-archive; 3P-KAN-07:235 cross-references it; verified 2026-09-26)
 - ~~proposed: the corpus tooling's archive-eligibility check should accept a failed card moving into archived/ when the move is attributed to the MANAGER or CHIEF-OF-STAFF (or, outside the harness, the USER or main agent) — today's zone-mismatch logic (ZONE-MISMATCH / expectedZone) treats failed as tasks/-only and would need to allow this one exception, not a general one~~ SUPERSEDED 2026-09-24 by the second USER ruling on this card ("no matter the column it is in ... it will be archived"); the zone-rule change is owned by TRDD-4NISAY49.
-- [ ] proposed: once a failed card has been archived under this ruling it becomes definitive, and the tooling that currently lets any archived/refused card be moved or its column reopened should refuse to do so for a definitive card specifically, i.e. it must never leave archived/ or return to an open column again
-- [ ] Apply the 2026-09-24 USER rulings (section "USER rulings — 2026-09-24") to the 3-pillars spec, this repo's rules and the plugin-owned rules/skills, per the reviewed proposal
+- [x] proposed: definitive-card tooling — ALREADY LANDED: trddgrep-archived-immutability.test.ts pins move-out-of-archived refused by the zone gate (dev/testing, byte-identical, still archived) and archived-again refused (positive control on a tasks/ card); authorization.ts:542 denies re-archive ('no option may exist to un-archive'); trdd-doctor.ts:1133 makes the un-archive finding unfixable by design. 22/22 pass 2026-09-26
+- [x] Apply the 2026-09-24 USER rulings to the spec, rules and skills — COMPLETE: spec at 4.0.0 (step 6), repo overlays at 23fdb2348, and the last stale claim anywhere ('never archived as failed' in the global universal-kanban rule) corrected 2026-09-26; sweep of rules/, .claude/skills/, GOVERNANCE-RULES.md found no other stale text
 - [x] step 1: plan and decisions recorded on this card
 - [x] step 2: remove design/refused/, move its 32 cards to proposals/ — COMPLETED 2026-09-26 (fc8bcbd86): 26 at bc02c5129 + the 5 janitor ticket cards now; column: refused kept, folder gone. #309 stays open on the janitor side only
 - [x] step 3: add status: proposed|tasked|archived, enforced by the trddgrep linter

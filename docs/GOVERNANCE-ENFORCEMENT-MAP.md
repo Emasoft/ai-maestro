@@ -503,7 +503,9 @@ not actually enforce — it is documentation, and the state it forbids will occu
 `scripts/aio-gate-coverage.py` (re-run it; do not hand-edit the verdicts). For each rule it
 greps enforcement code (`services/`, `lib/`, `app/api/`, `server.mjs`) versus docs/tests/design,
 and asks whether any enforcement-code citation sits within 40 lines of a gate label
-(`ops.push('G##' | 'EXE' | 'PG##')`).
+(`ops.push('G##' | 'EXE' | 'PG##')`). After a real coverage change, `python3
+scripts/aio-gate-coverage.py --write` rewrites this table's verdict cells and tally line in place
+(the "Where" prose column and the row set stay hand-curated).
 
 **The table below is checked against the code on every test run.**
 `python3 scripts/aio-gate-coverage.py --check` re-derives the verdicts and fails on any

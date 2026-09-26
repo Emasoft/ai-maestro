@@ -199,10 +199,50 @@ def check(rows: list[tuple[str, str, str, int, str]], tally: dict[str, int]) -> 
     return 0
 
 
+def write(rows: list[tuple[str, str, str, int, str]], tally: dict[str, int]) -> int:
+    """Rewrite the Part II table's verdict cells and tally line in place.
+
+    The verdict is the machine's claim, so the machine writes it; the "Where" prose column and
+    the row set are untouched — a row the code no longer computes still fails --check, which is
+    the signal to curate by hand, not to silently drop a row.
+    """
+    lines = MAP_MD.read_text().splitlines()
+    in_part_ii = False
+    rewritten = 0
+    for i, line in enumerate(lines):
+        if PART_II.match(line):
+            in_part_ii = True
+            continue
+        if not in_part_ii:
+            continue
+        if (m := TABLE_ROW.match(line)) is not None and m.group(1) in dict(
+            (rid, verdict) for rid, _, verdict, _, _ in rows
+        ):
+            new_verdict = next(v for rid, _, v, _, _ in rows if rid == m.group(1))
+            if new_verdict != m.group(2):
+                lines[i] = TABLE_ROW.sub(
+                    lambda mm: f"{mm.group(0)[:mm.start(2) - mm.start(0)]}{new_verdict}"
+                    f"{mm.group(0)[mm.end(2) - mm.start(0):]}",
+                    line,
+                )
+                rewritten += 1
+        elif (m := TALLY.search(line)) is not None:
+            want = tuple(tally[k] for k in VERDICTS) + (len(rows),)
+            lines[i] = (
+                f"**GATED {want[0]} · ENFORCED {want[1]} · DOC-ONLY {want[2]}"
+                f" · UNMAPPED {want[3]} · total {want[4]}.**"
+            )
+    MAP_MD.write_text("\n".join(lines) + "\n")
+    print(f"updated Part II in {MAP_MD.relative_to(ROOT)}: {rewritten} verdict cell(s) rewritten, tally rewritten.")
+    return 0
+
+
 def main() -> int:
     rows, tally = compute()
     if "--check" in sys.argv[1:]:
         return check(rows, tally)
+    if "--write" in sys.argv[1:]:
+        return write(rows, tally)
 
     w = max(len(t) for _, t, _, _, _ in rows)
     print(f"{'RULE':<5} {'TITLE':<{w}} {'VERDICT':<9} {'CITES':>5}  EVIDENCE")

@@ -17,7 +17,7 @@ approved: false
 # Seven PROJECT wikimem pages carry machine-private data and are pushed with the repo
 
 ## Problem
-The 2026-09-26/27 memory-scope-leak detector found 7 pages in .claude/project/memory/ (PROJECT scope: git-tracked AND pushed to every cloner of a public-adjacent repo) carrying private data per memory-scope-leak-proposed.md. PROJECT scope must never carry a home path, hostname, username, or machine state (rules/reports-and-memory.md). The buffer note was re-mirrored by the harvest agent but the flagged pages themselves were not yet demoted.
+The 2026-09-26/27 memory-scope-leak detector found 7 pages in .claude/project/memory/ (PROJECT scope: git-tracked AND pushed to every cloner of a repo verified PUBLIC 2026-09-27 (gh repo view Emasoft/ai-maestro → isPrivate:false)) carrying private data per memory-scope-leak-proposed.md. PROJECT scope must never carry a home path, hostname, username, or machine state (rules/reports-and-memory.md). The buffer note was re-mirrored by the harvest agent but the flagged pages themselves were not yet demoted.
 
 ## Root cause
 Pages were authored into PROJECT scope with machine-specific content; scope routing (LOCAL vs PROJECT) was not applied at write time.

@@ -7,7 +7,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-09-26T15:44:43+0200
+updated: 2026-09-27T01:09:55+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: ai-maestro-hub
@@ -264,6 +264,7 @@ prevent.
   (min-approval-requirement: user). Not a mandate: the author's authority is below the
   tier this TRDD requires. Touches a shared credential and a public artifact, so the
   D3 objective floor is `user`. No approval has been requested or granted.
+- 2026-09-27 — AUTONOMY-ROUND VERIFICATION (read-only, no release transition): PR #4 (ai-maestro-web-scenario-tester, 'stop mandating the literal credential') state=MERGED 2026-09-26T13:42Z; fix is on main (verified: current SCENARIOS_TESTS_RULES.md carries the name-the-ref rule and zero 'enter password <literal>' template lines). RESIDUAL EXPOSURE VERIFIED: tags v0.1.1/v0.1.2/v0.1.3 still exist publicly on the PRIVATE repo and each carries the reference file with a REAL governance password literal (2 occurrences on v0.1.1 and v0.1.2, 1 on v0.1.3, line ~783). The tags decision (delete vs leave) was already recorded as USER-owned and is what keeps this card in human_review — this verification sharpens it: the secret is reachable at pinned refs TODAY. Repo visibility confirmed private=false→PUBLIC (gh api .private returned false, i.e. the repo IS public). Escape-hatch caps: repo is public; the literals were verified by structure (line context), value redacted from session notes; do NOT reproduce the literal further. Rotation is the owner's call; tag deletion is the owner's call.
 
 ## ⏵ ROTATION LANDED — the gate is OPEN and the leak is DEAD (verified 2026-07-30)
 

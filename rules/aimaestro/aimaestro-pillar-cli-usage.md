@@ -4,17 +4,15 @@
 
 > **Why this lives IN THE REPO, not at `~/.claude/rules/`** (issue #162). These rules describe the
 > behaviour of `trddgrep`/`prrdgrep`/`specgrep` — CLIs whose implementation is `scripts/*.mjs` and
-> `lib/trdd-doctor.ts` in THIS repo. A copy pinned outside the repo (USER scope) drifts from the
-> tools the moment either moves, with no signal that it drifted. Versioning the rules alongside the
-> code they describe is the fix. `~/.claude/rules/three-pillars-tools-only.md` is the
-> janitor-shipped GLOBAL COPY of these rules; this is the in-repo copy, versioned with the tools.
+> `lib/trdd-doctor.ts` in THIS repo. Versioning the rules alongside the code they describe is the
+> fix.
 >
-> **They are two COPIES, not a base and an overlay, and which one wins is not yet decided.**
-> Measured 2026-09-13: the two differ on 21 of ~84 lines — this header, the `scripts/pillar-cli`
-> gate paragraph (#161), and the `help`-without-a-corpus correction (#159). Everything else is
-> byte-identical. Do NOT describe this file as EXPANDING the other: that word is the sibling
-> overlays' contract and it promises the base is never restated, which is false here. Resolving
-> the duplication is tracked on `TRDD-9JOCY2EJ` and needs the janitor repo.
+> **This is now the CANONICAL copy (resolved 2026-09-26, TRDD-9JOCY2EJ).** The janitor-shipped
+> global copy `~/.claude/rules/three-pillars-tools-only.md` was retired — it no longer exists at
+> USER scope (verified 2026-09-26: the janitor's rules dir carries no pillar-usage file in any
+> cached version) — and this in-repo copy, versioned with the tools it describes, is the single
+> source. Do NOT describe this file as EXPANDING a sibling: that word is the overlays' contract
+> and it promises a base that does not exist.
 >
 > **Why `rules/aimaestro/` — this file is one of the server-distributed overlays.** An earlier
 > draft of this header said the opposite; the seeder refutes it. `ensureAgentRules`
@@ -64,7 +62,7 @@ heredoc/redirect.
 | `<pattern>` | search | R |
 | `lint` | findings/rule | R |
 | `validate` | write-gate | R |
-| `fix` | repairs ALL findings corpus-wide, no id; `--dry-run` first | W |
+| `fix` | repairs ALL findings on ONE target (`fix <id>` or `fix --path <file>`; `--dry-run` first); corpus-wide batch repair is `yarn trdd:fix` | W |
 | `new --title T --task-type X` | mint card | W |
 | `set <id> <field> <value>` | edit field | W |
 | `append <id> <heading> <line>` | append | W |
@@ -132,9 +130,8 @@ first:
 `scripts/pillar-cli` (issue #161) is still the single shared launcher installed under each
 pillar's name (`trddgrep`, `prrdgrep`, `specgrep`) — it now carries NO write gate of its own, by
 design; it locates the install, pins Node, and `exec`s the tool's own `.mjs`, which asks the node
-gate above. `scripts/install-pillar-tooling.sh` per-CLI wrapper generator remains orphaned
-(superseded, kept only as a fallback path — `install-messaging.sh` is the installer that ships
-`scripts/pillar-cli`).
+gate above. (`scripts/install-pillar-tooling.sh` was retired 2026-09-13 — a tracked orphan,
+deleted at 7e10177ab; `install-messaging.sh` is the installer that ships `scripts/pillar-cli`.)
 
 Exempt: git/wc/checksum/ls · `grep -rl` paths-only (`-rn`=read, forbidden) · PARSE/LINT-error
 card `cat`-able ("not found"=wrong id, "no TRDD corpus at"=wrong `--design-dir`).

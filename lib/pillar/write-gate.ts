@@ -51,8 +51,8 @@ export interface WriteGateOpts {
 /**
  * `null` when the write is allowed; a refusal message otherwise.
  *
- * `AIM_PILLAR_ALLOW_WRITE=1` is the one escape hatch, matching
- * `three-pillars-tools-only.md`'s documented override.
+ * `AIM_PILLAR_ALLOW_WRITE=1` is the one escape hatch, matching the
+ * pillar-CLI usage rule's documented override.
  */
 export function writeRefusal(tool: PillarWriteTool, verb: string, opts: WriteGateOpts): string | null {
   if (!WRITE_VERBS[tool].includes(verb)) return null

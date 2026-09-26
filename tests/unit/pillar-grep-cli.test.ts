@@ -391,7 +391,7 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     const warn = runCli('trddgrep.mjs', ['validate', '--min-severity', 'warn'])
     const warnRows = warn.stdout.trim().split('\n').map((l) => l.split('\t').slice(0, 3).join('\t'))
     expect(warnRows).toEqual([
-      'WARN\tSTALE-COLUMN\t979DBDAA',
+      'WARN\tLEGACY-REFUSED-FOLDER\t(corpus)',
       'WARN\tBODY-STATE-CLAIM\t70A521D9',
       'WARN\tBODY-STATE-CLAIM\t7123D51A',
       'WARN\tBODY-STATE-CLAIM\tEAC02238',
@@ -400,11 +400,9 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     expect(warn.status).toBe(0)
   })
 
-  it('--rule STALE-COLUMN prints exactly the 1 STALE-COLUMN finding and exits 0 (no error among them)', () => {
+  it('--rule STALE-COLUMN prints exactly the 0 STALE-COLUMN findings and exits 0 (a filter matching nothing)', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--rule', 'STALE-COLUMN'])
-    const lines = r.stdout.trim().split('\n')
-    expect(lines).toHaveLength(1)
-    for (const line of lines) expect(line).toMatch(/^WARN\tSTALE-COLUMN\t979DBDAA\t/)
+    expect(r.stdout.trim()).toBe('')
     expect(r.status).toBe(0)
   })
 

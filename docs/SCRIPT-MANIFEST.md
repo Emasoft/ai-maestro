@@ -54,9 +54,9 @@ verb looks absent, and a plugin that believes the layer lacks what it needs is p
   with §2.2/§2.3 marked UNVERIFIED)
 - Previous reconciliation, 2026-08-05: announced the 7 scripts that were shipping unannounced
   (`aimaestro-settings.sh` → Tier A; `aimaestro-check-decoupling.sh`, `install-boot-persistence.sh`,
-  `install-pillar-tooling.sh`, `setup-local-marketplaces.sh`, `distribute-tailscale-skill.sh`,
-  `simulate-blackout.sh` → Tier C), reconciled four contradictory counts, and added
-  `aimaestro-groups.sh` (Tier A, ai-maestro#64 residual 6)
+  `install-pillar-tooling.sh` [retired 2026-09-13, see below], `setup-local-marketplaces.sh`,
+  `distribute-tailscale-skill.sh`, `simulate-blackout.sh` → Tier C), reconciled four contradictory
+  counts, and added `aimaestro-groups.sh` (Tier A, ai-maestro#64 residual 6)
 
 ---
 

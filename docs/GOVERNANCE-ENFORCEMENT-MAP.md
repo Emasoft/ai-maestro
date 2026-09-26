@@ -505,7 +505,7 @@ greps enforcement code (`services/`, `lib/`, `app/api/`, `server.mjs`) versus do
 and asks whether any enforcement-code citation sits within 40 lines of a gate label
 (`ops.push('G##' | 'EXE' | 'PG##')`). After a real coverage change, `python3
 scripts/aio-gate-coverage.py --write` rewrites this table's verdict cells and tally line in place
-(the "Where" prose column and the row set stay hand-curated).
+(the "Where" prose column and the row set stay hand-curated). --write runs --check afterwards and exits with its verdict, so a scripted caller must treat exit 1 as drift still present (including rows the code no longer computes, which --write names on stderr and never rewrites).
 
 **The table below is checked against the code on every test run.**
 `python3 scripts/aio-gate-coverage.py --check` re-derives the verdicts and fails on any

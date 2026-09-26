@@ -4,7 +4,7 @@ status: tasked
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200
-updated: 2026-09-26T06:26:26+0200
+updated: 2026-09-26T06:34:37+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -282,3 +282,4 @@ turned up on this board tonight and the reflex by now is to assume staleness.)
 ## STATE
 
 Boxes 3+4 TICKED 2026-09-26 (closeout audit follow-up): the implementation landed in 29b0b656 (assertReplyToInbound in lib/amp-inbox-writer.ts, atomic replied-marking, second-reply rejection) and was re-verified fresh this session: amp-reply-guard 9/9, tsc 0. BOX 5 STAYS OPEN with a re-scope question: its literal demand (invert the truthy-id assertions in tests/governance/r6-communication-graph.test.ts in the same commit) was superseded by implementation ALTITUDE — the graph layer still accepts any truthy id by contract (the KNOWN GAP test at line ~833 remains accurate as a graph-layer fact), and the real enforcement lives one layer up in assertReplyToInbound, covered by tests/unit/amp-reply-guard.test.ts. Whether to rewrite the graph test, or re-scope box 5 to name the service-layer guard, is a card decision not yet made. Boxes 1-2 (plugin/role-repo publication) and 6-7 remain open as before.
+Column stays todo DELIBERATELY (2026-09-26): in-repo boxes 3-4 are landed, but boxes 1-2 (external publication) and 6-7 keep the card mid-flight; moving to dev would assert active work that is not happening (WIP-truth). Placement note: this STATE section sits at the card bottom because trddgrep created it there; the convention wants it right after the title, but no sanctioned tool verb moves a section and direct file edits to cards are forbidden — fix only if a section-move verb ever exists.

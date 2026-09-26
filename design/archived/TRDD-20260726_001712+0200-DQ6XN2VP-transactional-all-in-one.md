@@ -1,12 +1,12 @@
 ---
 trdd-id: DQ6XN2VP
-status: tasked
+status: archived
 title: Make every all-in-one pipeline transactional — all-or-nothing with reverse compensation
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-09-25T22:56:12+0200
+updated: 2026-09-26T14:13:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1714,7 +1714,7 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       (`CreateAgent`, `DeleteAgent`, `ChangeTitle`, `ChangeClient`, `ChangeTeam` ×2) pass their gate
       array as a const identifier, so without resolution the parity assertion stays GREEN over a
       fraction of the corpus
-- [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
+- [x] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — CLOSED 2026-09-26: ChangeClient's invariant landed (commit after the ratchet raise; loud read via loadAgentsLoud from 43eb9cb03), three-valued valid/contradicted/unknown, 4 behavioural tests + 2 recorded neuters, ratchet MIN_WITH_INVARIANTS 2→3 with ChangeClient pinned by name. Survey records: 8 pipelines have no post-condition but only ChangeClient was multi-gate AND value-addable; the rest are single-gate where an undo is a no-op by construction. Ratchet stays at 3 as the closed finding
       contradictions are two different ways to be invalid, and the KERM18NX residue check only
       catches the first. **STARTED, ratcheted, deliberately not finished in one pass**
       (`2fd30172`): `tests/governance/r51-7-invariants.test.ts` pins `MIN_WITH_INVARIANTS = 2` by
@@ -1842,3 +1842,4 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 ## Approval log
 
 - 2026-07-26T00:17:12+0200 — MANDATE issued by USER (min-approval-requirement: none). Born approved.
+- 2026-09-26T14:13:16+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.

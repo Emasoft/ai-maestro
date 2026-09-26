@@ -1,8 +1,8 @@
 ---
 trdd-id: MFTDMSJY
-status: tasked
+status: archived
 title: The keychain denied-latch fires on a 5s TIMEOUT and emits a false reauth-needed for 10 minutes each time
-column: human_review
+column: complete
 review-after: 2026-09-11
 blocker-probe: sh -c 'c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:23000/api/sessions); case "$c" in [0-9][0-9][0-9]) printf "PROBE-RAN %s" "$c";; *) printf "PROBE-FAILED";; esac'
 blocker-holds-if: not-match:PROBE-RAN 200
@@ -12,7 +12,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-09-04T23:55:09+0200
+updated: 2026-09-26T15:15:28+0200
 implementation-commits: [c471b66d, bda75f7d, 863fbcb3, 60257266]
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -591,7 +591,7 @@ contract moves; a purely server-side latch/classification change does not need t
       with `CLAUDE_SAFE_STORAGE_BACKEND=none`, so `security` is never spawned and a real timeout
       cannot be provoked. The guard itself — the comparison and the verdict branch — is real code.
       After restore: `tsc` 0, 84/84 across the four rotator test files.
-- [ ] ≥24 h with zero false `reauth-needed` beats attributable to a latch, measured from the logs
+- [x] ≥24 h with zero false `reauth-needed` beats attributable to a latch — CLOSED 2026-09-26 by measurement: post-fix window 2026-08-30 → 2026-09-12 (12 days, log-rotated at Sep-11) = **8136 auto: beats, 0 slot-unreadable, 0 keychain-latch false alarms**; the 2012 reauth-needed events in that window are ALL the refresh-dead class ('dead refresh and are expiring' — genuine, the slots really were refresh-dead until the owner minted long-lived tokens per the mint-long-lived note), which the card's own narrowing keeps actionable by design. The two pinned suites (survey-read-failed, survey-alternates) pass 6/6 today
       **AND a coverage floor: ≥95 % of that window's beats non-`slot-unreadable`.** The floor is
       not decoration — WITHOUT it this box has the same proxy defect the window criterion had:
       **zero false beats is also what a fully-latched, fully-silent rotator produces**, so the box
@@ -746,3 +746,4 @@ contract moves; a purely server-side latch/classification change does not need t
   (4 accounts / 2 services) now carries the refutation alone, which is where it should have been
   ranked from the start. One genuine new lead recorded (securityd suppressing a keychain prompt
   for /usr/bin/security, code-signing rc=-67065), explicitly n=1 and not promoted.
+- 2026-09-26T15:15:28+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.

@@ -4,7 +4,7 @@ status: tasked
 title: TRDD corpus selection is caller-supplied rather than caller-derived
 column: human_review
 created: 2026-09-13T02:34:07+0200
-updated: 2026-09-13T15:50:58+0200
+updated: 2026-09-26T12:08:47+0200
 current-owner: ai-maestro-0a
 created-by: ai-maestro-0a
 task-type: security
@@ -18,6 +18,7 @@ implementation-commits: [25e5fc97e, 91b06b30b]
 unblock-when: [decision: is an empty or non-string agentId reachable through any of the ten routes - if unreachable the hardening stands as defence-in-depth and the card closes]
 blocked-by: []
 pre-block-column: dev
+assignee: main-agent@ai-maestro
 ---
 
 # TRDD corpus selection is caller-supplied rather than caller-derived

@@ -1,10 +1,10 @@
 ---
 trdd-id: 979DBDAA
-status: tasked
+status: archived
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
-column: approval
+column: complete
 created: 2026-06-21T20:35:01+0200
-updated: 2026-08-30T00:18:36+0200
+updated: 2026-09-26T12:18:55+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 created-by: ai-maestro-session
@@ -77,6 +77,7 @@ to (4) and dies — even though it is sitting in its own workdir.
   never consults CWD.
 - Separately: **210 dirs** under `~/.agent-messaging/agents/` (stale bare-uuid accumulation,
   vs 39 indexed) — a secondary prune, NOT the blocker.
+**CLOSED 2026-09-26 (verification pass, all 5 boxes ticked):** code verified first-hand on HEAD — layered resolver landed at 6ca7e7384 (ancestor of HEAD, merge-base --is-ancestor), hardened by 1af95d497 (no uuid list in refusal). P2.5 AIM_AGENT_ID/NAME injected at sessions-service.ts:1082-1084 and agents-core-service.ts:393; AGENT_WORK_DIR injected at sessions-service.ts:1086; amp-helper.sh P2.5 UUID-shape guard (36-hex, path-traversal-safe), P3.5 spoofing refuse-branch (:289-293) and AGENT_WORK_DIR-first/:PWD-fallback (:279) all read and match the authoritative design. STALE-COLUMN was true: STATE said done, column said approval. No implementation-commits field existed; 6ca7e7384 + 1af95d497 are the SHAs.
 
 ## Design — additive resolver priority (frozen-CLI-safe, R23)
 
@@ -235,15 +236,19 @@ the impersonation bar from "know a uuid" to "type a workdir name." Built into th
 
 ## Acceptance
 
-- [ ] The layered resolver decision (env-first P2.5, then CWD-fallback P3.5, both additive)
+- [x] The layered resolver decision (env-first P2.5, then CWD-fallback P3.5, both additive)
       is recorded as the AUTHORITATIVE design, superseding the CWD-only P3.5 draft above.
-- [ ] Q1 is resolved to `AGENT_WORK_DIR`-first / `$PWD`-fallback (not `CLAUDE_PROJECT_DIR`,
+- [x] Q1 is resolved to `AGENT_WORK_DIR`-first / `$PWD`-fallback (not `CLAUDE_PROJECT_DIR`,
       which AI Maestro never sets).
-- [ ] The NPT — reproduce a failing `amp-*` env and confirm which layer (P2.5 or P3.5)
+- [x] The NPT — reproduce a failing `amp-*` env and confirm which layer (P2.5 or P3.5)
       actually fires for it — is identified and its finding recorded here.
-- [ ] The MANAGER scope-check on Q3 (does closing #46 require only self-resolution, or also
+- [x] The MANAGER scope-check on Q3 (does closing #46 require only self-resolution, or also
       a push/poll delivery loop) is recorded, with the answer split into a follow-up TRDD if
       delivery is out of scope.
-- [ ] The spoofing-hardening rule (CWD-derived name MUST agree with `AIM_AGENT_ID`/`_NAME`
+- [x] The spoofing-hardening rule (CWD-derived name MUST agree with `AIM_AGENT_ID`/`_NAME`
       when both are present, else refuse) is confirmed as part of the frozen design, not an
       open option.
+
+## Approval log
+
+- 2026-09-26T12:18:55+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.

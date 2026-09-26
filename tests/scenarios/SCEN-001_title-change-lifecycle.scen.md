@@ -1,7 +1,7 @@
 ---
 number: 1
 name: Title Change Lifecycle
-version: "2.1"
+version: "2.2"
 description: >
   The user logs in, creates a test agent, then assigns it the ORCHESTRATOR
   title via the Title Assignment Dialog — confirming the role-plugin installs
@@ -405,6 +405,65 @@ author: AI Maestro Team
 - **Goal:** Test team removed. Auto-COS `cos-scen001-title-team` removed via cascade.
 - **Removes:** Team `scen001-title-team`, auto-COS agent `cos-scen001-title-team` (and its folder).
 - **Verify:** Teams tab no longer shows `scen001-title-team`. `cos-scen001-title-team` no longer in sidebar. Screenshot: SCEN-001/S034b-team-deleted.png
+
+#### S034c: Assign MAINTAINER title with a githubRepo (drives ChangeTitle G15/G16)
+> TRDD-9Z2P2SDA: the G15/G16 `installed` evidence class this step sets up is the one the
+> ChangeTitle fix (TRDD-JT3U4ZVM) never produced live. MAINTAINER is a STANDALONE title
+> (`services/element-management-service.ts` STANDALONE_TITLES), so it can only be assigned
+> after S034 removed the agent from its team — the dialog disables it for in-team agents. The
+> `githubRepo` is only format-validated (`owner/repo`, R19.2); nothing clones it, so a
+> scen-prefixed value that matches no real repo is safe and deleted with the agent.
+
+- **Action:** On `scen-test-title-agent`'s profile (now AUTONOMOUS, no team, per S034), click
+  the title badge. Select the MAINTAINER radio card, type `scen001/fake-repo-g16` in the
+  githubRepo field, click Confirm. When the sudo password modal appears (strict route
+  `PATCH /api/agents/[id]/title` per Rule 12), enter governance password
+  `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
+- **Goal:** Title changes to MAINTAINER and the ChangeTitle pipeline runs its role-plugin
+  gates G15/G16 against `ai-maestro-maintainer-agent` (R19.2 requires the githubRepo field
+  before Confirm is enabled — its absence is a BUG, Rule 4).
+- **Creates:** `githubRepo` attribute `scen001/fake-repo-g16` on the test agent's registry entry
+- **Modifies:** Agent governanceTitle (-> MAINTAINER), role-plugin (-> ai-maestro-maintainer-agent)
+- **Verify:** Profile shows MAINTAINER badge, plugin banner shows `ai-maestro-maintainer-agent`,
+  and the Config tab shows it as the single role-plugin. Screenshot: SCEN-001/S034c-maintainer-assigned.png
+
+#### S034d: Verify ChangeTitle reported G15/G16 `installed` in the server logs
+> Read-only verification (Rule 6 allows reads anywhere, anytime). TRDD-9Z2P2SDA: the
+> observation lives in the pm2 logs, NOT the HTTP response — the PATCH surface (`updateAgentById`)
+> never forwards ChangeTitle's `operations` array. Verified shape (2026-09-27, element-management-service.ts):
+> the summary line `[ChangeTitle] Agent <id> "<name>": <old> -> <new> (N gates, restart=...)`
+> is `console.log` -> the pm2 OUT log, and `logDegradedOps('ChangeTitle', ...)` (which fires for
+> ANY op matching /WARN|FAIL|DENIED|VIOLATION|MISMATCH/ — WARN included, no silent filter) is
+> `console.warn` -> STDERR -> the pm2 ERROR log. A healthy G16 prints
+> `G16: Installed role-plugin "<target>"` into the summary's gate count but NO degraded line —
+> so BOTH files must be checked: the out-log line is the positive control that stdout capture
+> works, and the err-log absence is the actual G15/G16 claim. Grepping only the out log would
+> report "no WARN" forever, healthy or not (the vacuous-negative shape).
+
+- **Action:** Derive both log paths at run time from the process, never hardcoded:
+  `pm2 jlist` -> the `ai-maestro` process -> `pm_out_log_path` and `pm_err_log_path`. Then, in
+  one command block (capture to files first — `$?` after a pipe is the last command's status):
+  1. Record the wall-clock mark BEFORE S034c's Confirm click was performed (or use the
+     ChangeTitle summary's own timestamp if the log carries one).
+  2. `grep '[ChangeTitle] Agent' <out_log> | tail -5 > /tmp/scen001-out.txt` — the LAST line
+     names this agent and its MAINTAINER transition.
+  3. `grep '[ChangeTitle]' <err_log> | grep -E 'DEGRADED|G15|G16' | tail -20 > /tmp/scen001-err.txt`
+  4. `wc -l` both capture files and read them in full.
+- **Goal:** (1) The out log contains a `[ChangeTitle] Agent` summary line for
+  `scen-test-title-agent` whose old->new arrow ends in `maintainer`, with a gate count >= the
+  previous transitions' — this proves the pipeline ran and the log capture works (a MISSING
+  summary line is a capture failure, not a pass). (2) The err-log capture is EMPTY of
+  `G15:`/`G16:` degraded lines — specifically NO `G16: WARN — Failed to install` and NO
+  `G16: WARN — Adapter install failed` for this transition. (3) G16's success form
+  (`G16: Installed role-plugin "ai-maestro-maintainer-agent"`) is consistent with the out-log
+  summary's gate count; if a future change surfaces ops in the response or a debug endpoint,
+  prefer that cross-check, but the two log assertions above are the minimum evidence.
+- **Creates:** nothing (read-only; capture files go to /tmp)
+- **Modifies:** nothing
+- **Verify:** Both conditions hold. If the err log DOES carry a G15/G16 degraded line for this
+  transition, that is the exact bug TRDD-JT3U4ZVM fixed having regressed — file a Rule 4 fix or
+  a bug card, do NOT pass the step. Screenshot: SCEN-001/S034d-g16-installed.png (the two
+  capture files' contents in the terminal)
 
 #### S035: Soft-delete primary test agent via UI (cemetery path)
 - **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Type `scen-test-title-agent` -> click **"Move to Cemetery"** (TRDD-0301PUYW: the soft-delete button — `hard=false` — which archives to the cemetery AND preserves the workdir; the checkbox is irrelevant on this path because a cemetery move always keeps the folder). When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.

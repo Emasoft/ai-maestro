@@ -4,7 +4,7 @@ status: tasked
 title: Failed cards stay open in tasks and are definitive in archived - owner ruling
 column: dev
 created: 2026-09-24T14:21:13+0200
-updated: 2026-09-26T06:34:37+0200
+updated: 2026-09-26T06:44:41+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: docs

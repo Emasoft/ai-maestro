@@ -4,7 +4,7 @@ status: tasked
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200
-updated: 2026-08-22T01:38:38+0200
+updated: 2026-09-26T06:26:26+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -233,8 +233,8 @@ tripwire, not merely as a row in a table.
 ## Acceptance
 - [ ] `skills/agent-messaging/SKILL.md` and `skills/team-governance/SKILL.md` in `Emasoft/ai-maestro-plugin` mirror the tightened + v2-expanded graph, published via `publish.py`
 - [ ] Each of the 8 role-plugin repos' main-agent "Communication Permissions" section is aligned with the current graph (per the per-repo table in §2.B), published independently
-- [ ] `isReplyToInbound(messageId, senderAgentId, humanUserId)` is implemented and called from both `send-message-service.ts` G06 and `amp-service.ts` at the reply-only branch of `validateMessageRoute`
-- [ ] A reply-only message marks the original inbound message `replied=true` atomically, and a second reply to the same inbound id is rejected
+- [x] `isReplyToInbound(messageId, senderAgentId, humanUserId)` is implemented and called from both `send-message-service.ts` G06 and `amp-service.ts` at the reply-only branch of `validateMessageRoute`
+- [x] A reply-only message marks the original inbound message `replied=true` atomically, and a second reply to the same inbound id is rejected
 - [ ] The reply-only assertions in `tests/governance/r6-communication-graph.test.ts` are INVERTED in the same commit as the enforcement — a test still asserting "any truthy string is accepted" would silently re-document the hole (absorbed from TRDD-VLBVO0ZP)
 - [ ] The "ADVISORY ONLY" comment in `lib/communication-graph.ts::validateMessageRoute` and the "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10 are removed once R6.10 is fully enforced
 - [ ] A test/scenario exercises an inter-title message on a tightened edge and confirms the API accepts/rejects per the current graph
@@ -278,3 +278,7 @@ turned up on this board tonight and the reflex by now is to assume staleness.)
   stays `none` — propagating already-ratified governance downstream is the "apply the
   baseline as-is" exempt shape, not a governance change. ESCALATION CLAUSE: if the sync
   ever REWORDS a rule, that edit escalates to the proper floor.
+
+## STATE
+
+Boxes 3+4 TICKED 2026-09-26 (closeout audit follow-up): the implementation landed in 29b0b656 (assertReplyToInbound in lib/amp-inbox-writer.ts, atomic replied-marking, second-reply rejection) and was re-verified fresh this session: amp-reply-guard 9/9, tsc 0. BOX 5 STAYS OPEN with a re-scope question: its literal demand (invert the truthy-id assertions in tests/governance/r6-communication-graph.test.ts in the same commit) was superseded by implementation ALTITUDE — the graph layer still accepts any truthy id by contract (the KNOWN GAP test at line ~833 remains accurate as a graph-layer fact), and the real enforcement lives one layer up in assertReplyToInbound, covered by tests/unit/amp-reply-guard.test.ts. Whether to rewrite the graph test, or re-scope box 5 to name the service-layer guard, is a card decision not yet made. Boxes 1-2 (plugin/role-repo publication) and 6-7 remain open as before.

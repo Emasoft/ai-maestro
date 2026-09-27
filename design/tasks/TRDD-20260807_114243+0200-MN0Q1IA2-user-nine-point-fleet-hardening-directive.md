@@ -8,7 +8,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-09-27T14:20:35+0200
+updated: 2026-09-27T14:24:34+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -93,6 +93,7 @@ no auth needed — the API itself is 401 until the USER's governance login), `li
 **EHTs:** `XV9BLQC5` complete + archived (`0b7bd799`); `Y1ZWU998` is the open descendant and gates
 itself, not this card.
 **↳ STATE REFRESH 2026-09-27 (review F-b) — the NEXT ACTION and blocked-mechanics text above is two edits stale:** column is now `human_review` (not blocked), `blocked-by` is empty. Item 4's arming leg is ticked (armed + actuation observed 2026-08-25/26, see the box). **Current NEXT ACTION — the USER's /login on the dead-refresh rotator slot** (item 3's sole remaining half); no agent-actionable work remains. EHT `Y1ZWU998` still gates this card's own `complete`.
+**↳ CORRECTION 2026-09-27 (review F-Y): the F-b refresh line's `EHT Y1ZWU998 still gates this card's own complete` is WRONG and is superseded by the card's own recorded ruling (Acceptance, XV9BLQC5 box): Y1ZWU998 is a NEW card and `gates itself, not this one` — it is NOT a completion gate for MN0Q1IA2. The generic EHT rule does not apply; the card's specific reshape ruling holds. Sole remaining NEXT ACTION is unchanged: the USER's /login on the dead-refresh rotator slot.
 
 ## ✅ 1. Marketplaces update every 4 h, ONE CLI command — DONE `5438312f`
 

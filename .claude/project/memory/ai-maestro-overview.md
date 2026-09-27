@@ -2,7 +2,7 @@
 name: ai-maestro-overview
 description: "the project's front door — what AI Maestro is, how its parts fit together, and which page owns each subject / where do I start when I do not know which page to read / what is the entry point to the ai-maestro wiki / project map and topic index"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-26
 metadata:
   node_type: memory
   type: reference
@@ -15,12 +15,14 @@ publish-globally: false
 
 # ai-maestro-overview
 
+^3CQV8WKD [desc: "AI Maestro is a browser dashboard for running and governing many coding agents at once: agents live in tmux sessions, terminals stream over WebSocket, plus identity, governance, AMP, kanban, plugins.", keywords: what_is_ai_maestro how_does_the_dashboard_work what_stack_does_ai_maestro_use where_do_agents_run tmux_session_terminal_streaming port_23000_custom_server identity_governance_amp_kanban_marketplace, ocd: 2026-08-02, lmd: 2026-09-26]
 **AI Maestro** is a browser dashboard for running and governing many coding agents at once. Agents
 live in tmux sessions; the dashboard streams their terminals over WebSocket and layers on identity
 (AID), governance (titles, teams, a directed comm graph), inter-agent messaging (AMP), kanban
 boards, and a role-plugin marketplace. Next.js + React + xterm.js + node-pty behind a custom server
 on port 23000.
 
+^6XRW2KQT [desc: "This page is the project wiki's front door: every subject has ONE page that owns it. If you know the symptom rather than the subject, search with memgrep recall — the pages are indexed by symptom.", keywords: where_do_I_start_in_the_project_wiki front_door_entry_point how_to_search_memory_by_symptom memgrep_recall_the_symptom_you_have which_page_owns_a_subject, ocd: 2026-08-02, lmd: 2026-09-26]
 **You are in the project wiki.** This page is the front door: every subject below has ONE page that
 owns it. If you know the symptom rather than the subject, search instead — that is what the pages
 are indexed for:
@@ -29,12 +31,14 @@ are indexed for:
 memgrep recall "<the symptom you have>" .claude/project/memory
 ```
 
+^8NKT4WPZ [desc: "Three memory scopes: PROJECT (this store) is git-tracked and pushed, never machine-private; LOCAL is machine-private; USER is global. LOCAL beats PROJECT for what to BELIEVE, not what search returns.", keywords: memory_scope_project_vs_local_vs_user can_PROJECT_carry_home_paths which_scope_wins_on_name_conflict does_LOCAL_beating_PROJECT_mean_search_hides_it scope_precedence_believe_not_search, ocd: 2026-08-02, lmd: 2026-09-26]
 Three scopes exist and they are not interchangeable. **PROJECT** (this store) is git-tracked and
 **pushed** — it must never carry a home path, a hostname, or anything machine-private. **LOCAL**
 (`~/.claude/projects/<slug>/memory/`) is machine-private and never leaves the machine. **USER** is
 global across all projects. On a name conflict the more specific scope wins — **LOCAL beats
 PROJECT** — but that governs which fact you BELIEVE, **not** what search returns.[^2]
 
+^7QWM3XTK [desc: "When a wiki page is not enough, the repo's docs/ folder holds 58 long-form documents (~35,000 lines) — see project-long-form-docs. Some subjects, notably the cerebellum subsystem, exist ONLY there.", keywords: where_is_long_form_documentation docs_folder_long_form_documents cerebellum_subsystem_documentation when_memory_page_is_not_enough project_long_form_docs, ocd: 2026-08-02, lmd: 2026-09-26]
 **When a page is not enough**, the repo's own `docs/` folder holds 58 long-form documents
 (~35 000 lines) — see [[project-long-form-docs]]. Some subjects, notably the cerebellum subsystem,
 exist ONLY there.

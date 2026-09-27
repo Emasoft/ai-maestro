@@ -2,7 +2,7 @@
 name: cross-client-conversion
 description: "how do I move an agent from claude to codex / ChangeClient plugin re-emission / does converting a role-plugin lose data / X to Claude lossy conversion forbidden / which Codex model maps to which Claude model / Universal Plugin IR / gpt-5.x to claude family mapping / R18 plugin continuity pipeline"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-27
 metadata:
   node_type: memory
   type: reference
@@ -13,18 +13,21 @@ publish-globally: false
 
 # cross-client-conversion
 
+^4XT7RBQ2 [desc: "AI Maestro moves a running agent between AI coding clients (claude to codex) without losing installed plugins, via the R18 ChangeClient pipeline and a Universal Plugin IR.", keywords: how_do_i_move_an_agent_from_claude_to_codex change_an_agent_client_without_losing_plugins ChangeClient_pipeline cross_client_conversion R18_plugin_continuity move_running_agent_to_another_client agent_client_migration universal_plugin_ir what_happens_to_installed_plugins_on_client_change, ocd: 2026-08-02, lmd: 2026-09-26]
 AI Maestro can move a running agent from one AI coding-agent client to another (e.g.
 `claude` → `codex`) without losing its installed plugins, via the `ChangeClient` pipeline
 (R18) and a Universal Plugin IR that every conversion routes through.
 
 ### ChangeClient — Plugin Continuity (R18)
 
+^8WNJ3M6D [desc: "Changing an agent's client is NEVER a field update: the agent's identity is its installed plugins, so R18 requires re-emitting every installed plugin in the new client's format.", keywords: why_is_changing_client_not_a_field_update agent_identity_is_its_plugins reemit_plugins_on_client_change R18_plugin_continuity_mandatory what_defines_an_agent_identity does_conversion_lose_plugins ChangeClient_never_simple_field_update reemit_every_plugin_new_format, ocd: 2026-08-02, lmd: 2026-09-26]
 Changing an agent's client (e.g. `claude` → `codex`) is **NEVER** a simple field update. An
 agent's identity is defined by its installed plugins (role-plugin, core `ai-maestro-plugin`,
 optional user plugins), so `ChangeClient` **MUST** re-emit every installed plugin in the new
 client's format before touching the agent directory. R18 makes this mandatory — see
 `docs/GOVERNANCE-RULES.md`.
 
+^5CVY9PKH [desc: "ChangeClient pipeline: G04 snapshot plugins, G05 resolve conversion plan (strict priority, abort before uninstall), G06 uninstall old-client, G07 install new-client, G08 registry, G09 restart.", keywords: ChangeClient_pipeline_gates what_are_the_G04_to_G09_steps resolve_conversion_plan_priority_order uninstall_before_install_guarantee scanAgentLocalConfig snapshot emitForClient convertAndStorePlugin abort_if_any_plugin_unresolved which_gate_uninstalls_old_plugins, ocd: 2026-08-02, lmd: 2026-09-26]
 **The pipeline:**
 
 1. **G04: Snapshot** — scan the agent's working directory via `scanAgentLocalConfig()` to get
@@ -55,6 +58,7 @@ client's format before touching the agent directory. R18 makes this mandatory �
 5. **G08: Update registry** — write `program: newClient` to the agent registry.
 6. **G09: Mark restart needed** — the client binary must be relaunched.
 
+^2QLD7XRT [desc: "Critical invariants: prefer native over converted (R18.3d), never X-to-Claude lossy (R18.3b), never uninstall without the replacement ready (R18.4), any failure aborts with no partial state.", keywords: prefer_native_over_converted never_x_to_claude_lossy_conversion R18.3b_claude_requires_canonical_source abort_on_any_conversion_failure no_partial_state_changeclient does_title_change_on_conversion role_plugin_keeps_name_no_client_suffix R17_core_plugin_always_in_snapshot, ocd: 2026-08-02, lmd: 2026-09-26]
 **Critical invariants:**
 - **Prefer native over converted (R18.3d)**: if a native version of the plugin exists for the
   target client (from GitHub marketplace, from Haephestos, or from user install), it is ALWAYS
@@ -70,6 +74,7 @@ client's format before touching the agent directory. R18 makes this mandatory �
 - The agent's governance title remains unchanged — the role-plugin is converted (or reused if
   already compatible), not reassigned.
 
+^6HFKW2NM [desc: "ChangeClient: services/element-management-service.ts; helpers: plugin-storage-service.ts; adapters: lib/client-plugin-adapters/; enumeration: scanAgentLocalConfig.", keywords: where_is_ChangeClient_implemented which_file_converts_plugins convertAndStorePlugin_location emitForClient_location client_plugin_adapters_directory scanAgentLocalConfig_service plugin_storage_service universal_ir_getter, ocd: 2026-08-02, lmd: 2026-09-26]
 **Files:**
 - `services/element-management-service.ts` — `ChangeClient()` pipeline
 - `services/plugin-storage-service.ts` — `convertAndStorePlugin()`, `emitForClient()`,
@@ -79,6 +84,9 @@ client's format before touching the agent directory. R18 makes this mandatory �
 
 ### Cross-Client Conversion Reference Repos
 
+### Cross-Client Conversion Reference Repos
+
+^9TBZ4CYJ [desc: "Based on open-source repos: TokenRollAI/acplugin (Claude plugins to Codex/OpenCode/Cursor), sustinbebustin/crucible (bidirectional, 7 harnesses), REPOZY/Hookbridge (YAML hook compiler).", keywords: acplugin_conversion_reference crucible_bidirectional_converter Hookbridge_yaml_hook_compiler 26_claude_events_vs_5_codex_events which_open_source_repos_inspired_conversion cross_client_skill_service_crucible_analysis loss_reports_shim_mechanism, ocd: 2026-08-02, lmd: 2026-09-26]
 The skill/plugin conversion feature is based on code from these two open-source repos:
 
 - **https://github.com/TokenRollAI/acplugin** — Converts Claude Code plugins to Codex,
@@ -99,6 +107,9 @@ features. Our `UniversalPluginIR` extends this pattern to all component types.
 
 ### Model Mapping Reference (2026-05)
 
+### Model Mapping Reference (2026-05)
+
+^7PGW3XKD [desc: "Model conversion (lib/converter/rewrite/model.ts) is family-based, version-proof: Claude ids normalize to their family alias via claudeFamily(); X-to-Claude emits the alias, never a version.", keywords: which_codex_model_maps_to_claude_opus claude_family_alias_normalization claudeFamily_version_proof gpt_5_x_to_claude_family_mapping model_mapping_new_release_no_table_edit fable_maps_where codex_model_claude_alias, ocd: 2026-08-02, lmd: 2026-09-26]
 Cross-client model conversion is in `lib/converter/rewrite/model.ts`.
 
 **Family-based, version-proof.** Claude ships frontier models faster than a
@@ -111,6 +122,7 @@ id is normalized to its family before lookup via `claudeFamily()`:
 the table. The reverse (**X → Claude**) emits the family *alias*, never a pinned
 version, so a converted agent always resolves to the current Claude model.
 
+^3MRZ6VQN [desc: "Claude-to-Codex model table: opus and fable map to gpt-5.5, sonnet to gpt-5.3-codex, haiku to gpt-5.4-mini. Reverse via alias with tier fallback; the curated table always wins first.", keywords: claude_to_codex_model_table codex_to_claude_model_table opus_maps_to_gpt_5_5 sonnet_maps_to_gpt_5_3_codex haiku_maps_to_gpt_5_4_mini codexTier_fallback_mini_haiku gpt_5_2_maps_to_sonnet o3_maps_to_opus reverse_never_emits_fable unknown_codex_model_fallback, ocd: 2026-08-02, lmd: 2026-09-26]
 **Claude → Codex** (Codex lineup verified 2026-05-28 against
 https://developers.openai.com/codex/models):
 
@@ -141,6 +153,7 @@ A Codex `gpt-5.x` id the table doesn't list yet (a freshly-released frontier mod
 a new model never emits an invalid Claude id. The curated table always wins first (e.g.
 `gpt-5.2`→`sonnet` is preserved despite its bare-frontier shape).
 
+^8J4TKWYB [desc: "Claude-to-Gemini model table: opus and fable map to gemini-2-pro, sonnet to gemini-2-flash, haiku to gemini-3-flash. Tests in tests/unit/converter-model-mapping.test.ts.", keywords: claude_to_gemini_model_table opus_maps_to_gemini_2_pro sonnet_maps_to_gemini_2_flash haiku_maps_to_gemini_3_flash fable_maps_to_gemini_2_pro converter_model_mapping_tests where_are_model_mapping_tests, ocd: 2026-08-02, lmd: 2026-09-26]
 **Claude → Gemini**:
 
 | Claude family | Gemini Model |
@@ -155,6 +168,9 @@ Tests: `tests/unit/converter-model-mapping.test.ts` (incl. Opus 4.8 `[1m]`, the 
 
 ### Universal Plugin IR Architecture
 
+### Universal Plugin IR Architecture
+
+^5NDX9CH2 [desc: "Converted plugins are stored as a Universal Plugin IR at ~/agents/custom-plugins/.abstract/<name>/plugin-universal-ir.yaml, extending the Hookbridge pattern to all 16 component types.", keywords: universal_plugin_ir_storage_location where_is_plugin_universal_ir_yaml UniversalPluginIR_16_component_types universal_ir_ts_converters transformPluginRootPaths PLATFORM_PATHS shared_emitters how_are_converted_plugins_stored, ocd: 2026-08-02, lmd: 2026-09-26]
 Converted plugins use a universal intermediate representation stored at
 `~/agents/custom-plugins/.abstract/<name>/plugin-universal-ir.yaml`. This extends the
 Hookbridge pattern to all 16 component types (hooks, skills, agents, commands, MCP, LSP,

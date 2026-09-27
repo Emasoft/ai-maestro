@@ -2,7 +2,7 @@
 name: team-creation
 description: "how is a team created / who creates the 5 base members — the MANAGER or the COS / what are the 5 required roles / why is my team stuck with only a chief-of-staff / can a COS create agents / how do I add a specialist (e.g. a webdesigner) to a team / is an incomplete team supposed to be frozen"
 ocd: 2026-07-14
-lmd: 2026-08-20
+lmd: 2026-09-26
 metadata:
   node_type: memory
   type: project
@@ -19,12 +19,14 @@ publish-globally: false
 
 # Team creation — who creates whom, and in what order
 
+^7VJQ9MBT [desc: "The team-creation rules were USER-ratified 2026-07-14, reconstructed from FOUR partly-contradicting rules; docs/GOVERNANCE-RULES.md R29.1 is WRONG and will mislead you.", keywords: who_creates_team_members_in_what_order R29.1_is_wrong_do_not_follow team_creation_rules_reconciled USER_ratified_team_creation_2026_07_14 governance_rules_partly_contradict_each_other, ocd: 2026-07-14, lmd: 2026-09-26]
 **The USER ratified this on 2026-07-14.** It is reconstructed from FOUR rules that partly
 contradict each other, so read the reconciliation before trusting any single rule —
 `docs/GOVERNANCE-RULES.md` **R29.1 is WRONG** and will mislead you (see below).
 
 ## The 5-role base — R12.1 is AUTHORITATIVE
 
+^4WDK8RXC [desc: "R12.1 is authoritative: every team MUST contain a minimum of 5 agents — 1 CHIEF-OF-STAFF, 1 ARCHITECT, 1 ORCHESTRATOR, 1 INTEGRATOR, 1 MEMBER. The COS is ONE OF THE 5, not an extra on top.", keywords: what_are_the_5_required_team_roles R12.1_minimum_five_agents is_the_chief_of_staff_one_of_the_five COS_one_of_the_5_not_extra team_must_contain_minimum_five governance_R12.1_crITICAL member_is_programmer_role_plugin team_missing_one_of_five_roles how_many_agents_must_a_team_have the_base_is_cos_plus_four_others, ocd: 2026-07-14, lmd: 2026-09-26]
 > **R12.1** (`docs/GOVERNANCE-RULES.md:529`, CRITICAL) — Every team **MUST** contain a minimum
 > of **5 agents** with these titles: **1 CHIEF-OF-STAFF · 1 ARCHITECT · 1 ORCHESTRATOR ·
 > 1 INTEGRATOR · 1 MEMBER** (programmer role-plugin).
@@ -36,6 +38,9 @@ contradict each other, so read the reconciliation before trusting any single rul
 
 ## The creation sequence — the MANAGER makes the COS; the COS makes the rest
 
+## The creation sequence — the MANAGER makes the COS; the COS makes the rest
+
+^6TQK3WXM [desc: "The creation sequence: USER asks the MANAGER; the MANAGER creates only the team + its auto-CHIEF-OF-STAFF (R29); the COS creates the other 4 (R12.2, R31.1) and any specialists (R30.2/R30.3).", keywords: who_creates_the_5_base_members MANAGER_or_COS_creates_agents createNewTeam_only_creates_auto_COS_correct R12.2_COS_must_add_missing_agents R31.1_incomplete_team_frozen_until_COS_finishes who_makes_the_other_four_agents, ocd: 2026-07-14, lmd: 2026-09-26]
 | Step | Actor | Creates | Rule |
 |---|---|---|---|
 | 1 | **USER** | asks the MANAGER for a team | — |
@@ -53,6 +58,9 @@ as one on 2026-07-14 — see the lesson `[^1]`.)
 
 ## Specialists beyond the base — always MEMBER + a role-plugin
 
+## Specialists beyond the base — always MEMBER + a role-plugin
+
+^8BPZ4RDN [desc: "Customization is limited to extra MEMBER agents created from existing role-plugins (R30.3): a website team gets an extra MEMBER with a webdesign role-plugin.", keywords: how_do_I_add_a_specialist_to_a_team specialist_is_member_with_role_plugin can_neither_manager_nor_cos_create_non_member_agents title_vs_role_split_never_invent_new_title webdesigner_example_team, ocd: 2026-07-14, lmd: 2026-09-26]
 > **R30.3** (`:1282`) — customization is limited to **extra MEMBER agents**, created from
 > existing role-plugins. *"Neither MANAGER nor COS may create a team lacking the 5 basic
 > agents, nor create non-MEMBER agents … under a team-creation mandate."*
@@ -66,11 +74,15 @@ the **TITLE** stays `MEMBER` (what it may *do* — the governance class), while 
 
 ## The COS needs a MANDATE to create agents
 
+## The COS needs a MANDATE to create agents
+
+^5VWX9QKT [desc: "R30.1 IRON: the COS requires the MANAGER's approval/mandate to create agents unless granted a team-creation mandate, which by default authorizes the 5-basic structure plus specialized MEMBERs.", keywords: does_the_COS_need_approval_to_create_agents R30.1_iron_mandate_required team_creation_mandate_default_scope what_does_team_creation_mandate_authorize, ocd: 2026-07-14, lmd: 2026-09-26]
 > **R30.1** (`:1282`, IRON) — the CHIEF-OF-STAFF requires the MANAGER's **approval/mandate** to
 > create agents, **unless** the MANAGER granted a **team-creation mandate**.
 > **R30.2** — a team-creation mandate authorizes, by default, the 5-basic-member structure PLUS
 > the specialized MEMBERs.
 
+^7MDY2WQC [desc: "The mandate is a portfolio token (R28) — scope agent:create, host-signed, ledger-anchored, minted by the MANAGER into the COS's enclave — never an AMP message.", keywords: mandate_is_a_portfolio_token_not_a_message R28_host_signed_ledger_anchored why_amp_message_cannot_be_an_approval unsigned_inbox_forgeable scope_agent_create, ocd: 2026-07-14, lmd: 2026-09-26]
 **The "mandate" is a portfolio token (R28), not a message.** Scope `agent:create`, host-signed
 and ledger-anchored, minted by the MANAGER into the COS's enclave. An AMP message must never
 serve as the approval: it is unsigned, unbounded prose that anything able to write to an inbox
@@ -78,6 +90,9 @@ can forge. See `[[approval-vs-mandate-protocol]]`.
 
 ## An incomplete team is FROZEN — but the COS stays AWAKE
 
+## An incomplete team is FROZEN — but the COS stays AWAKE
+
+^9FXR6TBK [desc: "R31.1 IRON: an incomplete team is frozen — ONLY the CHIEF-OF-STAFF may be active, all others hibernated until the COS finishes creating them. Freezing the COS would deadlock the team.", keywords: is_an_incomplete_team_frozen incomplete_team_only_COS_active R31.1_iron_others_hibernated why_freezing_the_COS_deadlocks_the_team which_agent_stays_awake_in_frozen_team, ocd: 2026-07-14, lmd: 2026-09-26]
 > **R31.1** (`:1292`, IRON) — an incomplete team is FROZEN: **only the CHIEF-OF-STAFF may be
 > active**; all other team agents are hibernated until the COS finishes creating them.
 
@@ -85,6 +100,7 @@ can forge. See `[[approval-vs-mandate-protocol]]`.
 that can lift the freeze, so freezing it deadlocks the team permanently. There are **two
 different freezes** in this system, sharing a vocabulary and inverting the COS rule:
 
+^3NQW8VZP [desc: "Two different freezes: R9.8 block (no MANAGER on host) hibernates the COS; R31 freeze (team missing 1 of the 5) keeps the COS ACTIVE. blockAllTeams() implements R9.8 and is fatal if reused for R31.", keywords: two_different_freezes_R9.8_vs_R31 blockAllTeams_hibernates_chiefOfStaffId R9.8_no_manager_hibernates_everyone freeze_team_then_assert_COS_tmux_session_alive TRDD-0KMDJVON_regression_test, ocd: 2026-07-14, lmd: 2026-09-26]
 | | trigger | the COS is… | why |
 |---|---|---|---|
 | **R9.8 block** (`:433`) | no MANAGER on the host | **hibernated** | nothing in-band can fix it — only the USER can assign a MANAGER |
@@ -97,6 +113,9 @@ See `[[TRDD-0KMDJVON]]`, which carries the regression test that catches the coll
 
 ## ⚠ R29.1 is a DEFECT in the governance document — do not follow it
 
+## ⚠ R29.1 is a DEFECT in the governance document — do not follow it
+
+^4KJT7RXW [desc: "R29.1 claims a team auto-creates the COS + 5 basic members — wrong twice: count reads as 6 (R12.1 says 5 incl. COS); 'auto-creates' puts creation on the system. R12.1 wins; only USER may correct it.", keywords: R29.1_defect_in_governance_document R29.1_says_six_agents_count_wrong auto_creates_wrongly_puts_creation_on_system R12.1_wins_defines_the_term R29.1_IRON_USER_set_only_USER_may_correct, ocd: 2026-07-14, lmd: 2026-09-26]
 > **R29.1** (`:1272`) claims a team *"auto-creates the CHIEF-OF-STAFF **+ the 5 basic team
 > members**"*.
 
@@ -111,6 +130,9 @@ may correct it — a fix is pending.
 
 ## What the CODE actually does today (2026-07-14 — expected to change; verify before relying)
 
+## What the CODE actually does today (2026-07-14 — expected to change; verify before relying)
+
+^6CWB5MVD [desc: "Enforcement audited 2026-07-14: no isTeamComplete predicate, OPERATIONS_REQUIRING_TOKEN empty, POST /api/agents ungated, zero freeze logic, Only-MANAGER-can-delete hard-coded in lib/authorization.ts.", keywords: which_team_rules_are_actually_enforced isTeamComplete_does_not_exist POST_api_agents_ungated_no_authorize zero_freeze_logic_in_code only_manager_can_delete_agents_invention governance_enforcement_audit_2026_07_14, ocd: 2026-07-14, lmd: 2026-09-26]
 The rules above are the **design**. The enforcement is largely absent — audited 2026-07-14
 (`reports/governance-audit/`, gitignored; commits `1ac64125`, `65bd6ec9`):
 
@@ -122,6 +144,7 @@ The rules above are the **design**. The enforcement is largely absent — audite
 | R31 (freeze) | **none** — zero freeze logic in `lib/ services/ app/ components/` |
 | COS may delete an own-team agent | **denied** — `lib/authorization.ts` hard-codes *"Only MANAGER can delete agents"*, an **invention** filling R30's silence. USER has since ruled otherwise → `[[TRDD-8K68E16G]]` |
 
+^8ZRQ3NKX [desc: "Every team is born at 1-of-5 and stays there, reporting healthy — a NON-FUNCTIONAL TEAM by R12.2's own definition. Open work: TRDD-F1SL03CK, TRDD-0KMDJVON, TRDD-8K68E16G.", keywords: team_born_at_one_of_five_reports_healthy non_functional_team_undetectable TRDD-F1SL03CK_creation_gate TRDD-0KMDJVON_freeze TRDD-8K68E16G_COS_delete open_work_team_governance, ocd: 2026-07-14, lmd: 2026-09-26]
 **Consequence:** every team is born at **1-of-5** and stays there, reporting healthy — a
 NON-FUNCTIONAL TEAM by R12.2's own definition, with nothing to detect it.
 

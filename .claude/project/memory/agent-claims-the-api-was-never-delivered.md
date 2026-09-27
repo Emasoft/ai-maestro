@@ -2,7 +2,7 @@
 name: agent-claims-the-api-was-never-delivered
 description: "a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build X) / why does a feature that is fully built look absent / the API 403s or 401s but the endpoint exists / a config toggle was never decided so the feature is dark — five times now it already existed: absent, unannounced, unauthorized, or BUILT AND SWITCHED OFF. Look before you build."
 ocd: 2026-07-14
-lmd: 2026-07-14
+lmd: 2026-09-26
 metadata:
   node_type: memory
   type: project
@@ -11,6 +11,7 @@ metadata:
 publish-globally: false
 ---
 
+^6YVQ3BWP [desc: "Five times a reported missing capability already existed: absent, unannounced, unauthorized, or built-and-switched-off. Verify before writing a line of code.", keywords: agent_says_capability_missing verify_before_building feature_reported_absent_was_built api_403_but_endpoint_exists capability_reported_missing_check_first built_and_switched_off dark_feature_config_toggle_never_decided janitor_TRDD_write_apis_never_delivered_claim, ocd: 2026-07-14, lmd: 2026-09-26]
 When anyone — a fleet agent, an issue, your own plan — reports that ai-maestro never
 shipped a capability, **verify it before writing a line of code.** Five times now the
 capability already existed and the real defect was elsewhere:
@@ -22,12 +23,14 @@ capability already existed and the real defect was elsewhere:
 | governance issue #37 | "add these two rules" | Both **already existed** as R23 and R24. Adding them again would have created two numbers for one rule and broken the property that a citation resolves to exactly one rule. |
 | #47 ask 2 — "make approvals verifiable" | (implicitly) the crypto must be built | **The crypto was complete AND WIRED IN, and switched off.** Ed25519 host signing, the R34 ledger anchor, the store, the mint/list/revoke API, **six passing test suites** — and `CreateTeam`/`CreateAgent` *already called* `matchPortfolioToken`. It always returned `ok:true` because **one map was empty** (`OPERATIONS_REQUIRING_TOKEN = {}`). What was missing was a **verification surface** (no endpoint, no CLI — `grep -rln portfolio scripts/` → nothing) and a **decision**. |
 
+^7KQM2XVB [desc: "The hardest-to-see case: code built, tested, wired into its call sites, and inert because the enabling config was never decided — 100% implemented, 0% reachable. Check the switch beside the call site.", keywords: built_tested_wired_but_inert feature_100_implemented_0_reachable check_the_switch_beside_the_call_site grep_for_type_and_call_site_not_just_verb OPERATIONS_REQUIRING_TOKEN_empty_map matchPortfolioToken_always_ok_true missing_decision_not_missing_code, ocd: 2026-07-14, lmd: 2026-09-26]
 **The fourth row is the one to internalize**, because it is the hardest to see: the code was
 not absent, not unannounced, not unauthorized — it was **built, tested, wired into its call
 sites, and inert**, because a config that turns it on was never *decided*. A feature can be
 100% implemented and 0% reachable. `grep` for the *type* and the *call site*, not just the
 verb name — and when you find the call site, check whether the switch beside it is on.
 
+^4RZW8NPD [desc: "Triage order: grep the verb in scripts/*.sh vs SCRIPT-MANIFEST.md, diff ~/.local/bin, check route auth + security-registry.json for strict, read lib/sudo-guard.ts on a 403, then conclude build.", keywords: missing_api_triage_order how_to_verify_a_verb_exists check_deployed_script_stale SCRIPT_MANIFEST_frozen_surface security_registry_strict_route_check 403_means_policy_decision_sudo_guard scanAgent_diff_local_bin, ocd: 2026-07-14, lmd: 2026-09-26]
 ## The triage, in order
 
 1. **Does the verb exist in the repo?** `grep -n '<verb>)' scripts/*.sh` — the frozen
@@ -43,6 +46,7 @@ verb name — and when you find the call site, check whether the switch beside i
    missing endpoint. See [[strict-route-agent-policy]].
 5. **Only then** conclude something must be built.
 
+^9CJY5TWM [desc: "An agent cannot see the server repo; its evidence (its own ~/.local/bin and a 401/403) cannot distinguish absent from present-but-unauthorized from present-but-unannounced. Announce shipped verbs.", keywords: agent_evidence_limitations why_agent_report_of_missing_api_is_honest treat_missing_api_as_symptom announce_the_verb_or_it_does_not_exist SCRIPT_MANIFEST_zero_plugin_references shipped_but_unannounced_capability, ocd: 2026-07-14, lmd: 2026-09-26]
 **Why:** an agent cannot see the server repo. Its evidence is its own `~/.local/bin` and a
 401/403 — neither of which distinguishes "absent" from "present but unauthorized" from
 "present but unannounced". Its report is honest and its inference is unfalsifiable *from
@@ -53,10 +57,12 @@ the loop the other way too: a shipped capability nobody was told about is not a 
 (`SCRIPT-MANIFEST.md` §5.3 — `aimaestro-session.sh`, `-panel.sh`, `-trdd.sh` shipped with
 zero plugin references). Announce the verb, or it does not exist.
 
+^6BWF3QKX [desc: "check_api_running() reported every non-200 as 'AI Maestro is not running', so on a 401 a present-but-unauthorized verb looked absent. Fixed in d6b802fd.", keywords: check_api_running_false_diagnosis non_200_reported_as_server_down 401_misdiagnosed_as_server_not_running d6b802fd_fix start_the_server_wrong_message, ocd: 2026-07-14, lmd: 2026-09-26]
 A contributing cause, now fixed (`d6b802fd`): `check_api_running()` reported **every**
 non-200 as *"AI Maestro is not running — start the server"*. On a 401 that is a false
 diagnosis that makes a present-but-unauthorized verb look absent.
 
+^8DTM4VZR [desc: "The consumer's mirror duty of R23.8: re-verify a blocker before citing it — a blocker is a claim with a timestamp and decays silently, because nobody re-runs a test they already 'know' the answer to.", keywords: stale_blocker_worse_than_open_bug reverify_blocker_before_citing blocker_is_a_claim_with_timestamp DECOUPLE_BLOCKED_marker_sat_for_weeks consumer_duty_mirror_of_R23.8, ocd: 2026-07-14, lmd: 2026-09-26]
 ## The consumer's half — a STALE BLOCKER is worse than an open bug
 
 The producer's duty is R23.8 (*announcing a verb is part of shipping it*). The **consumer's**
@@ -70,6 +76,7 @@ duty is the mirror of it, and the MANAGER stated it better than I did:
 world moves under it. It decays silently, because nobody re-runs a test they already
 "know" the answer to.
 
+^3PKW7YNC [desc: "Do not conflate two senses in one blocker marker: 'waiting on the other side to ship' decays and must be re-checked; 'deliberately impossible by design' never decays. State design intent in prose.", keywords: blocker_marker_two_senses decaying_vs_permanent_blocker DECOUPLE_BLOCKED_used_for_both waiting_on_other_side_vs_by_design set_governance_password_never_agent_verb state_design_intent_in_prose, ocd: 2026-07-14, lmd: 2026-09-26]
 **And do not conflate two senses in one marker.** `DECOUPLE-BLOCKED` was used for both:
 
 | Sense | Example | Decays? |

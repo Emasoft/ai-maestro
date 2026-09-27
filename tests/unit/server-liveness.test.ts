@@ -1,4 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+/** Synchronous busy-wait — guarantees real clock time elapses between two beats. */
+function busyWaitMs(ms: number): void {
+  const end = performance.now() + ms
+  while (performance.now() < end) { /* spin */ }
+}
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -322,16 +328,22 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
         // unconditionally, and one that RE-ANCHORS on every beat (re-anchoring makes the
         // drift 0 at every beat by the same construction as the first beat). It caught the
         // shipped /1_000n µs-unit bug on its first run (drift2 was −999000).
-        // The anchor deliberately reads raw Date.now rather than the injected `now`
-        // seam — it compares the WALL clock against the monotonic clock, and the
-        // seam exists to drive the gap check, not the wall clock.
+        //
+        // Discrimination margin note (review round on 9bc1c55f): drift_buggy = fake_adv −
+        // real_elapsed_IN_µS and drift_correct = fake_adv − real_elapsed_IN_MS, so the gap
+        // between them is the real elapsed time itself — widening the FAKE advance does
+        // not widen it (±30s bounds would pass the µs bug: 59436 ∈ [30000, 90000]). The
+        // busy-wait below guarantees ≥3ms of real elapsed time, so the buggy value loses
+        // ≥3000 while the correct one loses ≤3+preemption — bounds (950, 1005) separate
+        // them by ~2.9s on any host, independent of host speed.
+        busyWaitMs(3)
         simulatedNowMs = 14000 // gap 7000ms — a second late beat
-        vi.advanceTimersByTime(1000) // fake Date.now += 1000; real hrtime barely moves
+        vi.advanceTimersByTime(1000) // fake Date.now += 1000; real hrtime moves ~3ms
         expect(warnSpy).toHaveBeenCalledTimes(2)
         const line2 = String(warnSpy.mock.calls[1]?.[0])
         const drift2 = Number(line2.match(/clockDriftMs=([^ ]+)/)![1])
-        expect(drift2).toBeGreaterThan(500) // ≈1000 (real-elapsed noise only)
-        expect(drift2).toBeLessThan(5000)
+        expect(drift2).toBeGreaterThan(950) // correct ≈ 997 (1000 − ~3ms busy-wait)
+        expect(drift2).toBeLessThan(1005)
       } finally {
         stop()
       }

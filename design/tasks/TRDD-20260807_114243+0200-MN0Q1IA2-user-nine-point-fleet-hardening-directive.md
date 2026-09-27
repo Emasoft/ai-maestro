@@ -8,7 +8,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-09-27T14:15:46+0200
+updated: 2026-09-27T14:20:35+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -92,6 +92,7 @@ no auth needed — the API itself is 401 until the USER's governance login), `li
 
 **EHTs:** `XV9BLQC5` complete + archived (`0b7bd799`); `Y1ZWU998` is the open descendant and gates
 itself, not this card.
+**↳ STATE REFRESH 2026-09-27 (review F-b) — the NEXT ACTION and blocked-mechanics text above is two edits stale:** column is now `human_review` (not blocked), `blocked-by` is empty. Item 4's arming leg is ticked (armed + actuation observed 2026-08-25/26, see the box). **Current NEXT ACTION — the USER's /login on the dead-refresh rotator slot** (item 3's sole remaining half); no agent-actionable work remains. EHT `Y1ZWU998` still gates this card's own `complete`.
 
 ## ✅ 1. Marketplaces update every 4 h, ONE CLI command — DONE `5438312f`
 
@@ -753,6 +754,7 @@ code shape** (see Verification below).
 **There is no item 6.** The nine points are numbered 1-5 and 7-10; the USER's original list skipped
 it. Recorded so the next reader does not go looking for a tenth item that was never dropped.
       **↳ TICKED 2026-09-27 — the arming leg this box was holding on is now OBSERVED.** Re-measured first-hand this session, not taken from DPPYVLVH's text: (a) flag live — `ps eww` on the pm2 process reads `AIM_FLEET_MODEL_FALLBACK=1`; (b) actuation observed — pm2-error.log carries 4× `model-fallback SWITCHED … off Fable (100%) — confirmed=true` (2026-08-25 23:21/23:29, 2026-08-26 00:02/00:07, agents d6a55598 + 5ae7b214); `confirmed=true` is the emitter's own post-condition pane re-read, so these are verified switches, not keystrokes-sent; (c) DPPYVLVH is `column: complete` in design/archived/. The ESC half was already verified wired (`lib/fleet-continuity.ts:193`). Nothing agent-actionable remains on item 4.
+      **↳ CAVEAT 2026-09-27 (review F-a):** actuation was observed 2026-08-25/26 — no switch SINCE, and the 2026-09-26T11:41 restart re-read the env (arming survives a restart; actuation has not been observed since August). Next observation window: the next Fable scoped-wall event. **Disclosure (mirrors DPPYVLVH F3):** the box's observing half was satisfied by agent-measured log evidence under the 2026-08-15 USER arming approval, not the USER watching a pane — git-recoverable if you object.
 
 ## Verification
 

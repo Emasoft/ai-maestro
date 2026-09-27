@@ -28,10 +28,9 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 
-import { loadAgents, createAgent, getAgent, getAgentByName, getAgentByNameAnyHost, updateAgent, deleteAgent, markAgentAsAMPRegistered, checkMeshAgentExists, getAMPRegisteredAgents } from '@/lib/agent-registry'
-import { authenticateRequest, createApiKey, hashApiKey, extractApiKeyFromHeader, revokeApiKey, rotateApiKey, revokeAllKeysForAgent } from '@/lib/amp-auth'
+import { loadAgents, createAgent, getAgent, getAgentByName, getAgentByNameAnyHost, updateAgent, markAgentAsAMPRegistered, checkMeshAgentExists, getAMPRegisteredAgents } from '@/lib/agent-registry'
+import { authenticateRequest, createApiKey, hashApiKey, extractApiKeyFromHeader, revokeApiKey, rotateApiKey } from '@/lib/amp-auth'
 import { authenticateAgent } from '@/lib/agent-auth'
 import { saveKeyPair, loadKeyPair, calculateFingerprint, verifySignature, generateKeyPair } from '@/lib/amp-keys'
 import { queueMessage, getPendingMessages, acknowledgeMessage, acknowledgeMessages, cleanupAllExpiredMessages } from '@/lib/amp-relay'
@@ -40,7 +39,6 @@ import { checkMessageAllowed } from '@/lib/message-filter'
 import { validateMessageRoute, getAllowedRecipients } from '@/lib/communication-graph'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { createRoleAttestation, serializeAttestation, deserializeAttestation, verifyRoleAttestation } from '@/lib/role-attestation'
-import { getHostPublicKeyHex } from '@/lib/host-keys'
 import { deliverViaWebSocket } from '@/lib/amp-websocket'
 import { resolveAgentIdentifier } from '@/lib/messageQueue'
 import { getSelfHostId, getSelfHost, getHostById, isSelf, getOrganization } from '@/lib/hosts-config-server.mjs'
@@ -755,7 +753,6 @@ export async function routeMessage(
   body: AMPRouteRequest,
   authHeader: string | null,
   forwardedFrom: string | null,
-  envelopeIdHeader: string | null,
   contentLength: string | null,
   attestationHeaders?: MeshAttestationHeaders
 ): Promise<ServiceResult<AMPRouteResponse | AMPError>> {
@@ -1322,33 +1319,36 @@ export async function routeMessage(
       }
     }
 
+    // R6.10 reply-only enforcement (TRDD-80557822): when the graph allowed
+    // this send on a reply-only edge, verify the referenced inbound message
+    // is real and mark it replied=true under a lock — BEFORE delivery. The
+    // guard must precede deliverLocally or a refused duplicate reply would
+    // already sit in the recipient's inbox (the "fail-closed" contract is
+    // only closed if nothing has been written yet). The referenced message
+    // was sent BY the human user (the reply's recipient, `recipientName`) —
+    // the guard checks the inbox envelope's from-part against that identity.
+    if (graphCheck.edgeType === 'reply-only') {
+      try {
+        const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
+        await assertReplyToInbound(inReplyToId!, senderAgent!.id, recipientName)
+      } catch (replyErr) {
+        console.error('[AMP Route] Reply-only enforcement failed:', replyErr)
+        return {
+          data: {
+            error: 'reply_only_enforcement_failed',
+            message: replyErr instanceof Error ? replyErr.message : 'reply could not be verified against the inbound message'
+          } as AMPError,
+          status: 403,
+          headers: rateLimitHeaders,
+        }
+      }
+    }
+
     try {
       await deliverLocally({
         envelope, payload: body.payload, localAgent, recipientAgentName,
         senderAgent, senderName, forwardedFrom, senderPublicKeyHex: senderKeyPair?.publicHex, body
       })
-
-      // R6.10 reply-only enforcement (TRDD-80557822): when the graph allowed
-      // this send on a reply-only edge, verify the referenced inbound message
-      // is real and mark it replied=true under a lock. The referenced message
-      // was sent BY the human user (the reply's recipient, `recipientName`) —
-      // the guard checks the inbox envelope's from-part against that identity.
-      if (graphCheck.edgeType === 'reply-only') {
-        try {
-          const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
-          await assertReplyToInbound(inReplyToId!, senderAgent!.id, recipientName)
-        } catch (replyErr) {
-          console.error('[AMP Route] Reply-only enforcement failed:', replyErr)
-          return {
-            data: {
-              error: 'reply_only_enforcement_failed',
-              message: replyErr instanceof Error ? replyErr.message : 'reply could not be verified against the inbound message'
-            } as AMPError,
-            status: 403,
-            headers: rateLimitHeaders,
-          }
-        }
-      }
 
       return {
         data: { id: messageId, status: 'delivered', method: 'local', delivered_at: now } as AMPRouteResponse,

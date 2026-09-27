@@ -87,9 +87,9 @@ import {
 // module or anything that (transitively) imports this module.
 import {
   DEFAULT_MAX_REFRESH_FAILURES,
+  readRefreshCounters,
   refreshDeadCount,
   refreshNeedsHuman,
-  type RefreshCounters,
   type BlobIdentity,
 } from './supervisor'
 import * as fs from 'fs'
@@ -134,29 +134,10 @@ const KEEPALIVE_AHEAD_H = 6
 // duplication that lets a threshold change in one file silently stop matching the other.
 export const MAX_REFRESH_FAILURES = DEFAULT_MAX_REFRESH_FAILURES
 
-/** #152: read the `RefreshCounters` fields off a raw slot-meta record. `meta` is typed
- *  `Record<string, unknown>` throughout this file because state.json is shared with the
- *  janitor's own writer, so every field is read defensively rather than trusted. */
-function readRefreshCounters(meta: Record<string, unknown> | undefined): RefreshCounters {
-  const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined)
-  const rawSnap = meta?.refresh_counts_snapshot as Record<string, unknown> | undefined
-  const snapshot =
-    rawSnap &&
-    typeof rawSnap.total === 'number' &&
-    typeof rawSnap.fp === 'string' &&
-    (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
-      ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
-      : undefined
-  return {
-    refresh_failures: num(meta?.refresh_failures),
-    refresh_dead_failures: num(meta?.refresh_dead_failures),
-    refresh_answered_failures: num(meta?.refresh_answered_failures),
-    refresh_counts_snapshot: snapshot,
-  }
-}
-
 /** #152: this slot's blob identity RIGHT NOW — see `BlobIdentity`'s docstring (supervisor.ts) for
- *  why both halves are needed to validate a snapshot. */
+ *  why both halves are needed to validate a snapshot. The counters themselves are read through
+ *  `readRefreshCounters` in supervisor.ts — the ONE defensive reader, shared with the status
+ *  route, so the three consumers cannot drift on the snapshot-shape predicate. */
 function blobIdentity(blob: CredentialBlob): BlobIdentity {
   const exp = oauthOf(blob).expiresAt
   return { fp: fingerprint(blob), expiresAt: typeof exp === 'number' ? exp : null }

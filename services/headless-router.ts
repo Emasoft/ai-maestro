@@ -1977,7 +1977,6 @@ const routes: Route[] = [
       body,
       getHeader(req, 'Authorization'),
       getHeader(req, 'X-Forwarded-From'),
-      getHeader(req, 'X-AMP-Envelope-Id'),
       getHeader(req, 'Content-Length'),
       // Layer 2: pass attestation headers for mesh-forwarded role verification
       {

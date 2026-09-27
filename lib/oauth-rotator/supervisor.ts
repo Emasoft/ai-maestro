@@ -86,6 +86,29 @@ export interface RefreshCounters {
   refresh_counts_snapshot?: RefreshCountsSnapshot
 }
 
+/** #152: read the `RefreshCounters` fields off a raw slot-meta record — the ONE defensive
+ *  reader for state.json, which the janitor's own writer shares, so every field is read
+ *  defensively rather than trusted. `tick.ts` and the status route both go through this
+ *  instead of hand-copying the snapshot-shape check: two copies of the validation predicate
+ *  is the same linter/fixer drift this module's own docstrings warn against. */
+export function readRefreshCounters(meta: Record<string, unknown> | undefined): RefreshCounters {
+  const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined)
+  const rawSnap = meta?.refresh_counts_snapshot as Record<string, unknown> | undefined
+  const snapshot =
+    rawSnap &&
+    typeof rawSnap.total === 'number' &&
+    typeof rawSnap.fp === 'string' &&
+    (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
+      ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
+      : undefined
+  return {
+    refresh_failures: num(meta?.refresh_failures),
+    refresh_dead_failures: num(meta?.refresh_dead_failures),
+    refresh_answered_failures: num(meta?.refresh_answered_failures),
+    refresh_counts_snapshot: snapshot,
+  }
+}
+
 /** The sub-counters, but only if the snapshot proves they are still current against the total AND
  *  the slot's CURRENT blob identity (`current`, or `null` when the blob could not be read — an
  *  unreadable blob can never confirm freshness, so it falls back too). `null` return means

@@ -739,13 +739,17 @@ export async function assertReplyToInbound(
     // (a) Verify the referenced message is genuinely inbound to THIS agent
     // from the human user. The human user's AMP address is not
     // registry-resolvable, so compare on the agent name part of the
-    // addresses: the human user sends as its own name.
+    // addresses: the human user sends as its own name. The TO side must
+    // accept BOTH the agent's name and its alias — buildAMPEnvelope
+    // (lib/message-send.ts) writes `toAlias || to` into the envelope, so a
+    // legitimate reply can carry either spelling.
     const fromAgentPart = (msg.envelope?.from || '').split('@')[0]
     if (!fromAgentPart || fromAgentPart !== humanUserId) {
       throw new Error(`reply_to_inbound_pair_mismatch: message ${messageId} was not sent by ${humanUserId}`)
     }
     const toAgentPart = (msg.envelope?.to || '').split('@')[0]
-    if (toAgentPart !== (agent.name || agent.alias || senderAgentId)) {
+    const acceptedToParts = new Set([agent.name, agent.alias, senderAgentId].filter(Boolean) as string[])
+    if (!toAgentPart || !acceptedToParts.has(toAgentPart)) {
       throw new Error(`reply_to_inbound_pair_mismatch: message ${messageId} was not addressed to ${agent.name}`)
     }
 

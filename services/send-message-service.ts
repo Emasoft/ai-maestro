@@ -427,6 +427,27 @@ export async function SendMessage(
       ops.push(`G07: Team isolation check skipped (no agent IDs resolved)`)
     }
 
+    // ── G08: R6.10 reply-only enforcement (TRDD-80557822) ─────
+    // When this send rode a reply-only edge to the human user, verify the
+    // referenced inbound message is real and mark it replied=true under a
+    // lock — BEFORE the delivery below. The guard must precede EXE or a
+    // refused duplicate reply would already sit in the human's inbox, and
+    // EXE would have set success=true (the false-PASS shape). `to` names the
+    // human user — the identity the ORIGINAL inbound message was sent from,
+    // which is what the guard checks the inbox envelope's from-part against.
+    // Fail-CLOSED.
+    if (inReplyTo && recipientIsHuman && senderAgentId) {
+      try {
+        const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
+        await assertReplyToInbound(inReplyTo, senderAgentId, to.split('@')[0])
+        ops.push(`G08: Reply-only verified — inbound ${inReplyTo} marked replied=true`)
+      } catch (replyErr) {
+        result.error = replyErr instanceof Error ? replyErr.message : 'reply_only_enforcement_failed'
+        ops.push(`G08: DENIED — ${result.error}`)
+        return result
+      }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // EXECUTION
     // ═══════════════════════════════════════════════════════════
@@ -460,24 +481,6 @@ export async function SendMessage(
     // ═══════════════════════════════════════════════════════════
     // POST-EXECUTION GATES
     // ═══════════════════════════════════════════════════════════
-
-    // ── PG00: R6.10 reply-only enforcement (TRDD-80557822) ────
-    // When this send rode a reply-only edge to the human user, verify the
-    // referenced inbound message is real and mark it replied=true under a
-    // lock. `to` names the human user — the identity the ORIGINAL inbound
-    // message was sent from, which is what the guard checks the inbox
-    // envelope's from-part against. Fail-CLOSED.
-    if (inReplyTo && recipientIsHuman && senderAgentId) {
-      try {
-        const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
-        await assertReplyToInbound(inReplyTo, senderAgentId, to.split('@')[0])
-        ops.push(`PG00: Reply-only verified — inbound ${inReplyTo} marked replied=true`)
-      } catch (replyErr) {
-        result.error = replyErr instanceof Error ? replyErr.message : 'reply_only_enforcement_failed'
-        ops.push(`PG00: DENIED — ${result.error}`)
-        return result
-      }
-    }
 
     // ── PG01: Verify message was written ──────────────────────
     if (recipientAgentId && result.messageId) {

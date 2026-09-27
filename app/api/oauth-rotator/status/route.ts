@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { enforceMaestro } from '@/lib/route-auth'
 import { expiresInH, loadState } from '@/lib/oauth-rotator/slots'
 import { readTickStatus } from '@/lib/oauth-rotator/tick-status'
-import { refreshNeedsHuman, type RefreshCounters, type BlobIdentity } from '@/lib/oauth-rotator/supervisor'
+import { refreshNeedsHuman, readRefreshCounters, type BlobIdentity } from '@/lib/oauth-rotator/supervisor'
 
 /** Read one optional numeric extra off an index entry without asserting the open shape. */
 function num(entry: Record<string, unknown>, key: string): number | null {
@@ -42,26 +42,6 @@ function currentIdentityFrom(entry: Record<string, unknown>): BlobIdentity | nul
   const fp = entry.fp
   if (typeof fp !== 'string') return null
   return { fp, expiresAt: num(entry, 'expires_at') }
-}
-
-/** issue-152: the same `RefreshCounters` extraction `tick.ts`'s `readRefreshCounters` does, so
- *  this route's dead-count reads through the ONE shared predicate instead of re-deriving its own
- *  raw-threshold comparison (the duplication #152 fixes elsewhere). */
-function readRefreshCounters(entry: Record<string, unknown>): RefreshCounters {
-  const rawSnap = entry.refresh_counts_snapshot as Record<string, unknown> | undefined
-  const snapshot =
-    rawSnap &&
-    typeof rawSnap.total === 'number' &&
-    typeof rawSnap.fp === 'string' &&
-    (typeof rawSnap.expiresAt === 'number' || rawSnap.expiresAt === null)
-      ? { total: rawSnap.total, fp: rawSnap.fp, expiresAt: rawSnap.expiresAt as number | null }
-      : undefined
-  return {
-    refresh_failures: num(entry, 'refresh_failures') ?? undefined,
-    refresh_dead_failures: num(entry, 'refresh_dead_failures') ?? undefined,
-    refresh_answered_failures: num(entry, 'refresh_answered_failures') ?? undefined,
-    refresh_counts_snapshot: snapshot,
-  }
 }
 
 export async function GET(request: NextRequest) {

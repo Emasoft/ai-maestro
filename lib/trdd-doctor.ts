@@ -732,7 +732,16 @@ export function lintCorpus(designDir: string): DoctorReport {
       // lint must not promise a repair for it. Same `frontmatterEnd` predicate on both sides;
       // the file is re-read only for the (rare) cards that reach this finding.
       // ponytail: one extra read per STATUS-MISSING card; carry a flag on Card if this ever runs hot.
-      const fixable = frontmatterEnd(fs.readFileSync(c.filePath, 'utf8')) !== -1
+      // A concurrent `git mv` lifecycle transition may rename the card between loadCorpus and
+      // this re-read — the fixer side treats exactly that race as normal traffic and skips
+      // (:1908-1915), so the lint must degrade the finding to not-autofixable rather than let
+      // the ENOENT abort the whole corpus sweep.
+      let fixable: boolean
+      try {
+        fixable = frontmatterEnd(fs.readFileSync(c.filePath, 'utf8')) !== -1
+      } catch {
+        fixable = false
+      }
       add({
         rule: 'STATUS-MISSING',
         severity: 'warn',

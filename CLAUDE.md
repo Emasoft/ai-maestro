@@ -132,7 +132,7 @@ hook run overwrites it.
      author the PR / generate it here with tldr / ship it labelled scripts-only. A map of the
      wrong 1% under the heading "project map" is worse than no map. -->
 
-<+-+-JANITOR-WIKIMEM-INDEX-START-(do-not-modify)-+-+> v1 digest=b36bc875168b generated=2026-09-09T12:30:15+0200
+<+-+-JANITOR-WIKIMEM-INDEX-START-(do-not-modify)-+-+> v1 digest=186515b6bcc4 generated=2026-09-26T16:04:07+0200
 ## Wikimem index (PROJECT scope) — recall by symptom, read on demand
 
 Deep knowledge lives in these pages, not in this file. Search: `memgrep recall "<symptom>" .claude/project/memory`.
@@ -231,5 +231,6 @@ Deep knowledge lives in these pages, not in this file. Search: `memgrep recall "
 - [tsconfig-scope-gotchas](.claude/project/memory/tsconfig-scope-gotchas.md) — tsc fails on a file git does not track
 
 **Other topics**
+- [memory-scope-leak](.claude/project/memory/wikimem/memory-scope-leak.md) — the janitor's memory-scope-leak detector flagged PROJECT pages for machine-host or PII — is this finding real…
 - [memory-scope-leak-proposed](.claude/project/memory/memory-scope-leak-proposed.md)
 <+-+-JANITOR-WIKIMEM-INDEX-END-(do-not-modify)-+-+>

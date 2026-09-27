@@ -270,4 +270,52 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
       vi.useRealTimers()
     }
   })
+
+  // TRDD-8148P30S: the late-beat line must CARRY ATTRIBUTION, not just a gap. This test drives
+  // the late-beat BRANCH itself (fake timers + the injected now seam — the branch really
+  // executes, so a dropped field reddens the format check) and asserts every attribution field
+  // is present and well-formed on the emitted line.
+  it('the late-beat line carries every attribution field: load1 freemem lagMs clockDriftMs writeMs (TRDD-8148P30S)', () => {
+    vi.useFakeTimers()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // os.loadavg/freemem are non-configurable ESM exports — vi.spyOn cannot redefine them.
+    // Stubbing via vi.mock is module-wide, so instead assert WELL-FORMEDNESS: load1 is a finite
+    // loadavg (any host), freemem a non-negative byte count. Values are real; the contract is
+    // that the fields are present and parseable.
+    let simulatedNowMs = 0
+    try {
+      const stop = startServerLiveness({ intervalMs: 1000, now: () => simulatedNowMs })
+      try {
+        simulatedNowMs = 7000 // one huge gap straight off — straight into the late-beat branch
+        vi.advanceTimersByTime(1000)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        const line = String(warnSpy.mock.calls[0]?.[0])
+
+        // Field presence AND well-formedness — presence alone would pass an empty-value line.
+        const field = (name: string) => {
+          const m = line.match(new RegExp(`${name}=([^ ]+)`))
+          expect(m, `line missing ${name}: ${line}`).not.toBeNull()
+          return m![1]
+        }
+        // load1: a finite load average (real value from the test host).
+        expect(Number.isFinite(Number(field('load1')))).toBe(true)
+        // freemem: a non-negative byte count (real value from the test host).
+        expect(Number(field('freemem'))).toBeGreaterThanOrEqual(0)
+        // lagMs: actual fire (7000) minus scheduled (lastBeatMs 0 + interval 1000) = 6000.
+        expect(field('lagMs')).toBe('6000')
+        // clockDriftMs: a plain unit-test process has no wall-clock step — near zero.
+        expect(Math.abs(Number(field('clockDriftMs')))).toBeLessThan(1000)
+        // writeMs: the write really ran — a non-negative number.
+        expect(Number(field('writeMs'))).toBeGreaterThanOrEqual(0)
+        // Single line, still greppable by the original prefix.
+        expect(line).not.toMatch(/\n/)
+        expect(line.startsWith('[server-liveness] late beat: gap')).toBe(true)
+      } finally {
+        stop()
+      }
+    } finally {
+      warnSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
 })

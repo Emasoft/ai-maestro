@@ -14,6 +14,7 @@
 // exact "nobody does the chore" failure the coordination forbids.
 
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
@@ -297,15 +298,40 @@ export function startServerLiveness(opts: StartServerLivenessOptions = {}): () =
   // downstream reader simply misjudging staleness are indistinguishable without a signal on OUR
   // side too. Log ONLY the transition (a gap wider than 2x the interval), never every beat, so
   // this stays silent under normal load and only speaks when the writer itself was actually late.
+  // TRDD-8148P30S: monotonic-clock anchor for the late-beat clockDriftMs field — hrtime ms
+  // minus Date.now() at first late beat, so the drift printed later is only the wall-clock jump
+  // SINCE that anchor (per-process, like the heartbeat itself).
+  let hrtimeAnchorMs: number | undefined
   let lastBeatMs = now()
   const timer = setInterval(() => {
-    const nowMs = now()
-    const gapMs = nowMs - lastBeatMs
+    const firedAtMs = now()
+    const gapMs = firedAtMs - lastBeatMs
     if (gapMs > intervalMs * 2) {
-      console.warn(`[server-liveness] late beat: gap ${gapMs}ms exceeds 2x interval ${intervalMs}ms`)
+      // TRDD-8148P30S: the bare gap line could not ATTRIBUTE a late beat, so the next one had to
+      // be guessed. Every field below is computed ONLY on this transition path — never per beat.
+      //   load1/freemem — host pressure (loadavg spike vs memory squeeze).
+      //   lagMs — event-loop deschedule: actual fire time vs the SAME timer's scheduled time.
+      //   clockDriftMs — process.hrtime-vs-Date.now wall-clock jump detector. hrtime is
+      //     monotonic and immune to wall-clock steps, so anchoring it to Date.now once (first
+      //     use) and re-comparing at fire time yields the accumulated wall jump (NTP step,
+      //     laptop sleep) across the gap. A huge clockDriftMs with a small lagMs means the wall
+      //     clock moved, not the event loop.
+      //   writeMs — duration of the atomic write itself (writeFileSync+renameSync): IO stall.
+      const hrtimeMsAtFire = Number(process.hrtime.bigint() / 1_000n)
+      if (hrtimeAnchorMs === undefined) hrtimeAnchorMs = hrtimeMsAtFire - Date.now()
+      const writeStartPerf = performance.now()
+      writeServerLiveness()
+      const writeMs = Math.round(performance.now() - writeStartPerf)
+      const expectedAtMs = lastBeatMs + intervalMs
+      console.warn(
+        `[server-liveness] late beat: gap ${gapMs}ms exceeds 2x interval ${intervalMs}ms ` +
+          `load1=${os.loadavg()[0].toFixed(2)} freemem=${os.freemem()} lagMs=${Math.round(firedAtMs - expectedAtMs)} ` +
+          `clockDriftMs=${Math.round(Date.now() - (hrtimeMsAtFire - hrtimeAnchorMs))} writeMs=${writeMs}`,
+      )
+    } else {
+      writeServerLiveness()
     }
-    lastBeatMs = nowMs
-    writeServerLiveness()
+    lastBeatMs = firedAtMs
   }, intervalMs)
   timer.unref()
   return () => clearInterval(timer)

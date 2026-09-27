@@ -2,9 +2,9 @@
 trdd-id: GA53VW1Q
 status: tasked
 title: Replace the status-route user-controlled new RegExp filter with substring or an anchored escaped pattern
-column: backburner
+column: dev
 created: 2026-08-25T18:17:41+0200
-updated: 2026-08-25T18:23:34+0200
+updated: 2026-09-27T16:37:20+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -40,3 +40,4 @@ approach is picked; record the choice in this card.
 ## Approval log
 
 - 2026-08-25T18:17:41+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-27T16:37:20+0200 — column → dev by main-agent@ai-maestro. Picked up under the USER's 2026-09-27 parallel lean-worker directive; mandate pre-approves. Security fix, Tier 0 (in-repo, bounded).

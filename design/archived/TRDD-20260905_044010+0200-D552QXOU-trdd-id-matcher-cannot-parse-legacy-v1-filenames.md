@@ -1,12 +1,12 @@
 ---
 trdd-id: D552QXOU
-status: tasked
+status: archived
 title: The janitor TRDD id matcher cannot parse legacy v1 filenames so those cards vanish from four detectors
 scope: project
 project-id: ai-maestro
-column: todo
+column: complete
 created: 2026-09-05T04:40:10+0200
-updated: 2026-09-27T01:01:57+0200
+updated: 2026-09-27T16:50:02+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -103,13 +103,14 @@ touch 'design/tasks/TRDD-deadbeef-some-legacy-card.md'   # add valid frontmatter
 
 ## Acceptance
 
-- [ ] The user chooses route 1 (issue) or route 2 (fork+PR), or declines both
-- [ ] If route 1: the issue is filed on `Emasoft/ai-maestro-janitor` with the symptom, the
+- [x] The user chooses route 1 (issue) or route 2 (fork+PR), or declines both
+- [x] If route 1: the issue is filed on `Emasoft/ai-maestro-janitor` with the symptom, the
       reproducer above, and the downstream impact, and its URL is recorded here
-- [ ] If route 2: the PR is opened from a fork cloned to `/tmp`, never from a local edit of the
+- [x] If route 2: the PR is opened from a fork cloned to `/tmp`, never from a local edit of the
       janitor's tree, and its URL is recorded here
-- [ ] If declined: the reason is recorded here and this card is closed as `cancelled`, so the
+- [x] If declined: the reason is recorded here and this card is closed as `cancelled`, so the
       known-latent defect is on the record rather than forgotten
+- [x] Route decision + boxes disposition (review F1, 2026-09-27): box 1 — route 1 chosen under the USER's full-autonomy delegation (2026-09-27); box 2 — issue #313 filed on Emasoft/ai-maestro-janitor with symptom/reproducer/impact (recorded in the approval log); boxes 3 and 4 are route-2/decline conditionals, N/A by the route taken (ticked as resolved-N/A, not as performed). The card's own pre-authorization (route-1 closure citing the janitor fix, or its absence) is met: the ROUTE was this card's completion condition; the upstream fix landing is a follow-up, not a gate. Review-finding note: the exclusion of this card from parallel dispatch mischaracterized its gate as 'waiting on their fix' — its own acceptance text gates on the route, which is taken and recorded.
 
 ## Approval log
 
@@ -122,3 +123,4 @@ touch 'design/tasks/TRDD-deadbeef-some-legacy-card.md'   # add valid frontmatter
 - 2026-09-05T18:42:03+0200 — FORWARD CORRECTION (the janitor's own, relayed ~18:41): of the six extract_uid callers named in the line above, the janitor verified three first-hand — dispatch.py:2656, trdd-drift.py:290, findings_cli.py:54; trdd-reminder.py, trdd-cross-card-blindspot.py and ticket_proposal.py came from its worker's listing and are second-hand on both sides. The regex gap (trdd_common.py:193-199) stays verified. Fix in progress under the janitor's TRDD-JDIJ76SW; the hub's attribution note is recorded there. Still no route chosen here — the USER's call.
 - 2026-09-27T01:00:55+0200 — column → todo. USER granted full autonomy 2026-09-27: route 1 (file janitor issue) is the card's own recommended default and the USER delegated the decision — filing the issue is read-only on this repo and reversible (an issue can be closed)
 - 2026-09-27 — Route 1 taken under USER full-autonomy delegation (2026-09-27, 'decide yourself... base all decisions on verified facts'): janitor issue filed — https://github.com/Emasoft/ai-maestro-janitor/issues/313. Card advances to todo pending upstream fix; the local rename (f6f4664e) already protects this repo.
+- 2026-09-27T16:50:02+0200 — COMPLETE by main-agent@ai-maestro. Route 1 taken and recorded (issue #313); every acceptance box's condition is met or N/A by the route; the upstream fix is a follow-up, not this card's completion gate (review F1)..

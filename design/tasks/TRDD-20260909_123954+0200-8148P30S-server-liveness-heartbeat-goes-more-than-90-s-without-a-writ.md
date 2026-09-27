@@ -2,9 +2,9 @@
 trdd-id: 8148P30S
 status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
-column: todo
+column: dev
 created: 2026-09-09T12:39:54+0200
-updated: 2026-09-09T12:41:03+0200
+updated: 2026-09-27T16:37:21+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -43,3 +43,4 @@ NEXT ACTION: the stage-1 instrument edit in lib/server-liveness.ts + tests/unit/
 
 - 2026-09-09T12:39:54+0200 — MANDATE issued by governance-rules-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-09T12:41:03+0200 — minted from the TRDD-OUAQARPL audit (live_auditing) as its fix card; Tier 0 self-mandate. Title deliberately names the measured WRITE GAP and no mechanism: the cause is INFERRED (see Problem). Sleep/wake refuted by pmset log 2026-09-09.
+- 2026-09-27T16:37:21+0200 — column → dev by main-agent@ai-maestro. Picked up under the USER's 2026-09-27 parallel lean-worker directive. Stage 1 instrument only — no build/restart (server.mjs hold stands); box 2 remains USER-gated after this.

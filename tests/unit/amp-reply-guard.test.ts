@@ -201,23 +201,23 @@ describe('assertReplyToInbound (R6.10 / TRDD-80557822)', () => {
       const before = fsSync.readFileSync(filePath, 'utf-8')
       await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).resolves.toBe(false)
       expect(fsSync.readFileSync(filePath, 'utf-8')).toBe(before)
-      expect(mod.unmarkReplied('msg_missing', AGENT.id)).resolves.toBe(false)
+      await expect(mod.unmarkReplied('msg_missing', AGENT.id)).resolves.toBe(false)
     })
 
     it('throws when the registry module memo is unset — never silently scan a wrong path', async () => {
-      // Reach into the memo exactly as a fresh-process compensation would meet it.
+      // Hard-require the hook: a guarded typeof skip would pass vacuously on
+      // exactly the refactor (renaming the hook) most likely to happen.
       const writer = await import('@/lib/amp-inbox-writer') as unknown as {
-        __clearAgentRegistryModuleMemo?: () => void
+        __clearAgentRegistryModuleMemo: () => void
       } & typeof import('@/lib/amp-inbox-writer')
+      expect(typeof writer.__clearAgentRegistryModuleMemo).toBe('function')
       inboxFile(USER, AGENT.name, MSG_ID, true)
-      if (typeof writer.__clearAgentRegistryModuleMemo === 'function') {
-        writer.__clearAgentRegistryModuleMemo()
-        try {
-          await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).rejects.toThrow(/registry_module_unset/)
-        } finally {
-          // Restore by re-asserting a guarded call (re-memoizes on demand).
-          await mod.assertReplyToInbound(MSG_ID, AGENT.id, USER).catch(() => {})
-        }
+      writer.__clearAgentRegistryModuleMemo()
+      try {
+        await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).rejects.toThrow(/registry_module_unset/)
+      } finally {
+        // Restore by re-asserting a guarded call (re-memoizes on demand).
+        await mod.assertReplyToInbound(MSG_ID, AGENT.id, USER).catch(() => {})
       }
     })
   })

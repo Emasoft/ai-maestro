@@ -4,10 +4,10 @@ status: tasked
 title: The heartbeat todo count and a direct grep disagree by exactly one card
 scope: project
 project-id: ai-maestro
-column: blocked
-pre-block-column: todo
+column: todo
+pre-block-column: 
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-05T04:58:53+0200
+updated: 2026-09-27T17:20:21+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -22,7 +22,7 @@ mandated-by: self
 approved: true
 approval-judge: claude-opus-session
 approval-datetime: 2026-09-05T03:13:47+0200
-blocked-by: [D552QXOU]
+blocked-by: []
 blocker-probe: sh -c 'grep -m1 -h "^column:" design/*/TRDD-*D552QXOU*.md | head -1 | grep . || echo column-PROBE-BROKEN'
 blocker-holds-if: not-match:(published|complete|live|failed|superseded|cancelled|refused)$
 npt: []
@@ -492,3 +492,4 @@ against the same files, and name the cards the two sets disagree about. Settled 
   Difference documented as INTENDED, correct multi-scope command recorded. Closed on the
   mechanism; the unexplained inverted 51/52 reading is recorded in the STATE block and is NOT
   claimed resolved.
+- 2026-09-27T17:20:21+0200 — column → todo by main-agent@ai-maestro. D552QXOU (its sole blocker) went terminal complete — archived 2026-09-27. The doctor's own message names this release: 'Restore to todo (the release is a decision the owner records)'. Recording it. Cleared blocked-by (--clear-blocker override).

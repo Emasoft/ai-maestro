@@ -4,7 +4,7 @@ status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
 column: dev
 created: 2026-09-09T12:39:54+0200
-updated: 2026-09-27T16:37:21+0200
+updated: 2026-09-27T18:04:42+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -32,12 +32,13 @@ Stage 1 — attribute, do not guess: extend the late-beat line in lib/server-liv
 Stage 2 — after at least one attributed stale event (or 48 h of the running instrument with zero, which re-scopes this card): choose between beating from a `worker_threads` worker (immune to a main-thread stall, not to IO or a clock jump) and asking the janitor side for a reader tolerance (coordinate via SendMessage to the janitor session per the USER /goal 2026-09-05; never edit the janitor repo). Do not pick before the data.
 
 ## Acceptance
-- [ ] the late-beat line carries loadavg, freemem, event-loop lag, hrtime-vs-Date.now drift and write duration; a test drives the late-beat BRANCH with fake timers and asserts every field (neuter: drop one field from the format → red; a format-string check with the branch unreached is vacuous and does not count)
+- [x] the late-beat line carries loadavg, freemem, event-loop lag, hrtime-vs-Date.now drift and write duration; a test drives the late-beat BRANCH with fake timers and asserts every field (neuter: drop one field from the format → red; a format-string check with the branch unreached is vacuous and does not count)
 - [ ] the instrument is observed running: at least one `[server-liveness] late beat` line in logs/pm2-error.log after the USER's build+restart, OR 48 h of the running instrument with zero such lines while daemon.log shows zero takeovers — either outcome is recorded here with the log lines
 - [ ] the stage-2 choice is implemented with a test that reddens under neuter, and the choice cites the attributed event(s) recorded under box 2
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
 NEXT ACTION: the stage-1 instrument edit in lib/server-liveness.ts + tests/unit/server-liveness.test.ts (Tier 0, in-tree). BLOCKED AFTER THAT on the USER's server.mjs hold: no build/restart is authorised, so box 2 cannot start until the USER decides. Open question for stage 2: is the janitor's tick idempotent beside the server's — both take the rotator flock, but what each decides on the same window data is unmeasured. Count distinct gaps, never takeover lines: 1/4/5 episodes on 09-06/07/08.
+2026-09-27 — STAGE 1 LANDED AND HARDENED (commits 2fd28c4c + 9bc1c55f). The first review's vacuity finding caught a real shipped unit bug: hrtime.bigint()/1_000n yielded MICROseconds not ms (1000x-inflated clockDriftMs since stage 1); fixed to /1_000_000n and pinned by a differential second-beat test (fake Date advances, real hrtime; neuter reddens exactly that test). 25/25 + tsc 0. NEXT ACTION unchanged: box 2 waits on the USER's build+restart decision (server.mjs hold stands) — nothing here is workable without it.
 
 ## Approval log
 

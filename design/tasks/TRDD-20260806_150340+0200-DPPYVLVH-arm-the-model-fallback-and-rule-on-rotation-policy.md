@@ -4,7 +4,7 @@ status: tasked
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-09-27T01:10:43+0200
+updated: 2026-09-27T02:52:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -313,3 +313,4 @@ watching the rotator.
 **Still NOT verified, and must not be recorded otherwise.** No switch was attempted, so there is
 no `confirmed=true` and no pane flip. This observation raises confidence that the lane is armed
 for the right condition; it is not evidence that the switch works.
+2026-09-27 — ACTUATION OBSERVED (hub, full pm2-error.log sweep, needle 'model-fallback'): 4x 'model-fallback SWITCHED <agentId> off Fable (100%) — confirmed=true' on 2026-08-25T23:21/23:29 and 2026-08-26T00:02/00:07, agents d6a55598 (testbot) and 5ae7b214. This is a completed rotation, not a recommendation. Post-Sep-11 activity is only 'held off' (3,294x: 1,518 account-also-exhausted / 1,776 no-model-scoped-exhaustion) and 'could not read 9 pane(s)' (4,769x) — no later actuation and none contradicting it. The review-F1 'flag armed since Aug-15 but actuation unobserved' premise is REFUTED on this evidence; the leg has demonstrably carried traffic. Card returns to human_review with this evidence recorded.

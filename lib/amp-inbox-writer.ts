@@ -29,6 +29,12 @@ const AMP_INDEX_FILE = path.join(AMP_AGENTS_DIR, '.index.json')
 // Lazy-resolved registry module (see assertReplyToInbound for why it is cached).
 let agentRegistryModule: typeof import('@/lib/agent-registry') | null = null
 
+// TEST HOOK ONLY — lets the suite drive unmarkReplied's unset-memo invariant
+// without a second process. Never called in production.
+export function __clearAgentRegistryModuleMemo(): void {
+  agentRegistryModule = null
+}
+
 // ============================================================================
 // Name → UUID Index
 // ============================================================================
@@ -774,12 +780,29 @@ export async function assertReplyToInbound(
  * the assert may call this; it is not a general-purpose unmark. Best-effort:
  * if the compensation itself fails the desync is logged, not thrown, so it
  * cannot mask the send's own error.
+ *
+ * RACE-SAFETY INVARIANT (do not "simplify" the gate away): the unmark can
+ * never clobber a CONCURRENT legitimate mark, because every mark is
+ * preceded by the gate's own already-replied refusal — a second reply that
+ * arrives between this failed send's mark and its unmark is DENIED by
+ * assertReplyToInbound and never reaches a mark of its own. The window
+ * therefore holds at most one mark, and it is always this failed send's
+ * own. A second mark site would reopen the race.
  */
 export async function unmarkReplied(
   messageId: string,
   senderAgentId: string
 ): Promise<boolean> {
-  const agent = agentRegistryModule?.getAgent(senderAgentId)
+  // The memo is ALWAYS populated when the compensation fires — G08 ran
+  // assertReplyToInbound earlier in the same call and memoizes the module.
+  // If it is somehow unset, resolve a NAME-keyed path from an agent ID and
+  // silently scan the wrong directory — a quiet desync with a WARN as its
+  // only trace. A compensation must fail LOUD instead: the caller's catch
+  // already logs G08-COMP: WARN.
+  if (!agentRegistryModule) {
+    throw new Error('unmark_replied_registry_module_unset: assertReplyToInbound must have run first in this process')
+  }
+  const agent = agentRegistryModule.getAgent(senderAgentId)
   const filePath = await findInboxMessagePath(agent?.name || senderAgentId, senderAgentId, messageId)
   if (!filePath) return false
   return withLock(`amp-msg-${messageId}`, async () => {

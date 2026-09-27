@@ -483,7 +483,7 @@ export async function SendMessage(
         try {
           const { unmarkReplied } = await import('@/lib/amp-inbox-writer')
           const undone = await unmarkReplied(inReplyTo, senderAgentId)
-          ops.push(undone ? `G08-COMP: inbound ${inReplyTo} un-marked after failed send` : `G08-COMP: WARN — could not un-mark ${inReplyTo}`)
+          ops.push(undone ? `G08-COMP: inbound ${inReplyTo} un-marked after failed send` : `G08-COMP: WARN — inbound ${inReplyTo} remains marked (replied=true, no reply delivered) — WEDGED: later replies refused as duplicate; manual unmark or fresh inbound required`)
         } catch (compErr) {
           ops.push(`G08-COMP: WARN — unmark failed: ${compErr instanceof Error ? compErr.message : String(compErr)}`)
         }

@@ -181,4 +181,44 @@ describe('assertReplyToInbound (R6.10 / TRDD-80557822)', () => {
     expect(rejected).toHaveLength(1)
     expect((rejected[0] as PromiseRejectedResult).reason.message).toMatch(/already_replied/)
   })
+
+  // unmarkReplied (G08-COMP compensation, review round on d60d6a2a): the
+  // compensation must un-mark ONLY the failed send's own mark, refuse
+  // anything else, and — failing LOUD on the unset-registry invariant —
+  // throw rather than silently scan a wrong directory.
+  describe('unmarkReplied (G08-COMP compensation)', () => {
+    it('un-marks a failed send: mark → unmark → re-reply is allowed again', async () => {
+      const filePath = inboxFile(USER, AGENT.name, MSG_ID, undefined)
+      await mod.assertReplyToInbound(MSG_ID, AGENT.id, USER) // G08's mark
+      await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).resolves.toBe(true)
+      expect(JSON.parse(fsSync.readFileSync(filePath, 'utf-8')).metadata.replied).toBe(false)
+      // The gate accepts a NEW reply after the compensation — the wedge is gone.
+      await expect(mod.assertReplyToInbound(MSG_ID, AGENT.id, USER)).resolves.toBeUndefined()
+    })
+
+    it('returns false and writes NOTHING when the inbound was never marked (or absent)', async () => {
+      const filePath = inboxFile(USER, AGENT.name, MSG_ID, undefined)
+      const before = fsSync.readFileSync(filePath, 'utf-8')
+      await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).resolves.toBe(false)
+      expect(fsSync.readFileSync(filePath, 'utf-8')).toBe(before)
+      expect(mod.unmarkReplied('msg_missing', AGENT.id)).resolves.toBe(false)
+    })
+
+    it('throws when the registry module memo is unset — never silently scan a wrong path', async () => {
+      // Reach into the memo exactly as a fresh-process compensation would meet it.
+      const writer = await import('@/lib/amp-inbox-writer') as unknown as {
+        __clearAgentRegistryModuleMemo?: () => void
+      } & typeof import('@/lib/amp-inbox-writer')
+      inboxFile(USER, AGENT.name, MSG_ID, true)
+      if (typeof writer.__clearAgentRegistryModuleMemo === 'function') {
+        writer.__clearAgentRegistryModuleMemo()
+        try {
+          await expect(mod.unmarkReplied(MSG_ID, AGENT.id)).rejects.toThrow(/registry_module_unset/)
+        } finally {
+          // Restore by re-asserting a guarded call (re-memoizes on demand).
+          await mod.assertReplyToInbound(MSG_ID, AGENT.id, USER).catch(() => {})
+        }
+      }
+    })
+  })
 })

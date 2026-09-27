@@ -2,9 +2,9 @@
 trdd-id: 8148P30S
 status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
-column: dev
+column: backburner
 created: 2026-09-09T12:39:54+0200
-updated: 2026-09-27T18:04:42+0200
+updated: 2026-09-27T18:11:16+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -39,9 +39,11 @@ Stage 2 — after at least one attributed stale event (or 48 h of the running in
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-09-09
 NEXT ACTION: the stage-1 instrument edit in lib/server-liveness.ts + tests/unit/server-liveness.test.ts (Tier 0, in-tree). BLOCKED AFTER THAT on the USER's server.mjs hold: no build/restart is authorised, so box 2 cannot start until the USER decides. Open question for stage 2: is the janitor's tick idempotent beside the server's — both take the rotator flock, but what each decides on the same window data is unmeasured. Count distinct gaps, never takeover lines: 1/4/5 episodes on 09-06/07/08.
 2026-09-27 — STAGE 1 LANDED AND HARDENED (commits 2fd28c4c + 9bc1c55f). The first review's vacuity finding caught a real shipped unit bug: hrtime.bigint()/1_000n yielded MICROseconds not ms (1000x-inflated clockDriftMs since stage 1); fixed to /1_000_000n and pinned by a differential second-beat test (fake Date advances, real hrtime; neuter reddens exactly that test). 25/25 + tsc 0. NEXT ACTION unchanged: box 2 waits on the USER's build+restart decision (server.mjs hold stands) — nothing here is workable without it.
+2026-09-27 (cont.) — REVIEW ROUNDS CLOSED. (1) Box 1's named FORMAT-NEUTER now run: dropping freemem from the emitted line reds exactly the presence assertion; corrupting lagMs reds the value assertion; the µs-divisor neuter reds the differential assertion at −2432 (busy-wait margins guarantee ≥3ms real separation — the review's own ±30s widening proposal was arithmetically wrong and corrected, commit 485e9a7b). (2) GARBAGE WINDOW: clockDriftMs values emitted between commits 2fd28c4c and 9bc1c55f are ~1000x inflated (µs divisor); no build/restart occurred in that window so pm2-error.log should carry none — grep before citing any clockDriftMs line as attributed evidence. (3) Known instrument limits, one line each: a wall-clock step before the FIRST late beat is invisible (anchor calibrates to the already-jumped clock); gradual NTP slew accumulates into the same field a discrete step does.
 
 ## Approval log
 
 - 2026-09-09T12:39:54+0200 — MANDATE issued by governance-rules-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-09-09T12:41:03+0200 — minted from the TRDD-OUAQARPL audit (live_auditing) as its fix card; Tier 0 self-mandate. Title deliberately names the measured WRITE GAP and no mechanism: the cause is INFERRED (see Problem). Sleep/wake refuted by pmset log 2026-09-09.
 - 2026-09-27T16:37:21+0200 — column → dev by main-agent@ai-maestro. Picked up under the USER's 2026-09-27 parallel lean-worker directive. Stage 1 instrument only — no build/restart (server.mjs hold stands); box 2 remains USER-gated after this.
+- 2026-09-27T18:11:16+0200 — column → backburner by main-agent@ai-maestro. Stage 1 fully landed and neutered; remaining boxes are USER-gated (build+restart hold) — a WORK column asserting activity that is not happening is the board lying about itself (review round 2 finding b). Parked, not blocked: a USER decision is not a card, so blocked-by cannot name it.

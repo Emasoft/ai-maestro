@@ -2,10 +2,10 @@
 trdd-id: IALQ43QP
 status: tasked
 title: Automatic fallback when a model-scoped window is exhausted but the account has headroom
-column: blocked
-pre-block-column: testing
+column: testing
+pre-block-column: 
 created: 2026-08-06T15:01:34+0200
-updated: 2026-08-06T15:08:00+0200
+updated: 2026-09-27T12:08:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -26,7 +26,7 @@ repo: Emasoft/ai-maestro
 labels: [oauth-rotator, fleet-watchdog, actuation, ships-dark]
 npt: []
 eht: [DPPYVLVH]
-blocked-by: [DPPYVLVH]
+blocked-by: []
 implementation-commits: [c4805975, 7effa4aa, b00b447d, f9c92837, dec2d777, aa10c921, 3846c840, 68b6ab85, 63f1335f, 1fa79385, fc58aa52, 59022e79, 976fa045, f257600f, c053736f]
 external-refs: [Emasoft/ai-maestro-janitor#222]
 blocker-probe: sh -c 'for id in DPPYVLVH; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
@@ -156,3 +156,4 @@ on — that hole is what `DPPYVLVH` closes.
   authorized-work set while asserting nobody approved it"*. It was right. The confusion was mine —
   I had folded two atomic tasks into one card. The BUILD was self-mandated and is done; the
   ARMING needs the USER and is now `TRDD-DPPYVLVH`, an EHT. This card moves to `blocked` on it.
+- 2026-09-27T12:08:45+0200 — column → testing by main-agent@ai-maestro. Sole blocker DPPYVLVH terminal; restoring pre-block-column. Cleared blocked-by (all blockers terminal).

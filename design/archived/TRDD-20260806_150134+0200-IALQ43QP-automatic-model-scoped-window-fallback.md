@@ -1,11 +1,11 @@
 ---
 trdd-id: IALQ43QP
-status: tasked
+status: archived
 title: Automatic fallback when a model-scoped window is exhausted but the account has headroom
-column: testing
+column: complete
 pre-block-column: 
 created: 2026-08-06T15:01:34+0200
-updated: 2026-09-27T12:08:45+0200
+updated: 2026-09-27T12:23:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -54,6 +54,7 @@ wrong is a fleet parked on unanswered dialogs, which is worse than the exhausted
 
 **SUPERSEDED — do NOT carry forward:** any note saying the planner/actuator/deps/sweep is
 "not wired yet". All five modules and the watchdog leg landed on 2026-08-06.
+SUPERSEDED 2026-09-27: the flag IS armed (config 56047fa5; live pm2 env '1' after the 2026-09-26T11:41 restart) and actuation is LOG-VERIFIED — 4x 'model-fallback SWITCHED … confirmed=true' (Aug 25-26, dialog-verified scoping), recorded on EHT card TRDD-DPPYVLVH (archived complete 2026-09-27, commits 8bbc4622/91e6dae1). The NEXT ACTION below ('arm the flag') is DONE — do not re-arm; this card's checklist is fully ticked and it closes now.
 
 ## Problem
 
@@ -157,3 +158,4 @@ on — that hole is what `DPPYVLVH` closes.
   I had folded two atomic tasks into one card. The BUILD was self-mandated and is done; the
   ARMING needs the USER and is now `TRDD-DPPYVLVH`, an EHT. This card moves to `blocked` on it.
 - 2026-09-27T12:08:45+0200 — column → testing by main-agent@ai-maestro. Sole blocker DPPYVLVH terminal; restoring pre-block-column. Cleared blocked-by (all blockers terminal).
+- 2026-09-27T12:23:03+0200 — COMPLETE by main-agent@ai-maestro. Checklist fully ticked; sole EHT (DPPYVLVH) archived complete 2026-09-27. Arming USER-approved 2026-08-15; actuation log-verified (4x confirmed=true, dialog-verified scoping). The board's completion gate (all boxes + all-flock-terminal) now passes..

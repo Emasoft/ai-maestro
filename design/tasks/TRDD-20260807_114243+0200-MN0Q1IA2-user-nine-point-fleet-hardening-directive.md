@@ -8,7 +8,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-09-27T12:36:21+0200
+updated: 2026-09-27T14:12:31+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -669,7 +669,7 @@ code shape** (see Verification below).
 - [x] **2.** All plugins auto-update in `settings.json`, through the safe editor — `71b9f796`
 - [ ] **3.** The rotator is working — PARTLY VERIFIED. `scopedOnly` (`17e129d6`) is live and
       ticking; what remains is the dead-refresh account, which needs the USER's `/login`.
-- [ ] **4.** Post-rotation unblock (ESC to resume, or switch to Opus) — the MODEL half is already
+- [x] **4.** Post-rotation unblock (ESC to resume, or switch to Opus) — the MODEL half is already
       complete (`planModelFallback` makes the whole decision from windows; the "one unwired
       function" framing was refuted in place at §"…AND THEN THE WIRING PLAN ITSELF WAS REFUTED").
       ~~What is open is the ESC/resume half~~ — **struck 2026-08-21: this box contradicted its own
@@ -752,6 +752,7 @@ code shape** (see Verification below).
 
 **There is no item 6.** The nine points are numbered 1-5 and 7-10; the USER's original list skipped
 it. Recorded so the next reader does not go looking for a tenth item that was never dropped.
+      **↳ TICKED 2026-09-27 — the arming leg this box was holding on is now OBSERVED.** Re-measured first-hand this session, not taken from DPPYVLVH's text: (a) flag live — `ps eww` on the pm2 process reads `AIM_FLEET_MODEL_FALLBACK=1`; (b) actuation observed — pm2-error.log carries 4× `model-fallback SWITCHED … off Fable (100%) — confirmed=true` (2026-08-25 23:21/23:29, 2026-08-26 00:02/00:07, agents d6a55598 + 5ae7b214); `confirmed=true` is the emitter's own post-condition pane re-read, so these are verified switches, not keystrokes-sent; (c) DPPYVLVH is `column: complete` in design/archived/. The ESC half was already verified wired (`lib/fleet-continuity.ts:193`). Nothing agent-actionable remains on item 4.
 
 ## Verification
 

@@ -1,13 +1,13 @@
 ---
 trdd-id: UAP7ZEJL
-status: tasked
+status: archived
 title: The heartbeat todo count and a direct grep disagree by exactly one card
 scope: project
 project-id: ai-maestro
-column: todo
+column: complete
 pre-block-column: 
 created: 2026-09-05T03:13:47+0200
-updated: 2026-09-27T17:20:21+0200
+updated: 2026-09-27T17:44:22+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: unassigned
@@ -493,3 +493,4 @@ against the same files, and name the cards the two sets disagree about. Settled 
   mechanism; the unexplained inverted 51/52 reading is recorded in the STATE block and is NOT
   claimed resolved.
 - 2026-09-27T17:20:21+0200 — column → todo by main-agent@ai-maestro. D552QXOU (its sole blocker) went terminal complete — archived 2026-09-27. The doctor's own message names this release: 'Restore to todo (the release is a decision the owner records)'. Recording it. Cleared blocked-by (--clear-blocker override).
+- 2026-09-27T17:44:22+0200 — COMPLETE by main-agent@ai-maestro. All 4 boxes ticked; sole remaining gate was EHT D552QXOU reaching terminal (now complete+archived); premise re-read and holds.

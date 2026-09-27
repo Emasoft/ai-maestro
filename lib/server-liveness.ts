@@ -317,7 +317,10 @@ export function startServerLiveness(opts: StartServerLivenessOptions = {}): () =
       //     laptop sleep) across the gap. A huge clockDriftMs with a small lagMs means the wall
       //     clock moved, not the event loop.
       //   writeMs — duration of the atomic write itself (writeFileSync+renameSync): IO stall.
-      const hrtimeMsAtFire = Number(process.hrtime.bigint() / 1_000n)
+      // bigint is nanoseconds; /1_000_000n yields ms to match Date.now's unit.
+      // (A /1_000n draft left this in microseconds — the anchor absorbed it at the
+      // first beat, so only a second-beat differential test could see the -999000.)
+      const hrtimeMsAtFire = Number(process.hrtime.bigint() / 1_000_000n)
       if (hrtimeAnchorMs === undefined) hrtimeAnchorMs = hrtimeMsAtFire - Date.now()
       const writeStartPerf = performance.now()
       writeServerLiveness()

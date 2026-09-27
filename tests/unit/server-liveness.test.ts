@@ -276,7 +276,7 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
   // executes, so a dropped field reddens the format check) and asserts every attribution field
   // is present and well-formed on the emitted line.
   it('the late-beat line carries every attribution field: load1 freemem lagMs clockDriftMs writeMs (TRDD-8148P30S)', () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // os.loadavg/freemem are non-configurable ESM exports — vi.spyOn cannot redefine them.
     // Stubbing via vi.mock is module-wide, so instead assert WELL-FORMEDNESS: load1 is a finite
@@ -303,13 +303,35 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
         expect(Number(field('freemem'))).toBeGreaterThanOrEqual(0)
         // lagMs: actual fire (7000) minus scheduled (lastBeatMs 0 + interval 1000) = 6000.
         expect(field('lagMs')).toBe('6000')
-        // clockDriftMs: a plain unit-test process has no wall-clock step — near zero.
+        // clockDriftMs at the FIRST late beat is ~0 BY CONSTRUCTION (the anchor
+        // calibrates to the current clock) — presence-only here. The discriminating
+        // assertion is the second beat below.
         expect(Math.abs(Number(field('clockDriftMs')))).toBeLessThan(1000)
         // writeMs: the write really ran — a non-negative number.
         expect(Number(field('writeMs'))).toBeGreaterThanOrEqual(0)
         // Single line, still greppable by the original prefix.
         expect(line).not.toMatch(/\n/)
         expect(line.startsWith('[server-liveness] late beat: gap')).toBe(true)
+
+        // Second late beat with a DIFFERENTIAL clock advance: fake Date advances 1000ms
+        // while process.hrtime stays REAL (excluded from toFake below — sinon fakes it by
+        // default, which would advance both clocks in lockstep and make drift ≡ 0). The
+        // module's drift computation reads raw Date.now() (faked) against real hrtime, so
+        // clockDriftMs must move to ≈1000. This is the assertion that fails for the two
+        // wrong implementations an always-~0 band would pass: a detector that returns ~0
+        // unconditionally, and one that RE-ANCHORS on every beat (re-anchoring makes the
+        // drift 0 at every beat by the same construction as the first beat). It caught the
+        // shipped /1_000n µs-unit bug on its first run (drift2 was −999000).
+        // The anchor deliberately reads raw Date.now rather than the injected `now`
+        // seam — it compares the WALL clock against the monotonic clock, and the
+        // seam exists to drive the gap check, not the wall clock.
+        simulatedNowMs = 14000 // gap 7000ms — a second late beat
+        vi.advanceTimersByTime(1000) // fake Date.now += 1000; real hrtime barely moves
+        expect(warnSpy).toHaveBeenCalledTimes(2)
+        const line2 = String(warnSpy.mock.calls[1]?.[0])
+        const drift2 = Number(line2.match(/clockDriftMs=([^ ]+)/)![1])
+        expect(drift2).toBeGreaterThan(500) // ≈1000 (real-elapsed noise only)
+        expect(drift2).toBeLessThan(5000)
       } finally {
         stop()
       }

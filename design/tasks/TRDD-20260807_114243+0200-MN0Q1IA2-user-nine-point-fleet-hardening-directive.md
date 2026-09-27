@@ -2,13 +2,13 @@
 trdd-id: MN0Q1IA2
 status: tasked
 title: USER nine-point fleet-hardening directive — updates cadence, auto-update, rotator, unblock, ledger, agentlenspro
-column: todo
+column: human_review
 pre-block-column: 
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-09-27T14:12:31+0200
+updated: 2026-09-27T14:15:46+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -766,3 +766,5 @@ state, an absence of log lines over N ticks).
   min-approval-requirement. No approval request was sent.
 - 2026-09-27T12:25:51+0200 — column → dev by main-agent@ai-maestro. One of its two stated blockers (DPPYVLVH arming leg) is terminal — archived complete 2026-09-27 with log-verified actuation. Restoring pre-block-column; the card's other preconditions (USER /login for item 3) remain open on their own merits and the card's own note says verify before building. Cleared blocked-by (all blockers terminal).
 - 2026-09-27T12:36:21+0200 — column → todo by main-agent@ai-maestro. F-R1 from the remediation review: nobody is working this card this session, so dev was the untrue WORK column its own body was written to prevent. Its arming blocker (item 4) is resolved, but the USER /login precondition (item 3) stands and the card's nine-stale-premises warning demands a fresh verify pass before building. Parked in todo as honest queue until picked up.
+- 2026-09-27T14:15:34+0200 — column → human_review by main-agent@ai-maestro. After ticking box 4, every remaining item is USER-gated: item 3 needs the USER's /login on the dead-refresh account. A todo card an agent cannot work asserts a workable queue that is not there; human_review says the agent half is done and the USER's action is what remains — same convention DPPYVLVH used.
+- 2026-09-27 — column → human_review by main-agent@ai-maestro. After box 4's tick, the card's sole open item (3, rotator / dead-refresh account) is the USER's /login; todo asserted a workable queue with no workable work. Agent half is done.

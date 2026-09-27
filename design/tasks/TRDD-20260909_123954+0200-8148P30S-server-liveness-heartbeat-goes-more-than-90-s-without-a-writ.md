@@ -4,7 +4,7 @@ status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
 column: backburner
 created: 2026-09-09T12:39:54+0200
-updated: 2026-09-27T18:11:16+0200
+updated: 2026-09-27T18:17:47+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -40,6 +40,7 @@ Stage 2 — after at least one attributed stale event (or 48 h of the running in
 NEXT ACTION: the stage-1 instrument edit in lib/server-liveness.ts + tests/unit/server-liveness.test.ts (Tier 0, in-tree). BLOCKED AFTER THAT on the USER's server.mjs hold: no build/restart is authorised, so box 2 cannot start until the USER decides. Open question for stage 2: is the janitor's tick idempotent beside the server's — both take the rotator flock, but what each decides on the same window data is unmeasured. Count distinct gaps, never takeover lines: 1/4/5 episodes on 09-06/07/08.
 2026-09-27 — STAGE 1 LANDED AND HARDENED (commits 2fd28c4c + 9bc1c55f). The first review's vacuity finding caught a real shipped unit bug: hrtime.bigint()/1_000n yielded MICROseconds not ms (1000x-inflated clockDriftMs since stage 1); fixed to /1_000_000n and pinned by a differential second-beat test (fake Date advances, real hrtime; neuter reddens exactly that test). 25/25 + tsc 0. NEXT ACTION unchanged: box 2 waits on the USER's build+restart decision (server.mjs hold stands) — nothing here is workable without it.
 2026-09-27 (cont.) — REVIEW ROUNDS CLOSED. (1) Box 1's named FORMAT-NEUTER now run: dropping freemem from the emitted line reds exactly the presence assertion; corrupting lagMs reds the value assertion; the µs-divisor neuter reds the differential assertion at −2432 (busy-wait margins guarantee ≥3ms real separation — the review's own ±30s widening proposal was arithmetically wrong and corrected, commit 485e9a7b). (2) GARBAGE WINDOW: clockDriftMs values emitted between commits 2fd28c4c and 9bc1c55f are ~1000x inflated (µs divisor); no build/restart occurred in that window so pm2-error.log should carry none — grep before citing any clockDriftMs line as attributed evidence. (3) Known instrument limits, one line each: a wall-clock step before the FIRST late beat is invisible (anchor calibrates to the already-jumped clock); gradual NTP slew accumulates into the same field a discrete step does.
+2026-09-27 (cont. 2) — ROUND-3 REVIEW APPLIED. GARBAGE-WINDOW NOTE CORRECTED (it stated an inference as fact): no build/restart was AUTHORISED in the window (USER hold); none is KNOWN to have occurred; a dev-mode/tsx server running from source would emit garbage lines despite no yarn build — grep the log rather than trusting this line. Column stays backburner: blocked requires a non-empty blocked-by naming an OPEN CARD (D4-5b invariant) and a USER decision is not a card, so backburner is the only rule-consistent park. Test upper bound 1005 → 1000 (catches a sign-flip variant at +3, costs nothing). Commit: next.
 
 ## Approval log
 

@@ -343,7 +343,7 @@ describe('startServerLiveness — writes once immediately, returns a stop fn', (
         const line2 = String(warnSpy.mock.calls[1]?.[0])
         const drift2 = Number(line2.match(/clockDriftMs=([^ ]+)/)![1])
         expect(drift2).toBeGreaterThan(950) // correct ≈ 997 (1000 − ~3ms busy-wait)
-        expect(drift2).toBeLessThan(1005)
+        expect(drift2).toBeLessThan(1000) // correct is strictly < 1000 — a sign-flip (+3) lands at 1003 and must red
       } finally {
         stop()
       }

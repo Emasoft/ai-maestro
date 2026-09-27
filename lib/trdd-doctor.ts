@@ -739,7 +739,11 @@ export function lintCorpus(designDir: string): DoctorReport {
       let fixable: boolean
       try {
         fixable = frontmatterEnd(fs.readFileSync(c.filePath, 'utf8')) !== -1
-      } catch {
+      } catch (e) {
+        // ENOENT alone is the concurrent-git-mv race the fixer side treats as
+        // normal traffic. Any OTHER errno (EACCES, EIO) is a real fault the
+        // sweep must not silently pass — degrade only the legal absence.
+        if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e
         fixable = false
       }
       add({

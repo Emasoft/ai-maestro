@@ -281,7 +281,7 @@ export async function SendMessage(
     let recipientTitle = 'unknown'
     let recipientAgentId: string | null = null
     // Whether the recipient resolved to the human user (R6 node H). Set inside
-    // the G06 branches below; consumed by PG00's reply-only enforcement.
+    // the G06 branches below; consumed by G08's reply-only enforcement.
     let recipientIsHuman = false
     // The `@hostId` half of a qualified name. G06 needs it: without it, a recipient
     // on another host is indistinguishable from a name that does not exist — both
@@ -475,6 +475,19 @@ export async function SendMessage(
     } catch (sendErr) {
       result.error = sendErr instanceof Error ? sendErr.message : 'Failed to send message'
       ops.push(`EXE: FAILED — ${result.error}`)
+      // G08 marked the inbound replied=true BEFORE this send; a failed
+      // delivery must un-mark it or the human's real message is wedged shut
+      // (any later legitimate reply is refused as a duplicate). Best-effort:
+      // log, never mask the send error.
+      if (inReplyTo && recipientIsHuman && senderAgentId) {
+        try {
+          const { unmarkReplied } = await import('@/lib/amp-inbox-writer')
+          const undone = await unmarkReplied(inReplyTo, senderAgentId)
+          ops.push(undone ? `G08-COMP: inbound ${inReplyTo} un-marked after failed send` : `G08-COMP: WARN — could not un-mark ${inReplyTo}`)
+        } catch (compErr) {
+          ops.push(`G08-COMP: WARN — unmark failed: ${compErr instanceof Error ? compErr.message : String(compErr)}`)
+        }
+      }
       return result
     }
 

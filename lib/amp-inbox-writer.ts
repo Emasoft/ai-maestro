@@ -766,6 +766,44 @@ export async function assertReplyToInbound(
 }
 
 /**
+ * Compensation for SendMessage's G08-before-EXE ordering: the reply gate
+ * marks the inbound replied=true BEFORE the reply is delivered, so a send
+ * that then FAILS (EXE throws) would leave the inbound marked with no reply
+ * in the human's inbox — and a later legitimate reply to that same message
+ * would be refused as a duplicate. Only the send path that already passed
+ * the assert may call this; it is not a general-purpose unmark. Best-effort:
+ * if the compensation itself fails the desync is logged, not thrown, so it
+ * cannot mask the send's own error.
+ */
+export async function unmarkReplied(
+  messageId: string,
+  senderAgentId: string
+): Promise<boolean> {
+  const agent = agentRegistryModule?.getAgent(senderAgentId)
+  const filePath = await findInboxMessagePath(agent?.name || senderAgentId, senderAgentId, messageId)
+  if (!filePath) return false
+  return withLock(`amp-msg-${messageId}`, async () => {
+    let raw: string
+    try {
+      raw = await fs.readFile(filePath, 'utf-8')
+    } catch {
+      return false
+    }
+    let msg: { metadata?: Record<string, unknown> }
+    try {
+      msg = JSON.parse(raw)
+    } catch {
+      return false
+    }
+    if (msg.metadata?.replied !== true) return false
+    msg.metadata = { ...msg.metadata, replied: false }
+    const tmpPath = filePath + '.tmp'
+    await fs.writeFile(tmpPath, JSON.stringify(msg, null, 2))
+    await fs.rename(tmpPath, filePath)
+    return true
+  })
+}
+/**
  * Get the AMP_DIR path for an agent's tmux session environment.
  * When agentId is provided, returns the UUID-based path (stable across renames).
  */

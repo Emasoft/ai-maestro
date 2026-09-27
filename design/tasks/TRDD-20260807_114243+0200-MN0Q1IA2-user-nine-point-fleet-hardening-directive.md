@@ -2,13 +2,13 @@
 trdd-id: MN0Q1IA2
 status: tasked
 title: USER nine-point fleet-hardening directive — updates cadence, auto-update, rotator, unblock, ledger, agentlenspro
-column: blocked
-pre-block-column: dev
+column: dev
+pre-block-column: 
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-21T13:49:27+0200
+updated: 2026-09-27T12:25:51+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -23,7 +23,7 @@ approval-datetime: 2026-08-07T11:42:43+0200
 derived: false
 npt: []
 eht: [XV9BLQC5, Y1ZWU998]
-blocked-by: [DPPYVLVH]
+blocked-by: []
 release-via: none
 priority: 1
 severity: high
@@ -763,3 +763,4 @@ state, an absence of log lines over N ticks).
 
 - 2026-08-07T11:42:43+0200 — MANDATE issued by USER. Born approved: authority(user) >=
   min-approval-requirement. No approval request was sent.
+- 2026-09-27T12:25:51+0200 — column → dev by main-agent@ai-maestro. One of its two stated blockers (DPPYVLVH arming leg) is terminal — archived complete 2026-09-27 with log-verified actuation. Restoring pre-block-column; the card's other preconditions (USER /login for item 3) remain open on their own merits and the card's own note says verify before building. Cleared blocked-by (all blockers terminal).

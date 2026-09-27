@@ -2,7 +2,7 @@
 name: amp-messaging
 description: "how do agents send messages to each other / what is AMP / how to install AMP scripts / amp-send amp-inbox amp-read commands / agent messaging protocol architecture / local vs external provider / agent address format alice@default.local / push notification when a message arrives"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-27
 metadata:
   node_type: memory
   type: reference
@@ -14,6 +14,7 @@ publish-globally: false
 
 # amp-messaging
 
+^ZDMK4Y8X [desc: "AMP (Agent Messaging Protocol) is like email for AI agents: local-first with no external dependencies, Ed25519 cryptographic signing, optional federation with external providers (CrabMail), provider-agnostic CLI, and a title-based directed communication graph governing who can message whom.", keywords: what_is_AMP_agent_messaging_protocol how_do_agents_message_each_other amp_local_first_email_for_agents amp_ed25519_signing amp_federation_crabmail can_agents_talk_across_providers amp_title_based_communication_graph agent_to_agent_messaging_overview, ocd: 2026-08-02, lmd: 2026-09-27]
 AI Maestro uses the Agent Messaging Protocol (AMP) for inter-agent communication. AMP is like
 email for AI agents — it works locally by default and can optionally federate with external
 providers.
@@ -27,6 +28,7 @@ providers.
   message which — see [[amp-communication-graph]] for the full adjacency matrix and enforcement
   layers.
 
+^6LSB1QBN [desc: "AMP installation: ./install-messaging.sh installs amp-*.sh scripts to ~/.local/bin, the ai-maestro-plugin (26 auto-discovered skills as of 2026-08-02, 12 /amp-* commands, hooks) from marketplace Emasoft/ai-maestro-plugins, a local role-plugins marketplace at ~/agents/role-plugins/, and message storage at ~/.agent-messaging/.", keywords: how_do_I_install_AMP install_messaging_sh_script amp_scripts_to_local_bin where_do_amp_scripts_get_installed what_does_amp_install_include ai_maestro_plugin_skill_count_26 amp_local_roles_marketplace_path message_storage_agent_messaging_dir which_marketplace_installs_amp, ocd: 2026-08-02, lmd: 2026-09-27]
 ## Installation
 
 The AI Maestro plugins are installed from the marketplace `Emasoft/ai-maestro-plugins`.
@@ -83,6 +85,7 @@ amp-inbox.sh
 amp-read.sh <message-id>
 ```
 
+^PWAG3G2V [desc: "AMP has a two-component architecture: the AMP plugin (client, on each agent machine — keys, signing, local storage in ~/.agent-messaging/) and the AI Maestro server (provider — /api/v1/register, /api/v1/route, /api/v1/messages/pending; routing, relay queue, push notifications).", keywords: amp_architecture_two_components what_is_the_amp_client_vs_provider amp_provider_endpoints_register_route_pending which_server_routes_amp_messages where_are_amp_keys_stored amp_relay_queue_offline_agents amp_key_generation_signing_location, ocd: 2026-08-02, lmd: 2026-09-27]
 ## Architecture
 
 **Two Components:**
@@ -111,6 +114,7 @@ amp-read.sh <message-id>
 └── registrations/        # External provider registrations
 ```
 
+^N21RX3Y7 [desc: "AMP CLI commands: amp-init.sh --auto (identity), amp-send.sh <to> <subject> <msg>, amp-inbox.sh, amp-read.sh <id>, amp-reply.sh, amp-delete.sh, amp-status.sh, amp-register.sh --provider <url>, amp-fetch.sh. Local addresses resolve as alice → alice@default.local; external ones (alice@acme.crabmail.ai) need registration.", keywords: amp_cli_command_list how_to_send_amp_message amp_init_send_inbox_read_reply commands amp_address_format_alice_default_local how_do_I_initialize_amp_identity amp_local_vs_external_address register_external_provider_amp amp_send_command_syntax, ocd: 2026-08-02, lmd: 2026-09-27]
 ## AMP CLI Commands
 
 | Command | Description |
@@ -135,6 +139,7 @@ amp-read.sh <message-id>
 - `alice@acme.crabmail.ai` → Via CrabMail provider
 - `backend@company.otherprovider.com` → Via other provider
 
+^D0858DJ1 [desc: "AI Maestro can act as an AMP provider (v0.20.0+): agents register with amp-register.sh --provider localhost:23000 and the server handles routing. Provider endpoints: GET /api/v1/health, GET /api/v1/info, POST /api/v1/register, POST /api/v1/route, GET /api/v1/messages/pending, DELETE .../pending?id=X. Push notifications go via tmux, configurable with NOTIFICATIONS_ENABLED and NOTIFICATION_FORMAT.", keywords: ai_maestro_as_amp_provider amp_provider_api_endpoints how_to_register_agent_with_provider amp_push_notification_tmux how_do_offline_agents_get_messages amp_register_provider_localhost_23000 notifications_enabled_env_var provider_api_v0_20_0, ocd: 2026-08-02, lmd: 2026-09-27]
 ## Provider API (v0.20.0+)
 
 AI Maestro can act as an AMP provider. Agents register with AI Maestro and it handles routing.
@@ -166,8 +171,8 @@ When a message is routed to a local agent, AI Maestro sends a push notification 
 - `NOTIFICATIONS_ENABLED=false` - Disable push notifications
 - `NOTIFICATION_FORMAT` - Customize notification format
 
+^P9XCA7UE [desc: "AMP message storage lives in per-agent dirs ~/.agent-messaging/agents/<agentName>/messages/{inbox,sent}/, auto-created on first use. The old ~/.aimaestro/messages/ system is no longer used. The AMP skill provides natural language ('Check my messages' → amp-inbox.sh). All skills are bundled in ai-maestro-plugin — no standalone skills in ~/.claude/skills/.", keywords: where_are_amp_messages_stored amp_message_storage_per_agent_dirs is_aimaestro_messages_still_used amp_natural_language_skill check_my_messages_command are_there_standalone_amp_skills amp_inbox_directory_layout auto_created_agent_dirs, ocd: 2026-08-02, lmd: 2026-09-27]
 ## Message Storage
-
 All messages are stored in AMP per-agent directories:
 ```
 ~/.agent-messaging/agents/<agentName>/messages/inbox/

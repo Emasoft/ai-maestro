@@ -2,7 +2,7 @@
 name: agent-deletion-all-in-one-pipeline
 description: "I deleted an agent but its folder keeps coming back / rm -rf the workdir and it reappears with a bare .claude/rules / leftover agent after cleanup / how do I fully delete an agent / can I just call the service function from a script instead of the UI"
 ocd: 2026-07-25
-lmd: 2026-07-31
+lmd: 2026-09-27
 metadata:
   node_type: memory
   type: project
@@ -11,6 +11,7 @@ metadata:
 publish-globally: false
 ---
 
+^B62TZ4WG [desc: "An agent is not a folder: DeleteAgent touches registry, cemetery, team slots, tmux session, the PersistedSession row, AMP keys, AID tokens, governance requests and installed_plugins.json — but NOT the Claude transcript dir. Reached from UI Danger Zone or DELETE /api/agents/[id].", keywords: what_stores_does_agent_deletion_touch agent_is_not_a_folder DeleteAgent_pipeline_stores_list where_is_the_all_in_one_delete_operation how_do_I_fully_delete_an_agent does_deleting_an_agent_purge_transcripts delete_agent_api_endpoint sessions_json_persisted_session_row agent_teardown_stores, ocd: 2026-07-25, lmd: 2026-09-27]
 **An agent is not a folder.** Deleting one touches the registry record, the cemetery archive, team
 slots (COS/orchestrator), the tmux session, the **PersistedSession row** in
 `~/.aimaestro/sessions.json`, AMP API keys, AID governance tokens, pending governance requests and
@@ -25,6 +26,7 @@ Delete Agent) or `DELETE /api/agents/[id]`.
 to loops that will act on the agent afterwards. The folder is the one visible piece, so it is the
 one people reach for — and it is the least load-bearing.
 
+^O08G9CW1 [desc: "How to delete an agent correctly: UI button or the same endpoint with a valid signed token — calling DeleteAgent in-process from a script is FORBIDDEN under R50.4. Check 'Also delete agent folder', then purge the Cemetery entry. deleteFolder is honored only on a HARD delete; G03-SAFETY refuses folder deletion outside ~/agents/ so adopted agents keep theirs.", keywords: how_to_delete_an_agent_correctly can_I_call_DeleteAgent_from_a_script R50.4_no_in_process_pipeline soft_delete_deleteFolder_silently_inert also_delete_agent_folder_checkbox purge_cemetery_after_delete adopted_agent_folder_never_deleted g03_safety_workdir_outside_agents hard_vs_soft_delete_difference, ocd: 2026-07-25, lmd: 2026-09-27]
 **How to apply:**
 - **Through the UI button, or through the same API endpoint with a valid signed token — nothing
   else.** Calling `DeleteAgent` (or any pipeline) in-process from a script is FORBIDDEN under

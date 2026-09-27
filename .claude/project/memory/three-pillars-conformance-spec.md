@@ -2,7 +2,7 @@
 name: three-pillars-conformance-spec
 description: "where is the 3-pillars (TRDD/PRRD/kanban) design actually decided / what is the arbiter when types/task.ts, the janitor rules, and GOVERNANCE-RULES disagree on a column name / does ai-maestro have a spec for the pillars / the IND vs DEP boundary test / what are the 22 columns authoritatively / when did the vocabulary go from 17 to 22 / where is the default column for a card with no column set"
 ocd: 2026-07-22
-lmd: 2026-08-23
+lmd: 2026-09-27
 metadata:
   node_type: memory
   type: reference
@@ -10,6 +10,7 @@ metadata:
   topic: design-system
 publish-globally: false
 ---
+^6ABB406J [desc: "design/specs/3-pillars-spec.md is the 3-pillars ARBITER: janitor IND rules, ai-maestro DEP overlays and enforcement code conform to it; on disagreement the spec wins. Also ratifies the PRRD.", keywords: where_is_the_3_pillars_spec_defined which_document_is_the_arbiter spec_wins_on_disagreement what_ratifies_the_project_prrd trdd_prrd_kanban_spec_location where_do_column_vocabulary_disputes_get_resolved is_GOVERNANCE_RULES_or_spec_authoritative ind_dep_overlays_are_implementations who_authored_the_3_pillars_spec spec_version_semver_user_directed, ocd: 2026-07-22, lmd: 2026-09-27]
 ai-maestro hosts the normative **3-pillars conformance SPEC** at
 `design/specs/3-pillars-spec.md` (ai-maestro#85, USER-directed, `spec-version` semver). It is
 the **ARBITER**: the janitor IND rules (`~/.claude/rules/{trdd-design-tasks,prrd-design-rules,universal-kanban}.md`),
@@ -20,6 +21,7 @@ arbiter), the spec wins. It also ratifies the project PRRD at `design/requiremen
 created 2026-08-23 — golden rules there are what the spec must be AMENDED to match, never the
 reverse.
 
+^6Y2H7L8U [desc: "The 3-pillars spec is a CONFORMANCE CONTRACT, not a re-narration of rule prose: it pins the 22-column kanban vocabulary, the TRDD id/frontmatter/scope contract, the PRRD tier model, the IND/DEP boundary test, and the version-stamp rules.", keywords: what_does_the_3_pillars_spec_pin is_the_spec_a_prose_copy conformance_contract_vs_prose_copy 22_column_kanban_vocabulary_pinned trdd_id_regex_no_uuid prrd_golden_silver_identity_model what_is_the_ind_dep_boundary_test three_pillars_spec_families_3P_KAN_3P_TRDD_3P_PRRD_3P_BND_3P_VER, ocd: 2026-07-22, lmd: 2026-09-27]
 It is a CONFORMANCE CONTRACT, not a re-narration of rule prose — a prose copy would revive the
 `design/rules-refactor/independent/` mirror retired in TRDD-TAFH4U0G. It pins: the 22-column
 kanban vocabulary (`3P-KAN`), the TRDD id (`^[A-Z0-9]{8}$`, no UUID) / frontmatter / scope=path
@@ -29,11 +31,13 @@ ai-maestro harness removed — solo repo, one Claude, USER approves; DEP iff it 
 harness — TITLEs, comm graph, min-approval-requirement, the server as notarizer), and the version
 stamp + semver bump rules (`3P-VER`).
 
+^O51HWCYZ [desc: "Every 3-pillars spec clause leads with a stable 3P-<FAMILY>-NN anchor + bold key-phrase, so grep '3P-KAN' = all kanban clauses. IDs are stable, never reused, append-only — a conformance check may cite a clause id.", keywords: how_to_grep_the_3_pillars_spec 3P_KAN_clause_anchor spec_clause_id_citeable grep_3P_TRDD_3P_PRRD clause_ids_stable_never_reused what_is_the_3P_GREP_cheatsheet spec_lookup_surface_user_directive spec_greppability_rule, ocd: 2026-07-22, lmd: 2026-09-27]
 **Greppable** (USER: a spec is a lookup surface): every clause leads with a stable
 `` `3P-<FAMILY>-NN` `` anchor + a bold key-phrase → `grep '3P-KAN'` = all kanban clauses,
 `grep '3P-KAN-01'` = one. A `3P-GREP` cheat-sheet sits at the top. IDs are stable / never-reused /
 append-only so a conformance check may CITE a clause id.
 
+^MALHGPKE [desc: "The 3-pillars spec is enforced by tests/unit/three-pillars-spec-conformance.test.ts (asserts DEFAULT_STATUSES read FROM the spec) and lives in design/specs/ — the standard SPEC home in the doc-type taxonomy (PRRD requirements → SPEC specs → TRDD tasks).", keywords: what_enforces_the_3_pillars_spec three_pillars_spec_conformance_test where_does_a_spec_file_live design_specs_doc_type_taxonomy prrd_requirements_spec_tasks_authority_order is_the_spec_with_governance_rules_or_code overlay_filename_contract_test where_do_specs_live_not_rules, ocd: 2026-07-22, lmd: 2026-09-27]
 Enforced by `tests/unit/three-pillars-spec-conformance.test.ts` (asserts `types/task.ts`
 DEFAULT_STATUSES == the spec's 22-column block, read FROM the spec) + the #83 overlay-filename
 loop in `aimaestro-overlay-filename-contract.test.ts`. The spec lives in **`design/specs/`** — the
@@ -44,6 +48,7 @@ janitor + ai-maestro conformance checks read it from the repo path.
 The design decisions this spec codifies (the pillar bodies + their `[^N]` lessons) live in the
 janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
 
+^GT75416V [desc: "Spec version history 1.1.1→1.2.0→1.3.0 (2026-07-30, adding 3P-TRDD-09 status-is-not-column, -10 one-state-claim, -11 missing-column-fallback=todo): adding clauses is a MINOR bump the JANITOR consumes; pillar-store.test.ts asserts the exact clause census.", keywords: 3_pillars_spec_version_history what_is_3P_TRDD_09_10_11 status_is_not_column_one_state_claim missing_column_fallback_todo how_does_a_spec_minor_bump_work pillar_store_clause_census_test who_consumes_a_spec_bump janitor_checks_ind_bases_at_declared_version, ocd: 2026-07-30, lmd: 2026-09-27]
 **Version history** (`3P-VER-01`: clauses ADDED = MINOR, ids append-only and never reused):
 `1.1.1` → `1.2.0` (the `3P-IDX` + `3P-DAG` families) → **`1.3.0`** on 2026-07-30, adding three TRDD
 clauses that came out of a real corpus defect: `3P-TRDD-09` **status-is-not-column** (a frontmatter

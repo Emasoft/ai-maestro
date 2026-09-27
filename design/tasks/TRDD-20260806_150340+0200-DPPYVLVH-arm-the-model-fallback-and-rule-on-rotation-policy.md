@@ -4,7 +4,7 @@ status: tasked
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-09-27T02:52:45+0200
+updated: 2026-09-27T02:56:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -314,3 +314,4 @@ watching the rotator.
 no `confirmed=true` and no pane flip. This observation raises confidence that the lane is armed
 for the right condition; it is not evidence that the switch works.
 2026-09-27 — ACTUATION OBSERVED (hub, full pm2-error.log sweep, needle 'model-fallback'): 4x 'model-fallback SWITCHED <agentId> off Fable (100%) — confirmed=true' on 2026-08-25T23:21/23:29 and 2026-08-26T00:02/00:07, agents d6a55598 (testbot) and 5ae7b214. This is a completed rotation, not a recommendation. Post-Sep-11 activity is only 'held off' (3,294x: 1,518 account-also-exhausted / 1,776 no-model-scoped-exhaustion) and 'could not read 9 pane(s)' (4,769x) — no later actuation and none contradicting it. The review-F1 'flag armed since Aug-15 but actuation unobserved' premise is REFUTED on this evidence; the leg has demonstrably carried traffic. Card returns to human_review with this evidence recorded.
+2026-09-27 (review round 1 amendments, hub): (F1) 'confirmed=true' semantics pinned by reading the emitter — lib/oauth-rotator/model-fallback-actuator.ts:138-143: confirmed = NOT still blocked on ask_user/permission after the pane-read post-condition (deps.verify = block-state-service readPaneVerdict); the module docstring equates it with 'the switch actually landed', and confirmed:null (pane unreadable) is explicitly NOT success. So the 4 SWITCHED lines are switch-landed evidence, not keystroke-sent evidence. (F3) agent d6a55598 identified as testbot per registry read 2026-09-27 — mapping is registry-derived, not log-derived, and dangles if testbot is deleted. (F4) pm2-out.log swept for 'model-fallback SWITCHED': 0 lines — the actuation record lives only in the error log, closing the alternate-channel hole. (F2 residual, disclosed) the lane has NOT actuated since 2026-08-26; post-Sep-11 it held off 3,294 times (1,518 account-also-exhausted). (Q3 residual) the pane-read verification channel was itself failing ('could not read 9 pane(s)' x4,769 through Sep-11) while the switch mechanism actuated — a working switch feeding on a degraded liveness signal; the USER's ruling on the two policy questions should weigh this.

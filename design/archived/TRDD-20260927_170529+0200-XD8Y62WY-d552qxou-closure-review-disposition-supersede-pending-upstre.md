@@ -1,10 +1,10 @@
 ---
 trdd-id: XD8Y62WY
 title: D552QXOU closure review disposition — supersede pending-upstream reading
-column: backburner
-status: tasked
+column: complete
+status: archived
 created: 2026-09-27T17:05:29+0200
-updated: 2026-09-27T17:05:29+0200
+updated: 2026-09-27T17:06:04+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -26,3 +26,8 @@ approval-datetime: 2026-09-27T17:05:29+0200
 ## Approval log
 
 - 2026-09-27T17:05:29+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-09-27T17:06:04+0200 — COMPLETE by main-agent@ai-maestro. The disposition card's sole box is ticked; born complete..
+
+## Acceptance
+
+- [x] The disposition is recorded: F-A supersession + F-B measured claim, committed d4949c0a.

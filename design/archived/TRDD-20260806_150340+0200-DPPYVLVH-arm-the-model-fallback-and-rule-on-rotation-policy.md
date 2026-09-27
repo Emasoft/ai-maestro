@@ -1,10 +1,10 @@
 ---
 trdd-id: DPPYVLVH
-status: tasked
+status: archived
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
-column: human_review
+column: complete
 created: 2026-08-06T15:03:40+0200
-updated: 2026-09-27T03:04:37+0200
+updated: 2026-09-27T12:04:46+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -216,7 +216,7 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
 
 ## Acceptance
 
-- [ ] USER arms `AIM_FLEET_MODEL_FALLBACK=1` and observes one switch reach `confirmed=true`
+- [x] USER arms `AIM_FLEET_MODEL_FALLBACK=1` and observes one switch reach `confirmed=true`
       **↳ THE CODE SIDE IS VERIFIED READY — 2026-08-22T16:59, independent hub pass.** The leg is
       built, flag-gated, and its **default-OFF** property is PINNED, so arming it is a one-line act
       with a test standing behind the safe state. `scripts/dev/neuter` (1 ins / 1 del, restore
@@ -281,6 +281,7 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
   not a gate; left as `- [ ]` it makes the card permanently unclosable. Text preserved verbatim,
   reason appended.
 - 2026-09-27 — AUTONOMY-ROUND RE-MEASUREMENT, conclusion DOWNGRADED per adversarial review F1: the flag IS armed (config since 56047fa52 2026-08-15, live pm2 env '1' after the 2026-09-26T11:41 restart) but ACTUATION REMAINS UNOBSERVED — the 2026-09-11 log lines are the rotator RECOMMENDING the lane ('staying put... the model-fallback lane is the remedy'), not a confirmed switch; the one receiver-side line ([FleetLiveness] model-fallback could not read 9 panes, pm2-error.log same day) shows the receiver RAN but FAILED pane reads — consistent with 'armed and broken', not 'lit and working'. '/model' switch events: zero found in pm2-OUT.log through 2026-09-27 — pm2-ERROR.log NOT swept for this pattern (the receiver logs to stderr, where the FleetLiveness line was found), so the zero is bounded to stdout. The card's own acceptance procedure (arm + observe ONE confirmed switch) is therefore still OPEN. Card stays in human_review; the stale-premise closure is REFUTED. Next observation window: next Fable scoped-wall event.
+- 2026-09-27T12:04:46+0200 — COMPLETE by main-agent@ai-maestro. Both policy boxes ruled 2026-08-22 (scopedOnly ratified; live-account survey approved as TRDD-10J18FZX). Arming USER-approved 2026-08-15 and live in pm2 env since 2026-09-26T11:41 restart. Acceptance box 1 observation requirement met: 4x model-fallback SWITCHED confirmed=true (Aug 25-26, agents d6a55598/5ae7b214), re-verified directly against pm2-error.log 2026-09-27; dialog-verified per round-2 scoping. No residual engineering work..
 
 ## Live observation 2026-08-16T00:50 — the TRIGGER fired for real, and the lane still could not act
 

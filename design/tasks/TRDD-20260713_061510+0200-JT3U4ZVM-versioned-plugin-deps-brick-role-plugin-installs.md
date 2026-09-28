@@ -5,7 +5,7 @@ title: fleet blocker — role-plugin installs fail because releases lack the {na
 column: blocked
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-09-28T22:15:16+0200
+updated: 2026-09-28T22:17:17+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -25,7 +25,7 @@ derived: false
 parent-trdd: null
 npt: []
 eht: []
-blocked-by: [9Z2P2SDA]
+blocked-by: []
 relevant-rules: []
 release-via: none
 delivery: cross-repo-issues
@@ -286,6 +286,7 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
   nothing to rework; not completed — the checklist gate forbids a terminal column with an
   unchecked box.
 - 2026-09-28T22:50:00+0200 — REPRODUCED, live: SCEN-001 run 20260928T191659Z observed your signature first-hand — pm2 err log 'G16: WARN — Failed to install ai-maestro-maintainer-agent ... after 4 attempt(s)' at 21:56:49 for an autonomous→maintainer ChangeTitle (35 gates), while settings.local.json carries the plugin ~8s later (async landing). Same signature also fired at 21:45:37 for the architect transition in the same run, and the out-log summary (positive control) proves the pipeline ran. G16 emits on failed CLI ATTEMPTS, not post-install state — the emit-condition fix this card's last box gates on. Evidence: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md (BUG-001, verbatim log lines) + sibling card TRDD-9Z2P2SDA now blocked on this card.
+- 2026-09-28T23:05:00+0200 — blocked-by CLEARED (was [9Z2P2SDA]): the run 9Z2P2SDA was waiting for HAS HAPPENED (SCEN-001 20260928T191659Z), so the wait edge is spent — but the observation came back FAILING (G16 WARN reproduced live, see the 22:50 line above), so the card does NOT auto-advance; its last box still demands a PASSING observation, which only a post-fix re-run can give. Card stays blocked, restated as self-blocked on its own unticked box + the emit-condition fix landing. The 9Z2P2SDA→JT3U4ZVM edge remains (the sibling's box 3 needs this card terminal).
 
 ## Acceptance
 

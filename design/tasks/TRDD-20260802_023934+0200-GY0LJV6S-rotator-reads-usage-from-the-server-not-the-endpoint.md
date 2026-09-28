@@ -6,7 +6,7 @@ column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T15:17:03+0200
+updated: 2026-09-28T22:17:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,7 +23,7 @@ relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
 implementation-commits: [39bc5cad, 9fed4781, 18deb450]
-blocked-by: [MVZTEKX4]
+blocked-by: []
 pre-block-column: dev
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]

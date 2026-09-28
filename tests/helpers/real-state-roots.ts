@@ -35,15 +35,24 @@ export function listing(root: string): string[] {
       // Finder writes .DS_Store into any directory it has opened, at any time, with no
       // test involved — treating it as a leak would fail unrelated suites at random.
       if (e.name === '.DS_Store') continue
-      // The statusline-capture wrapper (TRDD-D8OYFG35/MVZTEKX4) rotates `.aim-bak-*` backups
-      // of every session record on EVERY refresh (3s x N live sessions), because the snapshot
-      // carries `capturedAt` — every write is a change, so json-io takes a backup every time.
-      // The prune keeps 10 per file, but the FILENAMES are always new, so a run-length window
-      // always sees new entries and the detector reads the live churn as a test leak. This is
-      // the wrapper writing, not a test (its own doc below names the daemon case); excluding
-      // the backup class — NOT the live records — keeps the leak signal for anything else.
-      if (e.name.includes('.aim-bak-')) continue
+      // The statusline-capture wrapper (TRDD-D8OYFG35/MVZTEKX4) writes through json-io's
+      // updateJson on EVERY refresh (3s x N live sessions): the snapshot carries `capturedAt`,
+      // so every write is a change — a fresh `.aim-bak-<stamp>-<pid>-<n>` backup, a fresh
+      // `.tmp.<pid>.<n>` staging file, and a `.lock` acquired+released per write. The prune
+      // keeps 10 backups per record, but the FILENAMES are always new, so any run-length
+      // window sees new entries and the detector reads the live churn as a test leak.
+      // Exempt the WHOLE transient write surface ONLY under statusline-state/ — json-io
+      // writes the same shapes tree-wide (settings, registry, teams) and those stay watched:
+      // a test leak delivered via a json-io backup elsewhere must still trip this detector.
+      // NOTE 1: the check is on the REL path (prefix for direct children carries no trailing
+      // slash — a `prefix.startsWith('statusline-state/')` test never matched them).
+      // NOTE 2: directories are NOT exempted, so the walk still descends — a `.json` record
+      // in a future per-session SUBdir stays watched. Known residual: a NEW Claude session
+      // starting mid-run creates a top-level `<uuid>.json` record and still trips the
+      // detector — accepted (the honest fix is the wrapper's time-gated backups, not a
+      // wider carve-out).
       const rel = prefix ? `${prefix}/${e.name}` : e.name
+      if (rel.startsWith('statusline-state/') && !e.isDirectory() && !e.name.endsWith('.json')) continue
       out.push(rel)
       if (e.isDirectory()) walk(path.join(dir, e.name), rel)
     }

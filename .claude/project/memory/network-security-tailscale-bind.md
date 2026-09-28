@@ -2,7 +2,7 @@
 name: network-security-tailscale-bind
 description: "why does a LAN IP get dropped / 192.168.x.x cannot reach the dashboard / does Tailscale IPv6 work from an iPad / x-forwarded-for spoof from a phone / how does a route know the real client IP is 127.0.0.1 vs remote / console-only route 403s from Tailscale but works on localhost / dual-bind :: with an IP filter, isAllowedSource"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-28
 metadata:
   node_type: memory
   type: reference
@@ -18,6 +18,7 @@ a TCP-level IP filter, and gated per-route by identity rather than by network po
 
 ### Dual-bind with IP filter (v0.27.2+)
 
+^C2GFZC0U [desc: "The server binds to :: (all interfaces, dual-stack) when Tailscale is detected, but a TCP-level filter isAllowedSource() (lib/tailscale-detect.mjs) drops non-allowed IPs BEFORE any HTTP/WS processing: localhost + Tailscale CGNAT/ULA in, LAN 192.168.x.x and everything else dropped at TCP level. Without Tailscale it falls back to 127.0.0.1-only.", keywords: why_does_a_LAN_IP_get_dropped 192.168.x.x_cannot_reach_dashboard dual_bind_all_interfaces_IPv4_IPv6 isAllowedSource_TCP_filter tailscale_CGNAT_100.64_allowed LAN_dropped_at_TCP_level no_tailscale_falls_back_localhost fd7a_115c_a1e0_ULA_allowed tailscale_required_for_remote_access never_allow_LAN_or_public_IPs v0.27.2_bind_change, ocd: 2026-08-02, lmd: 2026-09-28]
 The server binds to `::` (all interfaces, dual-stack IPv4+IPv6) when Tailscale is detected, but
 a TCP-level connection filter (`isAllowedSource()`, in `lib/tailscale-detect.mjs`) drops
 connections from non-allowed IPs before any HTTP/WebSocket processing:
@@ -38,6 +39,7 @@ Tailscale ULA (`fd7a:115c:a1e0::/48`) ranges — never allow LAN or public IPs.
 
 ### The perimeter is the network; the gate is identity (not network position)
 
+^I7BK5O97 [desc: "Inside the Tailscale VPN every device is a first-class caller (phone, iPad, remote machine, script) because everything must work from a browser remotely. Reachable ≠ permitted: each route demands its own proof (session cookie, AID proof, sudo token). NEVER gate a route on where the packet came from, and never put a check in a client — every route is curl-able, so a client-side check is no check. Enforce in the route.", keywords: reachable_does_not_mean_permitted gate_by_identity_not_network_position client_side_check_skippable_with_curl enforce_in_the_route remote_administration_breaks_source_gating tailscale_vpn_every_device_first_class session_cookie_AID_proof_sudo_token where_the_packet_came_from_not_a_boundary, ocd: 2026-08-02, lmd: 2026-09-28]
 Inside the Tailscale VPN, *every* device is a first-class caller — a phone, an iPad, a remote
 machine, a script on a server — because every function must work from a browser when working
 remotely. Reachable ≠ permitted: each route still demands its own proof (a session cookie for a
@@ -48,6 +50,7 @@ hook) is skippable with one curl — it is not a weak check, it is no check. Enf
 
 ### The trusted client IP — `lib/peer-address.mjs` (TRDD-P7XKV3N9)
 
+^O45EUFS2 [desc: "x-forwarded-for / x-real-ip are CLIENT-FORGEABLE, so server.mjs deletes any inbound x-aim-peer and re-stamps it from req.socket.remoteAddress; lib/peer-address.mjs is the only sanctioned reader. isConsolePeer() accepts ::ffff:127.0.0.1 too (dual-stack :: bind). NEVER read x-forwarded-for for a security decision; verify spoof tests from a genuinely REMOTE peer (the host's Tailscale IP) — from loopback the test proves nothing.", keywords: x_forwarded_for_spoof_from_phone x-forwarded-for_forgeable never_read_x_forwarded_for_security x_aim_peer_restamped_from_socket remoteAddress_trusted_peer_ip lib_peer_address_mjs_only_reader isConsolePeer_accepts_ffff_loopback how_does_a_route_know_real_client_IP spoof_test_from_loopback_proves_nothing TRDD-P7XKV3N9, ocd: 2026-08-02, lmd: 2026-09-28]
 A route handler gets a `Request`, never a socket, so it can only learn the caller's address from a
 header — and `x-forwarded-for` / `x-real-ip` are **client-forgeable** (a phone sends
 `X-Forwarded-For: 127.0.0.1`). So `server.mjs` **deletes any inbound `x-aim-peer` and re-stamps it
@@ -59,6 +62,7 @@ loopback the peer really is 127.0.0.1 and the test proves nothing.
 
 ### Governance-password rotation — `POST /api/governance/password/invalidate` (TRDD-P7XKV3N9)
 
+^DFJ8MSRA [desc: "The console gate (isConsolePeer) is the ONE place a network fact is an authorization input — presence at the machine as a second factor beside the password, for a short argued-for list of ops. It is NOT the general model. Everything else about password revocation (two-call flow, fail-closed, throttle, callers) lives on [[governance-password-invalidation]] — do not restate it here; the census's own rule is that it lives in lib/peer-address.mjs's docstring.", keywords: governance_password_invalidate_console_gate isConsolePeer_presence_second_factor password_rotation_endpoint POST_api_governance_password_invalidate console_only_route_403s_from_tailscale_but_works_localhost revocation_details_on_governance_password_invalidation caller_census_lives_in_peer_address_docstring, ocd: 2026-08-02, lmd: 2026-09-28]
 **What this page owns:** the console gate is the one place where a *network* fact is used as an
 authorization input, and it is deliberately narrow. `isConsolePeer()` proves **presence at the
 machine** — a second factor beside possession of the password — for a short, argued-for list of
@@ -73,6 +77,7 @@ was, until 2026-08-02, exactly that second copy.[^1]
 
 ### Known limitations and behaviour notes
 
+^YALI9FRS [desc: "Behaviour notes: human auth via governance password (setup-init/setup-verify, aim_session cookie; the old SF-058 bypass is CLOSED); no CORS/CSRF yet (same-origin by design); MagicDNS does NOT work on iOS (use raw Tailscale IPv4 via `tailscale ip -4`); Tailscale IPv6 not routable from the same macOS host; `tailscale serve` is NOT used (breaks Next.js static serving) — direct bind + IP filter instead.", keywords: MagicDNS_does_not_work_on_iOS iPad_needs_raw_tailscale_IP tailscale_ip_-4 tailscale_serve_breaks_nextjs_static_files no_CORS_CSRF_same_origin SF-058_bypass_closed aim_session_cookie_setup_init IPv6_not_routable_from_same_macOS_host how_to_connect_from_iPad, ocd: 2026-08-02, lmd: 2026-09-28]
 - **Human user authentication via governance password** — first-run setup via
   `POST /api/auth/setup-init` + `/setup-verify`; session cookies (`aim_session`) issued after
   login (see `lib/agent-auth.ts` and `docs_dev/2026-04-02-maestro-auth-design.md`). The old
@@ -89,6 +94,7 @@ was, until 2026-08-02, exactly that second copy.[^1]
 
 ### Key files
 
+^9STPZHK6 [desc: "Key files, cited by SYMBOL not line number (both original line citations rotted): lib/tailscale-detect.mjs is where the filter LIVES (isAllowedSource, isTailscaleIPv4, detectTailscaleIPv4, diagnoseTailscale — extracted from server.mjs because that file binds sockets on import so nothing could import/test the gate; 16 tests pin it incl. both CGNAT edges); server.mjs is where it is WIRED (TCP connection handler drops the socket before HTTP/WS); scripts/setup-tailscale.sh --check asserts BOTH halves.", keywords: where_is_isAllowedSource_defined tailscale-detect.mjs_extracted_from_server.mjs why_was_filter_extracted_sockets_bind_on_import CGNAT_edge_tests_100.64_100.127 setup_tailscale_check_audit key_files_network_filter cite_symbols_not_line_numbers citations_rotted, ocd: 2026-08-02, lmd: 2026-09-28]
 (cited by SYMBOL, not line number — both citations here had rotted to unrelated code after the
 filter moved out of `server.mjs`):
 

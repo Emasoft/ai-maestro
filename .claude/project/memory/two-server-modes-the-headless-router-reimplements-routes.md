@@ -2,7 +2,7 @@
 name: two-server-modes-the-headless-router-reimplements-routes
 description: "I added the guard in lib/ and the tests are green — but is it actually enforced? the same request behaves differently in headless mode / the route still returns 200 / a central edit was supposed to close every route"
 ocd: 2026-07-14
-lmd: 2026-09-05
+lmd: 2026-09-28
 metadata:
   node_type: memory
   type: project
@@ -11,6 +11,7 @@ metadata:
 publish-globally: false
 ---
 
+^BXN88BO7 [desc: "ai-maestro serves every API route TWICE from two independent code paths, and the headless one REIMPLEMENTS the handlers rather than calling them. full mode: server.mjs → Next.js → app/api/**/route.ts (requireSudoToken → lib/sudo-guard.ts → lib/authorization.ts::authorize). headless: server.mjs → services/headless-router.ts, a hand-maintained {method, pattern, handler} array — some delegate to services, others INLINE the work (raw execSync tmux send-keys). A rule added in lib/ binds full mode and does NOT bind headless.", keywords: I_added_the_guard_in_lib_and_tests_are_green_but_is_it_enforced same_request_behaves_differently_in_headless_mode the_route_still_returns_200 headless_router_reimplements_handlers two_server_modes_full_vs_headless MAESTRO_MODE services_headless-router.ts raw_execSync_tmux_send_keys route_absent_in_permissive_direction why_headless_exists_api_only_worker_nodes, ocd: 2026-07-14, lmd: 2026-09-28]
 **ai-maestro serves every API route TWICE, from two independent code paths, and the headless
 one REIMPLEMENTS the handlers — it does not call them.** So a rule added to a shared module in
 `lib/` binds full mode and, unless that specific handler happens to call it, **does not bind
@@ -26,6 +27,7 @@ headless at all**.
 is the price. The two modes are two independent lists of who-checks-what, and a route added to
 one is simply *absent* from the other — **silently, and in the permissive direction**.
 
+^RI5SWR6G [desc: "Before believing a central edit 'closes route X', CHECK whether X's handler is on the call graph you just edited: grep services/headless-router.ts for the route pattern, then READ the handler — does it call authorize() or a service that does? A claim about what a central edit closes is a claim about the CALL GRAPH; verify it, never infer it from the architecture you expect.", keywords: a_central_edit_was_supposed_to_close_every_route verify_call_graph_not_architecture grep_headless_router_for_route_pattern read_the_handler_does_it_call_authorize is_the_fix_actually_enforced_in_production green_in_CI_absent_in_production how_to_check_headless_enforcement, ocd: 2026-07-14, lmd: 2026-09-28]
 **How to apply.** Before you believe that a central edit "closes route X", **check whether X's
 handler is on the call graph you just edited.** Grep the headless router for the route pattern
 and read the handler. This is not paranoia — it is the difference between a shipped fix and a

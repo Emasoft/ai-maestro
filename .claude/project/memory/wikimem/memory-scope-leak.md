@@ -1,8 +1,8 @@
 ---
 name: memory-scope-leak
-description: "the janitor's memory-scope-leak detector flagged PROJECT pages for machine-host or PII — is this finding real or a false positive / what must I check before demoting a memory page to LOCAL / a detector says my PROJECT memory page carries machine-private data / does the machine-host rule fire on myteam.local or default.local scope placeholders / does pii:us_passport match a governance verdict id like G20260731 / can settings.local.json as a filename trip the leak detector / will demoting a correct PROJECT page remove shared knowledge from the pushed corpus / where does machine-private project memory belong / how do I verify a memory-scope-leak finding before acting / the janitor surfaced a scope-leak candidate on this page / is the memory-scope-leak detector's demote-to-LOCAL prescription safe to follow blindly / what is a shape match versus a meaning match in the leak detector / why does the janitor only surface leaks and never edit pages / RULE 0 for memory pages / what does re-running the scope-leak detector do to the proposal file"
+description: "the janitor's memory-scope-leak detector flagged PROJECT pages for machine-host or PII — is this finding real or a false positive / what must I check before demoting a memory page to LOCAL / a detector says my PROJECT memory page carries machine-private data / does the machine-host rule fire on myteam.local or default.local scope placeholders / does pii:us_passport match a governance verdict id like G20260731 / can settings.local.json as a filename trip the leak detector / will demoting a correct PROJECT page remove shared knowledge from the pushed corpus / where does machine-private project memory belong / how do I verify a memory-scope-leak finding before acting / the janitor surfaced a scope-leak candidate on this page / is the memory-scope-leak detector's demote-to-LOCAL prescription safe to follow blindly / what is a shape match versus a meaning match in the leak detector / why does the janitor only surface leaks and never edit pages / RULE 0 for memory pages / what does re-running the scope-leak detector do to the proposal file / did the detector output change again / why is custom-server-and-websocket-pty flagged machine-host"
 ocd: 2026-09-25
-lmd: 2026-09-26
+lmd: 2026-09-28
 publish-globally: false
 metadata:
   node_type: memory
@@ -52,7 +52,64 @@ SURFACES — it never edits a page (RULE 0), and neither should an agent acting
 on an unverified match.
 
 
-^ATOM-FUVD-QA0Q [desc: "Detector's own output, regenerated when findings change (buffer hash 1afc70e2154f7d32); every row is a candidate to verify, never a verdict — transient rows appear and vanish run to run.", keywords: the_proposal_file_is_detector_output memory-scope-leak-proposed_regenerated snapshot_of_the_finding_set content_hash_1afc70e2154f7d32 content_hash_9c9a14ecc608fafe list_of_leak_candidate_pages_is_transient ai-maestro-overview_machine-host_row amp-messaging_machine-host_row haephestos-creation-helper_row settings-file-watcher-ledger_row trdd-conventions_pii_us_passport_row measured_2026-08-02_nine_findings_nine_false_positives treat_every_row_as_candidate_not_verdict re-run_clears_proposal_once_leak_gone 2026-09-26_regeneration_removed_transient_PUBLISHED_row wikimem_memory-scope-leak_row_now_plain_demote detector_swept_up_a_maint_staging_path_row transient_row_for_the_pass_own_staging_dir, ocd: 2026-09-25, lmd: 2026-09-26, claude_mem_hash: 1afc70e2154f7d32, claude_mem_ref: memory-scope-leak-proposed.md]
+
+
+^ATOM-J658-OTRL [desc: "Detector output 2026-09-28 (84b338ed98be48e7): machine-host rows incl. custom-server-and-websocket-pty + trdd-conventions pii:us_passport; a .maint-staging row is the pass's own txn dir, not a leak.", keywords: detector_output_regenerated_2026_09_28 maint_staging_row_transient swept_up_own_staging_dir custom_server_and_websocket_pty_flagged_machine_host why_did_custom_server_page_get_flagged proposal_file_row_list_changed new_row_in_leak_proposal content_hash_84b338ed98be48e7 transient_rows_vanish_between_runs rows_are_per_run_snapshots demote_to_LOCAL_scope_prescription machine_host_row_list_current which_pages_are_leak_candidates_now trdd_conventions_pii_us_passport_row row_naming_maint_staging_is_snapshot harvest_pass_own_txn_swept_up, ocd: 2026-09-28, lmd: 2026-09-28, claude_mem_hash: 84b338ed98be48e7, claude_mem_ref: memory-scope-leak-proposed.md]
+
+The proposal file this page mirrors (`memory-scope-leak-proposed.md`) is the
+`memory-scope-leak` detector's own OUTPUT — regenerated whenever the finding
+set changes (content hash 84b338ed98be48e7, verified current 2026-09-28), so the
+row list below is a snapshot, not a stable registry. Its rows:
+`ai-maestro-overview.md`, `amp-messaging.md`, `custom-server-and-websocket-pty.md`,
+`haephestos-creation-helper.md`, `settings-file-watcher-ledger.md` (machine-host) and
+`trdd-conventions.md` (pii:us_passport) — each prescribed "demote to LOCAL scope".
+Measured 2026-08-02 on this store: 9 findings, 9 false positives — treat every row as a
+CANDIDATE to verify, never a verdict. Transient rows appear and vanish run to run: the
+2026-09-26 output carried two (this page's own mid-fix PUBLISHED state; the detector's
+staging dir while `.maint-staging` existed mid-pass), and the 2026-09-28 output swept
+up THIS harvest pass's own just-committed staging dir
+(`.maint-staging/8eff8fac…`) while it existed mid-pass — a row that already
+vanished again. A row naming `.maint-staging/` is the detector's snapshot of
+its own pass machinery, never a real leak.
+
+- `.claude/project/memory/.maint-staging/8eff8fac28f74b6b849fac7249127bd0/wikimem/memory-scope-leak.md` — machine-host, pii:us_passport — demote to LOCAL scope
+- `.claude/project/memory/ai-maestro-overview.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/amp-messaging.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/custom-server-and-websocket-pty.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/haephestos-creation-helper.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/settings-file-watcher-ledger.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/trdd-conventions.md` — pii:us_passport — demote to LOCAL scope
+- `.claude/project/memory/wikimem/memory-scope-leak.md` — machine-host, pii:us_passport — demote to LOCAL scope
+
+## See also
+
+- [[public-repo-personal-data]]
+
+## Superseded
+
+
+^ATOM-1MC3-9LZ9 [desc: "Detector output regenerated 2026-09-28 (b11ecbc0464d0f96): 5 machine-host rows incl. custom-server-and-websocket-pty + trdd-conventions pii:us_passport — per-run snapshot, candidates not verdicts.", keywords: detector_output_regenerated_2026_09_28 custom_server_and_websocket_pty_flagged_machine_host why_did_custom_server_page_get_flagged proposal_file_row_list_changed new_row_in_leak_proposal maint_staging_row_vanished content_hash_b11ecbc0464d0f96 transient_rows_vanish_between_runs rows_are_per_run_snapshots demote_to_LOCAL_scope_prescription machine_host_row_list_current which_pages_are_leak_candidates_now trdd_conventions_pii_us_passport_row memory_scope_leak_page_self_row, ocd: 2026-09-25, lmd: 2026-09-28, claude_mem_hash: b11ecbc0464d0f96, claude_mem_ref: memory-scope-leak-proposed.md, status: superseded, superseded-by: ATOM-J658-OTRL]
+
+The proposal file this page mirrors (`memory-scope-leak-proposed.md`) is the
+`memory-scope-leak` detector's own OUTPUT — regenerated whenever the finding
+set changes (content hash b11ecbc0464d0f96, verified current 2026-09-28), so the
+row list below is a snapshot, not a stable registry. Its rows:
+`ai-maestro-overview.md`, `amp-messaging.md`, `custom-server-and-websocket-pty.md`,
+`haephestos-creation-helper.md`, `settings-file-watcher-ledger.md` (machine-host) and
+`trdd-conventions.md` (pii:us_passport) — each prescribed "demote to LOCAL scope".
+Measured 2026-08-02 on this store: 9 findings, 9 false positives — treat every row as a
+CANDIDATE to verify, never a verdict. The 2026-09-26 output's two transient rows (this
+page's own mid-fix PUBLISHED state; the detector's staging dir while `.maint-staging`
+existed mid-pass) are gone from the 2026-09-28 output — rows are per-run snapshots.
+
+- `.claude/project/memory/ai-maestro-overview.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/amp-messaging.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/custom-server-and-websocket-pty.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/haephestos-creation-helper.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/settings-file-watcher-ledger.md` — machine-host — demote to LOCAL scope
+- `.claude/project/memory/trdd-conventions.md` — pii:us_passport — demote to LOCAL scope
+- `.claude/project/memory/wikimem/memory-scope-leak.md` — machine-host, pii:us_passport — demote to LOCAL scope
+^ATOM-FUVD-QA0Q [desc: "Detector's own output, regenerated when findings change (buffer hash 1afc70e2154f7d32); every row is a candidate to verify, never a verdict — transient rows appear and vanish run to run.", keywords: the_proposal_file_is_detector_output memory-scope-leak-proposed_regenerated snapshot_of_the_finding_set content_hash_1afc70e2154f7d32 content_hash_9c9a14ecc608fafe list_of_leak_candidate_pages_is_transient ai-maestro-overview_machine-host_row amp-messaging_machine-host_row haephestos-creation-helper_row settings-file-watcher-ledger_row trdd-conventions_pii_us_passport_row measured_2026-08-02_nine_findings_nine_false_positives treat_every_row_as_candidate_not_verdict re-run_clears_proposal_once_leak_gone 2026-09-26_regeneration_removed_transient_PUBLISHED_row wikimem_memory-scope-leak_row_now_plain_demote detector_swept_up_a_maint_staging_path_row transient_row_for_the_pass_own_staging_dir, ocd: 2026-09-25, lmd: 2026-09-26, claude_mem_hash: 1afc70e2154f7d32, claude_mem_ref: memory-scope-leak-proposed.md, status:superseded, superseded-by:ATOM-1MC3-9LZ9]
 
 The proposal file this page mirrors (`memory-scope-leak-proposed.md`) is the
 `memory-scope-leak` detector's own OUTPUT — regenerated whenever the finding
@@ -86,9 +143,5 @@ PREVIOUS SNAPSHOT (superseded 2026-09-26, preserved verbatim) — the
 
 _Surfaced by the `memory-scope-leak` detector. Resolve by moving the private fact to the LOCAL scope (the harness `# Memory` dir), or by rewriting the PROJECT page to be portable (no usernames/paths/hosts/secrets). Re-run clears this once the leak is gone._
 
-
-## See also
-
-- [[public-repo-personal-data]]
 
 ## Notes and lessons learned

@@ -2,7 +2,7 @@
 name: marketplace-plugin-registration
 description: "how to register / publish a new plugin into the ai-maestro-plugins marketplace / publish.py hard-exits 'not registered in marketplace' at stage 5 / cross-marketplace dependency won't resolve at install / claude plugin install can't find the plugin / marketplace.json entry shape + allowCrossMarketplaceDependenciesOn"
 ocd: 2026-07-08
-lmd: 2026-09-05
+lmd: 2026-09-28
 metadata:
   node_type: memory
   type: project
@@ -13,6 +13,7 @@ publish-globally: false
 
 # Registering a plugin in the ai-maestro-plugins marketplace
 
+^HPIJ5LL3 [desc: "Order matters when registering a plugin: CPV's canonical publish.py HARD-EXITS at its marketplace stage when the plugin is not yet registered in the marketplace manifest, so the manifest entry must land BEFORE the first publish.py run — even though the entry references a repo with no releases yet. Verified end-to-end 2026-07-08 publishing web-scenario-tester.", keywords: publish.py_hard-exits_not_registered_in_marketplace stage_5_marketplace_register_entry_first how_to_register_a_new_plugin order_matters_manifest_before_first_publish repo_with_no_releases_yet, ocd: 2026-07-08, lmd: 2026-09-28]
 Verified end-to-end 2026-07-08 by publishing `web-scenario-tester` (the first MEMBER
 role-plugin with a cross-marketplace dependency).
 
@@ -21,6 +22,7 @@ when the plugin is not yet registered** in the marketplace manifest — so the m
 entry must land BEFORE the first `publish.py` run, even though the entry references a
 repo that has no releases yet.
 
+^9STPZHK7 [desc: "Entry shape: mirror the existing url-source form ({source: {source: url, url: ...}} — never {type: git}, see marketplace-manifest-format). The entry NAME is what `claude plugin install <name>@ai-maestro-plugins` resolves; the GitHub REPO name is independent (plugin web-scenario-tester lives in repo ai-maestro-web-scenario-tester; the fourfold identity binds plugin.json/toml/main-agent/entry-name, NOT the repo name).", keywords: marketplace.json_entry_shape how_to_write_marketplace_entry url_source_form_never_type_git entry_name_resolves_plugin_install repo_name_independent_of_plugin_name fourfold_identity, ocd: 2026-07-08, lmd: 2026-09-28]
 **Entry shape** (mirror the existing entries — url-source form; see
 [[marketplace-manifest-format]] for why `{source: url, url}` and never `{type: git}`):
 
@@ -38,12 +40,14 @@ repo that has no releases yet.
   the GitHub REPO name is independent (e.g. plugin `web-scenario-tester` lives in repo
   `ai-maestro-web-scenario-tester`; the fourfold identity binds plugin.json/toml/
   main-agent/entry-name, NOT the repo name).
+^NYMTI3UQ [desc: "allowCrossMarketplaceDependenciesOn is a TOP-LEVEL marketplace.json array of foreign marketplace names. A plugin declaring a cross-marketplace dependency in its plugin.json installs it AUTOMATICALLY (verified live) — but CPV raises a MAJOR and install-time resolution fails if the hosting marketplace lacks the allowlist.", keywords: allowCrossMarketplaceDependenciesOn cross_marketplace_dependency_won't_resolve_at_install dependency_installed_automatically CPV_major_missing_allowlist dev-browser_marketplace_dependency foreign_marketplace_allowlist, ocd: 2026-07-08, lmd: 2026-09-28]
 - **`allowCrossMarketplaceDependenciesOn`** is a TOP-LEVEL marketplace.json array of
   foreign marketplace names. A plugin declaring
   `"dependencies": [{"name": "dev-browser", "marketplace": "dev-browser-marketplace"}]`
   in its plugin.json installs its dependency AUTOMATICALLY (verified live: the install
   printed "+ 1 dependency: dev-browser") — but CPV raises a MAJOR and install-time
   resolution fails if the hosting marketplace lacks the allowlist.
+^ZXIK2WDS [desc: "Every plugin repo's notify-marketplace workflow auto-bumps its manifest entry's version on each publish, so the manifest on GitHub changes constantly — any clone of the marketplace repo goes stale fast; ALWAYS `git pull --ff-only` immediately before editing the manifest. The notify workflow's trigger branch must match the PLUGIN repo's default branch (trigger said main, repo used master → notify never fired), and repos need the MARKETPLACE_PAT secret via set_marketplace_pat.py.", keywords: notify_marketplace_workflow_version_bump marketplace_clone_goes_stale git_pull_ff_only_before_manifest_edit trigger_branch_must_match_plugin_default_branch MARKETPLACE_PAT_secret set_marketplace_pat.py manifest_silently_reverted, ocd: 2026-07-08, lmd: 2026-09-28]
 - Every plugin repo's `notify-marketplace` workflow auto-bumps its entry's `version` on
   each publish — the manifest on GitHub changes constantly, so **any clone of the
   marketplace repo goes stale fast; always `git pull --ff-only` immediately before
@@ -52,6 +56,7 @@ repo that has no releases yet.
   (caught live: trigger said `main`, repo used `master` → notify never fired until fixed).
 - Repos also need the `MARKETPLACE_PAT` secret (set via the canonical
   `set_marketplace_pat.py`) for the notify chain.
+^BXN88BO8 [desc: "The notify→receiver auto-bump chain is proven end-to-end for a PRE-EXISTING entry (2026-07-09, ai-maestro-webdesign: 4 consecutive successful bumps v0.1.1→v0.1.4). Contrast with a FIRST publish whose entry did not exist at dispatch time (WST): the receiver no-ops (nothing to bump), so the entry version lags the shipped repo version until the next publish. Register the entry FIRST if the very first publish should also bump the manifest.", keywords: receiver_workflow_no_ops_on_first_publish entry_version_lags_repo_version register_entry_before_first_publish auto_bump_chain_proven_pre_existing_entry webdesign_v0.1.1_v0.1.4, ocd: 2026-07-08, lmd: 2026-09-28]
 - The notify→receiver auto-bump chain is **proven end-to-end for a PRE-EXISTING entry**
   (2026-07-09, `ai-maestro-webdesign`): the entry was registered at 0.1.0 before the first
   publish, and each publish (v0.1.1→v0.1.4) drove the receiver workflow to bump the manifest
@@ -61,6 +66,7 @@ repo that has no releases yet.
   want the very first publish to also bump the manifest.
 - **publish.py leaves `uv.lock` one version behind** and it bites the NEXT publish.[^2]
 
+^9FCGOH2N [desc: "Smoke-test a fresh registration without polluting anything: `claude plugin marketplace update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugins --scope local` inside a THROWAWAY directory, verify the cache under ~/.claude/plugins/cache/ai-maestro-plugins/<name>/<version>/, then uninstall.", keywords: smoke_test_plugin_installation claude_plugin_install_scope_local throwaway_directory_install verify_plugins_cache_directory test_registration_without_polluting, ocd: 2026-07-08, lmd: 2026-09-28]
 Smoke-test a fresh registration without polluting anything: `claude plugin marketplace
 update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugins
 --scope local` inside a THROWAWAY directory, verify the cache under

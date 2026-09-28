@@ -5,7 +5,7 @@ title: fleet blocker — role-plugin installs fail because releases lack the {na
 column: blocked
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-08-18T20:19:21+0200
+updated: 2026-09-28T22:15:16+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -285,6 +285,7 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
   card TRDD-9Z2P2SDA, whose run ticks it and unblocks this card. Not sent back to dev —
   nothing to rework; not completed — the checklist gate forbids a terminal column with an
   unchecked box.
+- 2026-09-28T22:50:00+0200 — REPRODUCED, live: SCEN-001 run 20260928T191659Z observed your signature first-hand — pm2 err log 'G16: WARN — Failed to install ai-maestro-maintainer-agent ... after 4 attempt(s)' at 21:56:49 for an autonomous→maintainer ChangeTitle (35 gates), while settings.local.json carries the plugin ~8s later (async landing). Same signature also fired at 21:45:37 for the architect transition in the same run, and the out-log summary (positive control) proves the pipeline ran. G16 emits on failed CLI ATTEMPTS, not post-install state — the emit-condition fix this card's last box gates on. Evidence: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md (BUG-001, verbatim log lines) + sibling card TRDD-9Z2P2SDA now blocked on this card.
 
 ## Acceptance
 

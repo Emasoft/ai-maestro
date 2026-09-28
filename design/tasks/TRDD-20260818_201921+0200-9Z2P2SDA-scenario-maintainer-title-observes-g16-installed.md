@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-28T22:13:04+0200
+updated: 2026-09-28T22:15:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -94,10 +94,11 @@ folder deletion, purge cemetery, STATE-WIPE.
       **NEXT ACTION:** add the verify step to SCEN-001 and dispatch a scenario-runner against the
       live server (a scheduled run — Rule 15: the orchestrator owns the clock; not improvised at
       the tail of another card).
-- [ ] The scenario has RUN against the live server; the G15/G16 `installed` observation is
+- [x] The scenario has RUN against the live server; the G15/G16 `installed` observation is
       recorded (report + screenshot), or the failure is a bug card.
 - [ ] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.
 - [x] **(box 2, resolved 2026-09-28)** The scenario HAS RUN against the live server — the G15/G16 observation is recorded, and it is a FAILING observation (BUG-001 in the report): the err-log WARN fired while the plugin landed async. Box ticked as MET with a negative result; the fix work belongs to JT3U4ZVM, not here.
+- Evidence-form note for box 2 (review round): the letter says 'report + screenshot'; the actual evidence is the report's verbatim log quotes only — S034d has no screenshot (log-grep evidence cannot be meaningfully screenshotted, and the run's own step table shows '—'). The failure arm ('bug card') is satisfied by reference to the EXISTING owner card TRDD-JT3U4ZVM (dedupe — a second card would violate it), which now carries the dated reproduction line. Read 'recorded' under that form.
 
 ## Approval log
 

@@ -4,7 +4,7 @@ status: tasked
 title: server-liveness heartbeat goes more than 90 s without a write while the server is alive, handing the rotator tick to the janitor
 column: backburner
 created: 2026-09-09T12:39:54+0200
-updated: 2026-09-27T18:35:44+0200
+updated: 2026-09-28T08:16:52+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: bugfix
@@ -43,6 +43,7 @@ NEXT ACTION: the stage-1 instrument edit in lib/server-liveness.ts + tests/unit/
 2026-09-27 (cont. 2) — ROUND-3 REVIEW APPLIED. GARBAGE-WINDOW NOTE CORRECTED (it stated an inference as fact): no build/restart was AUTHORISED in the window (USER hold); none is KNOWN to have occurred; a dev-mode/tsx server running from source would emit garbage lines despite no yarn build — grep the log rather than trusting this line. Column stays backburner: blocked requires a non-empty blocked-by naming an OPEN CARD (D4-5b invariant) and a USER decision is not a card, so backburner is the only rule-consistent park. Test upper bound 1005 → 1000 (catches a sign-flip variant at +3, costs nothing). Commit: next.
 2026-09-27 (cont. 3) — ROUND-4 REVIEW (accepted, nits applied): the garbage values are an order-1000 error from a µs-scaled hrtime term — sign either way, scaling with real elapsed time, NOT uniformly 1000x of a true drift (a large real window can read hugely negative, e.g. -999000). Garbage signature for the box-2 grep: any clockDriftMs= line whose |clockDriftMs| is implausible against its own gap= field (drift approaching or exceeding the gap by orders of magnitude = the µs signature), or whose timestamp falls in 2fd28c4c..9bc1c55f. Column note corrected: backburner is the only park available WITHOUT minting a tracking card — blocked+unblock-when becomes legal if a USER-decision card is ever minted.
 2026-09-27 (cont. 4) — ROUND-5, review loop CLOSED (findings shrank monotonically; further rounds would generate findings for their own sake). Signature sharpened: the large-drift signature is the µs bug OR a GENUINE wall-clock step — buggy drift is overwhelmingly NEGATIVE, a real forward step POSITIVE — so a magnitude-tripped line is a trigger for inspection, never a classifier: corroborate against pmset/NTP logs before discarding any clockDriftMs line. Commit: next.
+2026-09-28 — code-review follow-up (commit 2fd6217d1): the server's stranded-record reap now owns EVERY TICK_ALERT_PREFIXES code (was root-only), so the legacy file's leftover reauth-needed/rotator-stuck records from a refused window are reaped at the next healthy beat instead of stranding 7 days. Pinned by tests (4)/(4b) (3cabee64c). OPEN QUESTION re-opened in a new form: the janitor's own tick ALSO writes these codes under the same flock — the server-side clear can now reap a record the janitor still tracks as outstanding (duplicate ONSET on its side). Flock serializes beats; it does not coordinate semantics. The box-2 stage-2 measurement (both writers on the same window) now also covers this reap interaction.
 
 ## Approval log
 

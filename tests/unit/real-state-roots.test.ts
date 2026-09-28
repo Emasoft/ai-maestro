@@ -92,4 +92,12 @@ describe('real-state-roots helper', () => {
     fs.writeFileSync(path.join(root, 'registry.json.aim-bak-2026-09-28_1954-12835-020441'), '')
     expect(teardown).toThrow(/LEAKED/)
   })
+
+  it('a SIBLING dir named statusline-state-* is NOT exempt — the prefix requires the trailing slash', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state-backup'))
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'statusline-state-backup', 'leak.json'), '')
+    expect(teardown).toThrow(/LEAKED/)
+  })
 })

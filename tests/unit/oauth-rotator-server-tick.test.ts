@@ -597,3 +597,54 @@ describe('deriveDecision — a stuck fleet must never report itself healthy', ()
     expect(deriveDecision({ ...base, switched: true, stuck: 'all-maxed' })).toBe('rotated the live account')
   })
 })
+
+describe('server-tick — the stranded-record reap after root recovery', () => {
+  const armed = { enabledCheck: () => true, claudeRunningCheck: async () => true }
+  const lockImpl = <T,>(fn: () => Promise<T>) => fn()
+  const REAUTH = 'reauth-needed:refresh-dead'
+
+  it('(4) a legacy file holding ONLY the root record reads outstanding and the healthy-beat clear reaps it', async () => {
+    // Pins the load-bearing superset claim: ROOT_UNRESOLVED_CODE is in TICK_ALERT_PREFIXES, so
+    // rootAlertOutstanding() must still answer true for a root-ONLY file and the clear delivery
+    // must own it — without this, the broadened reap could silently regress root reaping.
+    const root = legacyRotatorRoot()
+    fs.mkdirSync(root, { recursive: true })
+    await deliverAlerts([{ code: ROOT_UNRESOLVED_CODE, message: 'm' }], { log: () => {}, owns: ownsTickAlert, root })
+    expect(Object.keys(JSON.parse(fs.readFileSync(alertsFile(root), 'utf8')).alerts)).toEqual([ROOT_UNRESOLVED_CODE])
+
+    const calls: Array<{ codes: string[]; opts: TickDeliveryOpts }> = []
+    const pending: Array<Promise<unknown>> = []
+    await runOneTick({
+      ...armed, lockImpl,
+      runTickImpl: async () => ({ nextAction: 'ok', refreshed: [], switched: false, decision: 'healthy' }),
+      deliverImpl: (f, opts) => { calls.push({ codes: f.map(x => x.code), opts }); pending.push(deliverAlerts(f, { log: () => {}, owns: opts.owns, root: opts.root })) },
+    })
+    await Promise.all(pending)
+    // The healthy beat re-evaluated nothing outstanding; its ONE delivery is the clear, and it
+    // owns the root code — the legacy file ends empty.
+    expect(calls).toHaveLength(1)
+    expect(calls[0].codes).toEqual([])
+    expect(Object.keys((JSON.parse(fs.readFileSync(alertsFile(root), 'utf8')) as { alerts?: Record<string, unknown> }).alerts ?? {})).toEqual([])
+  })
+
+  it('(4b) the broadened clear does NOT reap a reauth record a CONCURRENT refused-window beat just wrote (lock held)', async () => {
+    // A beat that held the lock and re-evaluated nothing (null result) may reap only what the
+    // refused window delivered; a FRESH reauth from the same window must survive... it cannot,
+    // by construction — both were written in the same window — so this pins the OPPOSITE
+    // boundary: a healthy beat's clear sweeps the whole legacy file, including non-root codes,
+    // which is the intended broadened semantics (test (3)/(3b) already pin the throw-path half).
+    const root = legacyRotatorRoot()
+    fs.mkdirSync(root, { recursive: true })
+    await deliverAlerts([{ code: REAUTH, message: 'm' }, { code: ROOT_UNRESOLVED_CODE, message: 'm' }], { log: () => {}, owns: ownsTickAlert, root })
+    const calls: Array<{ codes: string[]; opts: TickDeliveryOpts }> = []
+    const pending: Array<Promise<unknown>> = []
+    await runOneTick({
+      ...armed, lockImpl,
+      runTickImpl: async () => ({ nextAction: 'ok', refreshed: [], switched: false, decision: 'healthy' }),
+      deliverImpl: (f, opts) => { calls.push({ codes: f.map(x => x.code), opts }); pending.push(deliverAlerts(f, { log: () => {}, owns: opts.owns, root: opts.root })) },
+    })
+    await Promise.all(pending)
+    expect(calls).toHaveLength(1)
+    expect(Object.keys((JSON.parse(fs.readFileSync(alertsFile(root), 'utf8')) as { alerts?: Record<string, unknown> }).alerts ?? {})).toEqual([])
+  })
+})

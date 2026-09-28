@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-28T22:28:22+0200
+updated: 2026-09-28T22:34:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -111,3 +111,4 @@ folder deletion, purge cemetery, STATE-WIPE.
 - 2026-09-28T22:13:04+0200 — column → blocked by main-agent@ai-maestro. Box 2 resolved (negative: G16 WARN reproduced live). Remaining work = the G16 emit-condition fix, owned by TRDD-JT3U4ZVM's unticked live-observation box; this card blocks on it.
 - 2026-09-28T23:35:00+0200 — blocked-by CLEARED to break the ring the re-set created (validate GRAPH-ORDER-CYCLE: nothing in a 2-cycle can ever start, and the linter is right — a mutual wait where each side needs the OTHER to move first is a deadlock by definition, whatever the Approval-log prose says). The honest shape: THIS card's remaining box 3 is work ON THIS CARD — it cannot be done today (the fix hasn't landed) but it is not a WAIT on JT3U4ZVM's column; it is a wait on the emit-condition fix landing, which happens on JT3U4ZVM's side. blocked-by empty + the blocker-probe field repurposed below to watch for the FIX landing (JT3U4ZVM reaching ai_review with implementation-commits naming the G16 emit condition) is the machine-checkable form.
 - 2026-09-29T00:10:00+0200 — CORRECTION of the 316d505b commit-message diagnosis: the PII-gate trip was NOT a transient race. json-io's lock is a DIRECTORY at <file>.lock (lib/json-io.ts:165, mkdir-based), and the F1 amendment's isDirectory() guard pushed live lockDIRS into the counted set while descending into them — a lockdir alive at the teardown instant trips deterministically, not probabilistically. Fixed in the watcher (skip by NAME from the push, descent preserved) + two pinning tests. Retry-success was sampling, not proof.
+- 2026-09-29T00:50:00+0200 — RED LEG EXECUTED (closes the 4daf7ce6 commit-message gap): the mid-run lockdir test run against the pre-c6b8a875f helper FAILS (1 failed) and against the landed helper PASSES (1 passed) — a true red-green pair, replacing the earlier 11/12 count-delta mischaracterization. Method: direct file swap of the helper (git stash push of a file identical to HEAD no-ops — the first two attempts measured nothing), pre-c6b8a875f parent's helper verified by grep before the run. Also repaired this session: the 2026-09-24 auto-backup stash briefly polluted 5 oauth-rotator files into the working tree during a stash dance; verified those copies predated HEAD's own fixes and restored all 5 to HEAD (guarded checkout, OTP-authorized).

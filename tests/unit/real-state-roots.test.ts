@@ -123,4 +123,11 @@ describe('real-state-roots helper', () => {
     const teardown = watchForLeaks(root)
     expect(teardown).not.toThrow()
   })
+  it('a lockdir CREATED MID-RUN (after the snapshot) does NOT trip — the only shape that reddens under the isDirectory() code', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state'))
+    const teardown = watchForLeaks(root)
+    fs.mkdirSync(path.join(root, 'statusline-state', 'session.json.lock'))
+    expect(teardown).not.toThrow()
+  })
 })

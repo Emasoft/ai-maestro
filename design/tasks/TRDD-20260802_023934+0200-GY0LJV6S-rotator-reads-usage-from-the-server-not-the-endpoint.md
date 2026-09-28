@@ -6,7 +6,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-28T22:20:16+0200
+updated: 2026-09-28T22:23:12+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -562,6 +562,7 @@ key* was dead.
   Authority: USER >= any required approver, so this is authored directly in `design/tasks/`.
 - 2026-09-28T23:25:00+0200 — unblocked: D8OYFG35's last box (USER wiring statusLine into ~/.claude/settings.json) LANDED today — settings.json:1271 now carries the wrapped statusLine command (TRDD-MVZTEKX4, committed + archived), so snapshots arrive and this card's verification step can run. blocked-by cleared; restoring column to pre-block-column dev.
 - 2026-09-28T22:20:16+0200 — column → dev by main-agent@ai-maestro. Blocker spent: D8OYFG35/MVZTEKX4 completed — the statusline hook is wired live, snapshots arrive, the verification step can run.
+- 2026-09-28T23:55:00+0200 — second-source for the unblock: live statusline records are verifiably FLOWING (this session's leak-detector saga exists precisely because ~/.aimaestro/statusline-state/ churns fresh .json/.lock/tmp artifacts every ~3s — see governance-rules commits e225d5479/54f00841/71e9cabb), not merely wired. Box-2 condition (snapshots arrive) is evidenced, single-sourcing on settings.json closed.
 
 ## UNBLOCKED 2026-08-02T11:47:52+0200 — read this before wiring `tick.ts:422`
 

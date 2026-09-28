@@ -2,12 +2,12 @@
 trdd-id: 9Z2P2SDA
 status: tasked
 title: Phase-3 scenario — dashboard MAINTAINER creation observes ChangeTitle G15/G16 report installed
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-08-26T05:37:57+0200
+updated: 2026-09-28T21:14:54+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -101,3 +101,4 @@ folder deletion, purge cemetery, STATE-WIPE.
 
 - 2026-08-18T20:19:21+0200 — MANDATE under the USER's recorded delegation (TRDD-BRRJK57P
   Approval log). Tier 0 in-repo scenario authoring.
+- 2026-09-28T21:30:00+0200 — column → dev by main-agent@ai-maestro (delegated autonomy, 'do it all'). Box 1 was already landed (S034c/S034d, commit 3e56caec9). Dispatching scenario-runner for box 2 — live run against the RUNNING server; server.mjs hold honored (no build, no restart).

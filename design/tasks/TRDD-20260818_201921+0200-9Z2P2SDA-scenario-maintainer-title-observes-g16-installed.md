@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-28T22:21:29+0200
+updated: 2026-09-28T22:28:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -110,3 +110,4 @@ folder deletion, purge cemetery, STATE-WIPE.
 - 2026-09-28T22:40:00+0200 — box 2 RESOLVED NEGATIVE by the live run (SCEN-001 20260928T191659Z, PARTIAL): S034d FAILED — pm2 err log carries the G16 WARN — Failed to install degraded line for the 21:56:49 autonomous→maintainer transition (35 gates, restart=true, out-log summary present as positive control) while the plugin verifiably lands in settings.local.json ~8s later. The JT3U4ZVM regression signature REPRODUCED, not fixed (coordinator constraint during the hold). Bug recorded in the run report; JT3U4ZVM's live-observation box stays unticked — the observation is now measured and it is a FAILING observation. Report: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md
 - 2026-09-28T22:13:04+0200 — column → blocked by main-agent@ai-maestro. Box 2 resolved (negative: G16 WARN reproduced live). Remaining work = the G16 emit-condition fix, owned by TRDD-JT3U4ZVM's unticked live-observation box; this card blocks on it.
 - 2026-09-28T23:35:00+0200 — blocked-by CLEARED to break the ring the re-set created (validate GRAPH-ORDER-CYCLE: nothing in a 2-cycle can ever start, and the linter is right — a mutual wait where each side needs the OTHER to move first is a deadlock by definition, whatever the Approval-log prose says). The honest shape: THIS card's remaining box 3 is work ON THIS CARD — it cannot be done today (the fix hasn't landed) but it is not a WAIT on JT3U4ZVM's column; it is a wait on the emit-condition fix landing, which happens on JT3U4ZVM's side. blocked-by empty + the blocker-probe field repurposed below to watch for the FIX landing (JT3U4ZVM reaching ai_review with implementation-commits naming the G16 emit condition) is the machine-checkable form.
+- 2026-09-29T00:10:00+0200 — CORRECTION of the 316d505b commit-message diagnosis: the PII-gate trip was NOT a transient race. json-io's lock is a DIRECTORY at <file>.lock (lib/json-io.ts:165, mkdir-based), and the F1 amendment's isDirectory() guard pushed live lockDIRS into the counted set while descending into them — a lockdir alive at the teardown instant trips deterministically, not probabilistically. Fixed in the watcher (skip by NAME from the push, descent preserved) + two pinning tests. Retry-success was sampling, not proof.

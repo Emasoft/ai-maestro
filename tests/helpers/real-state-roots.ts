@@ -46,14 +46,20 @@ export function listing(root: string): string[] {
       // a test leak delivered via a json-io backup elsewhere must still trip this detector.
       // NOTE 1: the check is on the REL path (prefix for direct children carries no trailing
       // slash — a `prefix.startsWith('statusline-state/')` test never matched them).
-      // NOTE 2: directories are NOT exempted, so the walk still descends — a `.json` record
-      // in a future per-session SUBdir stays watched. Known residual: a NEW Claude session
+      // NOTE 2: the skip is NOT directory-gated and the walk still descends. json-io's lock is
+      // a DIRECTORY at `<file>.lock` (mkdir-based, json-io.ts:165) — the transient write surface
+      // under statusline-state/ therefore includes lockDIRS, and gating the exemption on
+      // `!e.isDirectory()` pushed them into the counted set while STILL descending into them
+      // (they carry no children). Measured 2026-09-28: a lockdir alive at the teardown instant
+      // tripped the detector as "1 new entry" and blocked a commit. Skipping by NAME regardless
+      // of type keeps a `.json` record in any future per-session SUBdir watched (subdirs are not
+      // transient-named) while lockdirs leave the set. Known residual: a NEW Claude session
       // starting mid-run creates a top-level `<uuid>.json` record and still trips the
       // detector — accepted (the honest fix is the wrapper's time-gated backups, not a
       // wider carve-out).
       const rel = prefix ? `${prefix}/${e.name}` : e.name
-      if (rel.startsWith('statusline-state/') && !e.isDirectory() && !e.name.endsWith('.json')) continue
-      out.push(rel)
+      const skipped = rel.startsWith('statusline-state/') && !e.name.endsWith('.json')
+      if (!skipped) out.push(rel)
       if (e.isDirectory()) walk(path.join(dir, e.name), rel)
     }
   }

@@ -100,4 +100,27 @@ describe('real-state-roots helper', () => {
     fs.writeFileSync(path.join(root, 'statusline-state-backup', 'leak.json'), '')
     expect(teardown).toThrow(/LEAKED/)
   })
+
+  it('a lockDIR (json-io mkdir lock) under statusline-state/ is exempt from the count, yet its contents stay watched', () => {
+    // json-io's lock is a DIRECTORY at `<file>.lock` (lib/json-io.ts:165) — the transient
+    // surface includes lockdirs, so the exemption must skip them by NAME regardless of type.
+    // The dir itself must NOT be counted (measured 2026-09-28: a live lockdir tripped the
+    // detector when the F1 isDirectory guard pushed it); anything a future implementation
+    // parks INSIDE one stays watched because the walk still descends.
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state'))
+    fs.mkdirSync(path.join(root, 'statusline-state', 'session.json.lock'))
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'statusline-state', 'session.json.lock', 'leak.json'), '')
+    expect(teardown).toThrow(/LEAKED/)
+    expect(() => watchForLeaks(root)).not.toThrow()
+  })
+
+  it('a lockdir alive across snapshot and teardown does NOT trip by itself (the 2026-09-28 incident shape)', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state'))
+    fs.mkdirSync(path.join(root, 'statusline-state', 'session.json.lock'))
+    const teardown = watchForLeaks(root)
+    expect(teardown).not.toThrow()
+  })
 })

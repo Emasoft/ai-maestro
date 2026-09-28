@@ -2,10 +2,10 @@
 trdd-id: JT3U4ZVM
 status: tasked
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
-column: blocked
+column: ai_review
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-09-28T22:17:17+0200
+updated: 2026-09-28T22:21:48+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -287,6 +287,9 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
   unchecked box.
 - 2026-09-28T22:50:00+0200 — REPRODUCED, live: SCEN-001 run 20260928T191659Z observed your signature first-hand — pm2 err log 'G16: WARN — Failed to install ai-maestro-maintainer-agent ... after 4 attempt(s)' at 21:56:49 for an autonomous→maintainer ChangeTitle (35 gates), while settings.local.json carries the plugin ~8s later (async landing). Same signature also fired at 21:45:37 for the architect transition in the same run, and the out-log summary (positive control) proves the pipeline ran. G16 emits on failed CLI ATTEMPTS, not post-install state — the emit-condition fix this card's last box gates on. Evidence: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md (BUG-001, verbatim log lines) + sibling card TRDD-9Z2P2SDA now blocked on this card.
 - 2026-09-28T23:05:00+0200 — blocked-by CLEARED (was [9Z2P2SDA]): the run 9Z2P2SDA was waiting for HAS HAPPENED (SCEN-001 20260928T191659Z), so the wait edge is spent — but the observation came back FAILING (G16 WARN reproduced live, see the 22:50 line above), so the card does NOT auto-advance; its last box still demands a PASSING observation, which only a post-fix re-run can give. Card stays blocked, restated as self-blocked on its own unticked box + the emit-condition fix landing. The 9Z2P2SDA→JT3U4ZVM edge remains (the sibling's box 3 needs this card terminal).
+- 2026-09-28T23:30:00+0200 — blocked-by RE-SET to [9Z2P2SDA] after the earlier clear left an empty field on a blocked card (BLOCKED-WITHOUT-BLOCKER). The earlier 'edge is spent' reasoning was correct about the RUN having happened but wrong about the GRAPH: 9Z2P2SDA's box 3 (ticking JT3U4ZVM's last box citing a PASSING run) is the remaining work this card waits on — and the sibling now carries blocker-probe/blocker-holds-if making the wait machine-checkable. The wait is mutual and deliberate: 9Z2P2SDA needs this card terminal to tick its box 3; this card needs the sibling's post-fix passing run to tick its own last box. That is a ring by grep, but NOT a deadlock: the emit-condition fix (in this card's scope, ai_review pre-block) breaks it from THIS side — fix lands here, a passing re-run ticks both.
+- 2026-09-28T22:21:37+0200 — column → ai_review by main-agent@ai-maestro. Ring repair complete: with 9Z2P2SDA now carrying the single wait edge, JT3U4ZVM's own wait is gone — the emit-condition fix is ITS remaining work, which is what ai_review (its pre-block-column) models. Its last box still gates complete; it leaves blocked because its blocker is now WORK, not a wait.
+- 2026-09-28T23:45:00+0200 — blocked → ai_review (pre-block-column restored): the mutual wait was unresolvable as a graph (two-card ring, nothing can start), so the wait was made ASYMMETRIC — 9Z2P2SDA carries blocked-by: [TRDD-JT3U4ZVM] and waits for this card's fix + a passing re-run; this card's wait was WORK (the emit-condition fix), not a column dependency, so it returns to ai_review where the fix happens. Its last box still gates complete (needs a PASSING live observation). blocked-by [] is now CORRECT here: nothing external blocks it, the work is its own.
 
 ## Acceptance
 

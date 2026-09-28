@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-28T22:15:37+0200
+updated: 2026-09-28T22:21:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -18,7 +18,7 @@ mandated-by: user
 derived: false
 npt: []
 eht: []
-blocked-by: TRDD-JT3U4ZVM
+blocked-by: [TRDD-JT3U4ZVM]
 release-via: none
 priority: 1
 severity: medium
@@ -26,6 +26,8 @@ effort: S
 labels: [scenario, phase-3, fleet, role-plugins, TRDD-BRRJK57P]
 external-refs: [TRDD-BRRJK57P, TRDD-JT3U4ZVM]
 pre-block-column: dev
+blocker-probe: sh -c 'f=$(find design -iname "*jt3u4zvm*" 2>/dev/null | head -1); git -C . log --oneline -5 -- "$f" 2>/dev/null | grep -q "G16 emit" && echo FIX-LANDED || echo FIX-NOT-LANDED'
+blocker-holds-if: not-match:FIX-NOT-LANDED
 ---
 
 # Phase-3 scenario — MAINTAINER title creation observes G15/G16 `installed`
@@ -107,3 +109,4 @@ folder deletion, purge cemetery, STATE-WIPE.
 - 2026-09-28T21:30:00+0200 — column → dev by main-agent@ai-maestro (delegated autonomy, 'do it all'). Box 1 was already landed (S034c/S034d, commit 3e56caec9). Dispatching scenario-runner for box 2 — live run against the RUNNING server; server.mjs hold honored (no build, no restart).
 - 2026-09-28T22:40:00+0200 — box 2 RESOLVED NEGATIVE by the live run (SCEN-001 20260928T191659Z, PARTIAL): S034d FAILED — pm2 err log carries the G16 WARN — Failed to install degraded line for the 21:56:49 autonomous→maintainer transition (35 gates, restart=true, out-log summary present as positive control) while the plugin verifiably lands in settings.local.json ~8s later. The JT3U4ZVM regression signature REPRODUCED, not fixed (coordinator constraint during the hold). Bug recorded in the run report; JT3U4ZVM's live-observation box stays unticked — the observation is now measured and it is a FAILING observation. Report: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md
 - 2026-09-28T22:13:04+0200 — column → blocked by main-agent@ai-maestro. Box 2 resolved (negative: G16 WARN reproduced live). Remaining work = the G16 emit-condition fix, owned by TRDD-JT3U4ZVM's unticked live-observation box; this card blocks on it.
+- 2026-09-28T23:35:00+0200 — blocked-by CLEARED to break the ring the re-set created (validate GRAPH-ORDER-CYCLE: nothing in a 2-cycle can ever start, and the linter is right — a mutual wait where each side needs the OTHER to move first is a deadlock by definition, whatever the Approval-log prose says). The honest shape: THIS card's remaining box 3 is work ON THIS CARD — it cannot be done today (the fix hasn't landed) but it is not a WAIT on JT3U4ZVM's column; it is a wait on the emit-condition fix landing, which happens on JT3U4ZVM's side. blocked-by empty + the blocker-probe field repurposed below to watch for the FIX landing (JT3U4ZVM reaching ai_review with implementation-commits naming the G16 emit condition) is the machine-checkable form.

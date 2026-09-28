@@ -53,4 +53,43 @@ describe('real-state-roots helper', () => {
     fs.writeFileSync(path.join(rootB, 'leak.txt'), '')
     expect(teardown).toThrow(/LEAKED/)
   })
+
+  // The statusline-state carve-out (commit e225d5479): the live statusline daemon mints
+  // always-newly-named backups/tmp/locks in ~/.aimaestro/statusline-state/ on every ~3s
+  // refresh, which the detector read as a test leak. The exemption keys on the REL path
+  // `statusline-state/` + non-.json FILE; a fixture subdir named exactly `statusline-state`
+  // exercises the same code without touching the developer's real $HOME.
+
+  it('a transient-named file under a statusline-state/ subdir is EXEMPT (does not trip)', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state'))
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'statusline-state', 'x.json.lock'), '')
+    fs.writeFileSync(path.join(root, 'statusline-state', 'y.json.tmp.12835.1'), '')
+    fs.writeFileSync(path.join(root, 'statusline-state', 'z.json.aim-bak-2026-09-28_1954-12835-020441'), '')
+    expect(teardown).not.toThrow()
+  })
+
+  it('a .json RECORD under statusline-state/ still trips — only the transient surface is exempt', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state'))
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'statusline-state', 'session-uuid.json'), '')
+    expect(teardown).toThrow(/LEAKED/)
+  })
+
+  it('a .json record in a statusline-state/ SUBDIR stays watched — the walk still descends', () => {
+    const root = mkFixture()
+    fs.mkdirSync(path.join(root, 'statusline-state', 'per-session'), { recursive: true })
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'statusline-state', 'per-session', 'leak.json'), '')
+    expect(teardown).toThrow(/LEAKED/)
+  })
+
+  it('the same transient shapes OUTSIDE statusline-state/ still trip — the carve-out does not leak tree-wide', () => {
+    const root = mkFixture()
+    const teardown = watchForLeaks(root)
+    fs.writeFileSync(path.join(root, 'registry.json.aim-bak-2026-09-28_1954-12835-020441'), '')
+    expect(teardown).toThrow(/LEAKED/)
+  })
 })

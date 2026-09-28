@@ -2,12 +2,12 @@
 trdd-id: 9Z2P2SDA
 status: tasked
 title: Phase-3 scenario — dashboard MAINTAINER creation observes ChangeTitle G15/G16 report installed
-column: dev
+column: blocked
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-28T21:14:54+0200
+updated: 2026-09-28T22:13:04+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -18,13 +18,14 @@ mandated-by: user
 derived: false
 npt: []
 eht: []
-blocked-by: []
+blocked-by: TRDD-JT3U4ZVM
 release-via: none
 priority: 1
 severity: medium
 effort: S
 labels: [scenario, phase-3, fleet, role-plugins, TRDD-BRRJK57P]
 external-refs: [TRDD-BRRJK57P, TRDD-JT3U4ZVM]
+pre-block-column: dev
 ---
 
 # Phase-3 scenario — MAINTAINER title creation observes G15/G16 `installed`
@@ -96,9 +97,12 @@ folder deletion, purge cemetery, STATE-WIPE.
 - [ ] The scenario has RUN against the live server; the G15/G16 `installed` observation is
       recorded (report + screenshot), or the failure is a bug card.
 - [ ] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.
+- [x] **(box 2, resolved 2026-09-28)** The scenario HAS RUN against the live server — the G15/G16 observation is recorded, and it is a FAILING observation (BUG-001 in the report): the err-log WARN fired while the plugin landed async. Box ticked as MET with a negative result; the fix work belongs to JT3U4ZVM, not here.
 
 ## Approval log
 
 - 2026-08-18T20:19:21+0200 — MANDATE under the USER's recorded delegation (TRDD-BRRJK57P
   Approval log). Tier 0 in-repo scenario authoring.
 - 2026-09-28T21:30:00+0200 — column → dev by main-agent@ai-maestro (delegated autonomy, 'do it all'). Box 1 was already landed (S034c/S034d, commit 3e56caec9). Dispatching scenario-runner for box 2 — live run against the RUNNING server; server.mjs hold honored (no build, no restart).
+- 2026-09-28T22:40:00+0200 — box 2 RESOLVED NEGATIVE by the live run (SCEN-001 20260928T191659Z, PARTIAL): S034d FAILED — pm2 err log carries the G16 WARN — Failed to install degraded line for the 21:56:49 autonomous→maintainer transition (35 gates, restart=true, out-log summary present as positive control) while the plugin verifiably lands in settings.local.json ~8s later. The JT3U4ZVM regression signature REPRODUCED, not fixed (coordinator constraint during the hold). Bug recorded in the run report; JT3U4ZVM's live-observation box stays unticked — the observation is now measured and it is a FAILING observation. Report: reports/scenarios-runner/SCEN-001_20260928T191659Z.report.md
+- 2026-09-28T22:13:04+0200 — column → blocked by main-agent@ai-maestro. Box 2 resolved (negative: G16 WARN reproduced live). Remaining work = the G16 emit-condition fix, owned by TRDD-JT3U4ZVM's unticked live-observation box; this card blocks on it.

@@ -89,21 +89,6 @@ Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
 
 All have `compatible-titles` and `compatible-clients` fields in their `.agent.toml`. No upstream sync needed. See [[role-plugins]] for the plugin-content detail (fourfold identity rule, Haephestos creation flow, editing workflow) behind each of these repos.
 
-Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
-
-| Repo | compatible-titles |
-|------|------------------|
-| `Emasoft/ai-maestro-architect-agent` | `["ARCHITECT"]` |
-| `Emasoft/ai-maestro-assistant-manager-agent` | `["MANAGER"]` |
-| `Emasoft/ai-maestro-chief-of-staff` | `["CHIEF-OF-STAFF"]` |
-| `Emasoft/ai-maestro-integrator-agent` | `["INTEGRATOR"]` |
-| `Emasoft/ai-maestro-orchestrator-agent` | `["ORCHESTRATOR"]` |
-| `Emasoft/ai-maestro-programmer-agent` | `["MEMBER"]` |
-| `Emasoft/ai-maestro-maintainer-agent` | `["MAINTAINER"]` |
-| `Emasoft/ai-maestro-autonomous-agent` | `["AUTONOMOUS"]` |
-
-All have `compatible-titles` and `compatible-clients` fields in their `.agent.toml`. No upstream sync needed. See [[role-plugins]] for the plugin-content detail (fourfold identity rule, Haephestos creation flow, editing workflow) behind each of these repos.
-
 ^ZQ56O29Q [desc: "Remotes are INVERTED: origin → 23blocks-OS (upstream), fork → Emasoft (where work lands and issues go). 'Push/post to origin' hits a repo the owner does not control; derive counts against fork/.", keywords: origin_is_the_upstream_not_my_fork which_remote_do_I_push_to where_do_I_post_issues_in_this_repo origin_main_HEAD_overstates_unpushed_commits remote_named_fork_holds_my_repo inverted_remote_convention pushed_to_upstream_accident tool_reports_23blocks_instead_of_Emasoft, ocd: 2026-08-02, lmd: 2026-09-27]
 ## ⚠ `origin` IS THE UPSTREAM HERE — the remotes are inverted
 

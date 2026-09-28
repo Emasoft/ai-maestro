@@ -80,16 +80,23 @@ export function ownsRootAlert(code: string): boolean {
 }
 
 /**
- * Does the root alert's record still sit in the legacy root's alert file? A refused root's alert
- * is written THERE (see `runOneTick`), and once the root resolves no finding names it again — and a
- * healthy beat never delivers at all, so without an explicit clear the record would outlive the
- * fix by the 7-day orphan bound. Absent is the normal answer; any other read failure answers true,
- * so the delivery runs and its own failure path logs the fault instead of this hiding it.
+ * Does the legacy root's alert file still hold anything this beat owns? A refused root's
+ * delivery goes THERE (see `runOneTick`), and that includes not just the root alert but any
+ * tick code delivered in the same call (test (2): ONE delivery carrying both). Once the root
+ * resolves, healthy beats read the CANONICAL file, so nothing would ever reap the legacy
+ * file's leftover `reauth-needed:*` / `rotator-stuck:*` records — a stranded record whose
+ * fix looks like a fresh ONSET on the canonical side (duplicate notification, backoff reset).
+ * So the outstanding check (and the clear delivery it drives) owns EVERY `TICK_ALERT_PREFIXES`
+ * code, not just the root one — `ownsTickAlert` already covers `ROOT_UNRESOLVED_CODE`, which
+ * is in the prefix list by construction.
+ * Absent is the normal answer; any other read failure answers true, so the delivery runs and
+ * its own failure path logs the fault instead of this hiding it.
  */
 export function rootAlertOutstanding(): boolean {
   try {
     const data = JSON.parse(fs.readFileSync(alertsFile(legacyRotatorRoot()), 'utf8')) as { alerts?: unknown }
-    return typeof data.alerts === 'object' && data.alerts !== null && ROOT_UNRESOLVED_CODE in data.alerts
+    if (typeof data.alerts !== 'object' || data.alerts === null) return false
+    return Object.keys(data.alerts).some((code) => ownsTickAlert(code))
   } catch (err) {
     return (err as NodeJS.ErrnoException)?.code !== 'ENOENT'
   }
@@ -344,8 +351,12 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
     // A null result means another process held the lock and the tick did not run: this beat
     // re-evaluated none of its own codes, so it may reap only the root code.
     if (findings.length > 0) deliverSafely(findings, { owns: result === null ? ownsRootAlert : ownsTickAlert, root: alertRoot })
-    // The root resolved but its alert is still recorded: clear it now, not 7 days from now.
-    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsRootAlert, root: legacyRotatorRoot() })
+    // The root resolved but the legacy alert file still holds records from the refused
+    // window (the root alert AND any tick code delivered alongside it — test (2) writes
+    // both to the legacy root): clear them all now, not 7 days from now. `ownsTickAlert`
+    // covers the root code too (it is in TICK_ALERT_PREFIXES), so the same reap claim
+    // sweeps everything that window delivered.
+    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsTickAlert, root: legacyRotatorRoot() })
     // REPAIR (TRDD-CVQJNW3A). The beat above can DETECT a dead slot and has nowhere to go —
     // re-capture is the one repair it cannot perform, and on 2026-07-31 that gap cost the owner a
     // manual login while the rotator watched it happen every 60 s. This is that leg.

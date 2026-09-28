@@ -1327,10 +1327,17 @@ export async function routeMessage(
     // only closed if nothing has been written yet). The referenced message
     // was sent BY the human user (the reply's recipient, `recipientName`) —
     // the guard checks the inbox envelope's from-part against that identity.
+    // The reply guard marked the inbound replied=true BEFORE delivery (above); if BOTH
+    // the local delivery AND the relay-queue fallback fail, the reply is lost while the
+    // inbound stays marked — any later legitimate reply is refused as a duplicate and the
+    // human's message is wedged shut. Best-effort unmark, mirroring SendMessage's
+    // G08-COMP (services/send-message-service.ts): log, never mask the real error.
+    let replyWasMarked = false
     if (graphCheck.edgeType === 'reply-only') {
       try {
         const { assertReplyToInbound } = await import('@/lib/amp-inbox-writer')
         await assertReplyToInbound(inReplyToId!, senderAgent!.id, recipientName)
+        replyWasMarked = true
       } catch (replyErr) {
         console.error('[AMP Route] Reply-only enforcement failed:', replyErr)
         return {
@@ -1358,14 +1365,28 @@ export async function routeMessage(
 
     } catch (error) {
       console.error('[AMP Route] Local delivery failed:', error)
-      queueMessage(localAgent.id, envelope, body.payload, senderKeyPair?.publicHex || '')
-      return {
-        data: {
-          id: messageId, status: 'queued', method: 'relay', queued_at: now,
-          error: 'Direct delivery failed, queued for relay'
-        } as AMPRouteResponse,
-        status: 200,
-        headers: rateLimitHeaders
+      try {
+        queueMessage(localAgent.id, envelope, body.payload, senderKeyPair?.publicHex || '')
+        return {
+          data: {
+            id: messageId, status: 'queued', method: 'relay', queued_at: now,
+            error: 'Direct delivery failed, queued for relay'
+          } as AMPRouteResponse,
+          status: 200,
+          headers: rateLimitHeaders
+        }
+      } catch (queueErr) {
+        // Both delivery routes failed and nothing was queued: undo the reply guard's
+        // mark so the human's message is not wedged shut (see replyWasMarked above).
+        if (replyWasMarked) {
+          try {
+            const { unmarkReplied } = await import('@/lib/amp-inbox-writer')
+            await unmarkReplied(inReplyToId!, senderAgent!.id)
+          } catch (unmarkErr) {
+            console.error('[AMP Route] Reply unmark after failed delivery also failed:', unmarkErr)
+          }
+        }
+        throw queueErr
       }
     }
 

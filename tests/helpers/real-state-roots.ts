@@ -35,6 +35,14 @@ export function listing(root: string): string[] {
       // Finder writes .DS_Store into any directory it has opened, at any time, with no
       // test involved — treating it as a leak would fail unrelated suites at random.
       if (e.name === '.DS_Store') continue
+      // The statusline-capture wrapper (TRDD-D8OYFG35/MVZTEKX4) rotates `.aim-bak-*` backups
+      // of every session record on EVERY refresh (3s x N live sessions), because the snapshot
+      // carries `capturedAt` — every write is a change, so json-io takes a backup every time.
+      // The prune keeps 10 per file, but the FILENAMES are always new, so a run-length window
+      // always sees new entries and the detector reads the live churn as a test leak. This is
+      // the wrapper writing, not a test (its own doc below names the daemon case); excluding
+      // the backup class — NOT the live records — keeps the leak signal for anything else.
+      if (e.name.includes('.aim-bak-')) continue
       const rel = prefix ? `${prefix}/${e.name}` : e.name
       out.push(rel)
       if (e.isDirectory()) walk(path.join(dir, e.name), rel)

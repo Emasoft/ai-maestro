@@ -10450,17 +10450,21 @@ export async function CreateAgent(
       }
     }
 
-    // G03-ENFORCE: Unless the user explicitly chose "Browse existing folder" in the wizard,
-    // the working directory MUST be under ~/agents/. No exceptions. No fallbacks to cwd, /tmp,
-    // $HOME, or any other location. This is the primary defense against agents being created
-    // in the wrong place.
-    const agentsRoot = join(HOME, 'agents')
+    // G03-ENFORCE (TRDD-WLWHVMKT): Unless the user explicitly chose "Browse existing folder"
+    // in the wizard, the working directory MUST be under ~/agents/. No exceptions. No fallbacks
+    // to cwd, /tmp, $HOME, or any other location. This is the primary defense against agents
+    // being created in the wrong place. The verdict comes from the single workdir-policy
+    // authority (checkAdoptableWorkdir — superset of the old hand-rolled startsWith: it also
+    // resolves `..` traversal and applies the BLOCKED_EXACT/recursion rules), but the
+    // semantics here stay a COERCION, not a refusal: a not-ok verdict forces the workdir
+    // back to ~/agents/<name>/ exactly as before — the policy is consulted only as the trigger.
     if (!allowExternal) {
-      const normalizedForCheck = workDir.startsWith('~') ? workDir.replace(/^~/, HOME) : workDir
-      if (!normalizedForCheck.startsWith(agentsRoot + '/') && normalizedForCheck !== agentsRoot) {
+      const { checkAdoptableWorkdir } = await import('@/lib/agent-workdir-policy')
+      const enforceVerdict = checkAdoptableWorkdir(workDir, false)
+      if (!enforceVerdict.ok) {
         // Force it back to ~/agents/<name>/
         console.warn(`[CreateAgent] G03-ENFORCE: Rejected workDir "${workDir}" (not under ~/agents/). Forcing to ~/agents/${name}/`)
-        workDir = join(agentsRoot, name)
+        workDir = join(HOME, 'agents', name)
       }
     }
 

@@ -4,7 +4,7 @@ status: tasked
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-09-10T09:52:01+0200
+updated: 2026-09-28T21:48:46+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -279,6 +279,7 @@ re-test by creating an agent.
 - [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug). — filed: TRDD-963CTSUO; landed: open. Independent Tier-0 card, `column: planned`, no `parent-trdd:`/`derived:` (per 2026-09-10 review correction — blocker (2) is a pre-existing general bug this card waits ON, not an effect it opens). See `design/tasks/TRDD-20260910_094841+0200-963CTSUO-registry-status-sessions-not-updating.md`.
 - [ ] Boot-restore across a real server restart is proven end-to-end for an adopted agent, once blocker (2) is fixed. **OWNER-SIDE**: requires a live server and a real restart; not attempted in this dispatch, and blocked on TRDD-963CTSUO's finding.
 - [ ] `SCENARIOS_TESTS_RULES.md` Rule 0 / the scenario fixture rules permit an out-of-`~/agents/` fixture, so external adoption is scenario-testable going forward. **Wording proposed in report, owner applies** — 2026-09-10 review found the file's Rule 0 text labels an out-of-`~/agents/` import "a critical security bug", and loosening it is a governance edit above the implementer's tier; the exact proposed old-text/new-text/file:line diff is in the implementer's report rather than applied to the file.
+- **G03-ENFORCE routed through the authority — 2026-09-28** (report: `reports/fleet-readiness/20260928-g03-enforce-policy-route.md`; orchestrator re-verified the diff, re-ran the suite, and re-proved the pre-existing failure three ways). The gate now consults `checkAdoptableWorkdir(workDir, false)` as the COERCION trigger; semantics unchanged (force to ~/agents/<name>/, warn text byte-identical). Two predicate/policy disagreements found, both resolved safer: traversal (`~/agents/../Code/foo`) old-PASSED [a real hole], new coerces; case-mismatch (`~/Agents/../agents/foo`) old over-coerced, new resolves correctly. Delete-side sites (G08c/G09) and the G03-undo compensation deliberately untouched — different question shapes. tsc 0; coercion pinned by existing g05c test C. **SEPARATE PRE-EXISTING BUG (not this change):** g05c test B (`allowExternalFolder=true` + folder under ~/agents) fails on UNMODIFIED code — proven by stash A/B, by a worktree run at f8d635c31~1 (pre-09-26), and by the allowExternal path never reaching G03-ENFORCE. Test asserts success=true; something else refuses. Needs its own card.
 
 ## Notes and lessons learned
 

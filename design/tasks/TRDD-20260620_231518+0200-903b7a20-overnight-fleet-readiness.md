@@ -4,7 +4,7 @@ status: tasked
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-22T14:48:03+0200
+updated: 2026-09-28T21:29:37+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -704,6 +704,7 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
       nobody is working it, and that is still true. Do NOT read the ticks above as "nearly done":
       four internal gates and the whole bounded remainder are open. This box exists so the next
       reader does not mistake a cleared EXTERNAL queue for a finished campaign.
+- **G10 parts 2+3 MEASURED 2026-09-28** (report: `reports/fleet-readiness/20260928-g10-parts2-3.md`; orchestrator spot-checked two claims live). PART 2 skills: repo vs installed cache 3.2.3 — 29/29 dirs, name-sets identical, 28 byte-identical, ONE changed (`agent-messaging`: repo carries undeployed R28/R41 compensating-verification text, ai-maestro#124). PART 3 API verbs: the plugin calls ZERO live `/api/*` endpoints by design (delegates to the CLI wrapper, documented in its own header) — the census is therefore 0 verbs, with the 4 comment-referenced legacy routes probed and all 4 registered (401, not 404). G10's three parts are now all measured: scripts identical (part 1), skills 28/29 (part 2), API by-design clean (part 3). Residue: deploy the one stale skill (owner-batch, publishes with the next plugin release).
 
 ## Approval log
 

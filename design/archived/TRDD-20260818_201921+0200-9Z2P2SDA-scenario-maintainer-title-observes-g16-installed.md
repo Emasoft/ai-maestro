@@ -1,13 +1,13 @@
 ---
 trdd-id: 9Z2P2SDA
-status: tasked
+status: archived
 title: Phase-3 scenario — dashboard MAINTAINER creation observes ChangeTitle G15/G16 report installed
-column: blocked
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-29T22:34:54+0200
+updated: 2026-09-29T23:09:25+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -18,14 +18,14 @@ mandated-by: user
 derived: false
 npt: []
 eht: []
-blocked-by: [TRDD-JT3U4ZVM]
+blocked-by: []
 release-via: none
 priority: 1
 severity: medium
 effort: S
 labels: [scenario, phase-3, fleet, role-plugins, TRDD-BRRJK57P]
 external-refs: [TRDD-BRRJK57P, TRDD-JT3U4ZVM]
-pre-block-column: dev
+pre-block-column: 
 blocker-probe: sh -c 'git -C . merge-base --is-ancestor 844c6730a HEAD && echo FIX-LANDED || echo FIX-NOT-LANDED'
 blocker-holds-if: not-match:FIX-NOT-LANDED
 ---
@@ -56,7 +56,7 @@ folder deletion, purge cemetery, STATE-WIPE.
 
 ## Acceptance
 
-- [ ] A `SCEN-XXX_maintainer-title-g16.scen.md` exists, conforms to the 15 rules, and names this
+- [x] ~~A `SCEN-XXX_maintainer-title-g16.scen.md` exists, conforms to the 15 rules, and names this~~ STRUCK 2026-09-29: superseded by the 2026-08-26 premise settlement (extend SCEN-001, no 41st file) — see Approval log
       card.
       **⚠ VERIFY THE PREMISE BEFORE WRITING IT — measured 2026-08-22, and it does not hold as
       stated.** This card's title says *"dashboard MAINTAINER **creation** observes **ChangeTitle**
@@ -98,7 +98,7 @@ folder deletion, purge cemetery, STATE-WIPE.
       the tail of another card).
 - [x] The scenario has RUN against the live server; the G15/G16 `installed` observation is
       recorded (report + screenshot), or the failure is a bug card.
-- [ ] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.
+- [x] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.
 - [x] **(box 2, resolved 2026-09-28)** The scenario HAS RUN against the live server — the G15/G16 observation is recorded, and it is a FAILING observation (BUG-001 in the report): the err-log WARN fired while the plugin landed async. Box ticked as MET with a negative result; the fix work belongs to JT3U4ZVM, not here.
 - Evidence-form note for box 2 (review round): the letter says 'report + screenshot'; the actual evidence is the report's verbatim log quotes only — S034d has no screenshot (log-grep evidence cannot be meaningfully screenshotted, and the run's own step table shows '—'). The failure arm ('bug card') is satisfied by reference to the EXISTING owner card TRDD-JT3U4ZVM (dedupe — a second card would violate it), which now carries the dated reproduction line. Read 'recorded' under that form.
 
@@ -121,3 +121,6 @@ folder deletion, purge cemetery, STATE-WIPE.
 - 2026-09-29T22:29:58+0200 (CLOCK-READ) — round-6 closed. (1) Test risk (finding 1's sharp half): tests/unit/trdd-doctor-blocker-probe.test.ts RUN against the message edit — 11/11 GREEN; the test asserts rule ids/severities, not the message substring, so the edit is safe. (2) Fabrication window CORROBORATED by git commit times, no longer estimated: 23:10-entry committed 22:15:05, 23:40-entry committed 22:18:15, 23:59-entry committed 22:22:38 — forward-fabricated by ~55, ~82, ~97 minutes respectively (measured, not 'roughly'). The correction entry's direction-word fixed HERE: the fabricated times are ABOVE this point in the append-only log, not below. (3) The 22:50/22:30 entries (this card + JT3U4ZVM): committed at ec48b9e6d 22:11:24 — those were typed ~22:0x-22:1x and are accurate within minutes, NOT part of the fabrication window. (4) The 22:22 lock: the concurrent git writer was plausibly the SCEN-001 runner (its prompt authorizes in-place Rule-4 commits) — the concurrent-writers risk is real for as long as it works; no harm landed (clean tree, exact delta), and its report will be reconciled against this history on return. (5) The remaining open item (existing probe-carrying cards' readers never see the new message; wikimem lesson for clock-read discipline) is now OWNED: this entry + the JT3U4ZVM 23:10 vehicle note are the in-repo half; the wikimem half goes to memory-write in the janitor's next cycle — and to keep it from the no-owner shape, the doctor's BLOCKER-PROBE-BAD-PREDICATE / present-probe path is the natural future carrier, proposed to the wikimem cycle rather than edited into a second message now.
 - 2026-09-29T22:31:43+0200 (CLOCK-READ) — round-7 closed. (1) Finding 1+2 closed by measurement: tests/unit/pillar-grep-cli.test.ts RUN — 38/38 GREEN (9.09s); both known test files touching the edited surface now pass, and the honest claim is recorded: the 11-test probe-gate run pins rule IDS not message CONTENT, so message-content is unpinned by tests — the shape is verified, the wording is verified only by reading. (2) Finding 3 reworded in the record: the lock author is UNATTRIBUTED — 'runner among candidates' (this session's own four commits 22:11-22:22 and any IDE indexer were live too); no commit hash of the runner exists yet to attribute. (3) Finding 4 accepted as named: the wikimem half has NO real owner — the record now states that plainly instead of claiming ownership; the minimal real fix (one line in the doctor's present-probe path, same file, tsc+tests green) is EXERCISED NOW rather than proposed: see the doctor commit that follows this entry. (4) Finding 6's unowned reconciliation promise: the runner's return notification lands in THIS session, which is the one tracking JT3U4ZVM/9Z2P2SDA — the tracking mechanism is the notification itself plus this card's in-flight state; accepted as bounded, not perfect.
 - 2026-09-29T22:34:53+0200 (CLOCK-READ) — round-8 = FINAL: the review chain itself BREACHED its two-rounds-max escalation protocol (7 rounds, ~3.4M subagent tokens, substance stable since round 4) — the chain STOPS here and the breach is escalated to the USER rather than another autonomous round. Two mechanical fixes applied (review-exempt): (1) reader set ENUMERATED by grep (finding 2's quantifier closed) — three files read the edited surface: trdd-doctor-blocker-probe (11/11), pillar-grep-cli (38/38), trdd-doctor (132/132, just run); all green, no message-substring pinners exist. (2) The code comment's TRDD citation rewritten (phantom-provenance edge removed): the id+date form 'TRDD-9Z2P2SDA (2026-09-29) established' became a pointer to this Approval log — code→TRDD provenance edges are not minted from a log-only fact. Tests re-green after the edit (49+132) BEFORE the commit; had they red, the edit would have been reverted, not committed. Known limits, for the USER: the runner-reconciliation obligation has no durable receiver if this session compacts before the runner returns; the durable half is the card entries themselves. COMBINED REVIEW-COST NOTE for the escalation: ~3.4M subagent tokens over 8 rounds on a probe-contract wording thread.
+- 2026-09-29T23:09:00+0200 — blocker RELEASED: TRDD-JT3U4ZVM reached complete (archived) at ~23:08; its last box was ticked after independent re-verification of the passing run (SCEN-001 20260929T200726Z: zero G15/G16 WARN lines dated 2026-09-29 in pm2 err log vs 10 pre-deploy lines; out-log summary present). Sibling's box 3 (tick JT3U4ZVM's box citing the passing run) is satisfied BY REFERENCE to that card's tick. This card's remaining work: tick its own box 3, leave blocked.
+- 2026-09-29T23:09:17+0200 — box 1 struck with reason, not ticked: it demanded a NEW scenario file; the 2026-08-26 premise settlement superseded that vehicle (extend SCEN-001 with a verify step instead — recorded on this card and echoed on JT3U4ZVM). The deliverable actually authorized and shipped is the S034c/S034d verify steps in SCEN-001 (commit 3e56caec9) plus the two live runs (20260928 failing, 20260929 passing). The box's letter is obsolete-as-superseded; the intent (a conforming scenario producing the G15/G16 observation) is met and verified by boxes 2-4.
+- 2026-09-29T23:09:25+0200 — COMPLETE by main-agent@ai-maestro. archived → complete. Cleared blocked-by (all blockers terminal).

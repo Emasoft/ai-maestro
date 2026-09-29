@@ -1,11 +1,11 @@
 ---
 trdd-id: JT3U4ZVM
-status: tasked
+status: archived
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
-column: ai_review
+column: complete
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-09-29T22:15:05+0200
+updated: 2026-09-29T23:08:50+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -294,6 +294,8 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
 - 2026-09-29T22:30:00+0200 — fix verified LIVE before dispatching the observation run: commit 844c6730a (14:09, subject carries the 'G16 emit' probe needle per the 23:55 contract) -> .next BUILD_ID written 14:54 -> pm2 server restarted 14:55:17, and .next/server/chunks/1.js greps positive for 'G16 emit verified post-install state'. Deploy chain complete; the card's only remaining item is a PASSING live observation (SCEN-001 re-run), dispatched to the scenario-runner now.
 - 2026-09-29T22:50:00+0200 — REVIEW REPAIR (adversarial fork, 5 findings): (1) the 19:24 mtime on .next/server/ the deploy verification observed is EXPLAINED — Finder wrote .next/server/.DS_Store, touching the directory mtime; no build process ran (ps checked); the served bundle is the 14:54 build. (2) The 'G16 emit' needle is now POLLUTED in git history: docs commit 91d6fb52 carries it in its subject, so 9Z2P2SDA's blocker-probe (greps git log for the string) can no longer discriminate fix-commit from doc-commit — verification of the fix must pin the SHA 844c6730a, never the needle. Needle-match alone is no longer evidence. (3) The 22:30 Approval-log timestamp was hand-typed, not clock-read — acknowledged as the known trap; the dispatch it asserts DID land (spawn succeeded after the commit).
 - 2026-09-29T23:10:00+0200 — box-letter vehicle note (review round 2, finding 4): the box's letter says 'stand up a MANAGER + one MAINTAINER through the dashboard'; the sanctioned vehicle is a SCEN-001 title-change verified from server logs, per the 2026-08-26 premise settlement recorded on sibling 9Z2P2SDA. Ticking this box cites that settlement; the letter's vehicle is superseded, not re-scoped.
+- 2026-09-29T23:08:33+0200 — LAST BOX TICKED (independently verified before ticking, not from the runner's self-report): SCEN-001 re-run 20260929T200726Z returned PASS 24/24; I re-measured the primary evidence myself — pm2 err log (logs/pm2-error.log): 10 G16:WARN lines all dated 2026-07-11..2026-09-28 (pre-deploy), ZERO for 2026-09-29; out log carries the run's own 'autonomous → maintainer (35 gates, restart=true)' summary at 22:57:11 as positive control. The run's 20 pre-fix err lines are the discriminating control proving capture works. The observation class the box demanded (ChangeTitle G15/G16 reports installed, not WARN) is now recorded from a passing live run. Report: reports/scenarios-runner/SCEN-001_20260929T200726Z.report.md
+- 2026-09-29T23:08:50+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
 
 ## Acceptance
 
@@ -318,7 +320,7 @@ card's own record of them.
       bypassing its pre-push hook). The tag step is in that repo's `publish.py` today, and three
       subsequent releases each carry their resolver tag. **The regression this card feared did not
       happen**
-- [ ] the card's own NEXT ACTION: stand up a MANAGER + one MAINTAINER **through the dashboard** and
+- [x] the card's own NEXT ACTION: stand up a MANAGER + one MAINTAINER **through the dashboard** and
       watch ChangeTitle G15/G16 report `installed` rather than `WARN — Failed to install`. The
       OUTCOME is confirmed (jack-bot carries the plugin, dependency resolved, pane on Claude 2.1.207
       rather than a fallen-back `zsh`) but the pipeline observation itself was never recorded, and

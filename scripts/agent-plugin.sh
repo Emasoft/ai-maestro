@@ -179,9 +179,9 @@ HELP
     require_claude || return 1
 
     # Use run_claude_command to capture full error output
-    local output exit_code
-    output=$(run_claude_command "$agent_dir" plugin install "$plugin" --scope "$scope" 2>&1)
-    exit_code=$?
+    # `|| exit_code=$?` is load-bearing under set -e (aimaestro-agent.sh): a plain failing assignment kills the CLI before the error branch below can print the captured output — ai-maestro#121's silent exit 1.
+    local output exit_code=0
+    output=$(run_claude_command "$agent_dir" plugin install "$plugin" --scope "$scope" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         # ToxicSkills: Post-install security scan for plugins that include skills
@@ -485,9 +485,8 @@ HELP
 
     print_info "Updating plugin '$plugin' (scope: $scope) for agent '$RESOLVED_ALIAS'..."
 
-    local output exit_code
-    output=$(run_claude_command "$agent_dir" plugin update "$plugin" --scope "$scope" 2>&1)
-    exit_code=$?
+    local output exit_code=0
+    output=$(run_claude_command "$agent_dir" plugin update "$plugin" --scope "$scope" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         print_success "Plugin updated: $plugin"
@@ -1135,9 +1134,8 @@ HELP
     print_info "Adding marketplace '$source' for agent '$RESOLVED_ALIAS'..."
 
     # Use run_claude_command to capture full error output
-    local output exit_code
-    output=$(run_claude_command "$agent_dir" plugin marketplace add "$source" 2>&1)
-    exit_code=$?
+    local output exit_code=0
+    output=$(run_claude_command "$agent_dir" plugin marketplace add "$source" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         print_success "Marketplace added: $source"

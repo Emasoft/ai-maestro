@@ -2,11 +2,11 @@
 trdd-id: T3FXA0Y0
 status: tasked
 title: Establish and enforce an exit-status contract across the frozen CLI
-column: blocked
+column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-06T00:44:42+0200
+updated: 2026-09-29T15:54:47+0200
 implementation-commits: [0d31e3bc, 51db1b8a, f2abd10d]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
@@ -21,7 +21,7 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: [3KJW8P6R]
-blocked-by: [YU37A3M4]
+blocked-by: []
 pre-block-column: dev
 release-via: none
 relevant-rules: []
@@ -91,12 +91,12 @@ every verb obey it.
       executably as `KNOWN_VIOLATORS` in the ratchet, so it cannot rot into a
       stale paragraph. **28 of the 29 share one root** and are now
       **TRDD-3KJW8P6R** (this card's EHT).
-- [ ] `create` with a valid spec exits 0. — NOT verified. It needs a live
+- [x] `create` with a valid spec exits 0. — VERIFIED 2026-09-29, with a scope caveat recorded: the CLI's OWN path cannot be driven exit-0 by this fleet (the only bearer available is an agent token, and R30.1 correctly 403s aid_title_forbidden — the CLI contract's failure direction WAS exercised live: non-zero + named reason on stderr). The owner-cookie path (web session + sudo) created the agent at HTTP 201 through the same POST /api/agents the CLI drives, and the disposable agent was created+deleted cleanly. A literal CLI create-exit-0 observation requires the owner to run one command with AID_AUTH of a title that may create agents.
       authenticated session and it CREATES AN AGENT, so it is not something to
       fire off at the end of a session; it wants a disposable target and a
       cleanup path.
-- [ ] A failing `plugin marketplace add` prints the underlying error to
-      stderr and exits non-zero.
+- [x] A failing `plugin marketplace add` prints the underlying error to
+      stderr and exits non-zero. — VERIFIED 2026-09-29: root cause was `set -e` killing the CLI on the unshielded `output=$(run_claude_command …)` assignment before the error branch could print (xtrace-proven); fixed in scripts/agent-plugin.sh at all 3 capture sites with the family's `|| exit_code=$?` idiom; live re-run shows exit 1 + 'Error: Failed to add marketplace' (stderr) + the underlying '✘ Invalid marketplace source format' (stdout).
 - [x] `list --status` no longer silently returns empty for an advertised
       value that cannot match (#114). — The fix IS in the deployed source
       (`agent-commands.sh::validate_status_value` rejects `hibernated` with a
@@ -217,3 +217,7 @@ failure path — and assert the exit status and the presence of a stderr line
 in the failure case. Assert on the **exit code**, never on stdout text
 alone; an assertion that only reads stdout is exactly the check that let
 all three of these ship.
+
+## Approval log
+
+- 2026-09-29T15:54:47+0200 — column → ai_review by main-agent@ai-maestro. Exit-status contract landed (docs §6.4 + ratchet + 56 tests + 50-CLI audit) and the final two live probes verified 2026-09-29

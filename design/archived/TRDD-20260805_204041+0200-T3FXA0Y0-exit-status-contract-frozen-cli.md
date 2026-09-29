@@ -1,13 +1,13 @@
 ---
 trdd-id: T3FXA0Y0
-status: tasked
+status: archived
 title: Establish and enforce an exit-status contract across the frozen CLI
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-09-29T16:29:12+0200
-implementation-commits: 0d31e3bc, 51db1b8a, f2abd10d, 93a8fb951, 81b76a957
+updated: 2026-09-29T17:24:51+0200
+implementation-commits: 0d31e3bc, 51db1b8a, f2abd10d, 93a8fb951, 81b76a957, 6e5595cd4, 63da19cc
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -218,10 +218,12 @@ in the failure case. Assert on the **exit code**, never on stdout text
 alone; an assertion that only reads stdout is exactly the check that let
 all three of these ship.
 2026-09-29 (post-review caveat, owner-run follow-up): the 34-site || true sweep's per-site verification covered EMPTY-output failure modes (connection refused / timeout, no body). A curl failure emitting a NON-empty garbage body (proxy 502 HTML, captive portal) would pass the emptiness checks and proceed with garbage — the discriminating garbage-body pin for the high-traffic verbs is follow-up work this card's complete gate should carry. Separately: the literal CLI create exit-0 with a title-authorized bearer remains an OWNER-RUN item (one command: AID_AUTH=<authorized> aimaestro-agent.sh create <disposable> … ; echo 0, then delete it).
+2026-09-29T17:1x+0200 — GARBAGE-BODY PIN LANDED (63da19cc): the follow-up box is closed. Driving the pin exposed a REAL bug, not just a test gap: cmd_probe's error branch ran an UNSHIELDED error_msg=$(… jq -r '.error // empty') assignment exactly when the body is unparseable — jq exits 2 on the parse error, set -euo pipefail kills the CLI before print_error, exit 5 with both streams empty (minimal case reproduced: bash -c 'set -euo pipefail; x=$(echo "<html>" | jq -r .x 2>/dev/null)'). Same defect at 8 sites in agent-commands.sh (probe x2, config, show, create, delete, update, rename, import); all shielded || true with the why-comment at the first. probe/presence vs a garbage curl shim now exit 1 + 'Invalid response from API' on stderr. Pins: 2 (presence+probe, URL-shaped curl shim, garbage-never-echoed + diagnostic-named assertions); neuter reddens exactly the 2 pins, nothing else. cli-help-exit-contract 73/73, tsc 0.
 
 ## Approval log
 
 - 2026-09-29T15:54:47+0200 — column → ai_review by main-agent@ai-maestro. Exit-status contract landed (docs §6.4 + ratchet + 56 tests + 50-CLI audit) and the final two live probes verified 2026-09-29
+- 2026-09-29T17:24:51+0200 — COMPLETE by main-agent@ai-maestro. Exit-status contract landed and fully verified: all acceptance boxes evidenced, garbage-body follow-up closed with a real 8-site silent-exit fix + 2 pins (neuter-verified), EHT 3KJW8P6R terminal, live probes recorded. ai_review held it; the last owed artifact (63da19cc) is committed and pushed..
 
 ## Provenance note
 

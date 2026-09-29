@@ -228,6 +228,15 @@ describe('claude-session join — the claimed name is corroborated, never truste
     expect((await post(PAYLOAD({ session_id: 'sess-phantom', agent: { name: 'agent-b' }, cwd: '/elsewhere' }), '127.0.0.1')).status).toBe(200)
     expect(persistedSessionId('agent-a-id')).toBeUndefined()
   })
+
+  it('a name that does NOT RESOLVE (deleted/unknown agent) falls through to the cwd path — the cwd match decides, no corroboration demanded', async () => {
+    // The fleet's most-trafficked join path: most payloads carry no agentName, and a payload
+    // naming a deleted agent must neither resurrect that record nor cost the honest cwd write.
+    // An unresolvable name contributes nothing; the cwd-only path keeps its pre-existing trust.
+    seedRegistry([{ id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' }])
+    expect((await post(PAYLOAD({ session_id: 'sess-cwd-fallthrough', agent: { name: 'ghost-agent' }, cwd: '/work/a' }), '127.0.0.1')).status).toBe(200)
+    expect(persistedSessionId('agent-a-id')).toBe('sess-cwd-fallthrough')
+  })
 })
 
 describe('the round trip normalises resets_at to epoch MS from BOTH wire formats', () => {

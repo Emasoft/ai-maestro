@@ -151,19 +151,23 @@ export async function POST(request: NextRequest) {
   // this is deliberately AFTER the write and deliberately unable to fail the request — a join miss
   // is warned about (a visible null is legible; a silent miss is not), never an ingest failure.
   //
-  // The claimed name is CORROBORATED, never trusted alone: a statusline payload is attacker-shaped
-  // local input (statusline-normalize), and the one field the sender must not choose is WHO the
-  // record lands on — a bare `agent.name` would let any local process write its session id onto
-  // any agent's record and misattribute its usage join. The name is honoured only when the
-  // snapshot's cwd also names that agent, or carries no cwd at all. On a DISAGREEMENT neither
-  // candidate wins and nothing is written: the cwd is the session's CURRENT directory and drifts
-  // the moment an agent cds into a repo, worktree, or a sibling agent's workdir, so letting the
-  // cwd match decide would attribute a cd'd agent's session to whoever owns the transient
-  // directory — a wrong-writer bug that needs no malice. Warn + skip kills both the spoof write
-  // and the cd-drift misattribution; the only loss is the rare case where the name is stale but
-  // the cwd is right, which the warn makes legible. ponytail: on a SHARED workdir the recorded id
-  // flip-flops last-seen-wins between the agents alternating there — history-aware assignment is
-  // the documented upgrade path (issue #155).
+  // The claimed name is corroborated WHEN IT RESOLVES, never trusted alone: a statusline payload
+  // is attacker-shaped local input (statusline-normalize), and the one field the sender must not
+  // choose is WHO the record lands on — a bare `agent.name` would let any local process write its
+  // session id onto any agent's record and misattribute its usage join. A name that resolves to a
+  // live agent is honoured only when the snapshot's cwd also names that agent, or carries no cwd
+  // at all; a name that resolves to nothing (deleted or unknown agent) contributes nothing, and
+  // the cwd path decides exactly as it always has. On a DISAGREEMENT neither candidate wins and
+  // nothing is written: the cwd is the session's CURRENT directory and drifts the moment an agent
+  // cds into a repo, worktree, or a sibling agent's workdir, so letting the cwd match decide
+  // would attribute a cd'd agent's session to whoever owns the transient directory — a
+  // wrong-writer bug that needs no malice. Warn + skip kills both the spoof write and the
+  // cd-drift misattribution. What it costs: a name that RESOLVES but disagrees with the cwd — a
+  // drifted-but-live agent (the cd-ing kind), or a spoofed name over someone else's cwd — records
+  // nothing until the drift resolves, and the warn keeps that legible rather than silently
+  // misattributing; a missing join is recoverable, a wrong one is not. ponytail: on a SHARED
+  // workdir the recorded id flip-flops last-seen-wins between the agents alternating there —
+  // history-aware assignment is the documented upgrade path (issue #155).
   try {
     const agentName = snapshot.session.agentName
     const cwd = snapshot.session.cwd

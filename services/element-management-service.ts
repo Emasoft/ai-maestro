@@ -3993,7 +3993,28 @@ export async function ChangeTitle(
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
-              ops.push(`G16: WARN — Failed to install "${target}": ${msg}`)
+              // VERIFY BY EFFECT before degrading: a CLI that exits nonzero after (or despite)
+              // doing the work — or a retry that races the CLI's own registry write — leaves the
+              // enabledPlugins key in settings.local.json while installPluginLocally throws.
+              // Emitting WARN on the throw alone reported `1 gate(s) DEGRADED` for installs that
+              // verifiably landed (SCEN-001 20260928T191659Z BUG-001: maintainer WARN at
+              // 21:56:49, plugin present in settings.local.json minutes later), and every
+              // downstream consumer of that line (G07c's cause propagation, G17's R9.13
+              // recovery, the pm2 err-log grep in SCEN-001) treats it as a real failure.
+              // Ground truth is the same file G17 scans — not the throw.
+              const verifyPath = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
+              const landed = await loadJsonSafe(verifyPath) as Record<string, Record<string, boolean>> | null
+              const landedKey = targetMarketplace ? `${target}@${targetMarketplace}` : null
+              const landedActive = !!landed?.enabledPlugins && Object.keys(landed.enabledPlugins).some(
+                k => k === landedKey || k.startsWith(`${target}@`)
+              )
+              if (landedActive) {
+                ctx.g16Installed = { via: 'claude', name: target, marketplace: targetMarketplace }
+                result.installedPlugin = target
+                ops.push(`G16: Installed role-plugin "${target}" (CLI reported failure but enabledPlugins carries the key — G16 emit verified post-install state)`)
+              } else {
+                ops.push(`G16: WARN — Failed to install "${target}": ${msg}`)
+              }
             }
           } else if (options?.skipPluginSync) {
             ops.push(`G16: Plugin install skipped (skipPluginSync=true)`)

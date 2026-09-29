@@ -718,6 +718,69 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     expect((calls[0].args as string[])[2]).toMatch(/^ai-maestro-autonomous-agent@/)
   })
 
+  // THE G16 EMIT CONDITION (TRDD-JT3U4ZVM live reproduction, SCEN-001 20260928T191659Z BUG-001):
+  // `claude plugin install` can exit nonzero while the enabledPlugins key still lands (a retry
+  // racing the CLI's own registry write; a dependency-mismatch refusal against a stale pinned
+  // range whose newer resolution succeeded). G16 used to emit its WARN on the throw alone, so
+  // the pm2 err log carried `G16: WARN — Failed to install … after 4 attempt(s)` for installs
+  // that verifiably landed — every consumer of that line (G07c's cause propagation, G17's R9.13
+  // recovery, SCEN-001's log grep) treats it as a real failure. The fix verifies POST-install
+  // state before degrading, and this test pins both halves:
+  //   - key present after a failed CLI  → NO WARN, an `Installed` line (this test);
+  //   - key absent after a failed CLI   → the WARN still fires (the sibling test below).
+  it('a CLI failure that STILL lands the enabledPlugins key is NOT a degraded install — G16 verifies post-install state before emitting its WARN (G16 emit)', async () => {
+    // The workdir persists across tests (afterAll is the only cleaner), so a key left by
+    // an earlier test would make this one's verify pass for the wrong reason — start clean.
+    rmSync(path.join(FAKE_HOME, 'agents', 'agent-a', '.claude'), { recursive: true, force: true })
+    seedAgents([makeAgentRecord({ id: 'agent-a' })])
+    // The false-degraded double: `claude plugin install` performs its real side effect
+    // (writes the enabledPlugins key into the agent's settings.local.json) and THEN rejects —
+    // the exact shape of the live reproduction where execFileAsync reports
+    // `Command failed: claude plugin install …` while the key exists on disk.
+    mockExecFileImpl.mockImplementation(async (cmd: unknown, args: unknown, opts: unknown) => {
+      mockExecFileCalls.push({ cmd, args })
+      const argv = Array.isArray(args) ? (args as string[]) : []
+      const cwd = (opts as { cwd?: string } | undefined)?.cwd
+      if (cmd === 'claude' && argv[0] === 'plugin' && argv[1] === 'install' && cwd) {
+        const file = path.join(cwd, '.claude', 'settings.local.json')
+        mkdirSync(path.dirname(file), { recursive: true })
+        const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
+        cur.enabledPlugins = { ...(cur.enabledPlugins ?? {}), [argv[2]]: true }
+        writeFileSync(file, JSON.stringify(cur, null, 2))
+      }
+      throw new Error('Command failed: claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local')
+    })
+
+    const r = await changeTitle('agent-a', 'maintainer', { skipPluginSync: false, githubRepo: 'Emasoft/ai-maestro' })
+
+    expect(r.success).toBe(true)
+    // NO degraded line: the WARN arm is what reddens if someone reverts the emit condition.
+    expect(r.operations.some(op => /G16: WARN — Failed to install/.test(op))).toBe(false)
+    // And the success shape is recorded, so the undo ledger knows the mechanism to mirror.
+    expect(r.operations.some(op =>
+      /^G16: Installed role-plugin "ai-maestro-maintainer-agent"/.test(op))).toBe(true)
+    expect(r.installedPlugin).toBe('ai-maestro-maintainer-agent')
+  })
+
+  it('a CLI failure that leaves NO key behind is STILL a degraded install — the post-install verify must not silence a genuine failure (G16 emit)', async () => {
+    // Same stale-state guard as the sibling: the first test's landed key must not leak in.
+    rmSync(path.join(FAKE_HOME, 'agents', 'agent-a', '.claude'), { recursive: true, force: true })
+    seedAgents([makeAgentRecord({ id: 'agent-a' })])
+    // The genuine-failure double: the CLI rejects and writes NOTHING — the shape where the
+    // WARN is the operator's only clue (logDegradedOps exists precisely so this is loud).
+    mockExecFileImpl.mockImplementation(async (cmd: unknown, args: unknown, opts: unknown) => {
+      mockExecFileCalls.push({ cmd, args })
+      throw new Error('Command failed: claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local')
+    })
+
+    const r = await changeTitle('agent-a', 'maintainer', { skipPluginSync: false, githubRepo: 'Emasoft/ai-maestro' })
+
+    expect(r.success).toBe(true)
+    expect(r.operations.some(op =>
+      /G16: WARN — Failed to install "ai-maestro-maintainer-agent"/.test(op))).toBe(true)
+    expect(r.installedPlugin).toBeNull()
+  })
+
   // R20.5's SECOND clause. The rule is "the default role-plugin MUST be installed
   // automatically when the title is granted, UNLESS the user (or a privileged
   // caller) explicitly picks a different COMPATIBLE role-plugin". ChangeTitle has

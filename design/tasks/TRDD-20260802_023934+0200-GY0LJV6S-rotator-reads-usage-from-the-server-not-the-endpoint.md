@@ -6,7 +6,7 @@ column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T17:59:21+0200
+updated: 2026-09-29T18:04:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -627,3 +627,5 @@ statusline path is observed working — the failure mode here is an unattended l
 account, so a reversible step is worth more than a tidy diff.
 
 2026-09-29T17:59+0200 — ROUND-2 REVIEW (df8776c6e/21bf0db3e): SOUND. 4.1a-proc note folded into the probe procedure: when the probe window runs, the record must name (i) the janitor daemon EXPECTEDLY stands down while the R16 flag is re-armed (the server claims the chore stamp; the janitor schedules from the newest stamp — the stamp's designed meaning, not a defect) and (ii) verification that the re-disable actually landed (marker renamed back to .DISABLED-...) so the window's cleanup does not leave the server silently owning the chore the ORH handover assigned to the janitor. Its MINOR 1.1c ("decides exactly as it always has" → "exactly as the bare-cwd path always has") is fixed in the same pass.
+
+2026-09-29T18:0x+0200 — ROUND-3 REVIEW (b18fdfd76): SOUND, no blocking findings. One line added to the probe procedure: alongside items (i) and (ii) above, the probe record must CONFIRM THE SERVER'S OWN 60s TIMER IS BEATING during the window — a re-armed flag with no server timer means neither side beats and a failed probe would misread as a broken push-trigger when the flag wiring is fine. (The probe's own acceptance assertion self-covers this by failing loudly, but naming it at probe time prevents the wrong diagnosis.) Record notes, not defects: df8776c6e's lint claim was made under a false reading ($?-after-pipe) and is superseded by the real capture this turn (ESLINT_USE_FLAT_CONFIG=false vs the repo's legacy .eslintrc.json: exit 0, 0 bytes); the machine's canonical bare `npx eslint .` currently exits 2 from a stray HOME-level eslint.config.mjs OUTSIDE this repo — owner's call, not filed here.

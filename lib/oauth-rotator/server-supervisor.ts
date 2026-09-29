@@ -70,10 +70,11 @@ export function serverTickAgeS(_root: string, now: number): number | null {
 }
 
 /**
- * One supervisor beat: gate on the rotator opt-in → gather facts (with the tick-armed state as the
+ * One supervisor beat: gate on OUR OWN tick flag (ORH-4/M3 — the server claims this chore only
+ * when able) → gate on the rotator opt-in → gather facts (with the tick-armed state as the
  * beat-owner liveness) → diagnose → surface the alerts. Wrapped so it NEVER throws to its caller.
- * Returns the alert codes it surfaced (empty when opted-out or all clear) so a test can assert
- * without scraping the log.
+ * Returns the alert codes it surfaced (empty when opted-out, not armed, or all clear) so a test
+ * can assert without scraping the log.
  */
 export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[] {
   const optInCheck = deps.optInCheck ?? optInPresent
@@ -82,12 +83,22 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
     deps.gatherFactsImpl ??
     ((daemonAlive: () => boolean) => gatherFacts({ deps: { daemonAlive, tickAgeS: serverTickAgeS } }))
   const log = deps.log ?? ((msg: string) => console.warn(msg))
-  // The janitor's handover stamp — see TRDD-14HI8ZPR / ai-maestro#111. Written on ATTEMPT, before
-  // the opt-in gate, because a supervisor beat that correctly no-ops is still this chore being
-  // owned on cadence, which is the only thing the stamp claims.
-  stampChoreRun('oauth-rotator-supervisor')
   try {
+    // Gated on OUR OWN tick flag first, mirroring the capability claim in server-liveness.ts:115
+    // (`if (oauthEnabled()) caps.push('oauth-rotator-tick', 'oauth-rotator-supervisor')`) — the
+    // server claims BOTH chores from the same flag, so this beat must refuse to run, let alone
+    // stamp, the moment that claim is untrue. Without this the beat gated only on the janitor's
+    // OWN opt-in flag, which is a different, independent switch: with our tick flag OFF (the
+    // deliberate kill switch, ORH-32/R3) but the janitor's opt-in still present, the beat ran and
+    // stamped anyway, telling the janitor "still owned" for a chore this server had disclaimed —
+    // so the janitor's daemon never resumed it and neither side ran the supervisor at all.
+    if (!tickArmedCheck()) return []
     if (!optInCheck()) return [] // rotator not opted in → silent no-op, no keychain access.
+    // The janitor's handover stamp — see TRDD-14HI8ZPR / ai-maestro#111 and ORH-4 (M3) in
+    // `design/specs/oauth-rotation-and-chore-handover-spec.md`: "the server claims a chore only
+    // when able". Written on ATTEMPT, but only AFTER both gates above — a beat that correctly
+    // no-ops because the server disclaimed the chore must not tell the janitor it is still owned.
+    stampChoreRun('oauth-rotator-supervisor')
     const facts = gatherFactsImpl(tickArmedCheck)
     const findings = diagnose(facts)
     const alerts = apply(findings, log).alerts

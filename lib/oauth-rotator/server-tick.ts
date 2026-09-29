@@ -263,19 +263,19 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   // instead of for the push-trigger alone — otherwise an ingest arriving just after a beat would
   // fire a second run the timer had already covered. (TRDD-GY0LJV6S)
   stampTickAttempt()
-  // The janitor's handover stamp, beside the internal one on purpose — they answer different
-  // questions and are easy to confuse. `stampTickAttempt` is OURS: a rate floor so two triggers
-  // cannot double-beat. `stampChoreRun` is THEIRS: the only way a janitor whose daemon we have
-  // suppressed can tell an absorbed chore from an unowned one (TRDD-14HI8ZPR / ai-maestro#111).
-  //
-  // Placed BEFORE the gates for the same reason `stampTickAttempt` is: it records that the chore
-  // was ATTEMPTED. A tick that correctly does nothing because the flag is off or no client is
-  // running is still a chore being owned on cadence, which is the question the janitor is asking;
-  // whether the rotation itself is healthy is reported separately by writeTickStatus and the
-  // alert-delivery path below.
-  stampChoreRun('oauth-rotator-tick')
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
+    // The janitor's handover stamp, beside the internal one on purpose — they answer different
+    // questions and are easy to confuse. `stampTickAttempt` (above) is OURS: a rate floor so two
+    // triggers cannot double-beat, and it fires on every attempt regardless of the flag.
+    // `stampChoreRun` is THEIRS: the janitor's daemon schedules its own tick from the NEWEST of
+    // these stamps (ORH spec: `design/specs/oauth-rotation-and-chore-handover-spec.md` ORH-4/M3,
+    // "the server claims a chore only when able: its flag is present"). Writing it while the flag
+    // is OFF — the deliberate kill switch (ORH-32/R3) — tells the janitor "still owned" for a
+    // chore this server has just disclaimed, so the janitor's daemon never picks it back up and
+    // BOTH sides skip it. It must move past the flag gate so a stamp means "the server is armed
+    // and actually running this beat", not merely "a no-op function was called". (TRDD-14HI8ZPR)
+    stampChoreRun('oauth-rotator-tick')
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.
     const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>, o: TickDeliveryOpts) => {
       void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: o.owns, root: o.root })

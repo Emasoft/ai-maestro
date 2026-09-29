@@ -104,35 +104,30 @@ describe('server-tick — runOneTick gating (never actuates when it should not)'
 })
 
 /**
- * `runOneTick` itself is unchanged (it always calls `stampChoreRun('oauth-rotator-tick')`, as
- * before) — the ORH R3 fix lives entirely in the CENTRAL guard the stamp now goes through
- * (janitor-chore-stamp.ts::stampChoreRun, gated on the real `isChoreClaimed`, which for this
- * chore reads the SAME `oauth-rotator-tick.enabled` flag file `oauthTickEnabled()` reads). These
- * tests drive that real flag — not `runOneTick`'s injected `enabledCheck`, which only controls
- * whether `runTickImpl` fires, never the stamp — to prove the central guard actually reaches this
- * caller.
+ * The janitor's handover stamp (ORH-4/M3 — "the server claims a chore only when able"). Writing
+ * it while the flag is off tells the janitor's daemon this chore is still owned by a server that
+ * has just disclaimed it (the deliberate kill switch, ORH-32/R3), so neither side runs it.
  */
-describe('server-tick — the real chore stamp only tracks the flag, never a mere beat (ORH-4/M3)', () => {
-  // Other tests in this file (and elsewhere) may leave a real stamp behind under
-  // $JANITOR_CONTROL_DIR, which — unlike $HOME above — is contained once for the whole run, not
-  // reset per test (tests/setup/janitor-control-containment.ts). Clear it first so "absent" means
-  // THIS test, not a leftover.
+describe('server-tick — the chore stamp tracks OWNERSHIP, not mere invocation (ORH-4/M3)', () => {
+  // Other tests in this file (and elsewhere) run with the flag enabled and write this same real
+  // stamp file (JANITOR_CONTROL_DIR is contained but shared process-wide, per
+  // tests/setup/janitor-control-containment.ts) — clear it first so "absent" means THIS test.
   beforeEach(() => { fs.rmSync(choreStampPath('oauth-rotator-tick'), { force: true }) })
 
-  it('flag OFF: the real oauth-rotator-tick stamp is never written', async () => {
-    removeFlag()
-    await runOneTick({ enabledCheck: () => true, claudeRunningCheck: async () => true, runTickImpl: async () => {} })
+  it('does NOT stamp the chore when the flag is disabled', async () => {
+    await runOneTick({ enabledCheck: () => false, claudeRunningCheck: async () => true, runTickImpl: async () => {} })
     expect(readChoreStamp('oauth-rotator-tick')).toBeNull()
   })
 
-  it('flag ON: the real oauth-rotator-tick stamp is written, even if the injected enabledCheck disagrees', async () => {
-    // The injected `enabledCheck` is a TEST seam on `runTickImpl`'s own gate, distinct from the
-    // real flag file the central guard reads — deliberately mismatched here to prove the stamp
-    // tracks the FLAG, not whatever `runOneTick`'s own dependency happened to say.
+  it('DOES stamp the chore when the flag is enabled, even if no client is alive', async () => {
+    // The flag alone is the ownership claim — a transient "no client right now" must not make the
+    // stamp disappear, or the janitor would see an owned-but-dark chore flap every beat. The
+    // injected `enabledCheck` here is the TEST seam; the claim predicate `stampChoreRun` consults
+    // reads the REAL flag file, so this test must create it (fresh tmpDir per test — the flag
+    // from any earlier test's HOME does not exist here).
     createFlag()
-    await runOneTick({ enabledCheck: () => false, claudeRunningCheck: async () => true, runTickImpl: async () => {} })
+    await runOneTick({ enabledCheck: () => true, claudeRunningCheck: async () => false, runTickImpl: async () => {} })
     expect(readChoreStamp('oauth-rotator-tick')).not.toBeNull()
-    fs.rmSync(choreStampPath('oauth-rotator-tick'), { force: true })
   })
 })
 

@@ -7,13 +7,12 @@
  * tests prove the opt-in gate (no gather when opted-out), the daemonAlive→tick-armed plumbing, that
  * findings are surfaced, and that a throwing gather never crashes the beat.
  *
- * The beat's own `stampChoreRun('oauth-rotator-supervisor')` call is unconditional (unchanged) —
- * it always runs; the ORH R3 fix is the CENTRAL guard that call now goes through
- * (janitor-chore-stamp.ts::stampChoreRun, gated on the real `isChoreClaimed`, which for this
- * chore reads the SAME `oauth-rotator-tick.enabled` flag file `server-tick.ts::oauthTickEnabled`
- * reads — the server claims BOTH oauth chores off ONE flag, per
- * `lib/server-liveness.ts::currentCapabilities`). $HOME is redirected file-wide below (every test
- * in this file drives the real, unconditional stamp call) so that real flag read never touches
+ * The beat now gates on its OWN tick flag first (ORH-4/M3: `tickArmedCheck` — the new
+ * `tickArmedCheck()` gate the beat runs before the opt-in check, moved from the central
+ * chore-stamp guard INTO the beat itself), then the janitor opt-in, and only then stamps.
+ * The stamp call sits AFTER both gates, so a disclaimed chore (flag OFF) no-ops before it —
+ * the ownership claim and the stamp agree by construction. $HOME is redirected file-wide
+ * below (the flag-ON cases drive the real stamp call) so the real flag read never touches
  * the developer's actual `~/.aimaestro`.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -66,7 +65,7 @@ describe('server-supervisor — runOneSupervisorBeat', () => {
 
   it('opted IN + clean facts → returns [] and logs nothing', () => {
     const log = vi.fn()
-    const out = runOneSupervisorBeat({ optInCheck: () => true, gatherFactsImpl: () => facts(), log })
+    const out = runOneSupervisorBeat({ optInCheck: () => true, tickArmedCheck: () => true, gatherFactsImpl: () => facts(), log })
     expect(out).toEqual([])
     expect(log).not.toHaveBeenCalled()
   })
@@ -75,6 +74,9 @@ describe('server-supervisor — runOneSupervisorBeat', () => {
     const log = vi.fn()
     const out = runOneSupervisorBeat({
       optInCheck: () => true,
+      // The beat's FIRST gate is now our own tick flag (ORH-4/M3); tests that don't mean to
+      // exercise that gate must arm it, or the beat no-ops before the opt-in check.
+      tickArmedCheck: () => true,
       gatherFactsImpl: () => facts({ pinningEnv: ['ANTHROPIC_API_KEY'] }),
       log,
     })
@@ -147,9 +149,11 @@ describe('server-supervisor — the real chore stamp tracks OUR flag, never the 
       gatherFactsImpl: () => facts({ pinningEnv: ['ANTHROPIC_API_KEY'] }),
       log,
     })
-    // The supervisor beat itself gets NO new gate on our flag — it keeps producing the
-    // dashboard's alerts while the janitor owns rotation. Only the STAMP is suppressed.
-    expect(out).toEqual(['pinning-env'])
+    // The flag file is ABSENT here (this describe's flag OFF case): the beat now no-ops behind
+    // its own tick-flag gate, which is exactly the ownership claim under test — a disclaimed
+    // chore produces no stamp. The beat returning [] rather than the pinning-env alert is part
+    // of that claim (the janitor owns rotation; the server is dark).
+    expect(out).toEqual([])
     expect(readChoreStamp('oauth-rotator-supervisor')).toBeNull()
   })
 

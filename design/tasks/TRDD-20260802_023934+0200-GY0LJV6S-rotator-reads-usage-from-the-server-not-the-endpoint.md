@@ -6,7 +6,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T14:20:30+0200
+updated: 2026-09-29T14:23:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +22,7 @@ effort: medium
 relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
-implementation-commits: bb798327a, 7ba13219e
+implementation-commits: [39bc5cad, 9fed4781, 18deb450, bb798327a, 7ba13219e]
 blocked-by: []
 pre-block-column: dev
 release-via: none

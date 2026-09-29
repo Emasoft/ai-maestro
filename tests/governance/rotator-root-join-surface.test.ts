@@ -131,7 +131,7 @@ const NON_JOIN_REVIEWED = [
   // joined at these lines.
   'lib/oauth-rotator/server-tick.ts:    const alertRoot = rootFinding ? legacyRotatorRoot() : undefined',
   "lib/oauth-rotator/server-tick.ts:    const data = JSON.parse(fs.readFileSync(alertsFile(legacyRotatorRoot()), 'utf8')) as { alerts?: unknown }",
-  'lib/oauth-rotator/server-tick.ts:    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsRootAlert, root: legacyRotatorRoot() })',
+  'lib/oauth-rotator/server-tick.ts:    if (!rootFinding && rootAlertOutstanding()) deliverSafely([], { owns: ownsTickAlert, root: legacyRotatorRoot() })',
 ].sort()
 
 /** Lines mentioning a rotator root that are not a direct join and not a comment. */

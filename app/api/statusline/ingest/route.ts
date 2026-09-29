@@ -44,6 +44,7 @@ import { admitSnapshot, stampLiveAccount } from '@/lib/statusline-admissible'
 import type { StatuslineSnapshot } from '@/types/statusline'
 import { normalizeStatuslinePayload } from '@/lib/statusline-normalize'
 import { MAX_INGEST_BYTES, pruneStatuslineSnapshots, writeStatuslineSnapshot } from '@/lib/statusline-store'
+import { recordClaudeSessionId, loadAgents } from '@/lib/agent-registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,35 @@ export async function POST(request: NextRequest) {
   // Acting on that directly burns the fleet (measured, and reverted in 3c9a7493). Triggering on it
   // costs one HTTP call the endpoint then answers with the truth.
   maybeTriggerRotationCheck(snapshot)
+
+  // ── CLAUDE-SESSION JOIN (issue #155) ───────────────────────────────────────────────────────
+  // Best-effort: record WHICH Claude Code session is running for WHICH agent, so agentlens usage
+  // records (sessionId + workspace, no agent id) can be joined per agent. The payload names the
+  // agent directly when the session runs under `--agent` (session.agentName); otherwise the only
+  // candidate is the workingDirectory match against the registry. Like the prune below, this is
+  // deliberately AFTER the write and deliberately unable to fail the request — a join miss is
+  // warned about (a visible null is legible; a silent miss is not), never an ingest failure.
+  try {
+    const agentName = snapshot.session.agentName
+    const cwd = snapshot.session.cwd
+    if (agentName) {
+      const ok = await recordClaudeSessionId(agentName, snapshot.sessionId)
+      if (!ok) console.warn(`[statusline-ingest] claude-session join: no agent or session 0 for name=${agentName} sessionId=${snapshot.sessionId}`)
+    } else if (cwd) {
+      const agents = loadAgents()
+      const match = agents.find(a => !a.deletedAt && a.workingDirectory === cwd)
+      if (match) {
+        const ok = await recordClaudeSessionId(match.id, snapshot.sessionId)
+        if (!ok) console.warn(`[statusline-ingest] claude-session join: agent ${match.id} has no session 0, sessionId=${snapshot.sessionId}`)
+      } else {
+        console.warn(`[statusline-ingest] claude-session join: no agent matches cwd=${cwd} sessionId=${snapshot.sessionId}`)
+      }
+    } else {
+      console.warn(`[statusline-ingest] claude-session join: payload carries neither agent name nor cwd, sessionId=${snapshot.sessionId}`)
+    }
+  } catch (err) {
+    console.warn(`[statusline-ingest] claude-session join failed (ingest unaffected): ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   // Housekeeping, deliberately AFTER the write and deliberately unable to fail the request: a
   // successful observation must never be reported as lost because a prune could not run.

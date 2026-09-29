@@ -146,6 +146,7 @@ export interface AgentSession {
   workingDirectory?: string         // Override agent's default working directory
   createdAt?: string                // When session was created
   lastActive?: string               // Last activity timestamp
+  claudeSessionId?: string          // Claude Code session id (statusline hook payload); joins agentlens usage records
 }
 
 // ============================================================================

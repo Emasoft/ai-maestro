@@ -1211,6 +1211,42 @@ export async function updateAgentWorkingDirectory(agentId: string, workingDirect
 }
 
 /**
+ * Record the Claude Code session id (from the statusline hook payload) on an
+ * agent's session record — issue #155. The id is what joins agentlens usage
+ * records (which carry sessionId + workspace but no agent id) to a fleet agent.
+ * Resolution upstream (by agentName or by workingDirectory match) happens in
+ * the ingest route; this is the write half.
+ *
+ * An OBSERVATION, not activity: deliberately does NOT bump lastActive.
+ * Best-effort by contract — returns false (no throw) when the agent or session
+ * is missing, so the caller can warn without failing the ingest.
+ * MF-003: locked like every other read-modify-write.
+ */
+export async function recordClaudeSessionId(agentIdOrName: string, claudeSessionId: string, sessionIndex: number = 0): Promise<boolean> {
+  return withLock('agents', () => {
+    const agents = loadAgents()
+    const index = agents.findIndex(a => a.id === agentIdOrName || a.name === agentIdOrName)
+
+    if (index === -1) {
+      return false
+    }
+
+    if (!agents[index].sessions) {
+      return false
+    }
+
+    const sessionIdx = agents[index].sessions.findIndex(s => s.index === sessionIndex)
+    if (sessionIdx === -1) {
+      return false
+    }
+
+    agents[index].sessions[sessionIdx].claudeSessionId = claudeSessionId
+
+    return saveAgents(agents)
+  }) // end withLock('agents')
+}
+
+/**
  * Unlink session from agent (mark as offline)
  * If sessionIndex provided, only marks that session offline
  * If no sessionIndex, marks all sessions offline

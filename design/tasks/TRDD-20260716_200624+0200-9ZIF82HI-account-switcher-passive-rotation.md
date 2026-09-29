@@ -4,7 +4,7 @@ status: tasked
 title: Account switcher — passive rotation to a fresh account/token on 429 / dead-refresh / network interruption
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-09-30T00:06:18+0200
+updated: 2026-09-30T00:09:59+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -117,3 +117,4 @@ this NPT.
   this card sat parked for 35 days after the authorisation it was waiting for arrived.
   **1GGQ4HWY is deliberately untouched** — its `backburner` is documented and correct; its disposition
   is the ARCHITECT's lane, not this correction's.
+2026-09-30T00:1x+0200 — REVIEW FINDINGS DISPOSITIONED (adversarial fork, 5 findings): (1) STRUCK acceptance box 1 — unsatisfiable by construction (1GGQ4HWY defers Phase F behind this card; commit b8db6885), applied. (2) column=dev ahead of survey evidence — ACCEPTED as a soft column lie; stands because the build is the stated assigned intent and the survey is a scoping step, not a gate; will revert to planned if the survey kills the card. (3) GY0LJV6S ai_review-vs-blocked normalization — NOT applied: the card's own 17:53 record keeps it ai_review deliberately (parent matched the card's own record); re-typing its column would contradict the owner's defer wording. (4) assignee drift (ai-maestro-hub-session vs this session) — noted; no gate depends on it; correctable on next touch with a valid identity. (5) survey report path missing HHMMSS — the dispatched prompt's path is cosmetic; the worker writes to that path and it is a gitignored reports/ artifact, not a tracked record.

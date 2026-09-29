@@ -1,5 +1,6 @@
 ---
 trdd-id: XOHLHQOF
+status: proposed
 title: an auto-loaded agent-context file carries an injection pattern — .claude/agents/scenario-runner.md
 column: refused
 created: 2026-08-05T18:21:30+0200

@@ -392,11 +392,11 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     const warnRows = warn.stdout.trim().split('\n').map((l) => l.split('\t').slice(0, 3).join('\t'))
     expect(warnRows).toEqual([
       'WARN\tLEGACY-REFUSED-FOLDER\t(corpus)',
-      // 5→7 on 2026-09-29: D49OPVWP and XOHLHQOF moved into design/proposals/ carrying no
-      // `status:` — the proposals/ folder implies `status: proposed`, a mechanical autofix.
-      // Re-measure and re-pin when the corpus moves again.
-      'WARN\tSTATUS-MISSING\tD49OPVWP',
-      'WARN\tSTATUS-MISSING\tXOHLHQOF',
+      // 5→7 on 2026-09-29 (D49OPVWP/XOHLHQOF moved into proposals/ without status:),
+      // then back to 5 the same day: the two cards were REPAIRED with the linter's own
+      // mechanical autofix (`trddgrep fix <id>` — proposals/ implies status: proposed),
+      // which is the adjudicated-correct fix; raising the census had laundered the
+      // corpus defect into a green test. Re-measure and re-pin when the corpus moves.
       'WARN\tBODY-STATE-CLAIM\t70A521D9',
       'WARN\tBODY-STATE-CLAIM\t7123D51A',
       'WARN\tBODY-STATE-CLAIM\tEAC02238',

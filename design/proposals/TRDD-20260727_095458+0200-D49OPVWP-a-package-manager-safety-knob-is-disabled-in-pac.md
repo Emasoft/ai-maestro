@@ -1,5 +1,6 @@
 ---
 trdd-id: D49OPVWP
+status: proposed
 title: A package-manager safety knob is disabled in package-manager config — 1 gap
 column: refused
 approved: rejected

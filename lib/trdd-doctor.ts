@@ -1321,6 +1321,10 @@ export function lintCorpus(designDir: string): DoctorReport {
         // arbitrary command execution for every caller that lints this corpus (CI, the
         // janitor heartbeat, and any cloner of this PUBLIC repo). Release is judged
         // DECLARATIVELY below instead, off `blocked-by:`, never by spawning anything.
+        // Cards that PASS this gate (a probe present) are under the same regime: their
+        // probe is an agent-runnable RECIPE, never self-firing — nothing anywhere runs
+        // it, so a parked card with a stale probe sits until a reader chooses to run
+        // the recipe. TRDD-9Z2P2SDA (2026-09-29) established this corpus-wide.
       }
     }
 

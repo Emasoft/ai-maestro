@@ -23,10 +23,12 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { execFileSync } from 'child_process'
-import { readdirSync, existsSync, mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { execFileSync, spawn } from 'child_process'
+import { readdirSync, existsSync, mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync, chmodSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { createServer, type Server } from 'http'
+import type { AddressInfo } from 'node:net'
 
 const SCRIPTS = join(process.cwd(), 'scripts')
 
@@ -318,5 +320,94 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
   it('every listed violator still exists (no stale names hiding a deleted script)', () => {
     const ghosts = [...KNOWN_VIOLATORS].filter((s) => !CANDIDATES.includes(s))
     expect(ghosts, `KNOWN_VIOLATORS names scripts that no longer exist: ${ghosts.join(', ')}`).toEqual([])
+  })
+
+  it('a failing plugin marketplace add prints a diagnostic to stderr (never exits silently) — pins the errexit-capture fix (#121)', () => {
+    // TRDD-T3FXA0Y0 / ai-maestro#121, `cmd_marketplace_add` in scripts/agent-plugin.sh.
+    // Under `set -euo pipefail` (inherited from aimaestro-agent.sh), the plain assignment
+    // `output=$(run_claude_command … 2>&1)` fired errexit ON THE ASSIGNMENT ITSELF when the
+    // command failed — killing the CLI with the command's own exit code and ZERO output
+    // before the real-error branch (`print_error "Failed to add marketplace"`) could run.
+    // Fixed with `|| exit_code=$?`. A future "simplification" back to the plain assignment
+    // passes every other test here (none drives this verb's failure branch) and fails
+    // SILENTLY in production — silence is the failure mode, so the pin is the stderr.
+    //
+    // Reaching the fixed line needs three things the other tests in this file deliberately
+    // avoid: check_api_running must PASS (a fake API answers /api/sessions), resolve_agent
+    // must FIND the agent (the same fake answers /api/agents), and `claude` must FAIL (a
+    // PATH shim exits 7). Verified empirically against the fixed script: exit 1, stderr
+    // `Error: Failed to add marketplace`, captured claude output on stdout.
+    //
+    // DISCRIMINATION (reasoned, not stashed — nothing was reverted): against the OLD plain
+    // assignment, errexit kills the CLI inside the command substitution; the process exits
+    // with the claude shim's code and BOTH STREAMS ARE EMPTY. The first assertion below
+    // (combined output non-empty) fails on that shape; the second (message match) fails
+    // because there is no stderr at all.
+    const tmp = mkdtempSync(join(tmpdir(), 'aim-errexit-pin-'))
+    const shimDir = join(tmp, 'bin')
+    const agentDir = join(tmp, 'agent')
+    mkdirSync(shimDir)
+    mkdirSync(agentDir)
+    writeFileSync(
+      join(shimDir, 'claude'),
+      '#!/bin/bash\nif [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "add" ]; then\n  echo "boom: simulated claude failure" >&2\n  exit 7\nfi\nexit 0\n',
+    )
+    chmodSync(join(shimDir, 'claude'), 0o755)
+
+    const fake = createServer((req, res) => {
+      if (req.url?.startsWith('/api/sessions')) {
+        res.writeHead(200)
+        return res.end('{}')
+      }
+      if (req.url?.includes('/api/agents?')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ agents: [{ id: 'pinfakeagent01', alias: 'pin-fake-agent', name: 'pin-fake-agent' }] }))
+      }
+      if (req.url?.startsWith('/api/agents/pinfakeagent01')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ agent: { id: 'pinfakeagent01', alias: 'pin-fake-agent', workingDirectory: agentDir } }))
+      }
+      res.writeHead(404)
+      res.end('{}')
+    })
+
+    return new Promise<void>((resolve, reject) => {
+      fake.listen(0, '127.0.0.1', () => {
+        const port = (fake.address() as AddressInfo).port
+        // ASYNC spawn, not execFileSync: the fake API is an in-process server, and a
+        // sync spawn would block this worker's event loop so the server could never
+        // answer curl (measured: every call died at "Cannot connect"). Async keeps the
+        // loop free; the CLI itself runs in a separate process and is unaffected.
+        const child = spawn('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), 'plugin', 'marketplace', 'add', 'nonexistent-agent-xyz', 'nonexistent-source-abc'], {
+          env: {
+            ...process.env,
+            PATH: `${shimDir}:${process.env.PATH}`,
+            AID_AUTH: '',
+            AIMAESTRO_SESSION: '',
+            AIMAESTRO_SUDO_TOKEN: '',
+            AIMAESTRO_API_BASE: `http://127.0.0.1:${port}`,
+          },
+        })
+        let stdout = ''
+        let stderr = ''
+        child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+        child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+        child.on('close', (code) => {
+          fake.close(() => {
+            try {
+              expect(code, 'a failed marketplace add must be reported as a failure').not.toBe(0)
+              // The load-bearing regression half: the OLD code exited with BOTH STREAMS EMPTY.
+              expect(`${stdout}${stderr}`.trim().length, 'total silence is the bug — the CLI must print SOMETHING').toBeGreaterThan(0)
+              // The message half, observed empirically on the fixed code.
+              expect(stderr, 'the diagnostic must reach STDERR (the old code wrote nothing anywhere)').toMatch(/Failed to add marketplace/)
+              resolve()
+            } catch (e) {
+              reject(e)
+            }
+          })
+        })
+        child.on('error', (e) => { fake.close(() => reject(e)) })
+      })
+    })
   })
 })

@@ -410,4 +410,83 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
       })
     })
   })
+
+  // TRDD-T3FXA0Y0 verification follow-up (2026-09-29): the 34-site `|| true` sweep's per-site
+  // checks covered EMPTY-output failure modes (connection refused / timeout, no body). A curl
+  // failure that still emits a NON-EMPTY garbage body — proxy 502 HTML, captive portal — passes
+  // every emptiness check and would flow onward as if it were the API's answer. The pin drives
+  // the two high-traffic read verbs against a fake API that answers 200 with garbage, asserting
+  // each verb REJECTS the body (non-zero exit, diagnostic) instead of echoing it.
+  it.each([
+    ['presence', ['presence']],
+    ['probe', ['probe', 'pin-fake-agent']],
+  ] as const)('a %s response that is GARBAGE (non-empty, non-JSON) is rejected, not echoed', (_verb, args) => {
+    const tmp = mkdtempSync(join(tmpdir(), 'aim-garbage-pin-'))
+    const shimDir = join(tmp, 'bin')
+    mkdirSync(shimDir)
+    // curl itself "succeeds" (exit 0) and prints a body — the exact shape the emptiness checks
+    // cannot see: a proxy/captive portal answering 200 with HTML. Only body validation catches it.
+    // The shim is URL-shaped, not flag-shaped: every caller that reads an http_code (-w) gets a
+    // clean `200` AND, when it asked for a body via -o, a JSON one — so the gate (check_api_running)
+    // and resolve_agent (_api_request) both succeed and the VERB is actually reached. The verb's
+    // own plain `-s` capture gets the garbage. A shim that answered garbage to everything would
+    // only re-prove that code readers reject garbage — checks that already existed — and would
+    // never reach the branch under test.
+    writeFileSync(
+      join(shimDir, 'curl'),
+      '#!/bin/bash\nout=""\nprev=""\nfor a in "$@"; do\n  if [ "$prev" = "-o" ]; then out="$a"; fi\n  prev="$a"\ndone\nfor a in "$@"; do\n  if [ "$a" = "-w" ]; then\n    [ -n "$out" ] && echo \'{"agents":[{"id":"pinfakeagent01","alias":"pin-fake-agent","name":"pin-fake-agent"}]}\' > "$out"\n    printf 200\n    exit 0\n  fi\n  if [ "$a" = "-o" ]; then\n    echo "{}" > "$2" 2>/dev/null\n  fi\ndone\necho "<html><body>502 Bad Gateway</body></html>"\nexit 0\n',
+    )
+    chmodSync(join(shimDir, 'curl'), 0o755)
+
+    const fake = createServer((req, res) => {
+      if (req.url?.startsWith('/api/sessions')) {
+        res.writeHead(200)
+        return res.end('{}')
+      }
+      if (req.url?.includes('/api/agents?')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ agents: [{ id: 'pinfakeagent01', alias: 'pin-fake-agent', name: 'pin-fake-agent' }] }))
+      }
+      res.writeHead(404)
+      res.end('{}')
+    })
+
+    return new Promise<void>((resolve, reject) => {
+      fake.listen(0, '127.0.0.1', () => {
+        const port = (fake.address() as AddressInfo).port
+        let stdout = ''
+        let stderr = ''
+        const child = spawn('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), ...args], {
+          env: {
+            ...process.env,
+            PATH: `${shimDir}:${process.env.PATH}`,
+            AID_AUTH: '',
+            AIMAESTRO_SESSION: '',
+            // AID_AUTH empty → maestro_sudo_ensure would demand a TTY; pre-mint a token so the
+            // probe verb reaches its curl. The curl shim never answers a sudo mint, so the
+            // empty-string token is all the gate needs to pass.
+            AIMAESTRO_SUDO_TOKEN: 'test-sudo-token',
+            AIMAESTRO_API_BASE: `http://127.0.0.1:${port}`,
+          },
+        })
+        child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+        child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+        child.on('close', (code) => {
+          fake.close(() => {
+            try {
+              expect(code, 'a garbage body must be a failure, not data').not.toBe(0)
+              // The garbage itself must NOT be relayed to the caller as if it were the record —
+              // the discriminating half: the old presence code echoed any non-empty body.
+              expect(stdout, 'the garbage must not be echoed as the answer').not.toMatch(/502 Bad Gateway/)
+              expect(`${stderr}`, 'a diagnostic must name the cause').toMatch(/Invalid response|not JSON|Failed to/i)
+              resolve()
+            } catch (e) {
+              reject(e)
+            }
+          })
+        })
+        child.on('error', (e) => { fake.close(() => reject(e)) })
+      })
+    })
+  })
 })

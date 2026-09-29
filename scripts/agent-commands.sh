@@ -270,6 +270,13 @@ cmd_presence() {
         print_error "Failed to fetch presence"
         return 1
     fi
+    # A curl FAILURE that still emits a non-empty body (proxy 502 HTML, captive portal) passes
+    # the emptiness check and would be echoed to the caller as if it were the presence record.
+    # TRDD-T3FXA0Y0 garbage-body pin: parse before trusting.
+    if ! echo "$response" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        print_error "Invalid response from API (not JSON)"
+        return 1
+    fi
     echo "$response"
 }
 
@@ -314,7 +321,12 @@ cmd_probe() {
     fi
     if ! echo "$response" | jq -e '.status' >/dev/null 2>&1; then
         local error_msg
-        error_msg=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
+        # `|| true` is load-bearing: this assignment runs exactly when the body is GARBAGE
+        # (proxy 502 HTML, captive portal — non-empty but unparseable), and jq then exits 2 on
+        # a parse error. Under inherited `set -euo pipefail` an UNSHIELDED assignment kills the
+        # CLI here — before print_error could say why — with exit 5 and both streams empty:
+        # the silent-exit class again, in the one branch that exists to explain failures.
+        error_msg=$(echo "$response" | jq -r '.error // empty' 2>/dev/null) || true
         print_error "${error_msg:-Invalid response from API}"
         return 1
     fi
@@ -548,7 +560,7 @@ cmd_config() {
     # were the config (the caller pipes this into jq and would read `.agent` as
     # null rather than seeing the 403/404).
     local err
-    err=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
+    err=$(echo "$response" | jq -r '.error // empty' 2>/dev/null) || true
     if [[ -n "$err" ]]; then
         print_error "$err"
         return 1
@@ -598,7 +610,7 @@ cmd_show() {
     # Validate JSON response before processing
     if ! echo "$response" | jq -e '.agent' >/dev/null 2>&1; then
         local error_msg
-        error_msg=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
+        error_msg=$(echo "$response" | jq -r '.error // empty' 2>/dev/null) || true
         if [[ -n "$error_msg" ]]; then
             print_error "API error: $error_msg"
         else
@@ -983,7 +995,7 @@ HELP
 
     # Check for error
     local error
-    error=$(echo "$response" | jq -r '.error // empty')
+    error=$(echo "$response" | jq -r '.error // empty') || true
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -1102,7 +1114,7 @@ HELP
     response=$(echo "$response" | sed '$d')
 
     local error
-    error=$(echo "$response" | jq -r '.error // empty')
+    error=$(echo "$response" | jq -r '.error // empty') || true
 
     # Rule 12 guidance: intercept sudo_required and explain the UI path.
     if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
@@ -1230,7 +1242,7 @@ HELP
     response=$(echo "$response" | sed '$d')
 
     local error
-    error=$(echo "$response" | jq -r '.error // empty')
+    error=$(echo "$response" | jq -r '.error // empty') || true
 
     # Rule 12 guidance: intercept sudo_required and explain the UI path.
     if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
@@ -1340,7 +1352,7 @@ HELP
     response=$(echo "$response" | sed '$d')
 
     local error
-    error=$(echo "$response" | jq -r '.error // empty')
+    error=$(echo "$response" | jq -r '.error // empty') || true
 
     # Rule 12 guidance: intercept sudo_required and explain the UI path.
     if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
@@ -1573,7 +1585,7 @@ HELP
         -d "$agent_data") || true
 
     local error
-    error=$(echo "$response" | jq -r '.error // empty')
+    error=$(echo "$response" | jq -r '.error // empty') || true
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1

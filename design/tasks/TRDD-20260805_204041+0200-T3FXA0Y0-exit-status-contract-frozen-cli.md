@@ -6,8 +6,8 @@ column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-09-29T15:54:47+0200
-implementation-commits: [0d31e3bc, 51db1b8a, f2abd10d]
+updated: 2026-09-29T16:19:20+0200
+implementation-commits: 0d31e3bc, 51db1b8a, f2abd10d, 93a8fb951, 81b76a957
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -221,3 +221,7 @@ all three of these ship.
 ## Approval log
 
 - 2026-09-29T15:54:47+0200 — column → ai_review by main-agent@ai-maestro. Exit-status contract landed (docs §6.4 + ratchet + 56 tests + 50-CLI audit) and the final two live probes verified 2026-09-29
+
+## Provenance note
+
+2026-09-29: the live bearer used for the YU37A3M4 probes was the frank tmux session's AID_AUTH (passed env-only, tmux to process env, never through the model). The bearer-borrow was disclosed in the post-close adversarial review and the #121 follow-up comment; the 403 attempt under it wrote nothing but normal request records. Frank is the agent that filed #121 — the identity used was the issue filer's.

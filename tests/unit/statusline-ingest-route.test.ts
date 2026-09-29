@@ -16,7 +16,7 @@
  * ⚠ `$HOME` is redirected per test and a containment assertion at the end proves it took.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdtempSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { join } from 'path'
 
@@ -168,6 +168,59 @@ describe('POST /api/statusline/ingest — input handling', () => {
   it('ACCEPTS a payload carrying only the session id — upstream drift must not cost the whole record', async () => {
     expect((await post({ session_id: 'bare-only' }, '127.0.0.1')).status).toBe(200)
     expect((await get('bare-only')).status).toBe(200)
+  })
+})
+
+describe('claude-session join — the claimed name is corroborated, never trusted alone', () => {
+  // A statusline payload is attacker-shaped local input; the one field the sender must not choose
+  // is WHO the record lands on. A bare agent.name would let any local process write its session id
+  // onto any agent's record and misattribute the usage join — so the name is honoured only when
+  // the snapshot's cwd also names that agent (or carries no cwd); on disagreement the cwd decides.
+  function seedRegistry(agents: Array<{ id: string; name: string; workingDirectory: string }>) {
+    mkdirSync(join(dir, '.aimaestro', 'agents'), { recursive: true })
+    writeFileSync(
+      join(dir, '.aimaestro', 'agents', 'registry.json'),
+      JSON.stringify(agents.map(a => ({
+        id: a.id, name: a.name, hostId: 'local', program: 'Claude Code',
+        taskDescription: 'fixture', tools: {}, status: 'offline',
+        createdAt: '2026-09-01T00:00:00.000Z', lastActive: '2026-09-01T00:00:00.000Z',
+        workingDirectory: a.workingDirectory,
+        sessions: [{ index: 0, status: 'offline', workingDirectory: a.workingDirectory, lastActive: '2026-09-01T00:00:00.000Z' }],
+      }))),
+    )
+  }
+
+  function persistedSessionId(agentId: string): string | undefined {
+    const registry = JSON.parse(readFileSync(join(dir, '.aimaestro', 'agents', 'registry.json'), 'utf-8')) as Array<{ id: string; sessions?: Array<{ index: number; claudeSessionId?: string }> }>
+    return registry.find(a => a.id === agentId)?.sessions?.find(s => s.index === 0)?.claudeSessionId
+  }
+
+  it('WRITES the claimed name when the cwd corroborates it', async () => {
+    seedRegistry([{ id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' }])
+    expect((await post(PAYLOAD({ session_id: 'sess-agree', agent: { name: 'agent-a' }, cwd: '/work/a' }), '127.0.0.1')).status).toBe(200)
+    expect(persistedSessionId('agent-a-id')).toBe('sess-agree')
+  })
+
+  it('REFUSES a claimed name the cwd does NOT corroborate — cwd match decides', async () => {
+    seedRegistry([
+      { id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' },
+      { id: 'agent-b-id', name: 'agent-b', workingDirectory: '/work/b' },
+    ])
+    expect((await post(PAYLOAD({ session_id: 'sess-spoof', agent: { name: 'agent-b' }, cwd: '/work/a' }), '127.0.0.1')).status).toBe(200)
+    expect(persistedSessionId('agent-b-id')).toBeUndefined()
+    expect(persistedSessionId('agent-a-id')).toBe('sess-spoof')
+  })
+
+  it('names are still honoured WITHOUT a cwd — the `--agent` direct path survives', async () => {
+    seedRegistry([{ id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' }])
+    expect((await post(PAYLOAD({ session_id: 'sess-no-cwd', agent: { name: 'agent-a' } }), '127.0.0.1')).status).toBe(200)
+    expect(persistedSessionId('agent-a-id')).toBe('sess-no-cwd')
+  })
+
+  it('a spoofed name with NO cwd match in the registry writes NOTHING', async () => {
+    seedRegistry([{ id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' }])
+    expect((await post(PAYLOAD({ session_id: 'sess-phantom', agent: { name: 'agent-b' }, cwd: '/elsewhere' }), '127.0.0.1')).status).toBe(200)
+    expect(persistedSessionId('agent-a-id')).toBeUndefined()
   })
 })
 

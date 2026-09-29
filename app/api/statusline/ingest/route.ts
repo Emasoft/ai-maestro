@@ -147,26 +147,32 @@ export async function POST(request: NextRequest) {
 
   // ── CLAUDE-SESSION JOIN (issue #155) ───────────────────────────────────────────────────────
   // Best-effort: record WHICH Claude Code session is running for WHICH agent, so agentlens usage
-  // records (sessionId + workspace, no agent id) can be joined per agent. The payload names the
-  // agent directly when the session runs under `--agent` (session.agentName); otherwise the only
-  // candidate is the workingDirectory match against the registry. Like the prune below, this is
-  // deliberately AFTER the write and deliberately unable to fail the request — a join miss is
-  // warned about (a visible null is legible; a silent miss is not), never an ingest failure.
+  // records (sessionId + workspace, no agent id) can be joined per agent. Like the prune below,
+  // this is deliberately AFTER the write and deliberately unable to fail the request — a join miss
+  // is warned about (a visible null is legible; a silent miss is not), never an ingest failure.
+  //
+  // The claimed name is CORROBORATED, never trusted alone: a statusline payload is attacker-shaped
+  // local input (statusline-normalize), and the one field the sender must not choose is WHO the
+  // record lands on — a bare `agent.name` would let any local process write its session id onto
+  // any agent's record and misattribute its usage join. The name is honoured only when the
+  // snapshot's cwd also names that agent, or carries no cwd at all; on a disagreement the cwd
+  // match decides, which is safe by construction. ponytail: on a SHARED workdir the recorded id
+  // flip-flops last-seen-wins between the agents alternating there — history-aware assignment is
+  // the documented upgrade path (issue #155).
   try {
     const agentName = snapshot.session.agentName
     const cwd = snapshot.session.cwd
-    if (agentName) {
-      const ok = await recordClaudeSessionId(agentName, snapshot.sessionId)
-      if (!ok) console.warn(`[statusline-ingest] claude-session join: no agent or session 0 for name=${agentName} sessionId=${snapshot.sessionId}`)
+    const agents = loadAgents()
+    const named = agentName ? agents.find(a => !a.deletedAt && a.name === agentName) : undefined
+    const cwdMatch = cwd ? agents.find(a => !a.deletedAt && a.workingDirectory === cwd) : undefined
+    const target = named && (!cwd || cwdMatch?.id === named.id) ? named : cwdMatch
+    if (target) {
+      const ok = await recordClaudeSessionId(target.id, snapshot.sessionId)
+      if (!ok) console.warn(`[statusline-ingest] claude-session join: agent ${target.id} has no session 0, sessionId=${snapshot.sessionId}`)
+    } else if (named) {
+      console.warn(`[statusline-ingest] claude-session join: claimed name=${agentName} not corroborated by cwd=${cwd}, sessionId=${snapshot.sessionId}`)
     } else if (cwd) {
-      const agents = loadAgents()
-      const match = agents.find(a => !a.deletedAt && a.workingDirectory === cwd)
-      if (match) {
-        const ok = await recordClaudeSessionId(match.id, snapshot.sessionId)
-        if (!ok) console.warn(`[statusline-ingest] claude-session join: agent ${match.id} has no session 0, sessionId=${snapshot.sessionId}`)
-      } else {
-        console.warn(`[statusline-ingest] claude-session join: no agent matches cwd=${cwd} sessionId=${snapshot.sessionId}`)
-      }
+      console.warn(`[statusline-ingest] claude-session join: no agent matches cwd=${cwd} sessionId=${snapshot.sessionId}`)
     } else {
       console.warn(`[statusline-ingest] claude-session join: payload carries neither agent name nor cwd, sessionId=${snapshot.sessionId}`)
     }

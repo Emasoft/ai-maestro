@@ -75,8 +75,8 @@ this NPT.
 
 ## Acceptance
 
-- [ ] `TRDD-1GGQ4HWY` (the OAuth manager it reuses for custody + the write mutex) reaches a
-      terminal column, clearing `blocked-by:`.
+- [x] ~~`TRDD-1GGQ4HWY` reaches a terminal column, clearing `blocked-by:`~~ STRUCK 2026-09-30 — unsatisfiable by construction: 1GGQ4HWY defers Phase F behind THIS card, so it can never go terminal first (the frontmatter half of this same cycle dissolved 2026-08-20). The substance it guarded — custody + one-writer mutex shipped — is proven by the nine-sha check in the 2026-08-20 Approval-log entry (ddec060f…2b325a11; custody = keychain/safe-storage/slots, mutex = tick-lock.ts). Superseded by that evidence. (Second line of the old box, "terminal column, clearing blocked-by:", was the same sentence continued.)
+
 - [ ] A pool of ≥2 accounts/tokens exists in keychain custody, indexed via 1GGQ4HWY's
       `safe_storage` slots.
 - [ ] The switcher detects all three triggers (429, dead-refresh, network interruption) and

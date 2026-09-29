@@ -2,9 +2,9 @@
 trdd-id: 9ZIF82HI
 status: tasked
 title: Account switcher — passive rotation to a fresh account/token on 429 / dead-refresh / network interruption
-column: planned
+column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-20T19:35:19+0200
+updated: 2026-09-30T00:06:18+0200
 current-owner: ai-maestro
 task-type: security
 scope: project

@@ -781,6 +781,38 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     expect(r.installedPlugin).toBeNull()
   })
 
+  it('a CLI failure with only a DIFFERENT plugin key present is STILL degraded — the verify must be target-specific, not any-key-passes (G16 emit)', async () => {
+    // The false-Installed vector the sibling tests cannot see: a PRE-EXISTING other
+    // plugin's enabledPlugins key (the workdir persists across tests; the agent had a
+    // plugin installed long before this title change) + the TARGET genuinely failing.
+    // An any-key-in-enabledPlugins predicate would emit Installed here — G17's R9.13
+    // recovery would then stand down on a broken install. The check must key on the
+    // target name, not on enabledPlugins being non-empty.
+    rmSync(path.join(FAKE_HOME, 'agents', 'agent-a', '.claude'), { recursive: true, force: true })
+    seedAgents([makeAgentRecord({ id: 'agent-a' })])
+    mockExecFileImpl.mockImplementation(async (cmd: unknown, args: unknown, opts: unknown) => {
+      mockExecFileCalls.push({ cmd, args })
+      const argv = Array.isArray(args) ? (args as string[]) : []
+      const cwd = (opts as { cwd?: string } | undefined)?.cwd
+      if (cmd === 'claude' && argv[0] === 'plugin' && argv[1] === 'install' && cwd) {
+        const file = path.join(cwd, '.claude', 'settings.local.json')
+        mkdirSync(path.dirname(file), { recursive: true })
+        const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
+        // A DIFFERENT plugin's key, never the target's.
+        cur.enabledPlugins = { ...(cur.enabledPlugins ?? {}), 'some-other-plugin@ai-maestro-plugins': true }
+        writeFileSync(file, JSON.stringify(cur, null, 2))
+      }
+      throw new Error('Command failed: claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local')
+    })
+
+    const r = await changeTitle('agent-a', 'maintainer', { skipPluginSync: false, githubRepo: 'Emasoft/ai-maestro' })
+
+    expect(r.success).toBe(true)
+    expect(r.operations.some(op =>
+      /G16: WARN — Failed to install "ai-maestro-maintainer-agent"/.test(op))).toBe(true)
+    expect(r.installedPlugin).toBeNull()
+  })
+
   // R20.5's SECOND clause. The rule is "the default role-plugin MUST be installed
   // automatically when the title is granted, UNLESS the user (or a privileged
   // caller) explicitly picks a different COMPATIBLE role-plugin". ChangeTitle has

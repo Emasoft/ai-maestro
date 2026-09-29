@@ -1,6 +1,6 @@
 ---
 spec: governance
-spec-version: 2.6.1
+spec-version: 2.7.0
 status: normative
 created: 2026-07-22T10:19:26+0200
 updated: 2026-08-26T07:50:25+0200
@@ -8,6 +8,7 @@ maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
 reconciled-with:
+  - "2.7.0 (2026-09-29, issue #154): R42.9 REACH CARVE-OUT — the invariant writes user/project/LOCAL settings and since CC 2.1.248 a `--restricted` (or CLAUDE_CODE_RESTRICTED=1) receiver ignores those files, so it never receives the refuse key and is OUTSIDE the mechanism's reach; the REFUSE claim is scoped to receivers the invariant can write. MINOR: scoping clarification of an existing rule's mechanism, no MUST changed, no code change."
   - "2.6.1 (2026-08-26): R6.6 + R6.9 prose corrected to match the code they describe (TRDD-2XV78BND; MANAGER-approved 2026-08-15) — in both the CODE was right and the TEXT was stale, the dangerous direction. R6.6 drops 'unconditional': the human sender's outbound Y is conditional on the sender context RESOLVING (R38.2 fail-closed branch, test-pinned) — the old wording licensed deleting that guard. R6.9 names the generic auth gate as today's enforcement and records the dedicated isSubagent guard as LATENT (zero production callers pass isSubagent: true). PATCH: record-only, no behavior or matrix change, no new clause ids."
   - "2.6.0 (2026-08-20): R42.9 CORRECTED by direct USER directive, same day as its 2.5.0 addition — the outbound half is INVERTED: a permissions.deny SendMessage entry is now FORBIDDEN (the deny keys on the whole client tool and breaks the agent's own subagent handling), and the amp-only-messaging invariant REMOVES the entry it previously wrote. The lockdown is crossSessionInbound refuse alone. Effectively a breaking change to a 12-hour-old rule with no external pinners beyond the invariant corrected in the same commit; recorded as MINOR with this explicit note rather than a major bump."
   - "2.5.0 (2026-08-20): R42.9 ADDED (USER directive, TRDD-027HZOYN) — client-native cross-session messaging structurally denied in harness workdirs, BOTH directions (permissions.deny SendMessage + crossSessionInbound refuse), enforced by the amp-only-messaging workdir invariant; sub-agent messaging explicitly untouched. MINOR: new rule, no existing MUST changed. Catalog row follows in the same commit."
@@ -1814,6 +1815,10 @@ the server writing each agent workdir's `.claude/settings.local.json` (the `amp-
 create, on wake, and on the periodic sweep, self-repairing if edited back out): `crossSessionInbound: "refuse"`, and
 NOTHING ELSE. With every harness session refusing inbound, a client-native cross-session send has nowhere to land, so
 AMP (R6-gated, AID-attributed, logged) is the only working channel — the lockdown needs no outbound half.
+REACH CARVE-OUT (issue #154, 2026-09-29): the enforcement mechanism writes to user/project/LOCAL settings files, and
+since Claude Code 2.1.248 a session launched with `--restricted` (or `CLAUDE_CODE_RESTRICTED=1`) IGNORES those files —
+so such a receiver never receives the refuse key and is OUTSIDE this mechanism's reach; the REFUSE claim is scoped to
+receivers the invariant can actually write, and a `--restricted` session relies on its own launch policy.
 **FORBIDDEN (USER correction, 2026-08-20): a `permissions.deny` entry for `SendMessage`.** The deny list keys on the
 whole client TOOL, and the same tool handles a session's OWN sub-agents — denying it breaks subagent handling, not
 just cross-session sends. The invariant REMOVES that entry wherever the pre-correction version wrote it.

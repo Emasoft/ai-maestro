@@ -21,7 +21,7 @@ constraints.
 
 ### Custom Server Architecture (server.mjs)
 
-^9FCGOH2M [desc: "server.mjs exists because Next.js alone cannot serve WebSocket upgrades on the same port as HTTP; a custom Node server combines Next.js HTTP handling with a WS server for terminal streaming, both on port 23000.", keywords: why_does_server.mjs_exist Next.js_websocket_same_port custom_server_architecture port_23000_websocket terminal_streaming_server server.mjs_upgrade_handler what_combines_http_and_websocket handle_http_and_ws_one_port, ocd: 2026-08-02, lmd: 2026-09-28]
+^9FCGOH2M [desc: "server.mjs exists because Next.js alone cannot serve WebSocket upgrades on the same port as HTTP; a custom Node server combines Next.js HTTP handling with a WS server for terminal streaming.", keywords: why_does_server.mjs_exist Next.js_websocket_same_port custom_server_architecture port_23000_websocket terminal_streaming_server server.mjs_upgrade_handler what_combines_http_and_websocket handle_http_and_ws_one_port, ocd: 2026-08-02, lmd: 2026-09-28]
 **Why it exists:** Next.js alone doesn't support WebSocket on the same port as HTTP. The custom server combines both.
 
 ```
@@ -42,7 +42,7 @@ When modifying `server.mjs`:
 
 ### Session Discovery Pattern
 
-^V3P3E6XZ [desc: "Sessions are discovered from `tmux ls` and LINKED to registry agents (~/.aimaestro/agents/registry.json survives restarts); a registry agent with no running session shows hibernated. All agent mutations go through the element-management-service pipelines, never direct registry writes.", keywords: session_discovery_from_tmux_ls agent_registry_source_of_truth hibernated_agent_no_session registry.json_survives_restarts how_are_sessions_linked_to_agents CreateAgent_DeleteAgent_pipeline never_write_registry_directly tmux_ls_empty_graceful session_id_must_match_tmux_name element_management_service_pipeline, ocd: 2026-08-02, lmd: 2026-09-28]
+^V3P3E6XZ [desc: "Sessions come from `tmux ls`, LINKED to registry agents; no running session = hibernated. All agent mutations go through element-management-service pipelines, never direct registry writes.", keywords: session_discovery_from_tmux_ls agent_registry_source_of_truth hibernated_agent_no_session registry.json_survives_restarts how_are_sessions_linked_to_agents CreateAgent_DeleteAgent_pipeline never_write_registry_directly tmux_ls_empty_graceful session_id_must_match_tmux_name element_management_service_pipeline, ocd: 2026-08-02, lmd: 2026-09-28]
 Sessions are discovered from tmux and LINKED to agents:
 
 ```
@@ -62,7 +62,7 @@ When implementing agent-related features:
 
 ### WebSocket-PTY Bridge
 
-^PT9JG5VW [desc: "The WebSocket-PTY bridge data flow: browser xterm.js ↔ WS messages ↔ node-pty ↔ `tmux attach-session` ↔ tmux session ↔ Claude Code CLI. PTYs are POOLED — multiple WS clients share one PTY, created on first connect, destroyed on last disconnect; resize propagates Browser→WS→PTY→tmux; I/O is binary-safe.", keywords: websocket_pty_bridge_data_flow pty_pooling_multiple_clients_one_session pty_created_first_connect_destroyed_last_disconnect terminal_resize_propagation_browser_to_tmux xterm.js_renders_only_no_tmux binary_safe_ansi_unicode input_output_binary_safe pty_error_closes_websocket_gracefully terminal_dimensions_sync_window_resize tmux_attach_session_node_pty, ocd: 2026-08-02, lmd: 2026-09-28]
+^PT9JG5VW [desc: "WebSocket-PTY bridge: browser xterm.js ↔ WS ↔ node-pty ↔ `tmux attach-session` ↔ tmux ↔ Claude Code CLI. PTYs are POOLED — multiple WS clients share one PTY, destroyed on last disconnect.", keywords: websocket_pty_bridge_data_flow pty_pooling_multiple_clients_one_session pty_created_first_connect_destroyed_last_disconnect terminal_resize_propagation_browser_to_tmux xterm.js_renders_only_no_tmux binary_safe_ansi_unicode input_output_binary_safe pty_error_closes_websocket_gracefully terminal_dimensions_sync_window_resize tmux_attach_session_node_pty, ocd: 2026-08-02, lmd: 2026-09-28]
 **Critical data flow:**
 ```
 Browser (xterm.js)
@@ -101,7 +101,7 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in
 
 ### WebSocket Reconnection Strategy
 
-^799LAMS8 [desc: "WS reconnection: max 5 attempts with exponential backoff [100,500,1000,2000,5000]ms; after 5 failures show an error to the user. Do NOT retry indefinitely — a truly-ended tmux session would burn resources forever.", keywords: websocket_reconnection_backoff max_5_reconnect_attempts exponential_backoff_ms reconnect_after_tmux_died when_to_stop_reconnecting_websocket websocket_retry_forever_waste reconnect_strategy_backoff_array, ocd: 2026-08-02, lmd: 2026-09-28]
+^799LAMS8 [desc: "WS reconnect: max 5 attempts, exponential backoff [100,500,1000,2000,5000]ms; after 5, show an error. Do NOT retry forever — a truly-ended tmux session would burn resources.", keywords: websocket_reconnection_backoff max_5_reconnect_attempts exponential_backoff_ms reconnect_after_tmux_died when_to_stop_reconnecting_websocket websocket_retry_forever_waste reconnect_strategy_backoff_array, ocd: 2026-08-02, lmd: 2026-09-28]
 ```typescript
 const reconnect = {
   maxAttempts: 5,
@@ -114,7 +114,7 @@ After 5 failed reconnection attempts, show error to user. Do NOT retry indefinit
 
 ### Session Naming Constraints
 
-^L1L4TL7R [desc: "tmux session names are limited to ^[a-zA-Z0-9_@.-]+$ — the extended @ and . characters support agentId@hostId multi-host addressing. Enforce this in any session-creating UI; invalid characters make `tmux attach` fail SILENTLY.", keywords: tmux_session_name_allowed_characters tmux_attach_fails_silently agentId_hostId_format session_name_regex enforce_session_name_ui invalid_characters_tmux_attach session_name_pattern, ocd: 2026-08-02, lmd: 2026-09-28]
+^L1L4TL7R [desc: "tmux session names are limited to ^[a-zA-Z0-9_@.-]+$ — @ and . support agentId@hostId multi-host addressing. Enforce in any session-creating UI; invalid characters make `tmux attach` fail SILENTLY.", keywords: tmux_session_name_allowed_characters tmux_attach_fails_silently agentId_hostId_format session_name_regex enforce_session_name_ui invalid_characters_tmux_attach session_name_pattern, ocd: 2026-08-02, lmd: 2026-09-28]
 tmux session names are limited to: `^[a-zA-Z0-9_@.-]+$`
 
 The extended character set (`@` and `.`) supports `agentId@hostId` format used for multi-host agent addressing. **Enforce this** in any UI that creates sessions (Phase 2+). Invalid characters will cause `tmux attach` to fail silently.
@@ -132,7 +132,7 @@ useEffect(() => {
 }, []) // Empty deps: one socket per MOUNT. The cleanup is not optional — see below.
 ```
 
-^T3JGHL8Z [desc: "One WebSocket socket per MOUNT, not per tab: only the active agent's TerminalView is mounted, so switching agents unmounts it, runs the useEffect cleanup (closes the socket), and the next mount re-attaches — the tmux session survives, scrollback re-captured.", keywords: websocket_closes_when_switching_agents one_socket_per_mount effect_cleanup_not_optional empty_deps_means_once_per_mount switching_agents_unmounts_terminal tmux_survives_socket_close scrollback_recaptured_next_mount terminal_view_lifecycle, ocd: 2026-08-02, lmd: 2026-09-28]
+^T3JGHL8Z [desc: "One WS socket per MOUNT, not per tab: switching agents unmounts TerminalView, cleanup closes the socket, next mount re-attaches — tmux session survives, scrollback re-captured.", keywords: websocket_closes_when_switching_agents one_socket_per_mount effect_cleanup_not_optional empty_deps_means_once_per_mount switching_agents_unmounts_terminal tmux_survives_socket_close scrollback_recaptured_next_mount terminal_view_lifecycle, ocd: 2026-08-02, lmd: 2026-09-28]
 **One socket per MOUNT, and a switch is a mount.** Only the agent matching `activeAgentId` is
 rendered, so switching agents unmounts `TerminalView`, runs this cleanup, and **closes the
 socket**; the next mount opens a new one. The empty dependency array means "once per mount", not

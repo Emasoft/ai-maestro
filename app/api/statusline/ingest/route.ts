@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
   // session id onto any agent's record and misattribute its usage join. A name that resolves to a
   // live agent is honoured only when the snapshot's cwd also names that agent, or carries no cwd
   // at all; a name that resolves to nothing (deleted or unknown agent) contributes nothing, and
-  // the cwd path decides exactly as it always has. On a DISAGREEMENT neither candidate wins and
+  // the cwd path decides exactly as the bare-cwd path always has. On a DISAGREEMENT neither candidate wins and
   // nothing is written: the cwd is the session's CURRENT directory and drifts the moment an agent
   // cds into a repo, worktree, or a sibling agent's workdir, so letting the cwd match decide
   // would attribute a cd'd agent's session to whoever owns the transient directory — a

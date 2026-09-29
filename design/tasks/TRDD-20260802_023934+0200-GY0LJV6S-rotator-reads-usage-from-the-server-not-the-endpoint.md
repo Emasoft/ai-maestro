@@ -6,7 +6,7 @@ column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T17:55:26+0200
+updated: 2026-09-29T17:59:21+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -625,3 +625,5 @@ what this card replaces with a statusline read gated by
 source with the endpoint as fallback, verify by effect, and remove the fallback only once the
 statusline path is observed working — the failure mode here is an unattended loop that burns every
 account, so a reversible step is worth more than a tidy diff.
+
+2026-09-29T17:59+0200 — ROUND-2 REVIEW (df8776c6e/21bf0db3e): SOUND. 4.1a-proc note folded into the probe procedure: when the probe window runs, the record must name (i) the janitor daemon EXPECTEDLY stands down while the R16 flag is re-armed (the server claims the chore stamp; the janitor schedules from the newest stamp — the stamp's designed meaning, not a defect) and (ii) verification that the re-disable actually landed (marker renamed back to .DISABLED-...) so the window's cleanup does not leave the server silently owning the chore the ORH handover assigned to the janitor. Its MINOR 1.1c ("decides exactly as it always has" → "exactly as the bare-cwd path always has") is fixed in the same pass.

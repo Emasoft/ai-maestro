@@ -392,6 +392,11 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     const warnRows = warn.stdout.trim().split('\n').map((l) => l.split('\t').slice(0, 3).join('\t'))
     expect(warnRows).toEqual([
       'WARN\tLEGACY-REFUSED-FOLDER\t(corpus)',
+      // 5→7 on 2026-09-29: D49OPVWP and XOHLHQOF moved into design/proposals/ carrying no
+      // `status:` — the proposals/ folder implies `status: proposed`, a mechanical autofix.
+      // Re-measure and re-pin when the corpus moves again.
+      'WARN\tSTATUS-MISSING\tD49OPVWP',
+      'WARN\tSTATUS-MISSING\tXOHLHQOF',
       'WARN\tBODY-STATE-CLAIM\t70A521D9',
       'WARN\tBODY-STATE-CLAIM\t7123D51A',
       'WARN\tBODY-STATE-CLAIM\tEAC02238',

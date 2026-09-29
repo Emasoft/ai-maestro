@@ -2,11 +2,11 @@
 trdd-id: GY0LJV6S
 status: tasked
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: dev
+column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T14:57:23+0200
+updated: 2026-09-29T17:31:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -125,6 +125,7 @@ Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nob
 the NPT [[SIV45HOG]].
 2026-09-29 — NEWER LAYER LANDED on top of the six-box work (does not alter its closure): bb798327a moves both stampChoreRun calls past their flag gates so a disclaimed chore is no longer stamped as the janitor's (ORH-4/M3), supervisor adds a tickArmedCheck() gate; 7ba13219e fixes the boot-guard test's busy-port bind to dual-stack. Resolution of an interrupted-stash conflict set; 53/53 tests, tsc 0. Review conditions outstanding: (1) stash lost-assertion audit running; (2) the card's verify-by-EFFECT step must ALSO check the janitor-side liveness consumer of chore stamps (a disclaimed beat now records NOTHING — could read as dead-server if the janitor counts any-owner stamps); (3) this append.
 2026-09-29 15:0x — LIVE-VERIFICATION PRECONDITION LANDED: yarn build (736s) + pm2 restart done; server serving (root 200, API auth-gated 401 as expected). The card's own verify-by-EFFECT step (statusline snapshot + tick log check) still needs a statusline-capable agent session to produce a beat — see the janitor-liveness note above (stamp consumer reads server-liveness.json, stamps are freshness evidence only).
+2026-09-29T17:31+0200 — VERIFY-BY-EFFECT DONE; all three review conditions closed. LIVE EVIDENCE: statusline snapshots flow (statusline-state/ churns fresh, newest 16:59:45, several under /agents/ cwds); the chore stamp oauth-rotator-tick.last-run.ts ADVANCES every ~60s (17:02:00 → 17:03:02 → 17:25:02, observed live); daemon.log shows task 'oauth-rotator-tick' starting/done each minute. WHO OWNS THE BEAT: the janitor daemon — the server's R16 flag file is renamed .DISABLED-20260924-orh-handover, so oauthTickEnabled()=false and the server's runOneTick returns before stampChoreRun (bb798327a's own gate order) — the ORH handover is working AS DESIGNED: server disclaimed, janitor claimed, stamps keep flowing, nothing reads dead-server. Condition (2) CLOSED on that evidence. Condition (1) CLOSED: stash lost-assertion audit completed by hand (the prior session's lean-worker died before delivering) — test counts equal pre/post (45+9 it-blocks, 92+16 expect-lines), and the ONLY assertion delta is the commit's own documented semantic change ('flag OFF now expects [] — the no-op is the correct new behavior', why-comment in place). Re-ran both resolved files today: 50/50 green. Condition (3): this append. The push-trigger itself: armed and floor-gated (50 tests pin the gates); threshold not reached today — live usage is low, no near-limit ingest yet, which is the correct quiet state, not a gap.
 
 ## ⏭ THE ACTUAL DESIGN — 2026-08-02T14:3x+0200. Read this first; it supersedes every plan below
 
@@ -565,6 +566,7 @@ key* was dead.
 - 2026-09-28T23:25:00+0200 — unblocked: D8OYFG35's last box (USER wiring statusLine into ~/.claude/settings.json) LANDED today — settings.json:1271 now carries the wrapped statusLine command (TRDD-MVZTEKX4, committed + archived), so snapshots arrive and this card's verification step can run. blocked-by cleared; restoring column to pre-block-column dev.
 - 2026-09-28T22:20:16+0200 — column → dev by main-agent@ai-maestro. Blocker spent: D8OYFG35/MVZTEKX4 completed — the statusline hook is wired live, snapshots arrive, the verification step can run.
 - 2026-09-28T23:55:00+0200 — second-source for the unblock: live statusline records are verifiably FLOWING (this session's leak-detector saga exists precisely because ~/.aimaestro/statusline-state/ churns fresh .json/.lock/tmp artifacts every ~3s — see governance-rules commits e225d5479/54f00841/71e9cabb), not merely wired. Box-2 condition (snapshots arrive) is evidenced, single-sourcing on settings.json closed.
+- 2026-09-29T17:31:56+0200 — column → testing. Code complete + unit-verified + verify-by-EFFECT done 2026-09-29 (snapshots flow, tick stamp advances, ORH handover confirmed, stash audit closed, 50/50 green)
 
 ## UNBLOCKED 2026-08-02T11:47:52+0200 — read this before wiring `tick.ts:422`
 

@@ -1293,7 +1293,7 @@ export function lintCorpus(designDir: string): DoctorReport {
             severity: sev,
             id: c.id,
             filePath: c.filePath,
-            message: `is parked (${c.column === 'blocked' ? 'column blocked' : blockedBy.length ? 'blocked-by non-empty' : otherReason === 'review-after' ? `review-after ${frontmatterDay(c.fm['review-after'])}` : `${otherReason} label`}) with no runnable blocker probe — its blocker is a VALUE with a silent timestamp and will rot while reading as current. Add \`blocker-probe: <argv>\` + \`blocker-holds-if: exit-0|exit-nonzero|match:<re>|not-match:<re>\` (take the needle from the EMITTER's source, never from vocabulary seen elsewhere)`,
+            message: `is parked (${c.column === 'blocked' ? 'column blocked' : blockedBy.length ? 'blocked-by non-empty' : otherReason === 'review-after' ? `review-after ${frontmatterDay(c.fm['review-after'])}` : `${otherReason} label`}) with no runnable blocker probe — its blocker is a VALUE with a silent timestamp and will rot while reading as current. Add \`blocker-probe: <argv>\` + \`blocker-holds-if: exit-0|exit-nonzero|match:<re>|not-match:<re>\` (take the needle from the EMITTER's source, never from vocabulary seen elsewhere). NOTE: a probe is an AGENT-RUNNABLE RECIPE, never self-firing — this doctor deliberately never executes it (frontmatter is git-tracked + agent-writable; validate spawning sh -c would be RCE for every linter caller) — so an agent or human must RUN it to reassess the block. Design the recipe so BOTH stdout and exit code fail closed: an echo-tailed recipe exits 0 in every arm, so key the verdict on the STDOUT string only`,
             autofixable: false,
           })
         } else if (!BLOCKER_HOLDS_IF_RE.test(holds)) {

@@ -154,9 +154,9 @@ _api_request() {
     local -a auth_args=()
     _build_auth_args auth_args
 
-    http_code=$(curl -s -w '%{http_code}' -o "$tmp_body" --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "$url" 2>/dev/null)
-    local curl_exit=$?
-    response=$(<"$tmp_body")
+    local curl_exit=0
+    http_code=$(curl -s -w '%{http_code}' -o "$tmp_body" --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "$url" 2>/dev/null) || curl_exit=$?
+    response=$(<"$tmp_body") || true
     rm -f "$tmp_body"
 
     if [[ $curl_exit -ne 0 ]]; then
@@ -761,7 +761,7 @@ resolve_agent() {
         local -a _resolve_auth_args=()
         _build_auth_args _resolve_auth_args
         local response
-        response=$(curl -s --max-time 10 "${_resolve_auth_args[@]+"${_resolve_auth_args[@]}"}" "${target_api}/api/messages?action=resolve&agent=${agent_part}" 2>/dev/null)
+        response=$(curl -s --max-time 10 "${_resolve_auth_args[@]+"${_resolve_auth_args[@]}"}" "${target_api}/api/messages?action=resolve&agent=${agent_part}" 2>/dev/null) || true
         if [[ -z "$response" ]]; then
             print_error "Cannot connect to AI Maestro at ${target_api}"
             return 1
@@ -897,7 +897,7 @@ resolve_agent() {
         _build_auth_args _list_auth_args
         local agent_list
         agent_list=$(curl -s --max-time 3 "${_list_auth_args[@]+"${_list_auth_args[@]}"}" "http://localhost:23000/api/agents" 2>/dev/null \
-            | jq -r '.agents[].name // empty' 2>/dev/null | sort -u)
+            | jq -r '.agents[].name // empty' 2>/dev/null | sort -u) || true
         if [[ -n "$agent_list" ]]; then
             echo "Agents on localhost:" >&2
             echo "$agent_list" | sed 's/^/   /' >&2
@@ -994,7 +994,7 @@ check_api_running() {
     # no AID_AUTH is present, so the unguarded form killed check_api_running for exactly
     # the unauthenticated caller it was added to serve. ${arr[@]+...} expands to nothing
     # when unset and is a no-op otherwise. See TRDD-WV8FDAH0.
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${_chk_auth_args[@]+"${_chk_auth_args[@]}"}" "${api_base}/api/sessions" 2>/dev/null)
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${_chk_auth_args[@]+"${_chk_auth_args[@]}"}" "${api_base}/api/sessions" 2>/dev/null) || true
 
     # LOW-4: Explicit check for empty or connection-failed (000) http_code
     if [[ -z "$http_code" ]] || [[ "$http_code" == "000" ]]; then

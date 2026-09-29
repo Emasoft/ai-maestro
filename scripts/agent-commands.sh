@@ -176,7 +176,8 @@ HELP
     done
 
     local response
-    response=$(list_agents)
+    # || true is load-bearing under the entry script's set -euo pipefail: an unshielded failing assignment kills the whole CLI before the error handling below runs (ai-maestro#121).
+    response=$(list_agents) || true
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agents"
@@ -264,7 +265,7 @@ cmd_presence() {
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/users/me/presence" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/users/me/presence" 2>/dev/null) || true
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch presence"
         return 1
@@ -306,7 +307,7 @@ cmd_probe() {
         sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
     fi
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${sudo_args[@]+"${sudo_args[@]}"}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null) || true
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent probe"
         return 1
@@ -373,7 +374,7 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 15 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}/subconscious" 2>/dev/null)
+    response=$(curl -s --max-time 15 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}/subconscious" 2>/dev/null) || true
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch subconscious status for ${RESOLVED_ALIAS:-$agent}"
@@ -469,7 +470,7 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/hibernation" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/hibernation" 2>/dev/null) || true
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch the hibernation roster"
         return 1
@@ -537,7 +538,7 @@ cmd_config() {
 
     local response
     response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" \
-        "${api_base}/api/agents/${RESOLVED_AGENT_ID}/full" 2>/dev/null)
+        "${api_base}/api/agents/${RESOLVED_AGENT_ID}/full" 2>/dev/null) || true
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch config for agent '${agent}'"
         return 1
@@ -587,7 +588,7 @@ cmd_show() {
     local -a auth_args=()
     _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}" 2>/dev/null) || true
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent data"
@@ -978,7 +979,7 @@ HELP
     # MEDIUM-010: Add timeout to curl
     response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
-        -d "$payload")
+        -d "$payload") || true
 
     # Check for error
     local error
@@ -1096,7 +1097,7 @@ HELP
     local response http_code
     # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
     # can detect the "sudo_required" 403 and print a user-facing message.
-    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}${query}")
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}${query}") || true
     http_code=$(echo "$response" | tail -n1)
     response=$(echo "$response" | sed '$d')
 
@@ -1224,7 +1225,7 @@ HELP
     # (agents cannot earn sudo tokens per Rule 12).
     response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
-        -d "$payload")
+        -d "$payload") || true
     http_code=$(echo "$response" | tail -n1)
     response=$(echo "$response" | sed '$d')
 
@@ -1334,7 +1335,7 @@ HELP
     # explicit human approval.
     response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
-        -d "$payload")
+        -d "$payload") || true
     http_code=$(echo "$response" | tail -n1)
     response=$(echo "$response" | sed '$d')
 
@@ -1398,7 +1399,7 @@ HELP
                 dir_payload=$(jq -n --arg d "$new_dir" '{workingDirectory: $d}')
                 dir_response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
                     -H "Content-Type: application/json" \
-                    -d "$dir_payload")
+                    -d "$dir_payload") || true
                 dir_http_code=$(echo "$dir_response" | tail -n1)
                 if [[ "$dir_http_code" = "403" ]]; then
                     # Roll back — the folder moved on disk but the registry
@@ -1569,7 +1570,7 @@ HELP
     local response
     response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
-        -d "$agent_data")
+        -d "$agent_data") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

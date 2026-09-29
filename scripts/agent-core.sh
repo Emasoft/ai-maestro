@@ -416,7 +416,7 @@ restart_agent() {
 
     # Get the agent's session name and programArgs from registry
     local agent_json
-    agent_json=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}")
+    agent_json=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}") || true
     local session_name
     session_name=$(echo "$agent_json" | jq -r '.agent.session.tmuxSessionName // .agent.name // .agent.alias // empty' 2>/dev/null)
     local program_args
@@ -453,7 +453,7 @@ restart_agent() {
     # 4. Verify agent comes back online
     sleep 3
     local response
-    response=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}")
+    response=$(curl -s --max-time 10 "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${agent_id}") || true
     local status
     status=$(echo "$response" | jq -r '.agent.session.status // "unknown"' 2>/dev/null)
 

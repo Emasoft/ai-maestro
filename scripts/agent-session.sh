@@ -80,7 +80,7 @@ cmd_session_add() {
     local response
     response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
-        -d "$payload")
+        -d "$payload") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -128,7 +128,7 @@ cmd_session_remove() {
 
     print_info "Removing session..."
     local response
-    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "$url")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]+"${auth_args[@]}"}" "$url") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -185,7 +185,7 @@ cmd_session_exec() {
     local response
     response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
-        -d "$payload")
+        -d "$payload") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -238,7 +238,7 @@ cmd_session_command() {
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/${session}/command" \
-        -H "Content-Type: application/json" -d "$payload")
+        -H "Content-Type: application/json" -d "$payload") || true
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
     print_success "Command sent to session: $session"
@@ -268,7 +268,7 @@ cmd_session_activity_update() {
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/activity/update" \
-        -H "Content-Type: application/json" -d "$payload")
+        -H "Content-Type: application/json" -d "$payload") || true
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
     print_success "Activity updated for session: $session"
@@ -282,7 +282,7 @@ cmd_session_user_input() {
     _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/sessions/me/user-input" \
-        -H "Content-Type: application/json")
+        -H "Content-Type: application/json") || true
     local error; error=$(echo "$response" | jq -r '.error // empty')
     [[ -n "$error" ]] && { print_error "$error"; return 1; }
     local ts; ts=$(echo "$response" | jq -r '.recorded_at_epoch // empty')
@@ -368,7 +368,7 @@ cmd_hibernate() {
 
     print_info "Hibernating agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -407,7 +407,7 @@ cmd_wake() {
 
     print_info "Waking agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]+"${auth_args[@]}"}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake") || true
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

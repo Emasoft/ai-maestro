@@ -2,7 +2,7 @@
 name: agent-first-architecture
 description: "why is data.governanceTitle always undefined / agent API response nesting bug / do agents need a tmux session / where does ai-maestro store agent workingDirectory / difference between lib/agent-registry.ts and lib/agent.ts / does the subconscious need remote API calls / why is checkMessages disabled by default"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-09-29
 metadata:
   node_type: memory
   type: reference
@@ -15,6 +15,7 @@ publish-globally: false
 
 ## Agent-First Architecture (CRITICAL)
 
+^TSZT5G0A [desc: "Agents are the core entity in ai-maestro; sessions are optional properties — an agent can exist with zero tmux sessions, and the entity tree hangs every property off the agent record.", keywords: agent_first_architecture agents_are_the_core_entity sessions_are_optional_properties can_an_agent_exist_without_a_session agent_entity_tree_model what_is_the_core_entity sessions_optional_not_required, ocd: 2026-08-02, lmd: 2026-09-29]
 **AGENTS ARE THE CORE ENTITY.** Sessions are optional properties of agents.
 
 ```
@@ -30,12 +31,14 @@ Agent (core entity)
 └── preferences.defaultWorkingDirectory
 ```
 
+^DLSHXR42 [desc: "The four agent-first principles: agents can exist without sessions; workingDirectory is stored on the agent; never query tmux to derive agent properties; sessions are linked to existing agents, not agents derived from sessions.", keywords: agent_first_key_principles never_query_tmux_for_agent_data workingDirectory_stored_not_derived sessions_linked_to_existing_agents agent_registry_source_of_truth derive_agent_properties_from_tmux sessions_discovered_and_linked, ocd: 2026-08-02, lmd: 2026-09-29]
 **Key principles:**
 1. **Agents can exist without sessions** - An agent for querying repos/documents doesn't need a tmux session
 2. **workingDirectory is STORED on the agent** - Set when agent is created or session is linked
 3. **NEVER query tmux to derive agent properties** - All agent data comes from the registry
 4. **Sessions are discovered and LINKED to existing agents** - Not the other way around
 
+^QHB6Y3P4 [desc: "Two agent systems coexist: lib/agent-registry.ts is the file-based registry (~/.aimaestro/agents/registry.json) holding full metadata, and lib/agent.ts is the in-memory Agent class for runtime. Use the registry for metadata like workingDirectory.", keywords: two_agent_systems lib_agent_registry_ts_vs_lib_agent_ts which_file_holds_agent_metadata agent_registry_json_location in_memory_agent_class_runtime getAgent_getAgentBySession how_to_read_agent_workingDirectory_in_code, ocd: 2026-08-02, lmd: 2026-09-29]
 **Two agent systems:**
 - **`lib/agent-registry.ts`** - File-based registry (`~/.aimaestro/agents/registry.json`) with full agent metadata
 - **`lib/agent.ts`** - In-memory Agent class for runtime (database, subconscious)
@@ -47,12 +50,14 @@ const agent = getAgent(agentId) || getAgentBySession(sessionName)
 const workingDir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
 ```
 
+^S0Y805QC [desc: "The DO-NOT list for agent data: never query tmux for working directories, never derive agent properties from tmux session state, never assume an agent has a session, never create runtime lookups for data that should be stored.", keywords: agent_data_do_not_list query_tmux_for_working_directory_derive_agent_properties_from_session_state assume_agent_always_has_session runtime_lookup_for_stored_data anti_pattern_agent_properties, ocd: 2026-08-02, lmd: 2026-09-29]
 **DO NOT:**
 - Query tmux to get working directories
 - Derive agent properties from tmux session state
 - Assume an agent always has a session
 - Create runtime lookups for data that should be stored
 
+^DTLVX9ZT [desc: "The subconscious runs LOCAL to the agent's machine — direct access to conversation files, CozoDB, and the local filesystem; no remote API calls needed, which is why index-delta reads .jsonl files straight from disk.", keywords: subconscious_runs_local_same_machine_as_agent no_remote_api_calls_needed index_delta_reads_jsonl_directly subconscious_coardb_local_access where_does_subconscious_run conversation_files_local, ocd: 2026-08-02, lmd: 2026-09-29]
 **Subconscious runs LOCAL to the agent:**
 
 The subconscious process runs on the **same machine where the agent lives**. This means it has direct access to:
@@ -62,6 +67,7 @@ The subconscious process runs on the **same machine where the agent lives**. Thi
 
 The subconscious does NOT need remote API calls to access agent data - everything is local. This is why `index-delta` can read `.jsonl` files directly from disk.
 
+^NMDXS703 [desc: "Subconscious timers after TRDD-70a521d9: RAG-based memory maintenance was removed once Claude Code shipped built-in memory; only checkMessages() polling remains and it is DISABLED by default (push notifications replace polling).", keywords: subconscious_timers_checkMessages_disabled_by_default RAG_memory_maintenance_removed maintainMemory_triggerConsolidation_removed TRDD_70a521d9 messagePollingEnabled re_enable_message_polling push_notifications_replace_polling, ocd: 2026-08-02, lmd: 2026-09-29]
 **Subconscious timers (v0.29+ / post-RAG removal per TRDD-70a521d9):**
 - `checkMessages()` - **DISABLED by default** (push notifications replace polling)
 
@@ -69,6 +75,7 @@ The RAG-based memory maintenance (`maintainMemory()` + nightly `triggerConsolida
 
 ## Agent API Response Nesting — ALWAYS use `.agent.field`
 
+^69H0B4UV [desc: "GET /api/agents/{id} nests all data under .agent — reading data.governanceTitle directly is ALWAYS undefined and silently falls back to defaults; always read data.agent?.field (this exact bug made title changes look like they failed while the server had saved them).", keywords: agent_api_response_nesting data_governanceTitle_always_undefined GET_api_agents_id_returns_agent_object title_change_fails_silently read_data_agent_field data_agent_workingDirectory agent_api_nested_payload, ocd: 2026-08-02, lmd: 2026-09-29]
 **CRITICAL:** `GET /api/agents/{id}` returns `{ agent: { id, name, role, governanceTitle, ... } }` — the data is nested under `.agent`. NEVER read fields directly from the response object.
 
 ```typescript

@@ -2,7 +2,7 @@
 name: server-oauth-token-continuity-design
 description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes / did a guard land in front of the bookkeeping instead of the mutation / keychain says one account and state.json says another / split-brain after a rotation / the live-identity beacon disagrees with the state index / evidence answers only the question you point it at / I wrote a claim into memory that the source I had just read disproves / host state leaked into a pushed project memory page / does our side ever re-mint or write the shared cookie store / a grep returned nothing so I concluded the path is never referenced / my needle was a joined path in a codebase that joins by segment / --include=*.ts skipped the .mjs runtime half / my needle omitted the very segment whose absence I asserted / a cap on a command that settles a NEGATIVE is me choosing the absence / what is actually joined onto the rotator root / is the cookie store in a different tree or one segment away / the canonical rotator root's profiles entry is a symlink / do the two rotator roots share state.json / I answered a filesystem question by grepping source text / rotator-root-unresolved alert / the rotator refused the root / the janitor data dir was wiped and came back"
 ocd: 2026-07-16
-lmd: 2026-09-24
+lmd: 2026-09-29
 metadata:
   node_type: memory
   type: project
@@ -61,7 +61,7 @@ must replicate, so server + `#N` daemon coordinate not fight):**
   the exact lock-FILE PATH is in the janitor repo (`oauth_rotator/`/`daemon.py`): a CROSS-REPO
   item to obtain, never guessed. See [[family-a-continuity-absorption-plan]] (NPT 1GGQ4HWY).
 
-^ATOM-S7SH-7ZQO [desc:"the rotator can DELIBERATELY refuse a rotation and log DRAIN-GUARD / HOLDING — that is not a stall, do not fix it", keywords: rotator_refuses_to_rotate DRAIN-GUARD_in_the_log HOLDING_not_rotating rotator_stuck_drain-guard-hold is_the_rotator_stalled why_did_it_not_rotate_an_expiring_token rotated_off_an_account_that_still_had_headroom, ocd: 2026-08-02, lmd: 2026-08-02]
+^ATOM-S7SH-7ZQO [desc: "the rotator can DELIBERATELY refuse a rotation and log DRAIN-GUARD / HOLDING — that is not a stall; the 2026-08-01 incident rotated off an account at 9%/38% whose stored credential had rotted", keywords: rotator_refuses_to_rotate DRAIN-GUARD_in_the_log HOLDING_not_rotating rotator_stuck_drain-guard-hold is_the_rotator_stalled why_did_it_not_rotate_an_expiring_token rotated_off_account_that_still_had_headroom drainsLastEscapeHatch stored_credential_rotted_10.9_days 69_failed_refreshes copy_of_the_key_was_dead, ocd: 2026-08-02, lmd: 2026-09-29]
 
 The rotator can DELIBERATELY decline a rotation it has already computed as needed, logging
 `DRAIN-GUARD` (tick) / `HOLDING` (beat). That is not a stall — do not "fix" it.
@@ -72,6 +72,9 @@ including the model-scoped one), and rotating would leave ZERO usage-confirmed s
 the rotator rotated off an account at 9%/38% for expiry alone; when the target maxed out the
 abandoned account's stored credential had rotted (10.9 days expired, 69 failed refreshes). The
 account had headroom the whole time — the rotator's COPY OF THE KEY was dead.
+
+
+^ATOM-CUV8-0VLP [desc: "why the guard is safe and how it counts: reachable only after /usage returned 200 on the live token, counts usage-confirmed candidates only, and reports the hold via StuckReason drain-guard-hold", keywords: guard_reachable_after_usage_200 expiry_is_a_prediction_not_observation 401_answers_within_one_tick usage_confirmed_candidates_only not_provably_dead_is_not_healthy paper_spare_dead_in_fact hold_reported_not_silent StuckReason_drain_guard_hold rotator-stuck_drain-guard-hold surveyAlternates_skips_live_account fleet_one_credential_from_lockout, ocd: 2026-09-29, lmd: 2026-09-29]
 
 It is safe because it is only reachable after `/usage` returned 200 USING THE LIVE TOKEN, so the
 expiry is a PREDICTION, not an observation. A token that has really died answers 401 — a branch the
@@ -109,7 +112,7 @@ you are judging is not evidence about that process.
 Sibling: ATOM-S7SH-7ZQO covers the opposite error — a DELIBERATE DRAIN-GUARD/HOLDING refusal
 mistaken for a stall. Both failures are "the rotator looks stuck and is not".
 
-^ATOM-3XXL-4KCV [desc:"A captcha on claude.ai/oauth/authorize does NOT shorten unattended runtime: the ~8h renew is a browserless refresh_token POST to a different host; only the rare SEED touches that screen.", keywords: captcha_on_the_authorize_screen oauth_authorize_captcha does_a_captcha_break_continuity can_the_fleet_still_run_unattended refresh_token_grant_is_browserless seed_versus_renew_leg platform.claude.com_token_endpoint, ocd: 2026-08-07, lmd: 2026-08-07]
+^ATOM-3XXL-4KCV [desc:"A captcha on claude.ai/oauth/authorize does NOT shorten unattended runtime: the ~8h renew is a browserless refresh_token POST to a different host; only the rare SEED touches that screen.", keywords: captcha_on_the_authorize_screen oauth_authorize_captcha does_a_captcha_break_continuity can_the_fleet_still_run_unattended refresh_token_grant_is_browserless seed_versus_renew_leg platform.claude.com_token_endpoint, ocd: 2026-08-07, lmd: 2026-09-29]
 
 **A captcha on the claude.ai authorize screen does NOT break unattended continuity** — measured
 2026-08-07, when one appeared for the first time and looked like it would cut runtime from the
@@ -126,6 +129,9 @@ Two legs, two grants, two HOSTS:
   already required a human (`CLAUDE_ROTATOR_AUTO_BOOTSTRAP` defaults OFF, and the login challenge is
   an OS-level passkey/2FA prompt no automation can satisfy).
 
+
+^ATOM-J3YO-IQJ5 [desc: "the proof and the real exposure: an old captured date beside a fresh token-expiry proves the browserless chain; the quiet risk is keepalive_refresh returning None on any Cloudflare error", keywords: positive_control_captured_vs_token_expiry rotator_py_list_old_captured_fresh_expiry browserless_chain_proof_15_days 45_refresh_cycles_no_authorize_visits keepalive_refresh_returns_None_on_error cloudflare_1010_banned_default_ua hand_picked_user_agent_claude-account-rotator endpoint_behind_cloudflare silent_kill_of_unattended_path janitor_228_filed oauth-rotation-renew-reauth, ocd: 2026-09-29, lmd: 2026-09-29]
+
 **The positive control is what settles it:** a slot whose `captured` date is WEEKS old while its
 `token-expiry` is a live ~7h has been carried entirely by the browserless chain. On the measured
 day that was 15 days / ~45 refresh cycles with zero authorize-screen visits. Check it with
@@ -137,7 +143,7 @@ carries a hand-picked `User-Agent: claude-account-rotator` precisely because url
 1010-banned). A tightening there would kill the only unattended path SILENTLY. Filed as
 janitor#228; see [[oauth-rotation-renew-reauth]].
 
-^ATOM-2HN8-H8OR [desc:"A dead OAuth refresh is evidence about rung 1 and NOTHING else — a live cookie mints a new one with no human. The correct cookie-aware code exists in ai-maestro and has ZERO production callers.", keywords: a_human_must_re-login_but_the_account_is_fine false_reauth_alert dead_refresh_does_not_mean_a_human_is_needed why_does_it_keep_saying_re-login cascade.ts_is_never_called cookie-vault_has_no_callers the_fix_exists_but_nothing_calls_it, ocd: 2026-08-07, lmd: 2026-08-07]
+^ATOM-2HN8-H8OR [desc: "a dead OAuth refresh is evidence about rung 1 and NOTHING else — a live cookie mints a new one with no human; of two slots flagged for reauth one minted itself unattended", keywords: a_human_must_re-login_but_the_account_is_fine false_reauth_alert dead_refresh_does_not_mean_a_human_is_needed why_does_it_keep_saying_re-login rung_1_exhausted_nothing_more live_cookie_mints_new_refresh_no_human healthy_cookie_minted_unattended 4506_false_alerts_over_4_days alert_frequency_stops_being_read refresh_dead_evidence_about_oauth_rung_only, ocd: 2026-08-07, lmd: 2026-09-29]
 
 **`refresh-dead` does not mean a human is required** — it means rung 1 of the ROTATE → RENEW →
 REAUTHENTICATE cascade is exhausted, and nothing more. Rung 2 mints a fresh refresh from a live
@@ -150,6 +156,9 @@ cookie and minted itself unattended; only the other had genuinely lapsed. Right 
 stated with equal confidence. The same phrase had already been logged **4 506 times over 4 days**
 (`alert-delivery.ts:10`) — a false alarm at that frequency stops being read at all, which is the
 actual damage.
+
+
+^ATOM-S6TJ-45DJ [desc: "the trap: cascade.ts implements the cookie rung correctly with tests but has zero production callers — a fix in an uncalled module is indistinguishable from one in a live module", keywords: cascade_ts_is_never_called cookie_vault_has_no_callers the_fix_exists_but_nothing_calls_it fix_in_uncalled_module_indistinguishable tests_call_module_directly_pass_either_way two_copies_drifted_on_constants do_not_teach_tick_ts_cookies third_copy_of_taxonomy stop_message_asserting_unknown_rung TRDD-XV9BLQC5_dead_modules_open TRDD-J9TM3WQK_RENEW_COOKIE, ocd: 2026-09-29, lmd: 2026-09-29]
 
 **THE TRAP, and the reason this took hours to see:** ai-maestro DOES implement the cookie rung,
 correctly, with tests. `lib/oauth-rotator/cascade.ts` has the full 3-rung cascade including
@@ -189,11 +198,14 @@ spawns a subprocess whose output is definitionally discarded — and any test dr
 Suites about the store source stub `readAgentlensRows: async () => []` explicitly.
 
 
-^ATOM-OC11-WU2C [desc: "A guard placed on the RECORDING of an act does not guard the act — three consecutive fixes to the same rotator bug, each one layer too shallow", keywords: guard_on_the_recording_is_not_a_guard_on_the_act precondition_before_the_irreversible_write split_brain_keychain_vs_state_json rotator_root_fails_closed legacy_root_silently_adopted lenient_reader_materialises_emptiness void_function_cannot_report_refusal saveState_throws_unresolved_root, type: project, ocd: 2026-08-26, lmd: 2026-08-26]
+^ATOM-OC11-WU2C [desc: "A guard placed on the RECORDING of an act does not guard the act — three consecutive fixes to the same rotator bug, each one layer too shallow", keywords: guard_on_the_recording_is_not_a_guard_on_the_act precondition_before_the_irreversible_write split_brain_keychain_vs_state_json rotator_root_fails_closed legacy_root_silently_adopted lenient_reader_materialises_emptiness void_function_cannot_report_refusal saveState_throws_unresolved_root, type: project, ocd: 2026-08-26, lmd: 2026-09-29]
 
 **A guard on the RECORDING of an act is not a guard on the ACT.** The rotator's root
 resolution took three passes to get right, and each failed fix was one layer shallower than
-the claim made for it. The sequence is the lesson:
+the claim made for it. The sequence is the lesson: [^3]
+
+
+^ATOM-C4N0-YW2G [desc: "passes 1 and 2: rotatorRoot silently fell through to the legacy root on a missing state.json, and the lenient loadState materialised the emptiness into canonical — fixed at the write primitive", keywords: rotatorRoot_silently_fell_through_legacy different_live_accounts_three_months_apart loadState_readOrRestore_returns_null saveState_materialises_emptiness fail-closed_guard_on_lenient_read_path write_primitive_not_call_sites recoverable_absent_becomes_present-and-empty opt-in_sealed_behind_it state.json_missing_beside_legacy plugin_reinstall_removes_DATA_dir, type: project, ocd: 2026-09-29, lmd: 2026-09-29]
 
 1. **`rotatorRoot()` silently fell through to the legacy standalone root** whenever the
    canonical DATA-dir root lacked `state.json`. Safe only if the two agree; measured, they did
@@ -210,6 +222,9 @@ the claim made for it. The sequence is the lesson:
    rests on a read path nobody opened.** Fixed at the WRITE PRIMITIVE, not the ~8 call sites —
    a per-call-site guard cannot cover the next caller anyone adds.
 
+
+^ATOM-7MK2-Q8BJ [desc: "passes 3 and 4: a void saveState cannot report refusal so a throw was the wrong mode, and a throw after writeLiveBlob made the split-brain deterministic — fixed by ordering the root check first", keywords: wrong_failure_MODE void_saveState_refuses_by_returning_early function_that_cannot_report_refusal silent_branch_undetectable_at_every_call_site throw_fired_after_keychain_rotated keychain_B_state.json_A_deterministic silent_return_merely_allowed_it fixed_by_ORDER_not_by_mode root_check_first_statement_switchLiveTo before_any_mutation, type: project, ocd: 2026-09-29, lmd: 2026-09-29]
+
 3. **That fix had the wrong failure MODE**: it refused by returning early, and `saveState` is
    `void`, so **a function that cannot report refusal has no failure mode, only a silent
    branch** — undetectable at every call site by construction.
@@ -221,6 +236,9 @@ the claim made for it. The sequence is the lesson:
    the silent return had merely allowed it (returning let execution continue, so a later save on
    a re-resolved root could still reconcile). Fixed by ORDER: the root check is now the FIRST
    statement of `switchLiveTo`, before any mutation.
+
+
+^ATOM-M6BP-3BMS [desc: "why the split-brain beats the empty store: self-consistent to every reader in isolation; the live-identity.json beacon already existed, only the comparison was missing", keywords: split_brain_worse_than_empty_store live-identity.json_beacon the_datum_existed_nothing_consumed_it gap_in_the_reading_not_the_recording beacon_write_in_try_catch_never_fail_a_switch beacon_stale_after_legitimate_rotation naive_comparison_cries_wolf abstain_when_state_newer_than_beacon email_fp_stamped_at_credential_write consumer_must_abstain_on_stale_beacon, type: project, ocd: 2026-09-29, lmd: 2026-09-29]
 
 **Why the split-brain is the worst of the four:** an empty store announces itself (zero slots,
 the janitor's DESYNC probe fires) while a live/state disagreement is *self-consistent to every
@@ -237,13 +255,16 @@ credential (SessionStart), while `state.json` is rewritten every tick — so aft
 rotation the beacon lags, and a naive comparison reports disagreement on a HEALTHY system.
 Any consumer must abstain when `state` is newer than the beacon rather than cry wolf.
 
+
+^ATOM-69E5-BMSQ [desc: "the reachability gap: unresolved-root-implies-unreachable holds only at load; the root can go unresolved mid-tick with slots already loaded, which is the path that matters", keywords: reachability_argument_only_as_good_as_its_moment root_unresolved_AT_LOAD_assumption root_goes_unresolved_MID-TICK slots_already_loaded reachable_path_differs defaultState_zero_slots_candidate_loop switchLiveTo_unreachable_only_at_load evidence_moment_assumption unresolved_root_mid_tick_path load_time_vs_runtime_resolution reachability_claim_scope_error, type: project, ocd: 2026-09-29, lmd: 2026-09-29]
+
 **A reachability argument is only as good as the moment it assumes.** "Unresolved root ⇒
 `defaultState()` ⇒ zero slots ⇒ the candidate loop never runs ⇒ `switchLiveTo` unreachable" is
 true only when the root is unresolved AT LOAD. It says nothing about the root going unresolved
-MID-TICK, with slots already loaded — which is the reachable path. [^3]
+MID-TICK, with slots already loaded — which is the reachable path.
 
 
-^ATOM-3S09-H2JS [desc: "ai-maestro never touches the rotator's profiles/ cookie store, and DOES write eight files into the surrounding root. Both halves are true; neither survives being quoted alone.", keywords: does_our_side_re-mint_cookies who_writes_the_shared_cookie_store cookie_store_mtime reauth_drives_a_real_browser_profile janitor_vault_untouched_by_ai-maestro, ocd: 2026-08-27, lmd: 2026-08-27]
+^ATOM-3S09-H2JS [desc: "does ai-maestro re-mint the shared cookie store: the argued negative via completeReauth was the wrong code path; reauth-drive.ts drives a real browser profile, so the premise is false as stated", keywords: does_our_side_re-mint_cookies who_writes_the_shared_cookie_store cookie_store_mtime reauth_drives_a_real_browser_profile janitor_vault_untouched_by_ai-maestro completeReauth_pasted_code argued_negative_wrong_code_path discoverBrowserProfiles_seven_browsers premise_we_never_touch_a_cookie_store_false is_the_cookie_store_ever_written_by_ai_maestro chrome_behaviour_not_ours, ocd: 2026-08-27, lmd: 2026-09-29]
 
 The question "does ai-maestro ever re-mint or write the shared cookie store the janitor's
 rotator keeps per account?" was carried for a while with an ARGUED negative: *`completeReauth`
@@ -263,6 +284,9 @@ path-reference measurement settles this better than the proposed mtime experimen
 an mtime test is confounded — the janitor's own daemon may touch the store during the window, so
 a moved mtime would not have implicated us anyway.
 
+
+^ATOM-W3EJ-7U2B [desc: "the filesystem measurement: the canonical rotator root profiles entry IS A SYMLINK to the legacy root — the live cookie store hangs one path segment off the root this project writes into", keywords: MEASURED_ON_THE_FILESYSTEM profiles_entry_IS_A_SYMLINK symlink_to_legacy_profiles_directory store_not_in_some_other_tree one_path_segment_away path.join_rotatorRoot_profiles_would_write_cookies would_write_real_cookies_every_account closed_enumeration_none_exists source_text_grep_answered_wrong_question path_string_proxy_for_bytes, ocd: 2026-09-29, lmd: 2026-09-29]
+
 MEASURED ON THE FILESYSTEM, which is where the question actually lives — three successive greps
 answered it over source TEXT, and a path string is a proxy for which bytes get written. The
 canonical rotator root's `profiles` entry IS A SYMLINK pointing at the legacy root's `profiles`
@@ -270,6 +294,9 @@ directory, i.e. at the live cookie store. So the store is not in some other tree
 very root this project writes into, exactly ONE path segment away. A single
 `path.join(rotatorRoot(), 'profiles', …)` anywhere in this codebase would write the real cookies
 for every account. The closed enumeration above is what says none exists — today.
+
+
+^ATOM-1SC3-H19J [desc: "measured: no profiles join exists (pinned in tests) but the store hangs one segment off the root via symlink; reauth also mutates real browser cookies", keywords: never_touches_profiles_cookie_store DOES_write_eight_files_rotator_root rotator-root-join-surface.test profiles_entry_IS_A_SYMLINK store_one_path_segment_away mkdirSync_whole_root_create_only reauth_mutates_real_browser_cookies side_effect_of_driving_them profiles_symlink_shared_store does_the_codebase_write_the_cookie_store whole_root_operation_decision-log_ts rotatorRoot_can_RETURN_legacy_root, ocd: 2026-09-29, lmd: 2026-09-29]
 
 **ai-maestro never touches the `profiles/` cookie store. It DOES write eight files into the
 surrounding rotator root.** Both halves are true and neither survives being quoted alone — the
@@ -285,14 +312,17 @@ tests/governance/rotator-root-join-surface.test.ts so neither can rot silently. 
 this project writes eight files into the directory containing that symlink (state.json, slots/,
 live-identity.json, active-alerts.json, opt-in.flag, cookie-leg-since.json, tick-completed.ts,
 rotator.log), plus an atomic temp sibling per write. That co-tenancy is the shared substrate by
-design; "untouched" would tell the janitor something false about it.
+design; "untouched" would tell the janitor something false about it. [^4] [^5]
+
+
+^ATOM-J4NW-UJS2 [desc: "corollaries: two roots are different dirs with different-inode state.json, only profiles shared via symlink; the short not-untouched form exists because peers truncate long sentences", keywords: two_roots_NOT_one_directory state.json_NOT_shared_different_inodes legacy_copy_is_the_stale_one only_profiles_shared_by_symlink two_recorded_beliefs_fail_measurement neither_survives_quoted_alone peer_truncates_at_first_clause short_form_deliberate eight_files_state_json_slots_live-identity shared_substrate_by_design different_store_different_tree, ocd: 2026-09-29, lmd: 2026-09-29]
 
 Two recorded beliefs also fail the measurement: the two roots are NOT one directory (different
 real paths), and `state.json` is NOT shared between them (different inodes — the legacy copy is
 the stale one). Only `profiles` is shared, and only by that symlink.
 
 And separately: a reauth run CAN mutate the owner's REAL browser cookie stores as a side effect of
-driving them. Different store, different tree, not previously written down. [^4] [^5]
+driving them. Different store, different tree, not previously written down.
 
 
 ^ATOM-KH9D-0R9Q [desc: "surveyAlternates now reads the live account too, so a dead-refresh live account reports reauth-needed not stuck", keywords: surveyAlternates live_account_excluded stuck_all-maxed reauth-needed keepaliveRefresh_exclusion read_vs_write_distinction rotator_says_wait_but_should_re-login dead_refresh_token expired_access_token TRDD-10J18FZX oauth_rotator_status_file, trdd: TRDD-10J18FZX, ocd: 2026-09-05, lmd: 2026-09-05]
@@ -300,11 +330,14 @@ driving them. Different store, different tree, not previously written down. [^4]
 surveyAlternates no longer skips the live/currently-active account when surveying alternates — it only READS accounts, never writes, so including the live one is safe. This means a live account whose refresh token is dead AND whose access token is expired now correctly surfaces as reauth-needed instead of being masked by an aggregate stuck: all-maxed verdict (which told the user to just wait for a rate-limit window, when the real fix was to re-login). keepaliveRefresh's own exclusion of the live account is untouched, because keepaliveRefresh WRITES (rotates), and writing to the live account while it is in active use is what that exclusion protects against. Landed under TRDD-10J18FZX, commit 5f7662d4.
 
 
-^ATOM-0MIM-2RVF [desc: "a refused rotator root raises the rotator-root-unresolved alert, written into the LEGACY root so the janitor DATA dir is never recreated; it clears itself once the root resolves (#153)", keywords: rotator-root-unresolved_alert rotator_refused_the_root janitor_data_dir_wiped janitor_DATA_dir_recreated_by_an_alert rotator_root_refusal_only_in_pm2_stderr server_tick_failed_rotator-state-write-refused active-alerts.json_in_account-rotator stale_root_alert_after_restoring_the_data_dir alert_cleared_unrelated_reauth_alert legacyRotatorRoot_alert_delivery ownsRootAlert, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-24]
+^ATOM-0MIM-2RVF [desc: "a refused rotator root raises the rotator-root-unresolved alert, written into the LEGACY root so the janitor DATA dir is never recreated; it clears itself once the root resolves (#153)", keywords: rotator-root-unresolved_alert rotator_refused_the_root janitor_data_dir_wiped janitor_DATA_dir_recreated_by_an_alert rotator_root_refusal_only_in_pm2_stderr server_tick_failed_rotator-state-write-refused active-alerts.json_in_account-rotator stale_root_alert_after_restoring_the_data_dir alert_cleared_unrelated_reauth_alert legacyRotatorRoot_alert_delivery ownsRootAlert, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-24, lmd: 2026-09-29]
 
 When `rotatorRoot()` refuses (canonical state.json missing beside a present legacy one), the server
 tick now raises `rotator-root-unresolved` through the normal deliverAlerts channel instead of leaving
-only a `server tick failed` line in pm2 stderr (ai-maestro#153; commits e5b98af9d, 0f88d42dc).
+only a `server tick failed` line in pm2 stderr (ai-maestro#153; commits e5b98af9d, 0f88d42dc). [^6]
+
+
+^ATOM-Z8HZ-6JDC [desc: "how the rotator-root-unresolved alert behaves: deliveries go to the LEGACY root on a refused beat, a non-running tick clears only the root code, and the first resolved beat clears it", keywords: delivery_goes_to_LEGACY_root_on_refused_beat mkdir-p_would_recreate_janitor_DATA_dir refusal_returns_CANONICAL_path ownsRootAlert_clears_only_root_code never_clears_unre-evaluated_reauth_stuck first_resolved_beat_clears_root_alert oauth-rotator-tick.enabled_gates_the_tick open_residuals_on_153 corrupt_legacy_alert_file tick_code_written_to_legacy_not_cleared, type: reference, trdd: TRDD-MQE5D28T, ocd: 2026-09-29, lmd: 2026-09-29]
 
 How it behaves, and why:
 - On a refused beat EVERY delivery goes to the LEGACY root (`legacyRotatorRoot()`), which exists by
@@ -316,7 +349,7 @@ How it behaves, and why:
 - The first beat whose root resolves clears the root alert if the legacy alert file still holds it.
 The server tick is gated off unless `~/.aimaestro/oauth-rotator-tick.enabled` exists.
 Open residuals (on #153): writing beside refused legacy state; a corrupt legacy alert file makes
-every healthy beat deliver into it; a tick code written to legacy on a refused beat is not cleared. [^6]
+every healthy beat deliver into it; a tick code written to legacy on a refused beat is not cleared.
 
 ## See also
 

@@ -6,7 +6,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-28T22:23:12+0200
+updated: 2026-09-29T14:17:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -123,6 +123,7 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
+2026-09-29 — NEWER LAYER LANDED on top of the six-box work (does not alter its closure): bb798327a moves both stampChoreRun calls past their flag gates so a disclaimed chore is no longer stamped as the janitor's (ORH-4/M3), supervisor adds a tickArmedCheck() gate; 7ba13219e fixes the boot-guard test's busy-port bind to dual-stack. Resolution of an interrupted-stash conflict set; 53/53 tests, tsc 0. Review conditions outstanding: (1) stash lost-assertion audit running; (2) the card's verify-by-EFFECT step must ALSO check the janitor-side liveness consumer of chore stamps (a disclaimed beat now records NOTHING — could read as dead-server if the janitor counts any-owner stamps); (3) this append.
 
 ## ⏭ THE ACTUAL DESIGN — 2026-08-02T14:3x+0200. Read this first; it supersedes every plan below
 

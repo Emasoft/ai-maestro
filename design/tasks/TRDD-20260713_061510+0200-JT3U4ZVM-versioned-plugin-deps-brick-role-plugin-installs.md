@@ -5,7 +5,7 @@ title: fleet blocker — role-plugin installs fail because releases lack the {na
 column: ai_review
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-09-29T22:05:34+0200
+updated: 2026-09-29T22:11:23+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -292,6 +292,7 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
 - 2026-09-28T23:45:00+0200 — blocked → ai_review (pre-block-column restored): the mutual wait was unresolvable as a graph (two-card ring, nothing can start), so the wait was made ASYMMETRIC — 9Z2P2SDA carries blocked-by: [TRDD-JT3U4ZVM] and waits for this card's fix + a passing re-run; this card's wait was WORK (the emit-condition fix), not a column dependency, so it returns to ai_review where the fix happens. Its last box still gates complete (needs a PASSING live observation). blocked-by [] is now CORRECT here: nothing external blocks it, the work is its own.
 - 2026-09-28T23:55:00+0200 — probe-needle CONTRACT (review round 5): the eventual fix commit subject/body MUST contain the exact string 'G16 emit' — 9Z2P2SDA's blocker-probe greps git log for it, so a fix commit worded any other way never fires the probe and the ring stays closed forever while reading machine-checkable. Binding the convention here at the point of work.
 - 2026-09-29T22:30:00+0200 — fix verified LIVE before dispatching the observation run: commit 844c6730a (14:09, subject carries the 'G16 emit' probe needle per the 23:55 contract) -> .next BUILD_ID written 14:54 -> pm2 server restarted 14:55:17, and .next/server/chunks/1.js greps positive for 'G16 emit verified post-install state'. Deploy chain complete; the card's only remaining item is a PASSING live observation (SCEN-001 re-run), dispatched to the scenario-runner now.
+- 2026-09-29T22:50:00+0200 — REVIEW REPAIR (adversarial fork, 5 findings): (1) the 19:24 mtime on .next/server/ the deploy verification observed is EXPLAINED — Finder wrote .next/server/.DS_Store, touching the directory mtime; no build process ran (ps checked); the served bundle is the 14:54 build. (2) The 'G16 emit' needle is now POLLUTED in git history: docs commit 91d6fb52 carries it in its subject, so 9Z2P2SDA's blocker-probe (greps git log for the string) can no longer discriminate fix-commit from doc-commit — verification of the fix must pin the SHA 844c6730a, never the needle. Needle-match alone is no longer evidence. (3) The 22:30 Approval-log timestamp was hand-typed, not clock-read — acknowledged as the known trap; the dispatch it asserts DID land (spawn succeeded after the commit).
 
 ## Acceptance
 

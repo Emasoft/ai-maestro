@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { spawn } from 'child_process'
+import { execFileSync } from 'child_process'
+import { createServer as createNetServer, type Server as NetServer } from 'net'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -113,24 +114,32 @@ function seedGovernance(homeDir: string, devModeLogin: Record<string, unknown> |
 
 describe('server.mjs boot wiring — dev-mode token guard (TRDD-7IJ08EUV)', () => {
   it(
-    'does NOT refuse to boot in production when a dev-mode token is present — real subprocess of server.mjs, killed at first output before it can ever reach server.listen() (owner ruling 2026-09-24)',
+    'does NOT refuse to boot in production when a dev-mode token is present — real subprocess spawn of server.mjs (owner ruling 2026-09-24)',
     async () => {
-      // SAFETY DESIGN — measured, not assumed (2026-09-24): an earlier draft of this test
-      // handed server.mjs a PORT it had pre-bound itself, expecting server.listen() to fail
-      // with EADDRINUSE. Manually probed: it did NOT fail — the child bound the SAME port
-      // successfully anyway (observed "> Ready on http://127.0.0.1:<port>" plus real side
-      // effects: key rotation, marketplace calls) and ran a genuinely live production server.
-      // A pre-bound "busy port" is therefore NOT a safe guarantee on this platform/Node combo.
-      //
-      // Instead: nothing in server.mjs prints ANYTHING before the (removed) guard's old
-      // location — it was the very first executable statement after two silent handler
-      // registrations. So the FIRST byte of stdout/stderr the child ever produces is, by
-      // construction, already past that point, and the child is SIGKILL'd the instant that
-      // byte arrives — long before app.prepare()/server.listen() can run (those require
-      // seconds of real work: Next.js prepare, host-key generation, ledger verification).
-      // A distinct, far-from-23000 PORT is set too, purely as a second line of defense in
-      // case the kill ever raced a real bind.
       const home = mkdtempSync(join(tmpdir(), 'aim-server-boot-guard-neg-'))
+      // Bind a real listener on a free port and hand server.mjs that SAME port via
+      // PORT=<busy port>. This is what makes the "never start the real server" constraint
+      // safe here now that the boot guard is gone: server.mjs's own server.listen() call
+      // fails with EADDRINUSE before it can ever actually bind and start serving requests —
+      // a real live server is never created, no matter how far past the (removed) guard's
+      // old checkpoint the process runs.
+      //
+      // ⚠ Bind on '::', NOT '127.0.0.1' (measured 2026-09-29): when Tailscale is present
+      // server.mjs binds dual-stack ('::'), and on macOS a '::' listener COEXISTS with an
+      // existing '127.0.0.1'-only listener on the same port — no EADDRINUSE, the child
+      // started a genuinely live server, and the test failed with `error.status === 0`
+      // (execFileSync timed out against a server that never exits). Binding '::' here
+      // makes the conflict real: '::' vs '::' is refused.
+      const busyServer: NetServer = createNetServer()
+      const boundPort: number = await new Promise((resolve, reject) => {
+        busyServer.once('error', reject)
+        busyServer.listen(0, '::', () => {
+          const addr = busyServer.address()
+          if (addr && typeof addr === 'object') resolve(addr.port)
+          else reject(new Error('could not bind test port'))
+        })
+      })
+
       try {
         seedGovernance(home, {
           enabled: true,
@@ -143,69 +152,48 @@ describe('server.mjs boot wiring — dev-mode token guard (TRDD-7IJ08EUV)', () =
           ...process.env,
           HOME: home,
           NODE_ENV: 'production',
-          PORT: '58217', // arbitrary, far from the real server's 23000 — belt-and-braces
+          PORT: String(boundPort),
           HOSTNAME: '127.0.0.1',
         }
         delete env.MAESTRO_MODE // force full mode — the guard used to sit before this branch too
 
-        const output = await new Promise<string>((resolve, reject) => {
-          // detached: true makes `child` the leader of its OWN process group, so
-          // `process.kill(-child.pid, ...)` below reaches every process in that group —
-          // tsx AND the node process it internally spawns to actually run server.mjs
-          // (confirmed necessary by a real leak: killing only `child` with SIGKILL left
-          // that inner node process alive and reparented to pid 1, still listening, because
-          // SIGKILL gives tsx no chance to forward the signal to its own child).
-          const child = spawn('tsx', [SERVER_MJS], { cwd: REPO_ROOT, env, detached: true })
-          let chunks = ''
-          let killed = false
-          const killGroup = () => {
-            if (killed) return
-            killed = true
-            try {
-              if (child.pid) process.kill(-child.pid, 'SIGKILL')
-            } catch {
-              // group already gone (e.g. process.kill(-pid) after the process already exited) — fine
-            }
-          }
-          const onFirstData = (data: Buffer) => {
-            chunks += data.toString('utf-8')
-            killGroup()
-          }
-          child.stdout?.on('data', onFirstData)
-          child.stderr?.on('data', onFirstData)
-          // 45s, not 10s (measured 2026-09-25): in a full parallel suite run the machine
-          // can be ~3.4x slower than solo (292s wall vs 86s for the same suite), and the
-          // child's tsx compile of server.mjs then misses a 10s no-output deadline (the
-          // test failed at 10044ms in the full run, passed solo at 969ms). The kill-at-
-          // first-byte safety design is unaffected by the longer deadline.
-          const timer = setTimeout(() => {
-            killGroup()
-            reject(new Error('server.mjs produced no output within 45s — cannot prove forward progress'))
-          }, 45_000)
-          child.on('error', (err) => {
-            clearTimeout(timer)
-            killGroup()
-            reject(err)
+        let error: (Error & { status?: number | null; stderr?: Buffer | string }) | undefined
+        try {
+          execFileSync('tsx', [SERVER_MJS], {
+            cwd: REPO_ROOT,
+            env,
+            timeout: 30_000,
+            encoding: 'utf-8',
           })
-          child.on('exit', () => {
-            clearTimeout(timer)
-            // The direct child (tsx) exiting doesn't guarantee its inner node process is
-            // dead too — kill the whole group unconditionally before resolving.
-            killGroup()
-            resolve(chunks)
-          })
-        })
+        } catch (err) {
+          error = err as typeof error
+        }
 
-        // The POSITIVE marker: any output at all, since nothing precedes the removed
-        // guard's location. The NEGATIVE assertions: the guard's own refusal text is absent.
-        expect(output.length, 'server.mjs must have printed something before being killed').toBeGreaterThan(0)
-        expect(output).not.toContain('[SECURITY]')
-        expect(output).not.toContain('FATAL: a dev-mode login token is present')
+        const stderr = String(error?.stderr ?? '')
+        // The removed guard's refusal must be ABSENT — this is what proves the boot call
+        // is gone, not merely that the process failed for some other reason.
+        expect(stderr).not.toContain('[SECURITY]')
+        expect(stderr).not.toContain('FATAL: a dev-mode login token is present')
+        // POSITIVE marker, not just "some other failure": server.mjs's own top-of-file
+        // process.on('uncaughtException', ...) handler (lines ~45-67) prints
+        // '[CRASH-GUARD] Fatal error, exiting...' and exits 1 ONLY for error.code ===
+        // 'EADDRINUSE'/'EACCES' — reached only from the server.listen() call deep inside
+        // startServer(), hundreds of lines past where the guard used to sit. Handing the
+        // child our own already-bound port makes this failure BOTH deterministic (no
+        // dependency on a fresh `.next` build existing) and the proof of forward progress
+        // the negative assertions above cannot supply alone — an unrelated early crash
+        // (a missing module, a stale build) would also lack the FATAL text but would
+        // NOT print this marker, because it happens well before server.listen().
+        expect(error, 'server.mjs should crash on the busy port, not run to success').toBeDefined()
+        expect(error?.status).not.toBe(0)
+        expect(stderr).toContain('[CRASH-GUARD] Fatal error, exiting...')
+        expect(stderr).toContain('EADDRINUSE')
       } finally {
+        busyServer.close()
         rmSync(home, { recursive: true, force: true })
       }
     },
-    60_000
+    40_000
   )
 
   it('does not block boot in production when no dev-mode token is present — pure-check positive control', async () => {

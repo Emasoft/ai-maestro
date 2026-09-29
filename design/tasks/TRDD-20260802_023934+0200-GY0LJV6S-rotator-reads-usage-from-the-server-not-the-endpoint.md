@@ -6,7 +6,7 @@ column: ai_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T19:37:39+0200
+updated: 2026-09-29T19:42:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -132,6 +132,7 @@ the NPT [[SIV45HOG]].
 OWNER DECISION 2026-09-29 ~19:0x+0200 (pasted verbatim): "A: defer-gy0ljv6s — note: Also add the option to disable/enable the auto rotation with a janitor skill/command (send a message to the janitor plugin for its side of the rotation code)". Consequences: (1) the probe-channel question is PARKED — the card stays ai_review; no R16 re-arm and no flag-off artifact for now; (2) NEW OWNER-DIRECTED WORK: a janitor-plugin skill/command to disable/enable auto rotation — cross-repo request on Emasoft/ai-maestro-janitor; (3) the probe-record checklist (stand-down, re-disable, timer beat, observation channel) stays on this card for whenever the defer lifts.
 OWNER-NOTE FOLLOW-UP 2026-09-29: the requested janitor-side disable/enable ALREADY SHIPS — skills janitor-auto-manage-oauth-on / -off toggle the rotator's opt-in flag (the janitor owns the tick beat under the ORH handover; the server's R16 flag file is already .DISABLED-20260924-orh-handover). No cross-repo request filed — a duplicate of an existing capability. If the owner wants ONE command that flips BOTH sides (janitor opt-in + server R16 flag file), that is new work and needs their say-so.
 N3 VERIFIED 2026-09-29 19:4x: the rotation toggle claim is now VERIFIED, not inferred — janitor-auto-manage-oauth-on/SKILL.md read in full: it sets the opt-in flag the daemon's 60s oauth-rotator-tick Task reads (97% threshold, drain-first alternates); janitor-auto-manage-oauth-off is its counterpart. The janitor side of the owner's request fully ships today. The only gap remains a single command flipping BOTH sides (janitor flag + server R16 flag file) — awaiting owner ratification on whether to file that request.
+F3 CLOSED 2026-09-29 19:5x: janitor-auto-manage-oauth-off/SKILL.md now read in full — it CLEARS the opt-in flag (daemon's 60s tick gates on it, becomes a total no-op; legacy launchd teardown; slots untouched). The on/off pair is a real toggle, both directions verified by file read. The rotation-toggle portion of the owner's A-note is fully covered by existing skills; only the both-sides single-command idea remains open, awaiting owner ratification.
 
 ## ⏭ THE ACTUAL DESIGN — 2026-08-02T14:3x+0200. Read this first; it supersedes every plan below
 

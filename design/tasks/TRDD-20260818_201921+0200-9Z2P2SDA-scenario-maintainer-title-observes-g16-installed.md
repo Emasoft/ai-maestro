@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-09-29T22:11:24+0200
+updated: 2026-09-29T22:15:05+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -26,7 +26,7 @@ effort: S
 labels: [scenario, phase-3, fleet, role-plugins, TRDD-BRRJK57P]
 external-refs: [TRDD-BRRJK57P, TRDD-JT3U4ZVM]
 pre-block-column: dev
-blocker-probe: sh -c 'f=$(find design -iname "*jt3u4zvm*" 2>/dev/null | head -1); git -C . log --oneline -5 -- "$f" 2>/dev/null | grep -q "G16 emit" && echo FIX-LANDED || echo FIX-NOT-LANDED'
+blocker-probe: sh -c 'git -C . merge-base --is-ancestor 844c6730a HEAD && echo FIX-LANDED || echo FIX-NOT-LANDED'
 blocker-holds-if: not-match:FIX-NOT-LANDED
 ---
 
@@ -113,3 +113,4 @@ folder deletion, purge cemetery, STATE-WIPE.
 - 2026-09-29T00:10:00+0200 — CORRECTION of the 316d505b commit-message diagnosis: the PII-gate trip was NOT a transient race. json-io's lock is a DIRECTORY at <file>.lock (lib/json-io.ts:165, mkdir-based), and the F1 amendment's isDirectory() guard pushed live lockDIRS into the counted set while descending into them — a lockdir alive at the teardown instant trips deterministically, not probabilistically. Fixed in the watcher (skip by NAME from the push, descent preserved) + two pinning tests. Retry-success was sampling, not proof.
 - 2026-09-29T00:50:00+0200 — RED LEG EXECUTED (closes the 4daf7ce6 commit-message gap): the mid-run lockdir test run against the pre-c6b8a875f helper FAILS (1 failed) and against the landed helper PASSES (1 passed) — a true red-green pair, replacing the earlier 11/12 count-delta mischaracterization. Method: direct file swap of the helper (git stash push of a file identical to HEAD no-ops — the first two attempts measured nothing), pre-c6b8a875f parent's helper verified by grep before the run. Also repaired this session: the 2026-09-24 auto-backup stash briefly polluted 5 oauth-rotator files into the working tree during a stash dance; verified those copies predated HEAD's own fixes and restored all 5 to HEAD (guarded checkout, OTP-authorized).
 - 2026-09-29T22:50:00+0200 — probe-needle CONTRACT AMENDED (adversarial review of JT3U4ZVM's record commit): your blocker-probe greps git log for 'G16 emit', and that string now appears in MORE than the fix commit — docs commit 91d6fb52 (JT3U4ZVM card records) carries it in its subject, permanently in history. The needle still fires correctly when the fix lands, but needle-match is NO LONGER DISCRIMINATING evidence the FIX landed. When the probe fires, verify the fix by SHA — 844c6730a must be an ancestor of the branch and present in the built bundle — before ticking anything on its strength.
+- 2026-09-29T23:10:00+0200 — blocker-probe RE-POINTED (review round 2): the old probe grepped git log for 'G16 emit', which docs commits (91d6fb52 + the repair commit) now also carry — needle-match was no longer discriminating. New probe tests SHA ancestry of the fix commit 844c6730a against HEAD, which is immune to subject-string pollution. Findings 1 and 5 of the round-2 review closed at the machine level, not in prose. Also softened the 22:50 entry's 'EXPLAINED' wording per finding 2: the .DS_Store account is the best explanation for the 19:24 mtime; the served-bundle claim rests on the 14:54 BUILD_ID + chunk grep, which is the evidence that actually proves it.

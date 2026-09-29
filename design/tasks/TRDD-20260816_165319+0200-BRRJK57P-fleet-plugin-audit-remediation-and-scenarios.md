@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-09-29T23:13:09+0200
+updated: 2026-09-29T23:14:47+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1290,6 +1290,7 @@ them to.
       *(Both are the same shape, which is why the pair is worth stating together: a tool that
       cannot see something reports CLEAN, and clean is indistinguishable from correct. That is the
       exact failure the pillar work was built to kill, found inside the pillar tooling itself.)*
+- [ ] Purge the residual scen001-manager row from ~/.aimaestro/sessions.json via the supported settings path (it still names workingDirectory ~/agents/scen001-manager/ — the 2026-07-25 haunting shape; folder itself is parked in /tmp/scen001-residue-20260929T230339). Before the next scenario batch.
 
 ## Credential sweep — 2026-08-21T15:0x+0200 — acceptance box 9, measured
 
@@ -3274,3 +3275,4 @@ tag complete, 1656 files) — no emergency republish.
   program decisions under this delegation; Tier-3-classified items are still ruled on the merits
   and surfaced to the USER in the session summary for override.
 - 2026-09-29T23:13:08+0200 — POST-CLOSURE DISPOSITION for archived pair JT3U4ZVM+9Z2P2SDA (their own cards are now immutable; recorded here, the fleet-program card that owns their scenario work): (1) the G16 fix's signature ops line ('CLI reported failure but enabledPlugins carries the key') greps 0 in pm2 err log — the 20260929T200726Z run exercised the HAPPY path; the honest claim is 'G16 observation PASSED (installed, no WARN); the throw-but-landed path the fix targets was NOT proven exercised this run' — the box's observation class is met in both worlds and the 09-28 reproduction stands as the proof the throw-path behavior existed pre-fix. (2) Archived box read-back verified: JT3U4ZVM line 323 = the NEXT ACTION box, correctly ticked. (3) The runner's residual sessions.json row is NOT inert: it still names workingDirectory ~/agents/scen001-manager/ — the exact 2026-07-25 haunting shape; purge via the supported path (settings UI / persisted-session cleanup) is outstanding, owner: this program. (4) The two wizard bugs found by the run (false 'Your Agent is Ready!' pacing; silent 403 dead-end) await the USER's go to file as TRDDs, from the report body at reports/scenarios-runner/SCEN-001_20260929T200726Z.report.md.
+- 2026-09-29T23:14:39+0200 — post-closure review round 2, finding 1 settled by the missing half-instrument: the signature line greps 0 in BOTH logs (err checked first at 23:1x, out checked now) — the throw-but-landed path was NOT exercised this run and 'happy path' stands as measured, not inferred. Finding 2 (no forward pointer from the archived card) accepted and CARRIED here as this entry: the archived card is immutable by design, so the bridge is this open card — the fix commit 844c6730a's reader should cross-read BRRJK57P's Approval log for the happy-path-only scoping. Finding 3 (sessions-row purge is a deferral): converted to a real acceptance box on THIS card (see the new box below) instead of prose. Third lock tonight: runner has returned, so a third occurrence with no writer needs a ps snapshot at the moment it appears — noted, not scheduled.

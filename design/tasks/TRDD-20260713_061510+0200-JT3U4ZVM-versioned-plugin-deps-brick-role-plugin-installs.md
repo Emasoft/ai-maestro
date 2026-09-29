@@ -5,7 +5,7 @@ title: fleet blocker — role-plugin installs fail because releases lack the {na
 column: ai_review
 pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-09-28T22:23:12+0200
+updated: 2026-09-29T22:05:34+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -35,7 +35,7 @@ audit-requirements: []
 review-requirements: []
 impacts: [agent-lifecycle, role-plugins, fleet]
 attempts: 0
-implementation-commits: []
+implementation-commits: [844c6730ac44301130f75e5266a78acb7250ba8f]
 external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plugin-dependencies.md", "gh:Emasoft/ai-maestro-plugin#24", "gh:Emasoft/ai-maestro-plugin#25(PR)", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
 blocker-probe: sh -c 'for id in 9Z2P2SDA; do f=$(find design -iname "*${id}*.md" 2>/dev/null | head -1); c=$(grep -m1 -h "^column:" "$f" 2>/dev/null); echo "$id $c"; done | grep -qviE "column:[[:space:]](published|complete|live|failed|superseded|cancelled|refused)\$" && echo NOT-ALL-TERMINAL || echo ALL-TERMINAL'
 blocker-holds-if: not-match:^ALL-TERMINAL$
@@ -291,6 +291,7 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
 - 2026-09-28T22:21:37+0200 — column → ai_review by main-agent@ai-maestro. Ring repair complete: with 9Z2P2SDA now carrying the single wait edge, JT3U4ZVM's own wait is gone — the emit-condition fix is ITS remaining work, which is what ai_review (its pre-block-column) models. Its last box still gates complete; it leaves blocked because its blocker is now WORK, not a wait.
 - 2026-09-28T23:45:00+0200 — blocked → ai_review (pre-block-column restored): the mutual wait was unresolvable as a graph (two-card ring, nothing can start), so the wait was made ASYMMETRIC — 9Z2P2SDA carries blocked-by: [TRDD-JT3U4ZVM] and waits for this card's fix + a passing re-run; this card's wait was WORK (the emit-condition fix), not a column dependency, so it returns to ai_review where the fix happens. Its last box still gates complete (needs a PASSING live observation). blocked-by [] is now CORRECT here: nothing external blocks it, the work is its own.
 - 2026-09-28T23:55:00+0200 — probe-needle CONTRACT (review round 5): the eventual fix commit subject/body MUST contain the exact string 'G16 emit' — 9Z2P2SDA's blocker-probe greps git log for it, so a fix commit worded any other way never fires the probe and the ring stays closed forever while reading machine-checkable. Binding the convention here at the point of work.
+- 2026-09-29T22:30:00+0200 — fix verified LIVE before dispatching the observation run: commit 844c6730a (14:09, subject carries the 'G16 emit' probe needle per the 23:55 contract) -> .next BUILD_ID written 14:54 -> pm2 server restarted 14:55:17, and .next/server/chunks/1.js greps positive for 'G16 emit verified post-install state'. Deploy chain complete; the card's only remaining item is a PASSING live observation (SCEN-001 re-run), dispatched to the scenario-runner now.
 
 ## Acceptance
 

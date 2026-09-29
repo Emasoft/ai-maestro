@@ -155,8 +155,13 @@ export async function POST(request: NextRequest) {
   // local input (statusline-normalize), and the one field the sender must not choose is WHO the
   // record lands on — a bare `agent.name` would let any local process write its session id onto
   // any agent's record and misattribute its usage join. The name is honoured only when the
-  // snapshot's cwd also names that agent, or carries no cwd at all; on a disagreement the cwd
-  // match decides, which is safe by construction. ponytail: on a SHARED workdir the recorded id
+  // snapshot's cwd also names that agent, or carries no cwd at all. On a DISAGREEMENT neither
+  // candidate wins and nothing is written: the cwd is the session's CURRENT directory and drifts
+  // the moment an agent cds into a repo, worktree, or a sibling agent's workdir, so letting the
+  // cwd match decide would attribute a cd'd agent's session to whoever owns the transient
+  // directory — a wrong-writer bug that needs no malice. Warn + skip kills both the spoof write
+  // and the cd-drift misattribution; the only loss is the rare case where the name is stale but
+  // the cwd is right, which the warn makes legible. ponytail: on a SHARED workdir the recorded id
   // flip-flops last-seen-wins between the agents alternating there — history-aware assignment is
   // the documented upgrade path (issue #155).
   try {
@@ -165,12 +170,13 @@ export async function POST(request: NextRequest) {
     const agents = loadAgents()
     const named = agentName ? agents.find(a => !a.deletedAt && a.name === agentName) : undefined
     const cwdMatch = cwd ? agents.find(a => !a.deletedAt && a.workingDirectory === cwd) : undefined
-    const target = named && (!cwd || cwdMatch?.id === named.id) ? named : cwdMatch
+    const corroborated = named && (!cwd || cwdMatch?.id === named.id)
+    const target = corroborated ? named : !named ? cwdMatch : undefined
     if (target) {
       const ok = await recordClaudeSessionId(target.id, snapshot.sessionId)
       if (!ok) console.warn(`[statusline-ingest] claude-session join: agent ${target.id} has no session 0, sessionId=${snapshot.sessionId}`)
     } else if (named) {
-      console.warn(`[statusline-ingest] claude-session join: claimed name=${agentName} not corroborated by cwd=${cwd}, sessionId=${snapshot.sessionId}`)
+      console.warn(`[statusline-ingest] claude-session join: claimed name=${agentName} not corroborated by cwd=${cwd} — no join written, sessionId=${snapshot.sessionId}`)
     } else if (cwd) {
       console.warn(`[statusline-ingest] claude-session join: no agent matches cwd=${cwd} sessionId=${snapshot.sessionId}`)
     } else {

@@ -201,14 +201,20 @@ describe('claude-session join — the claimed name is corroborated, never truste
     expect(persistedSessionId('agent-a-id')).toBe('sess-agree')
   })
 
-  it('REFUSES a claimed name the cwd does NOT corroborate — cwd match decides', async () => {
+  it('REFUSES a claimed name the cwd does NOT corroborate — warn + no write (cwd may be transient drift)', async () => {
+    // The cwd is the session's CURRENT directory and drifts when an agent cds mid-session; if the
+    // cwd match decided on disagreement, a cd'd agent's session would land on whoever owns the
+    // transient directory. So disagreement writes NOTHING — the spoofed name AND the drifted-cwd
+    // write are both refused. (The fixture's cwd belongs to agent-a; a name-claim for agent-b
+    // over it is indistinguishable from agent-b legitimately cd-ing into agent-a's dir, and
+    // neither may write.)
     seedRegistry([
       { id: 'agent-a-id', name: 'agent-a', workingDirectory: '/work/a' },
       { id: 'agent-b-id', name: 'agent-b', workingDirectory: '/work/b' },
     ])
     expect((await post(PAYLOAD({ session_id: 'sess-spoof', agent: { name: 'agent-b' }, cwd: '/work/a' }), '127.0.0.1')).status).toBe(200)
     expect(persistedSessionId('agent-b-id')).toBeUndefined()
-    expect(persistedSessionId('agent-a-id')).toBe('sess-spoof')
+    expect(persistedSessionId('agent-a-id')).toBeUndefined()
   })
 
   it('names are still honoured WITHOUT a cwd — the `--agent` direct path survives', async () => {

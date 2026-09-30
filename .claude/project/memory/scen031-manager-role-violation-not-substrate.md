@@ -2,7 +2,7 @@
 name: scen031-manager-role-violation-not-substrate
 description: "SCEN-031 fleet-ship FAILs — MANAGER builds the project solo instead of creating+delegating to fleet personas; and why the earlier '--agent unresolvable / role agents dead on arrival' root cause was a FALSE NEGATIVE"
 ocd: 2026-07-22
-lmd: 2026-07-22
+lmd: 2026-09-30
 metadata:
   node_type: memory
   type: project
@@ -10,6 +10,7 @@ metadata:
   topic: teams-and-governance
 publish-globally: false
 ---
+^V6CQ2X9N [desc: "SCEN-031 (zipsearcher fleet-ship readiness) FAILs for a ROLE-BEHAVIOUR reason, not substrate: the fresh MANAGER built zipsearcher SOLO — created the repo, developed with its own Task-tool subagents, created ZERO fleet personas, never delegated via AMP — an R6/R9 governance violation.", keywords: SCEN_031_fleet_ship_fails manager_builds_project_solo instead_of_creating_and_delegating zero_fleet_personas_created never_delegated_via_AMP R6_R9_governance_violation MANAGER_must_orchestrate_not_execute zipsearcher_readiness_proof, ocd: 2026-07-22, lmd: 2026-09-30]
 SCEN-031 (zipsearcher end-to-end fleet-ship readiness proof) FAILs, and the harness is
 NOT ready — but for a **role-behaviour** reason, not a substrate reason.
 
@@ -24,6 +25,7 @@ a SEPARATE Emasoft repo → cross-project, so it was filed as an **issue, not an
 `github.com/Emasoft/ai-maestro-assistant-manager-agent/issues/31`. In-repo Rule-11 counterpart:
 proposal `TRDD-F898NXLU`. Readiness TRDD: `TRDD-B7G2R0SX` (its STATE block is authoritative).
 
+^W9FZ4B7K [desc: "REFINED root cause (USER-confirmed 2026-07-22): the harness DROPS --agent at the CREATE launch, so a freshly-created titled agent runs GENERIC claude — persona never loads. The MANAGER built solo because it WAS generic claude.", keywords: agent_dropped_at_CREATE_launch fresh_titled_agent_runs_generic_claude persona_never_loads plugin_install_fine_launch_bug registry_programArgs_carried_agent_arg OQIA2DCR_CREATE_does_not_pass_programArgs, ocd: 2026-07-22, lmd: 2026-09-30]
 **REFINED root cause (USER-confirmed 2026-07-22): the harness DROPS `--agent` at the CREATE
 launch, so a freshly-created titled agent runs GENERIC claude — its persona never loads.**
 The plugin install/resolution is fine (a role plugin installed `--scope local` by

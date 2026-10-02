@@ -33,7 +33,10 @@ import type { MessageUsage } from '@/types/sessions-browser'
  * Sonnet 5, which lists at half the 4.x rate (Claude Code changelog 2.1.243
  * — standard list price, not a promo). Unknown ids resolve to `sonnet`.
  */
-export type ModelFamily = 'opus' | 'sonnet' | 'sonnet5' | 'haiku'
+// fable = Fable 5.1 (and bare alias); fable5 = Fable 5 (cache-read differs); opus5 = Opus 5.5 only;
+// opus = Opus 4.5-5 ($5/$25); opus41 = Opus 4.1 and earlier ($15/$75).
+// Source: Anthropic pricing page, fetched 2026-10-02 (docs_dev/anthropic-pricing-20261002.md).
+export type ModelFamily = 'opus' | 'opus41' | 'opus5' | 'sonnet' | 'sonnet5' | 'haiku' | 'fable' | 'fable5'
 
 /** Per-million-token USD rates for one model family. */
 export interface FamilyPrices {
@@ -81,18 +84,53 @@ export interface FamilyPrices {
  *    distortion. Approximate is fine; differently-approximate-per-row is not.
  *
  * Base list rates used (per 1M tokens):
- *   opus    ≈ $15 in  / $75 out
+ *   opus    ≈ $5  in  / $25 out   (Opus 4.5-5; opus41 = $15 / $75 for Opus 4.1 and earlier)
  *   sonnet  ≈ $3  in  / $15 out   (Sonnet 4.x)
  *   sonnet5 ≈ $2  in  / $10 out   (Sonnet 5 — half the 4.x rate)
- *   haiku   ≈ $0.80 in / $4 out
+ *   haiku   ≈ $1 in   / $5 out    (Haiku 4.5)
  */
 export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
+  // Opus 4.5 - 4.8 and Opus 5 (pricing page lines 22-26): $5 in / $25 out, 5m write $6.25, 1h write $10, hit $0.50.
   opus: {
+    input: 5,
+    output: 25,
+    cacheWrite: 6.25,
+    cacheWrite1h: 10,
+    cacheRead: 0.5,
+  },
+  // Opus 4.1 and earlier, incl. Opus 4 / 3 (pricing page lines 27-28): $15 in / $75 out.
+  opus41: {
     input: 15,
     output: 75,
-    cacheWrite: 18.75, // 15 × 1.25
-    cacheWrite1h: 30, // 15 × 2.00
-    cacheRead: 1.5, // 15 × 0.10
+    cacheWrite: 18.75,
+    cacheWrite1h: 30,
+    cacheRead: 1.5,
+  },
+  // Opus 5.5. Published (platform.claude.com pricing, 2026-10-02; matches claude-api skill table 2026-09-25):
+  // $4 in / $20 out, 5m write $5, 1h write $8, cache hit $0.20 (0.05x input on 5.5).
+  opus5: {
+    input: 4,
+    output: 20,
+    cacheWrite: 5,
+    cacheWrite1h: 8,
+    cacheRead: 0.2,
+  },
+  // Fable 5.1. Published (pricing page 2026-10-02; claude-api skill 2026-09-25):
+  // $10 in / $50 out, 5m write $12.50, 1h write $20, cache hit $0.25 (0.025x input).
+  fable: {
+    input: 10,
+    output: 50,
+    cacheWrite: 12.5,
+    cacheWrite1h: 20,
+    cacheRead: 0.25,
+  },
+  // Fable 5. Same as Fable 5.1 except cache hit is $1 (0.10x input), per the pricing page 2026-10-02.
+  fable5: {
+    input: 10,
+    output: 50,
+    cacheWrite: 12.5,
+    cacheWrite1h: 20,
+    cacheRead: 1,
   },
   sonnet: {
     input: 3,
@@ -108,12 +146,13 @@ export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
     cacheWrite1h: 4, // 2 × 2.00
     cacheRead: 0.2, // 2 × 0.10
   },
+  // Haiku 4.5 (pricing page line 34); Haiku 3.5 ($0.80/$4) is retired.
   haiku: {
-    input: 0.8,
-    output: 4,
-    cacheWrite: 1.0, // 0.80 × 1.25
-    cacheWrite1h: 1.6, // 0.80 × 2.00
-    cacheRead: 0.08, // 0.80 × 0.10
+    input: 1,
+    output: 5,
+    cacheWrite: 1.25,
+    cacheWrite1h: 2,
+    cacheRead: 0.1,
   },
 } as const
 
@@ -148,8 +187,14 @@ export function modelFamily(model: string | null | undefined): ModelFamily {
   if (!model) return FALLBACK_FAMILY
   const m = model.toLowerCase()
   // Order: most-specific check first. `sonnet-5` must be checked before the
-  // bare `sonnet` substring, or every Sonnet-5 id would be mispriced at the
-  // 4.x rate.
+  // bare `sonnet` substring, and `opus-5-5` before the generic `opus`.
+  // Fable 5 (cache read $1) is split from Fable 5.1 / bare alias (cache read $0.25).
+  if (m.includes('fable')) return m.includes('fable-5-1') || !m.includes('fable-5') ? 'fable' : 'fable5'
+  if (m.includes('opus-5-5') || m.includes('opus-5.5')) return 'opus5'
+  // Legacy $15/$75 Opus. Match `opus-4-1` only when NOT followed by another digit, so a
+  // future `opus-4-10` is not swallowed; `opus-4-2025` is dated Opus 4.0; `opus-4@` / `opus-4`
+  // end-of-id is bare Opus 4.0.
+  if (/opus-4-1(?!\d)|opus-4-0|opus-4-2025|opus-4(@|$)|3-opus/.test(m)) return 'opus41'
   if (m.includes('opus')) return 'opus'
   if (m.includes('haiku')) return 'haiku'
   if (m.includes('sonnet-5') || m.includes('sonnet5')) return 'sonnet5'
@@ -161,7 +206,7 @@ export function modelFamily(model: string | null | undefined): ModelFamily {
 export function isFallbackFamily(model: string | null | undefined): boolean {
   if (!model) return true
   const m = model.toLowerCase()
-  return !(m.includes('opus') || m.includes('haiku') || m.includes('sonnet'))
+  return !(m.includes('opus') || m.includes('haiku') || m.includes('sonnet') || m.includes('fable'))
 }
 
 /**

@@ -5,13 +5,14 @@
  * Canonical rule the fix agent (build agent T) and the Rust mirror
  * (`rust-tools/aim-jsonl-reader/src/context.rs`) both implement:
  *   - a model id whose lowercased string CONTAINS `[1m]` → 1,000,000
+ *   - a native-1M family (Sonnet 5, Opus 5, Fable 5 / 5.1) → 1,000,000
  *   - everything else (opus/sonnet/haiku 4.x without the marker, bare
  *     aliases, empty, unknown) → 200,000 default.
  *
  * The HIGH bug this guards against (IN-1 §C1): the old heuristic returned
  * 1,000,000 for ANY `claude-opus-4*`, over-reporting standard Opus
  * 4.6/4.7/4.8 free space by ~800K. The `[1m]` tag OR a native-1M family
- * (Sonnet 5, bare `claude-sonnet-5`) grants 1M; nothing else does.
+ * (Sonnet 5, Opus 5, Fable 5 / 5.1) grants 1M; nothing else does.
  *
  * No mocks — exercises the real exported function.
  */
@@ -38,8 +39,7 @@ describe('contextLimitForModel — standard-context families default to 200K', (
     expect(contextLimitForModel('claude-haiku-4-5')).toBe(200_000)
   })
 
-  it('claude-fable-5 / bare fable → 200000 (Claude 5 family gets no native-1M grant unless tagged)', () => {
-    expect(contextLimitForModel('claude-fable-5')).toBe(200_000)
+  it('bare fable alias → 200000 (the window behind the alias is unknown; only versioned ids are native 1M)', () => {
     expect(contextLimitForModel('fable')).toBe(200_000)
   })
 
@@ -66,6 +66,20 @@ describe('contextLimitForModel — the [1m] tag or a native-1M family grants the
 
   it('claude-fable-5[1m] → 1000000 (generic [1m] tag covers new families without a code change)', () => {
     expect(contextLimitForModel('claude-fable-5[1m]')).toBe(1_000_000)
+  })
+
+  it('claude-fable-5 / claude-fable-5-1 → 1000000 (native 1M, no tag — claude-api skill model table 2026-09-25)', () => {
+    // Real transcripts show both ids running above 200K (up to 879,879 tokens).
+    expect(contextLimitForModel('claude-fable-5')).toBe(1_000_000)
+    expect(contextLimitForModel('claude-fable-5-1')).toBe(1_000_000)
+    expect(contextLimitForModel('claude-fable-5-1[1m]')).toBe(1_000_000)
+    expect(contextLimitForModel('CLAUDE-FABLE-5-1')).toBe(1_000_000)
+  })
+
+  it('a different Fable major version must NOT inherit the window (pins the `(?![0-9])` boundary)', () => {
+    expect(contextLimitForModel('claude-fable-6')).toBe(200_000)
+    expect(contextLimitForModel('claude-fable-50')).toBe(200_000)
+    expect(contextLimitForModel('claude-fable-55')).toBe(200_000)
   })
 
   it('claude-sonnet-5 → 1000000 (native 1M, no [1m] tag — CC 2.1.197, TRDD-CS51MFIX)', () => {
@@ -110,8 +124,6 @@ describe('contextLimitForModel — the [1m] tag or a native-1M family grants the
     expect(contextLimitForModel('claude-opus-50')).toBe(200_000)
     expect(contextLimitForModel('claude-opus-55')).toBe(200_000)
     expect(contextLimitForModel('opus')).toBe(200_000)
-    // fable-5 ends in `-5` but is not an opus/sonnet family — must stay 200K.
-    expect(contextLimitForModel('claude-fable-5')).toBe(200_000)
   })
 
   it('a dated snapshot of the sonnet-5 family is still native 1M', () => {

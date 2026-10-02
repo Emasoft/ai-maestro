@@ -110,7 +110,8 @@ const EXTENDED_CONTEXT_TAG = '[1m]'
  * model — do not relax the boundary guard to catch one, or the next major
  * version silently inherits a window it does not have.
  */
-const NATIVE_1M_FAMILY_RE = /(?:sonnet|opus)-5(?![0-9])/
+// Fable 5 / 5.1 added 2026-10-02 (TRDD-2PFVKO7P A2): real transcripts show both ids running above 200K (up to 879,879 tokens); claude-api skill model table (2026-09-25) lists them 1M.
+const NATIVE_1M_FAMILY_RE = /(?:sonnet|opus|fable)-5(?![0-9])/
 
 /**
  * Resolve the context-window size for a Claude model id.
@@ -122,7 +123,8 @@ const NATIVE_1M_FAMILY_RE = /(?:sonnet|opus)-5(?![0-9])/
 export function contextLimitForModel(model: string): number {
   const m = model.toLowerCase()
   if (m.includes(EXTENDED_CONTEXT_TAG)) return CONTEXT_LIMITS.extended
-  // Natively-1M families (Sonnet 5, Opus 5) advertise no `[1m]` tag — match directly.
+  // Natively-1M families (Sonnet 5, Opus 5, Fable 5/5.1) advertise no `[1m]` tag — match directly.
+  // Bare alias `fable` stays at the 200K default: the window behind the alias is unknown.
   if (NATIVE_1M_FAMILY_RE.test(m)) return CONTEXT_LIMITS.extended
   return CONTEXT_LIMITS.default
 }

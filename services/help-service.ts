@@ -159,7 +159,8 @@ export async function createAssistantAgent(): Promise<ServiceResult<{
     writeFileSync(promptFile, SYSTEM_PROMPT)
 
     // Launch claude with read-only tools and bypass permissions
-    const launchCmd = `claude --model ${ASSISTANT_MODEL} --tools ${ASSISTANT_TOOLS} --permission-mode bypassPermissions --system-prompt "$(cat ${promptFile})"`
+    // --system-prompt-file avoids a shell $(cat) expansion and keeps the prompt text out of the process list
+    const launchCmd = `claude --model ${ASSISTANT_MODEL} --tools ${ASSISTANT_TOOLS} --permission-mode bypassPermissions --system-prompt-file ${promptFile}`
     await runtime.sendKeys(ASSISTANT_NAME, launchCmd, { literal: true, enter: true })
 
     return {

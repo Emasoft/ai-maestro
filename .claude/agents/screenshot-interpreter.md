@@ -5,6 +5,7 @@ model: opus[1m]
 effort: low
 tools: Read, Glob
 color: violet
+omitClaudeMd: true
 ---
 
 # Screenshot Interpreter — Opus vision, concise output

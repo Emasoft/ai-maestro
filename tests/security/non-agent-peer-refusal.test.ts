@@ -139,8 +139,13 @@ describe('TRDD-46MY2EX4 — a credential-less peer resolves to a refusal (the wa
     // REFUSE — naming 'severed' — never resolve "no pane found" to some default
     // identity (owner, system, or the last pid seen).
     const deps: WalkDeps = {
+      // TRDD-7YRXXKE8 replaced the bare-pid predicate (isKnownPanePid) with pairwise
+      // (pid, start-time) deps. No pane is on record and every pid reads as a live
+      // identity, so the walk climbs to init, matches nothing, and must REFUSE with
+      // "severed" — never resolve "no pane found" to a default identity.
       getParentPid: (pid) => (pid === 2 ? 1 : pid === 1 ? null : 1),
-      isKnownPanePid: () => false,
+      readRecordedPane: () => null,
+      readProcIdentity: (pid) => ({ pid, startSeconds: 1, startMicroseconds: 0 }),
     }
     const result = walkToPane(2, deps)
     expect(result).toMatchObject({ ok: false, reason: 'severed' })

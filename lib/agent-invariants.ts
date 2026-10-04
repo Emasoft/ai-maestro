@@ -184,6 +184,40 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
   },
 
   {
+    id: 'assistant-fs-containment',
+    // ALL THREE triggers, deliberately including 'periodic' — this is the
+    // opposite trade-off from core-plugin below, and the asymmetry is the
+    // point. The repair is two file writes (copy the hook script, edit the
+    // workdir settings) with no network, no package manager, no registry
+    // write, so the periodic loop is safe. And periodic is REQUIRED here:
+    // a containment guard enforced only at create/wake is enforced by the
+    // very ASSISTANT that may have just edited its own settings.local.json
+    // to remove it — the tamper is the agent's to attempt and the watchdog's
+    // to undo. TRDD-U7MJUHWJ (the card's third acceptance box: provisioning
+    // installs this automatically, never as a manual opt-in step; the
+    // create/wake/boot-sweep triggers ARE that automatic install).
+    //
+    // Skips for every non-ASSISTANT agent: the row is a no-op (status
+    // 'skipped', nothing written) unless the registry title is 'assistant'.
+    description: "ASSISTANT-role filesystem containment: the TRDD-3QRUDK12 PreToolUse hook is installed, byte-identical, with the server-projected allowlist env",
+    triggers: ['create', 'wake', 'periodic'],
+    async enforce(ctx: AgentInvariantContext) {
+      const { getAgent } = await import('@/lib/agent-registry')
+      const agent = getAgent(ctx.agentId)
+      if (agent?.governanceTitle !== 'assistant') {
+        return { id: 'assistant-fs-containment', status: 'skipped', detail: 'not an ASSISTANT' }
+      }
+
+      const { ensureAssistantFsContainment, readAssistantLocalFolders, getAssistantCollabFolders } = await import('@/lib/assistant-fs-containment-seed')
+      const r = await ensureAssistantFsContainment(ctx.workdir, {
+        localFolders: readAssistantLocalFolders(),
+        projectFolders: getAssistantCollabFolders(agent),
+      })
+      return { id: 'assistant-fs-containment', status: r.status, detail: r.detail }
+    },
+  },
+
+  {
     id: 'core-plugin',
     // WAKE ONLY — and this narrow trigger list is the whole point of the field.
     //

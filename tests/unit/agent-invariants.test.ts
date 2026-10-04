@@ -127,7 +127,12 @@ describe('enforceAgentInvariants', () => {
     // core-plugin is wake-only: it must not even be attempted here, or the sweep
     // would try to install a plugin for every agent on every tick.
     expect(periodic.outcomes.map((o) => o.id)).not.toContain('core-plugin')
-    expect(periodic.outcomes.map((o) => o.id).sort()).toEqual(['amp-only-messaging', 'claude-dir', 'dep-rules', 'git-exclude'])
+    // assistant-fs-containment IS periodic (a containment guard must not be
+    // enforced only by the agent that may have broken it) and reports
+    // 'skipped' for the non-ASSISTANT fixture agent here.
+    expect(periodic.outcomes.map((o) => o.id).sort()).toEqual(
+      ['amp-only-messaging', 'assistant-fs-containment', 'claude-dir', 'dep-rules', 'git-exclude'],
+    )
   })
 
   it('is idempotent — a second run reports everything already holding', async () => {
@@ -158,7 +163,7 @@ describe('enforceAgentInvariants', () => {
 
     expect(r.failed.map((o) => o.id)).toContain('claude-dir')
     expect(r.outcomes.map((o) => o.id)).toContain('git-exclude')
-    expect(r.outcomes).toHaveLength(4)
+    expect(r.outcomes).toHaveLength(5)
   })
 })
 

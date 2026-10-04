@@ -11,7 +11,7 @@ metadata:
 publish-globally: false
 ---
 
-^P2GZ9D6H [desc: "Before TRDD-6AMXSG3S both restart routes cold-started: buildRelaunchCommand guaranteed only --name, so claude --agent <persona> with no --continue opened a NEW conversation — the agent returned on a splash screen with no memory of its in-flight task.", keywords: restarted_agent_came_back_blank forgot_what_it_was_doing splash_screen_after_restart restart_wiped_in_flight_task cold_start_on_restart buildRelaunchCommand_no_continue claude_agent_without_continue_new_conversation restart_route_cold_start useRestartQueue_fires_after_every_change, ocd: 2026-07-23, lmd: 2026-09-30]
+^P2GZ9D6H [desc: "Before TRDD-6AMXSG3S both restart routes cold-started: buildRelaunchCommand guaranteed only --name, so no --continue meant a NEW conversation — agent returned on a splash screen, task forgotten.", keywords: restarted_agent_came_back_blank forgot_what_it_was_doing splash_screen_after_restart restart_wiped_in_flight_task cold_start_on_restart buildRelaunchCommand_no_continue claude_agent_without_continue_new_conversation restart_route_cold_start useRestartQueue_fires_after_every_change, ocd: 2026-07-23, lmd: 2026-09-30]
 Restarting an agent's session used to be a **cold start**: both restart routes
 (`/api/sessions/[id]/restart`, `/api/sessions/me/restart`) build their relaunch
 command with `buildRelaunchCommand()` in `lib/session-restart.ts`, which guaranteed
@@ -19,7 +19,7 @@ only `--name "<persona>"`. `claude --agent <persona>` with no `--continue` opens
 NEW conversation, so the agent returned on a splash screen with no memory of the
 task it had been executing — and nothing re-delivered it.
 
-^Q5VK3N8R [desc: "Since TRDD-6AMXSG3S the builder takes opts.continueConversation and appends --continue; both routes derive it via lib/claude-conversation.ts — the SSOT lookup key ~/.claude/projects/<slug>/*.jsonl where slug is the workdir with every / replaced by -.", keywords: how_does_restart_preserve_conversation continueConversation_flag claude_conversation_lookup_key projects_slug_jsonl workdir_slash_replaced_by_dash transcript_lookup_single_source_of_truth TRDD_6AMXSG3S --continue_relaunch, ocd: 2026-07-23, lmd: 2026-09-30]
+^Q5VK3N8R [desc: "Since TRDD-6AMXSG3S the builder takes opts.continueConversation and appends --continue; both routes derive it via lib/claude-conversation.ts — SSOT key ~/.claude/projects/<slug>/*.jsonl.", keywords: how_does_restart_preserve_conversation continueConversation_flag claude_conversation_lookup_key projects_slug_jsonl workdir_slash_replaced_by_dash transcript_lookup_single_source_of_truth TRDD_6AMXSG3S --continue_relaunch, ocd: 2026-07-23, lmd: 2026-09-30]
 Since **TRDD-6AMXSG3S** the builder takes `opts.continueConversation` and appends
 `--continue`. Both routes derive that flag from the agent's workdir via
 `lib/claude-conversation.ts`, which is the single source of truth for the lookup
@@ -31,13 +31,13 @@ transcript and never another agent's. It is gated on `bin === 'claude'`
 nothing to continue), and `hasPriorConversation` returns false on every failure
 path so a wrong answer costs the old cold start rather than a relaunch that dies.
 
-^S8LW4F1B [desc: "Memory is not momentum: --continue restores the agent's CONTEXT but does not give it a turn — a resumed session sits idle at the prompt. Resuming WORK without a human is a separate mechanism (janitor heartbeat / continuity daemon).", keywords: memory_is_not_momentum continue_restores_context_not_a_turn resumed_session_sits_idle agent_recovered_but_not_working who_gives_resumed_session_a_turn janitor_heartbeat_continuity_daemon context_restored_no_progress, ocd: 2026-07-23, lmd: 2026-09-30]
+^S8LW4F1B [desc: "Memory is not momentum: --continue restores CONTEXT but not a turn — resumed session sits idle at the prompt. Resuming WORK needs a separate mechanism (janitor heartbeat / continuity daemon).", keywords: memory_is_not_momentum continue_restores_context_not_a_turn resumed_session_sits_idle agent_recovered_but_not_working who_gives_resumed_session_a_turn janitor_heartbeat_continuity_daemon context_restored_no_progress, ocd: 2026-07-23, lmd: 2026-09-30]
 **Memory is not momentum.** `--continue` restores the agent's CONTEXT; it does not
 give it a turn. A resumed session sits idle at the prompt with its history loaded.
 Whether an agent resumes WORKING without a human is a separate mechanism (the
 janitor heartbeat / continuity daemon) — do not read this fix as solving that.
 
-^T3HJ7M5D [desc: "The BOOT-RESTORE path was a second, separate cold start (closed by TRDD-NIU5RQ1S): wakeAgent built its command from startCommand + resolveLaunchArgs and never added a resume verb — agents restored after a server restart came back having forgotten everything.", keywords: boot_restore_cold_start second_relaunch_path wakeAgent_no_resume TRDD_NIU5RQ1S agent_restored_after_server_restart_forgot_everything relaunch_command_built_in_two_places startCommand_resolveLaunchArgs, ocd: 2026-07-25, lmd: 2026-09-30]
+^T3HJ7M5D [desc: "BOOT-RESTORE was a second separate cold start (closed by TRDD-NIU5RQ1S): wakeAgent built its command from startCommand + resolveLaunchArgs, no resume verb — restored agents forgot everything.", keywords: boot_restore_cold_start second_relaunch_path wakeAgent_no_resume TRDD_NIU5RQ1S agent_restored_after_server_restart_forgot_everything relaunch_command_built_in_two_places startCommand_resolveLaunchArgs, ocd: 2026-07-25, lmd: 2026-09-30]
 **The BOOT-RESTORE path was a second, separate cold start**, closed later by
 TRDD-NIU5RQ1S: `wakeAgent` built its command from `startCommand + resolveLaunchArgs()`
 and never added a resume verb, so an agent restored after a server restart came back

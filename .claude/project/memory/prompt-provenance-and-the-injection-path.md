@@ -21,7 +21,7 @@ problems on this page.
 
 ## An injected prompt used to report "a human is present" (ai-maestro#117)
 
-^B3RQ8T4C [desc: "ai-maestro#117: the UserPromptSubmit hook POSTs /api/sessions/me/user-input on EVERY prompt and fleet-recovery reads that record as 'a human is present' — one injected prompt stood fleet recovery down for everyone.", keywords: fleet_recovery_keeps_deferring it_says_a_human_is_present_when_nobody_is_typing injected_prompt_stood_recovery_down user_input_route_records_presence fleet_recovery_false_presence presence_record_single_global injected_prompt_defers_recovery ai_maestro_117 system_forged_presence_no_attacker, ocd: 2026-08-05, lmd: 2026-09-30]
+^B3RQ8T4C [desc: "ai-maestro#117: UserPromptSubmit hook POSTs /api/sessions/me/user-input on EVERY prompt and fleet-recovery reads it as 'a human is present' — one injected prompt stood fleet recovery down.", keywords: fleet_recovery_keeps_deferring it_says_a_human_is_present_when_nobody_is_typing injected_prompt_stood_recovery_down user_input_route_records_presence fleet_recovery_false_presence presence_record_single_global injected_prompt_defers_recovery ai_maestro_117 system_forged_presence_no_attacker, ocd: 2026-08-05, lmd: 2026-09-30]
 Claude Code's `UserPromptSubmit` hook fires for **every** prompt and POSTs
 `/api/sessions/me/user-input`, and `fleet-recovery-runner` reads that record as *a human is at the
 keyboard, defer*. Presence is a **single global record**, so one injected prompt stood fleet
@@ -32,7 +32,7 @@ The hook cannot fix this where it runs; it has no way to know. The **server** kn
 the injecting. So `injectedPrompts: Map<sessionName, epochMs>` lives in `services/shared-state.ts`,
 the send sites mark it, and the presence route consumes the mark and vetoes that one echo.
 
-^D4XW7H1J [desc: "Three injection surfaces: sendCommand and sendAgentSessionCommand always mark after a successful send; sendChatMessage marks ONLY when the caller is an agent (auth.agentId) — the dashboard chat box is a human really typing.", keywords: which_send_paths_mark_injection sendCommand_sendAgentSessionCommand_always_mark sendChatMessage_caller_conditional auth_agentId_discriminator dashboard_chat_box_human_typing three_injection_surfaces agent_bearer_vs_owner_cookie R42_send_command_self_only, ocd: 2026-08-05, lmd: 2026-09-30]
+^D4XW7H1J [desc: "Three injection surfaces: sendCommand and sendAgentSessionCommand always mark after a send; sendChatMessage marks ONLY for an agent caller (auth.agentId) — the chat box is human typing.", keywords: which_send_paths_mark_injection sendCommand_sendAgentSessionCommand_always_mark sendChatMessage_caller_conditional auth_agentId_discriminator dashboard_chat_box_human_typing three_injection_surfaces agent_bearer_vs_owner_cookie R42_send_command_self_only, ocd: 2026-08-05, lmd: 2026-09-30]
 **Three injection surfaces, and the third is not like the other two:**
 
 | surface | marks |
@@ -46,7 +46,7 @@ human really is typing. The discriminator is `auth.agentId` — set for an agent
 the human/system-owner cookie — the same one the veto route uses. R42 makes `send-command`
 SELF-ONLY for agents, so when it is an agent the marked pane is the caller's own.
 
-^F2MG6R1W [desc: "Two veto invariants: veto on POSITIVE evidence only (a missing mark never means 'not human' — recovery would race a live user); consume-once, not a time window (one injection = one hook call, mark deleted as it is spent).", keywords: veto_on_positive_evidence_only missing_mark_must_not_mean_not_human recovery_race_live_user consume_once_not_time_window mark_deleted_when_spent injection_veto_invariants absence_of_mark_is_not_absence_of_human age_cap_only_for_undelivered_echo, ocd: 2026-08-05, lmd: 2026-09-30]
+^F2MG6R1W [desc: "Two veto invariants: veto on POSITIVE evidence only (a missing mark never means 'not human' — recovery would race a live user); consume-once, not a time window (one injection = one hook call).", keywords: veto_on_positive_evidence_only missing_mark_must_not_mean_not_human recovery_race_live_user consume_once_not_time_window mark_deleted_when_spent injection_veto_invariants absence_of_mark_is_not_absence_of_human age_cap_only_for_undelivered_echo, ocd: 2026-08-05, lmd: 2026-09-30]
 **Two invariants that are easy to get backwards:**
 
 - **Veto on POSITIVE evidence only.** No mark ⇒ record presence exactly as before. Inferring
@@ -55,7 +55,7 @@ SELF-ONLY for agents, so when it is an agent the marked pane is the caller's own
 - **Consume-once, not a time window.** One injection produces one hook call, so the mark is deleted
   as it is spent. The age cap only discards a mark whose echo never arrived.
 
-^K3NQ7B2V [desc: "Known gaps (both named in the code): the mark is a single scalar per session (loses the second of two injections landing before either echo) and the route guesses the echo pane (online ?? sessions[0]) while marks key the pane actually written.", keywords: injected_mark_known_gaps single_scalar_per_session_loses_second_injection route_guesses_echo_pane online_sessions0_pane_guess hook_lives_in_different_repo two_injections_before_either_echo prompt_hash_session_name_fix, ocd: 2026-08-05, lmd: 2026-09-30]
+^K3NQ7B2V [desc: "Known gaps (named in code): the mark is one scalar per session (loses the second of two injections) and the route guesses the echo pane (online ?? sessions[0]) not the pane actually written.", keywords: injected_mark_known_gaps single_scalar_per_session_loses_second_injection route_guesses_echo_pane online_sessions0_pane_guess hook_lives_in_different_repo two_injections_before_either_echo prompt_hash_session_name_fix, ocd: 2026-08-05, lmd: 2026-09-30]
 **Known gaps** (both named in the code): the mark is a single scalar per session, so it loses the
 second of two injections landing before either echo arrives; and the route *guesses* which pane the
 echo came from (`online ?? sessions[0]`) while the marks key the pane actually written. Both
@@ -64,7 +64,7 @@ hook lives in a different repo.
 
 ## The idle gate refuses everything (ai-maestro#110, #51, #60)
 
-^L6WD9P3X [desc: "sendCommand's requireIdle gate can NEVER pass: the activity bump writes Date.now() on the line before the check, so elapsed is ~0 — every call 409s, even the first against a completely fresh session. Pinned by a characterisation test.", keywords: sendCommand_always_returns_409 requireIdle_seems_to_do_nothing idle_gate_never_passes activity_bump_before_idle_check 409_on_fresh_session isSessionIdle_elapsed_zero session_activity_set_then_check require_idle_gate_self_defeating characterisation_test_no_activity, ocd: 2026-08-05, lmd: 2026-09-30]
+^L6WD9P3X [desc: "sendCommand's requireIdle gate can NEVER pass: the activity bump writes Date.now() on the line before the check, so elapsed ~0 — every call 409s, even fresh. Pinned by a characterisation test.", keywords: sendCommand_always_returns_409 requireIdle_seems_to_do_nothing idle_gate_never_passes activity_bump_before_idle_check 409_on_fresh_session isSessionIdle_elapsed_zero session_activity_set_then_check require_idle_gate_self_defeating characterisation_test_no_activity, ocd: 2026-08-05, lmd: 2026-09-30]
 `sendCommand`'s `requireIdle` defaults to **true**, and the gate **can never pass**:
 
 ```
@@ -79,7 +79,7 @@ threshold; the `!activity` early-out cannot rescue even the first call, because 
 wrote the entry. **Every call 409s, including the first against a completely fresh session.** Pinned
 by a characterisation test that seeds no activity and asserts the map is empty first.
 
-^M4RB8T2K [desc: "Consequences of the broken idle gate: it protects nothing; the CLI's hardcoded require_idle=false is a WORKAROUND (not an oversight) — using the server default would 409 every injection; wake/freeze-recovery paths must pass requireIdle:false because a frozen agent is never idle.", keywords: require_idle_false_is_a_workaround cli_hardcoded_require_idle make_cli_use_server_default_would_409 wake_or_freeze_recovery_requireIdle_false frozen_agent_never_idle idle_gate_protects_nothing, ocd: 2026-08-05, lmd: 2026-09-30]
+^M4RB8T2K [desc: "Broken idle gate consequences: protects nothing; the CLI's require_idle=false is a WORKAROUND (server default would 409 every injection); wake/freeze-recovery must pass requireIdle:false.", keywords: require_idle_false_is_a_workaround cli_hardcoded_require_idle make_cli_use_server_default_would_409 wake_or_freeze_recovery_requireIdle_false frozen_agent_never_idle idle_gate_protects_nothing, ocd: 2026-08-05, lmd: 2026-09-30]
 Consequences: the "protect a busy agent" gate protects nothing; the CLI's hardcoded
 `require_idle=false` is a **workaround**, not an oversight, so "make the CLI use the server default"
 would 409 every injection; and any wake or freeze-recovery path must pass `requireIdle: false` — a
@@ -87,7 +87,7 @@ frozen agent is by definition never idle.
 
 ## Headless mode has no presence route at all
 
-^N7XJ5C3W [desc: "Headless mode has NO presence route: POST /api/sessions/me/user-input exists as a Next route but in none of the headless router's table entries — the hook 404s there, presence never records, the veto is inert. New presence routes must land in BOTH modes.", keywords: headless_mode_no_presence_route user_input_404_in_headless hook_404_headless_presence_never_recorded veto_inert_headless route_added_to_one_side_only_recurring_defect headless_router_explicit_route_table presence_route_both_modes, ocd: 2026-08-05, lmd: 2026-09-30]
+^N7XJ5C3W [desc: "Headless mode has NO presence route: /api/sessions/me/user-input is a Next route but absent from the headless router — hook 404s, presence never records, veto inert. New routes: BOTH modes.", keywords: headless_mode_no_presence_route user_input_404_in_headless hook_404_headless_presence_never_recorded veto_inert_headless route_added_to_one_side_only_recurring_defect headless_router_explicit_route_table presence_route_both_modes, ocd: 2026-08-05, lmd: 2026-09-30]
 `POST /api/sessions/me/user-input` exists as a Next route and in **none** of the headless router's
 route-table entries, so the hook 404s there: presence is never recorded and the veto is inert. The
 bug is absent in that mode too, but the *feature* is missing. Any new presence route must be added

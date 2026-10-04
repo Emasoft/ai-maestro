@@ -2,7 +2,7 @@
 name: project-long-form-docs
 description: "where is the long-form documentation / is there a doc for the cerebellum or the voice pipeline / where are the governance rules R1-R20 written down / installation prerequisites / operations and troubleshooting guide / what is in the docs folder / I need more detail than a wiki page gives"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-10-04
 metadata:
   node_type: memory
   type: reference
@@ -13,11 +13,13 @@ publish-globally: false
 
 # project-long-form-docs
 
+^5XX17H3K [desc: "docs/ holds 58 long-form documents (~35000 lines) - specs, architecture write-ups, audits, guides too long to be a wiki page. Wiki pages answer 'what do I do now' (symptom-indexed); the long form answers 'how does the whole thing work'. When a wiki page is not enough, go to the long form.", keywords: where_is_the_long_form_documentation docs_folder_58_documents wiki_vs_long_form_docs how_does_the_whole_thing_work specs_architecture_writeups_audits_guides wiki_page_not_enough_more_detail_than_wiki_page documentation_overview long_form_docs_count, type: reference, ocd: 2026-08-02, lmd: 2026-10-04]
 **The wiki is not the whole story.** `docs/` holds **58 long-form documents, ~35 000 lines** —
 specifications, architecture write-ups, audits and guides too long to be a wiki page. Wiki pages
 are indexed by symptom and answer "what do I do now"; these answer "how does the whole thing
 work". When a page here is not enough, the long form is where to go.
 
+^GOS5GNUW [desc: "Always enumerate docs/ rather than trust a list: `find docs -maxdepth 1 -name '*.md' -type f | sort` then `grep -m1 '^# ' docs/<FILE>.md` - each file's own title says what it covers.", keywords: enumerate_docs_folder_find_command how_to_list_all_long_form_docs each_docs_file_title_says_what_it_covers grep_first_heading_docs_file find_docs_maxdepth_1 docs_folder_inventory_command trust_a_list_never_enumerate_instead, type: reference, ocd: 2026-08-02, lmd: 2026-10-04]
 **Always enumerate rather than trust a list:**
 
 ```bash
@@ -26,6 +28,8 @@ grep -m1 '^# ' docs/<FILE>.md          # each file's own title says what it cove
 ```
 
 ## The load-bearing ones
+
+^PYYZEJNM [desc: "The 10 load-bearing docs (of 58): GOVERNANCE-RULES.md (R1-R20+ rule corpus, cited by id all over code+wiki), SCRIPT-LAYER.md (aimaestro-*/amp-*/aid-* subcommands + caller authorization), PLUGIN-ABSTRACTION-PRINCIPLE.md, CEREBELLUM.md (the ONLY documentation of lib/cerebellum - no wiki page covers it), OPERATIONS-GUIDE.md (~1000 lines), REQUIREMENTS.md (install prerequisites), API-CHANGES.md (branch-change log), CLAUDE-CODE-COMPATIBILITY-AUDIT.md, COMMUNICATION-GRAPH.md (S-to-R notation), BACKLOG.md (~3000 lines). The table is deliberately partial - the rest are found with the find command, not by growing the list.", keywords: GOVERNANCE_RULES_MD_R1_R20 CEREBELLUM_MD_only_documentation_subsystem SCRIPT_LAYER_MD_subcommands_authorization OPERATIONS_GUIDE_MD_troubleshooting REQUIREMENTS_MD_installation_prerequisites API_CHANGES_MD_branch_changelog COMMUNICATION_GRAPH_MD_S_R_notation load_bearing_docs_table BACKLOG_MD_product_backlog CLAUDE_CODE_COMPATIBILITY_AUDIT_MD which_docs_matter_most cerebellum_subsystem_doc lib_cerebellum_documentation, type: reference, ocd: 2026-08-02, lmd: 2026-10-04]
 
 | doc | what it is |
 |---|---|

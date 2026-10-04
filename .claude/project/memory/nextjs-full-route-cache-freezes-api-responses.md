@@ -2,7 +2,7 @@
 name: nextjs-full-route-cache-freezes-api-responses
 description: "an API endpoint returns stale or frozen data / uptime_seconds never increases / x-nextjs-cache HIT / the health endpoint reports the same value on every poll / /api/config shows the BUILD machine's node version and port / a config change does not propagate until someone rebuilds / gh auth works but the orgs endpoint still 500s / why is my GET route listed as Static in the build output"
 ocd: 2026-08-05
-lmd: 2026-08-05
+lmd: 2026-10-01
 metadata:
   node_type: memory
   type: project
@@ -13,22 +13,26 @@ publish-globally: false
 
 # nextjs-full-route-cache-freezes-api-responses
 
+^3XW1UYN7 [desc: "Next.js full-route-caches a GET handler that never reads its Request: the response is computed once at yarn build time on the build machine and served forever", keywords: api_returns_frozen_response stale_until_rebuild response_computed_at_build_time GET_route_static unauthenticated_endpoint_cached request_independent means_static discovery_endpoint_frozen liveness_endpoint_frozen config_endpoint_frozen nextjs_caches_my_api, ocd: 2026-08-05, lmd: 2026-10-01]
 **Next.js full-route-caches a GET handler that never reads its `Request`.** The response is
 computed once, on the machine that ran `yarn build`, and served forever after. Being
 *unauthenticated* and *request-independent* — the two properties that make a discovery, liveness,
 or config endpoint useful — are exactly the two that make it static.
 
+^A90V70AJ [desc: "cache-control no-store, async, and real I/O (filesystem, subprocess, database) do NOT prevent full-route caching: the cache is server-side and upstream of response headers", keywords: cache_control_no_store_did_not_work no_store_header_ignored async_route_still_cached real_IO_in_handler_still_frozen fs_read_frozen subprocess_output_frozen db_query_frozen no_store_does_not_prevent_caching why_is_my_endpoint_still_stale client_vs_server_cache, ocd: 2026-08-05, lmd: 2026-10-01]
 **`cache-control: no-store` does not prevent this.** That header instructs the CLIENT; the full
 route cache lives server-side, upstream of it. Neither does `async`, nor doing real I/O in the
 handler: reading the filesystem, shelling out to a subprocess, and hitting a database are all
 things Next.js will happily do once at build time and freeze.
 
+^CIOMIY6H [desc: "The fix for full-route caching is one additive line per route: export const dynamic = 'force-dynamic'", keywords: how_to_fix_static_api_route force_dynamic_export route_serving_stale_data_fix make_nextjs_route_dynamic export const dynamic fix_frozen_endpoint one_line_fix_dynamic_route, ocd: 2026-08-05, lmd: 2026-10-01]
 **The fix is one additive line per route:**
 
 ```ts
 export const dynamic = 'force-dynamic'
 ```
 
+^EDJI81O6 [desc: "The build output is the only instrument that decides static vs dynamic: verify each fixed route shows the Dynamic glyph by PRESENCE, with page routes as positive control", keywords: verify_route_not_static_anymore build_output_glyph_check stale_next_serving_cached_asset positive_control_page_routes verify_by_presence_not_absence how_to_check_route_is_dynamic next_build_static_dynamic_symbols route_left_the_static_set, ocd: 2026-08-05, lmd: 2026-10-01]
 **The build is the only instrument that decides.** Asserting the export exists in the source is a
 different check from the route actually leaving the static set — a stale `.next` will keep serving
 the cached asset regardless of what the source says:
@@ -45,6 +49,7 @@ that the corpus is clean).
 
 ## Do NOT blanket-apply it
 
+^W3HN15TL [desc: "Do NOT blanket-apply force-dynamic: a route whose body is a genuine compile-time constant is correctly static; judge each route by whether its response can change without the bundle changing", keywords: should_i_force_dynamic_every_route blanket_apply_force_dynamic compile_time_constant_route_correctly_static force_dynamic_trades_optimisation_for_nothing per_route_verdict can_this_response_change_without_the_bundle_changing which_routes_need_force_dynamic donot_force_dynamic_all, ocd: 2026-08-05, lmd: 2026-10-01]
 A route whose body is a genuine compile-time constant is *correctly* static, and forcing it dynamic
 trades a real optimisation for nothing. Each route gets its own verdict, grounded in what its
 handler actually reads. The question is not "is this route important?" but **"can this response

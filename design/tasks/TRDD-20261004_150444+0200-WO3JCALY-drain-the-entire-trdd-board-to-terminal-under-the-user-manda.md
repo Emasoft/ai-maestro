@@ -4,7 +4,7 @@ title: Drain the entire TRDD board to terminal under the user mandate
 column: planned
 status: tasked
 created: 2026-10-04T15:04:44+0200
-updated: 2026-10-04T15:08:01+0200
+updated: 2026-10-04T15:15:21+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: infra
@@ -15,6 +15,8 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-04T15:04:44+0200
+project-id: ai-maestro
+scope: project
 ---
 
 # Drain the entire TRDD board to terminal under the user mandate

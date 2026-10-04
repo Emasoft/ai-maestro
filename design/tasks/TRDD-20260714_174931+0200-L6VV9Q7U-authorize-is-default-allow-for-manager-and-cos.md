@@ -4,7 +4,7 @@ status: tasked
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
 column: human_review
 created: 2026-07-14T17:49:31+0200
-updated: 2026-10-05T01:41:46+0200
+updated: 2026-10-05T01:57:03+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -19,7 +19,7 @@ labels: [security, authorization, governance, root-cause, structural]
 approval-judge:  user 
 approval-datetime: 2026-09-05T10:20:46+0200
 assignee: ai-maestro-hub-session
-implementation-commits: [876673caa]
+implementation-commits: [876673caa, 07f8745b0, fb4052467]
 eht: []
 relevant: [TRDD-A50RC5G8]
 ---
@@ -172,8 +172,8 @@ from a decision anyone made.
 - [ ] USER: is a process-level session kill a hard-kill reserved to the user? (then set the delete-session row)
 - [ ] USER ruling 2: create-session / link-session — system-owner only like register-agent, or MANAGER + own-team COS
 - [ ] USER ruling 3: who administers groups (manage-group)
-- [ ] Split the CHIEF-OF-STAFF denial reason: a grant row with cosOwnTeam false must not answer "only in their own team" to a COS acting on its own team (unreachable today, wrong for the first such row)
-- [ ] ACTION_POLICY is an exported MUTABLE object: freeze it and give the synthetic-row tests a test-only seam, so no module can flip a grant at runtime
+- [x] Split the CHIEF-OF-STAFF denial reason: a grant row with cosOwnTeam false must not answer "only in their own team" to a COS acting on its own team (unreachable today, wrong for the first such row)
+- [x] ACTION_POLICY is an exported MUTABLE object: freeze it and give the synthetic-row tests a test-only seam, so no module can flip a grant at runtime
 - [ ] The four UNRULED rows carry no UNRULED marker after the rulings above are applied
 
 ## Estimated risk

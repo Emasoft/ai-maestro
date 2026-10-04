@@ -1,10 +1,10 @@
 ---
 trdd-id: A50RC5G8
 title: Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
-column: todo
+column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T01:41:25+0200
+updated: 2026-10-05T01:57:03+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -21,6 +21,7 @@ approval-datetime: 2026-10-05T01:29:48+0200
 derived: false
 
 relevant: [TRDD-L6VV9Q7U]
+implementation-commits: [68e0c7ade]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
@@ -58,8 +59,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 
 ## Acceptance
 
-- [ ] READ FIRST: does `DeleteAgent` already refuse an agent's `hard: true`? Record the file and line either way
-- [ ] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
+- [x] READ FIRST: does `DeleteAgent` already refuse an agent's `hard: true`? Record the file and line either way
+- [x] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
 - [ ] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
 - [ ] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
 - [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
@@ -72,6 +73,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - 2026-10-05 — MANDATE issued by USER (min-approval-requirement: user), relayed and filed by main-agent@ai-maestro. The ruling quoted under Problem is the mandate; no approval request was sent.
 - 2026-10-05 — USER RULING (general rule on hard-kill), verbatim: "in general hard-kill is strictly reserved to the user maestro. it also needs a sudo confirmation from the user." Consequences: no agent, under any title, may hard-kill or hard-delete; the hard path is system-owner only AND requires a sudo token. This settles the reading that agents are soft-only.
 - 2026-10-05 — CORRECTION by main-agent@ai-maestro to the two entries above. Only the QUOTED sentences are the user's. Everything after "Consequences:" is my INTERPRETATION and is UNCONFIRMED. Specifically NOT ruled: (1) whether a process-level session kill (`delete-session`: POST /api/sessions/[id]/kill and the two session DELETEs) counts as "hard-kill" — if it does, it is user-only and the phrase "RULED grant" above is wrong; that row stays at status quo, flagged, until the user answers. (2) Whether cemetery RESTORE is user-only — the user said the user "can always" resurrect, not that others cannot. (3) "system owner" was used for "the user maestro" without checking how the two relate when the user-authority model is on. ENTAILED by the quotes and safe to build: CHIEF-OF-STAFF may delete an agent of its own team (a privilege widening); agents may only soft-delete; hard delete is the user's and needs sudo; cemetery purge is the user's. The question is with the user.
+- 2026-10-05 — PARTLY LANDED 68e0c7ade by main-agent@ai-maestro: DeleteAgent refuses a non-system-owner caller asking for hard or deleteFolder (verified first-hand beforehand that G00 checked neither); the DeleteTeam member cascade soft-deletes when the caller is an agent. READ-FIRST answers (worker report reports/a50rc5g8/, gitignored): soft delete writes a cemetery zip, hard delete does not; cemetery POST/DELETE refuse agents in both modes, headless cemetery GET is open to agents (not re-verified); headless DELETE /api/agents/:id makes NO sudo-token check. NOT landed: the COS own-team grant; sudo on the headless hard path; a test in both user-authority-model states; the stale DeleteTeam doc comment and UI label.
+- 2026-10-05T01:57:03+0200 — column → dev by main-agent@ai-maestro. Partly landed in 68e0c7ade; COS grant, headless sudo and model-on verification remain.
 
 ## Approval log
 

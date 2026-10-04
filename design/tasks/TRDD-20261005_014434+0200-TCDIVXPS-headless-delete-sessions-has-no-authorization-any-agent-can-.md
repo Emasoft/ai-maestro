@@ -4,7 +4,7 @@ title: Headless DELETE sessions has no authorization — any agent can kill any 
 column: dev
 status: tasked
 created: 2026-10-05T01:44:34+0200
-updated: 2026-10-05T01:46:38+0200
+updated: 2026-10-05T01:57:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T01:44:34+0200
+implementation-commits: [6626cbe60]
 ---
 
 # Headless DELETE sessions has no authorization — any agent can kill any session
@@ -58,16 +59,17 @@ authContext refused. Neuter the check and record the red set. Run the headless r
 
 ## Acceptance
 
-- [ ] `deleteSession` refuses an unauthorized or unidentified caller before any side effect
-- [ ] Headless and full-mode routes both pass the verified identity; neither can reach the service without one
-- [ ] Refusal tests assert no kill, no unpersist, no registry write; neuter recorded
-- [ ] Every other caller of `deleteSession` enumerated and updated
+- [x] `deleteSession` refuses an unauthorized or unidentified caller before any side effect
+- [x] Headless and full-mode routes both pass the verified identity; neither can reach the service without one
+- [x] Refusal tests assert no kill, no unpersist, no registry write; neuter recorded
+- [x] Every other caller of `deleteSession` enumerated and updated
 - [ ] SCOPE OF THE CLAIM, stated honestly: PROVEN open is the headless handler (authenticates, then calls the service). NOT verified: whether anything authorizes before the headless router, and whether full mode is closed — `enforceAuth` admits agents and whether `requireSudoToken` also applies the delete-session authorization was not read. The service fix closes both either way; settle these two reads and record them here
 - [ ] `deleteSession` also soft-deletes the AGENT RECORD (`deleteAgentBySession`) with NO cemetery archive (per the TRDD-A50RC5G8 investigation; not re-read). Under the USER ruling of 2026-10-05 ("only soft-kill ... the agent corpse in the cemetery can always be resurrected") an agent deletion must leave a resurrectable archive. Authorizing as delete-session is not enough: route the record deletion through the archiving DeleteAgent pipeline, or stop deleting the record here. This card must not close on authorization alone
 - [ ] Target resolution tested on an indexed multi-session name and on the cloud branch, not only on a mocked single session
-- [ ] BEHAVIOUR CHANGE named: a session that resolves to no registry agent (an orphan tmux session) can afterwards be removed only by the system owner
+- [x] BEHAVIOUR CHANGE named: a session that resolves to no registry agent (an orphan tmux session) can afterwards be removed only by the system owner
 
 ## Approval log
+- 2026-10-05 — LANDED 6626cbe60 by main-agent@ai-maestro. Scope settled by reading (worker report, spot-checked): HEADLESS was open — the router authenticates only before dispatch; FULL mode was already closed for agents — requireSudoToken also runs the title check from the sudo-guard route map. Still OPEN: (1) deleteSession marks the record deleted with NO cemetery archive (lib/agent-registry.ts deleteAgent soft path sets deletedAt only); (2) target resolution on an indexed name is defective — getAgentBySession (lib/agent-registry.ts:487-491) strips the trailing index, so session "alpha_1" resolves to agent "alpha" even when an agent named "alpha_1" exists. The indexed-session box stays unticked for that reason.
 
 ## Approval log
 

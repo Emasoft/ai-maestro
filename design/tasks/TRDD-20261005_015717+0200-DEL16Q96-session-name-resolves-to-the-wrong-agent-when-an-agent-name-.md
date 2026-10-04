@@ -1,0 +1,58 @@
+---
+trdd-id: DEL16Q96
+title: Session name resolves to the wrong agent when an agent name ends in an index suffix
+column: todo
+status: tasked
+created: 2026-10-05T01:57:17+0200
+updated: 2026-10-05T01:57:17+0200
+current-owner: main-agent@ai-maestro
+created-by: main-agent@ai-maestro
+task-type: security
+min-approval-requirement: none
+scope: project
+project-id: ai-maestro
+assignee: main-agent@ai-maestro
+mandate: true
+mandated-by: none
+approved: true
+approval-judge: main-agent@ai-maestro
+approval-datetime: 2026-10-05T01:57:17+0200
+---
+
+# Session name resolves to the wrong agent when an agent name ends in an index suffix
+
+## Problem
+
+`getAgentBySession(sessionName)` (`lib/agent-registry.ts:487-491`, read 2026-10-05) parses the
+session name with `parseSessionName`, which strips a trailing index ("website_1" -> "website"),
+and returns the agent with that NAME. So if agents named `alpha` and `alpha_1` both exist, the
+session `alpha_1` resolves to agent `alpha`.
+
+Every authorization decision keyed on a session name inherits this: the sudo-guard route map
+(`rule.session` targets), and `deleteSession` since 6626cbe60. The team and title checks then run
+against the WRONG agent — a caller entitled over `alpha` is authorized to act on a session that
+belongs to `alpha_1`, and the reverse is refused.
+
+Found by the worker finishing TRDD-TCDIVXPS (report under reports/tcdivxps/, gitignored); the
+lookup lines were read first-hand. NOT established: whether an agent name may legally end in
+`_<digits>` (if name validation forbids it, the collision is unreachable and this is hardening),
+and whether a second session of one agent is ever actually created in this deployment.
+
+## Proposed fix
+
+Establish the two facts above first. Then one of: forbid `_<digits>` suffixes in agent names at
+creation and rename (if none exist today), or resolve a session name by exact session ownership
+(the agent record's own session list) before falling back to the name parse.
+
+## Acceptance
+
+- [ ] READ FIRST: may an agent name end in `_<digits>`? cite the validation (or its absence) and count existing agents that do
+- [ ] READ FIRST: where are indexed sessions created, and is the index recorded on the agent record
+- [ ] A session name resolves to the agent that owns that session, tested with `alpha` + `alpha_1` both present
+- [ ] The TRDD-TCDIVXPS indexed-session box can be ticked against this fix
+
+## Approval log
+
+## Approval log
+
+- 2026-10-05T01:57:17+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.

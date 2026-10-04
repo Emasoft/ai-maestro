@@ -1,13 +1,13 @@
 ---
 trdd-id: V2BLADSF
-status: tasked
+status: archived
 title: Group creation lets any authenticated agent inject arbitrary text into any other agent's live session as AI Maestro
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:48:51+0200
-updated: 2026-10-04T19:00:29+0200
+updated: 2026-10-05T01:11:46+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -180,6 +180,7 @@ must be **self-only for a plain agent, unrestricted for MANAGER and the system o
   against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
   `design/proposals/`. Zone only — no content changed and nothing withdrawn.
 - 2026-09-05T10:21:00+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  groups-service still lets create/update set arbitrary subscriberIds . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+- 2026-10-05T01:11:46+0200 — COMPLETE by user. Code landed b9d97a308; 6/6 injection tests + 12/12 coverage ledger re-verified against the committed tree 2026-10-05; all acceptance boxes ticked.
 
 ## RULING (2026-10-04) — fix 1 AND fix 3; fix 2 deliberately NOT taken
 

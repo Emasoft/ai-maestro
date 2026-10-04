@@ -60,6 +60,8 @@ const {
     mockAgentRegistry: {
       getAgent: vi.fn(),
       updateAgent: vi.fn().mockResolvedValue({ id: 'agent-1' }),
+      // f8d635c31 added the R51.7 loud registry read to ChangeClient; default set in beforeEach.
+      loadAgentsLoud: vi.fn(),
     },
     mockClientCapabilities: {
       detectClientType: vi.fn().mockReturnValue('claude'),
@@ -227,6 +229,14 @@ describe('element-management-service.ChangeClient (R18 pipeline)', () => {
     mockConvertAndStorePlugin.mockResolvedValue(undefined)
     mockAgentRegistry.updateAgent.mockResolvedValue({ id: 'agent-1', program: 'codex' })
     mockClientCapabilities.clientTypeToProviderId.mockReturnValue('claude')
+    // G09's R51.7 post-condition finds the agent in the loud read and checks its program equals
+    // the new client. Model the write: the agent getAgent returned, patched by what updateAgent
+    // was actually called with — a constant here would pass the verification regardless.
+    mockAgentRegistry.loadAgentsLoud.mockImplementation(async () => {
+      const base = mockAgentRegistry.getAgent() as Record<string, unknown> | undefined
+      const patch = (mockAgentRegistry.updateAgent.mock.calls[0]?.[1] ?? {}) as Record<string, unknown>
+      return { ok: true as const, agents: base ? [{ ...base, ...patch }] : [] }
+    })
     // getAdapter returns the right adapter based on client
     mockGetAdapter.mockImplementation((client: string) => {
       if (client === 'claude') return mockOldAdapter

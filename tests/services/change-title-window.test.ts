@@ -107,7 +107,13 @@ vi.mock('@/lib/agent-registry', async () => {
   }
 })
 vi.mock('@/lib/governance', async () => (await import(HELPER)).governanceMock(H.world))
-vi.mock('@/lib/team-registry', async () => (await import(HELPER)).teamRegistryMock(H.world))
+// 3847007dc added G23 (R31 completeness) to ChangeTitle, which imports freezeIncompleteTeam; the
+// shared helper's mock lacks it. Model the real contract: a team still complete is not frozen.
+// The fixtures here hold complete teams (COS present), so report `frozen: false`.
+vi.mock('@/lib/team-registry', async () => ({
+  ...(await (await import(HELPER)).teamRegistryMock(H.world)),
+  freezeIncompleteTeam: async () => ({ frozen: false, hibernated: [] as string[] }),
+}))
 vi.mock('@/lib/aid-token', async () => (await import(HELPER)).aidTokenMock(H.world))
 vi.mock('@/lib/portfolio-store', async () => (await import(HELPER)).portfolioStoreMock(H.world))
 vi.mock('@/lib/governance-request-registry', async () => (await import(HELPER)).stubs.governanceRequests())

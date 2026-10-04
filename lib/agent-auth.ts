@@ -379,7 +379,17 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
   } catch {
     modelEnabled = false
   }
-  if (modelEnabled) {
+  // TRDD-46MY2EX4: an ERRORED auth result is a REFUSED caller, never the system
+  // owner. `agentId: undefined` is documented as the web-session owner shape, so
+  // the legacy `!agentId` grant below would read a 401 refusal as the owner if
+  // this guard were absent. Every current caller (requireAuth, enforceAuth,
+  // enforceSystemOwner, requireSudoToken, the headless router) checks
+  // `authResult.error` before calling here — the guard makes that ordering
+  // structural at the one primitive all of them share, instead of a convention
+  // the next caller must remember.
+  if (authResult.error) {
+    isSystemOwner = false
+  } else if (modelEnabled) {
     // Active-MAESTRO semantics. An agent (agentId set) is never the system
     // owner. A user is the system owner ONLY when its title is maestro or the
     // acting maestro-delegate.

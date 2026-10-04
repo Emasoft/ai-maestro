@@ -9138,8 +9138,9 @@ export async function DeleteTeam(
     // Opt-in via the "Delete Agents Too" checkbox in the sidebar Team
     // Delete dialog. Cascade goes through the DeleteAgent pipeline per
     // agent (NEVER raw registry deletion, never bash rm), inherits the
-    // caller's authContext, and sets hard=true + deleteFolder=true so
-    // the workdir is wiped too. Per-agent failures do NOT roll back —
+    // caller's authContext. For the system owner it sets hard=true +
+    // deleteFolder=true so the workdir is wiped too; for an AGENT caller it
+    // is a soft delete (cemetery archive kept) — TRDD-A50RC5G8. Per-agent failures do NOT roll back —
     // the team is already gone from the registry; the operator can
     // re-try individual deletions via Profile → Danger Zone if any
     // fail. Every successful DeleteAgent emits its own ledger entry
@@ -9168,14 +9169,18 @@ export async function DeleteTeam(
             }
           } catch { /* if registry read throws, fall through and let DeleteAgent surface */ }
           try {
-            const delResult = await DeleteAgent(agentId, {
-              authContext: options.authContext,
-              hard: true,
-              deleteFolder: true,
-            })
+            // USER ruling 2026-10-05 (TRDD-A50RC5G8): "hard-kill is strictly reserved to the user maestro".
+            // DeleteAgent now refuses hard/deleteFolder from a non-system-owner, so an AGENT caller (MANAGER)
+            // must cascade SOFT — otherwise every member is refused and left behind. The ops line and the
+            // counts below must therefore not claim a hard delete or a wiped folder that did not happen.
+            const hardCascade = !!options.authContext.isSystemOwner
+            const delResult = await DeleteAgent(agentId, hardCascade
+              ? { authContext: options.authContext, hard: true, deleteFolder: true }
+              : { authContext: options.authContext, hard: false })
             if (delResult.success) {
               deletedCount++
-              ops.push(`G07: DeleteAgent succeeded for ${agentId.substring(0, 8)} (hard, folder wiped)`)
+              ops.push(`G07: DeleteAgent succeeded for ${agentId.substring(0, 8)} ` +
+                (hardCascade ? '(hard, folder wiped)' : '(soft — archived to the cemetery; hard delete is reserved to the user)'))
             } else {
               deleteFailures.push({ agentId, error: delResult.error || 'unknown' })
               ops.push(`G07: DeleteAgent FAILED for ${agentId.substring(0, 8)}: ${delResult.error || 'unknown'}`)
@@ -9283,6 +9288,16 @@ export async function DeleteAgent(
     }
     const g0err = await gate0Auth('delete-agent', agentId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
+
+    // USER ruling 2026-10-05 (TRDD-A50RC5G8): an AGENT caller (MANAGER) may only
+    // SOFT-delete; hard delete and folder wipe are reserved to the user. Must precede every other gate: it
+    // is a pure refusal, and any later gate has side effects a refusal must not leave behind. Enforced here,
+    // in the service, so the Next route and the headless router both get it.
+    if (!options.authContext.isSystemOwner && (hard || options.deleteFolder)) {
+      result.error = 'hard delete and folder deletion are reserved to the user (TRDD-A50RC5G8); an agent may only soft-delete'
+      ops.push('G00: DENIED — agent caller requested hard/deleteFolder (TRDD-A50RC5G8)')
+      return result
+    }
 
     // ── G01: Validate agent exists ─────────────────────────────
     const { getAgent, deleteAgent: registryDelete } = await import('@/lib/agent-registry')

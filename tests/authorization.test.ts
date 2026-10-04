@@ -108,7 +108,7 @@ vi.mock('@/lib/agent-registry', () => ({
 
 import { issueGovernanceToken } from '@/lib/aid-token'
 import { authenticateFromRequest, buildAuthContext, type AgentAuthResult } from '@/lib/agent-auth'
-import { authorize } from '@/lib/authorization'
+import { authorize, ACTION_POLICY, type AuthAction } from '@/lib/authorization'
 import { ChangeTitle } from '@/services/element-management-service'
 
 function requestWith(headers: Record<string, string>, agentId = 'member-a2'): NextRequest {
@@ -448,5 +448,305 @@ describe('TRDD-F1SL03CK — create-agent authorization (R30.1/R30.2)', () => {
     expect(authorize(asCosA(), 'create-agent').allowed).toBe(true)
     expect(authorize(asManager(), 'create-agent').allowed).toBe(true)
     expect(authorize(asMember(), 'create-agent').allowed).toBe(false)
+  })
+})
+
+/**
+ * TRDD-L6VV9Q7U — authorize() is no longer default-ALLOW for MANAGER and COS.
+ *
+ * The defect was structural. authorize() ended with two blanket branches — MANAGER
+ * unconditionally allowed, COS allowed across its own team — so an AuthAction with
+ * no dedicated branch ABOVE them was GRANTED to the two most powerful titles in the
+ * system. The grant was invisible precisely because it was the ABSENCE of code:
+ * adding an AuthAction granted it, with no diff to review and no test to fail.
+ *
+ * The fix replaces the blankets with ACTION_POLICY, a Record<AuthAction, Policy>.
+ * THIS CHANGE IS A PURE NO-OP: today's behaviour is preserved row-for-row, pinned by
+ * the HEAD baseline fixture below. Properties, each with its OWN assertion:
+ *
+ *   1. The record is exhaustive — a new AuthAction without a row is a TYPE error
+ *      (tsc, not vitest; asserted structurally below).
+ *   2. The four actions the card found UNRULED keep their legacy grant, flagged as
+ *      'UNRULED' (not a decision, awaiting USER rulings); a FUTURE undecided action
+ *      must use kind 'unruled', which DENIES. The negative half (other-team COS,
+ *      MEMBER) stays denied, so a blanket-allow regression is still caught.
+ *   3. The tail's three guards (unknown action, lost branch, unruled) each deny.
+ *
+ * R42 revokes cross-agent DRIVE for every title, so the card's claim that those
+ * remain R42-denied is asserted too — as the RULE, not the old accident.
+ */
+describe('TRDD-L6VV9Q7U — the matrix preserves today\'s behaviour and denies by default', () => {
+  const asManager = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+  const asCosA = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
+  const asMember = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+
+  // The four actions TRDD-L6VV9Q7U names as UNRULED: their grant was never a
+  // decision, only the absence of a branch. The matrix keeps today's grant (no-op)
+  // and flags them 'UNRULED' until a USER ruling moves each row (the card's rulings).
+  const UNRULED = ['delete-session', 'create-session', 'link-session', 'manage-group'] as const
+
+  it.each(UNRULED)('MANAGER keeps the legacy grant on "%s" — status quo, NOT a decision', (action) => {
+    expect(authorize(asManager(), action, 'member-b1').allowed).toBe(true)
+  })
+
+  it.each(UNRULED)('CHIEF-OF-STAFF keeps the legacy grant on "%s" for its OWN-TEAM agent, and stays DENIED out of team', (action) => {
+    expect(authorize(asCosA(), action, 'member-a2').allowed).toBe(true)
+    // Negative half: the team scope survived the rewrite.
+    const other = authorize(asCosA(), action, 'member-b1')
+    expect(other.allowed).toBe(false)
+    expect(other.reason).toMatch(/own team/i)
+  })
+
+  it.each(UNRULED)('MEMBER is DENIED "%s" on a peer', (action) => {
+    expect(authorize(asMember(), action, 'member-a2').allowed).toBe(false)
+  })
+
+  it('the system-owner (the human) is UNAFFECTED — the dashboard still manages sessions and groups', () => {
+    // The matrix is reached only by an AGENT: the `!auth.agentId` grant above it
+    // returns first. A fix that closed the human out would have made the product
+    // unusable rather than safe.
+    const human = {} as AgentAuthResult
+    for (const action of UNRULED) {
+      expect(authorize(human, action, 'member-b1').allowed).toBe(true)
+    }
+  })
+
+  it('R42 REVOKE still holds: cross-agent DRIVE is denied for MANAGER and COS, as the RULE not an accident', () => {
+    // These rows carry `grant: false/false` NOW. Before the fix they were denied
+    // only because the R42 branch happened to sit ABOVE the blankets — re-order
+    // the branches and the grant would have come back. The row is the second net.
+    expect(authorize(asManager(), 'send-command', 'member-b1').allowed).toBe(false)
+    expect(authorize(asCosA(), 'restart-session', 'member-a2').allowed).toBe(false)
+  })
+
+  it('the DECIDED grants must NOT regress — R42.6 config and R10.3 lifecycle still pass', () => {
+    // The fix must not have "solved" default-allow by denying everything. These
+    // are the rows with an authorising rule; a regression here would be the
+    // opposite failure, and just as silent.
+    for (const action of ['modify-agent', 'manage-skills', 'wake-agent', 'hibernate-agent'] as const) {
+      expect(authorize(asManager(), action, 'member-b1').allowed).toBe(true)
+    }
+    // COS own-team, and COS out-of-team denied — the team scope survived the rewrite.
+    expect(authorize(asCosA(), 'modify-agent', 'member-a2').allowed).toBe(true)
+    expect(authorize(asCosA(), 'modify-agent', 'member-b1').allowed).toBe(false)
+  })
+
+  it('ACTION_POLICY covers every AuthAction — the exhaustiveness the Record<AuthAction, …> buys', () => {
+    // The type system enforces this at compile time; the assertion here documents
+    // the contract and fails loudly if a cast ever sneaks past the checker.
+    // A `branch`-kind row whose branch is REMOVED fails closed at the matrix tail
+    // (asserted by the delete-agent/register-agent suites above).
+    // The Record<AuthAction, Policy> type enforces exhaustiveness at COMPILE time.
+    // This test is the BEHAVIOURAL half, which a type cannot state: for every
+    // AuthAction, a MANAGER acting on ANOTHER agent is allowed ONLY for the rows
+    // that cite a rule. Anything else — including an action nobody listed — is
+    // DENIED. That is "deny by default" as a property, not as an example.
+    // The expectation is derived from the matrix itself, never a hand-written list.
+    const ALL_ACTIONS = Object.keys(ACTION_POLICY) as AuthAction[]
+    const managerMismatch: string[] = []
+    const cosOwnMismatch: string[] = []
+    const cosOtherMismatch: string[] = []
+    const unruled: string[] = []
+    let grantManagerTrue = 0
+    let grantManagerFalse = 0
+    for (const action of ALL_ACTIONS) {
+      const policy = ACTION_POLICY[action]
+      if (policy.kind === 'grant') {
+        if (policy.manager) grantManagerTrue++
+        else grantManagerFalse++
+        const m = authorize(asManager(), action, 'member-b1')
+        if (m.allowed !== policy.manager) managerMismatch.push(`${action}: got ${m.allowed}, matrix ${policy.manager}`)
+        const own = authorize(asCosA(), action, 'member-a2')
+        if (own.allowed !== policy.cosOwnTeam) cosOwnMismatch.push(`${action}: got ${own.allowed}, matrix ${policy.cosOwnTeam}`)
+        const other = authorize(asCosA(), action, 'member-b1')
+        if (other.allowed !== false) cosOtherMismatch.push(`${action}: got ${other.allowed}, expected false`)
+      } else if (policy.kind === 'unruled') {
+        unruled.push(action)
+        const d = authorize(asManager(), action, 'member-b1')
+        expect(d.allowed).toBe(false)
+        expect(d.reason).toMatch(/TRDD-L6VV9Q7U/)
+      }
+      // kind 'branch': decided by its own dedicated branch, pinned by the suites above.
+    }
+    expect(managerMismatch).toEqual([])
+    expect(cosOwnMismatch).toEqual([])
+    expect(cosOtherMismatch).toEqual([])
+    // Non-vacuity: both polarities of 'grant' exist.
+    expect(grantManagerTrue).toBeGreaterThan(0)
+    expect(grantManagerFalse).toBeGreaterThan(0)
+    // LITERAL expectations, deliberately NOT read from ACTION_POLICY: the loop above
+    // derives its expectation from the matrix, so it cannot detect a wrong matrix row.
+    const literal: Array<[AuthAction, boolean]> = [
+      ['modify-agent', true], ['manage-skills', true], ['wake-agent', true],
+      ['hibernate-agent', true], ['view-agent', true],
+      ['send-command', false], ['restart-session', false], ['delete-session', true],
+      ['create-session', true], ['link-session', true], ['manage-group', true],
+    ]
+    for (const [action, expected] of literal) {
+      expect({ action, allowed: authorize(asManager(), action, 'member-b1').allowed }).toEqual({ action, allowed: expected })
+    }
+    // No row is kind 'unruled' today: the four legacy rows are flagged grants.
+    expect(unruled).toEqual([])
+  })
+
+  // An action cast in from outside the enum must be DENIED at the matrix tail, never inherit a grant (TRDD-L6VV9Q7U).
+  it('an action absent from ACTION_POLICY is DENIED for MANAGER and COS — the tail guard', () => {
+    const unknown = 'not-a-real-action' as AuthAction
+    const m = authorize(asManager(), unknown, 'member-b1')
+    expect(m.allowed).toBe(false)
+    expect(m.reason).toMatch(/No authorization policy is defined/)
+    const c = authorize(asCosA(), unknown, 'member-a2')
+    expect(c.allowed).toBe(false)
+    expect(c.reason).toMatch(/No authorization policy is defined/)
+  })
+
+  it('lost-branch guard: a kind "branch" row whose branch never ran is DENIED for MANAGER, not granted', () => {
+    const name = 'synthetic-branch-action' as AuthAction
+    // Mutates the exported ACTION_POLICY (restored in `finally`): this file must NOT be marked concurrent.
+    const table = ACTION_POLICY as Record<string, unknown>
+    table[name] = { kind: 'branch', rule: 'synthetic' }
+    try {
+      const d = authorize(asManager(), name, 'member-b1')
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toMatch(/decided by its own branch, which did not run/)
+    } finally {
+      delete table[name]
+    }
+    expect(name in ACTION_POLICY).toBe(false)
+  })
+
+  it('unruled guard: a kind "unruled" row is DENIED for MANAGER and names the card', () => {
+    const name = 'synthetic-unruled-action' as AuthAction
+    // Mutates the exported ACTION_POLICY (restored in `finally`): this file must NOT be marked concurrent.
+    const table = ACTION_POLICY as Record<string, unknown>
+    table[name] = { kind: 'unruled', rule: 'synthetic' }
+    try {
+      const d = authorize(asManager(), name, 'member-b1')
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toMatch(/TRDD-L6VV9Q7U/)
+    } finally {
+      delete table[name]
+    }
+    expect(name in ACTION_POLICY).toBe(false)
+  })
+
+  it('the UNRULED marker: exactly the four legacy rows carry it; kind "unruled" is the only other place the word may appear', () => {
+    const flagged = Object.entries(ACTION_POLICY)
+      .filter(([, p]) => /^UNRULED/.test(p.rule))
+      .map(([a]) => a)
+      .sort()
+    expect(flagged).toEqual(['create-session', 'delete-session', 'link-session', 'manage-group'])
+    // Each legacy row is a flagged GRANT with its OWN question text (no shared sentence).
+    const rules = flagged.map((a) => ACTION_POLICY[a as AuthAction].rule)
+    expect(new Set(rules).size).toBe(4)
+    for (const a of flagged) expect(ACTION_POLICY[a as AuthAction].kind).toBe('grant')
+    // Anywhere else the word appears, the row must be kind 'unruled' (none today).
+    const stray = Object.entries(ACTION_POLICY)
+      .filter(([a, p]) => /UNRULED/i.test(p.rule) && !flagged.includes(a) && p.kind !== 'unruled')
+      .map(([a]) => a)
+    expect(stray).toEqual([])
+    expect(Object.values(ACTION_POLICY).filter((p) => p.kind === 'unruled')).toEqual([])
+  })
+})
+
+/**
+ * TRDD-L6VV9Q7U acceptance: the refactor is a PURE NO-OP. Recorded from HEAD 7ba34ec25 on 2026-10-05
+ * (the pre-matrix authorize(), run through the same fixtures); the refactor must reproduce it exactly.
+ * Cell = '' when ALLOWED, else the FULL denial reason. Literal values — never derived from ACTION_POLICY.
+ */
+describe('TRDD-L6VV9Q7U — HEAD baseline: every (action x caller x target) cell is reproduced exactly', () => {
+  const SELF_MOD = 'No agent can modify itself via the AI Maestro API'
+  const SELF_TITLE = 'No agent can change its own governance title'
+  const SELF_DEL = 'No agent can delete itself via API'
+  const OWNER_REG = 'Only the system owner can register agent records'
+  const OWNER_EXP = 'Only the system owner can export an agent — the archive contains keys/private.pem'
+  const TRDD_CTX = 'manage-trdd requires the TRDD context (verb + min-approval-requirement)'
+  const MGR_ONLY_DEL = 'Only MANAGER can delete agents'
+  const MGR_ONLY_TEAM = 'Only MANAGER can manage teams'
+  const CREATE_DENY = 'Only MANAGER and CHIEF-OF-STAFF can create agents (R30.1/R30.2); a COS additionally requires a MANAGER mandate'
+  const r42 = (a: string) => `R42: no agent may ${a} on another agent — not even a MANAGER or CHIEF-OF-STAFF. Messaging is the only channel of agent-to-agent influence: ask, never inject.`
+  const cosTail = (a: string) => `Chief-of-Staff can only ${a} agents in their own team`
+  const memTail = (a: string) => `member cannot ${a} other agents`
+
+  // Columns: MANAGER->member-b1, COS-A->member-a2 (own team), COS-A->member-b1 (other team), MEMBER->member-a2 (peer),
+  // system-owner->member-b1, MANAGER->self, COS-A->self, MEMBER->self.
+  const COLUMNS = ['MANAGER->member-b1', 'COS-A->member-a2', 'COS-A->member-b1', 'MEMBER->member-a2', 'OWNER->member-b1', 'MANAGER->self', 'COS-A->self', 'MEMBER->self']
+  const BASELINE: Record<string, string[]> = {
+    'modify-agent': ['', '', cosTail('modify-agent'), memTail('modify-agent'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'change-title': ['', '', 'Chief-of-Staff can only change titles of agents in their own team', 'Only MANAGER or CHIEF-OF-STAFF can change governance titles', '', SELF_TITLE, SELF_TITLE, SELF_TITLE],
+    'delete-agent': ['', MGR_ONLY_DEL, MGR_ONLY_DEL, MGR_ONLY_DEL, '', SELF_DEL, SELF_DEL, SELF_DEL],
+    'send-command': [r42('send-command'), r42('send-command'), r42('send-command'), r42('send-command'), '', '', '', ''],
+    'restart-session': [r42('restart-session'), r42('restart-session'), r42('restart-session'), r42('restart-session'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'unblock-prompt': ['', '', 'R42.8: a CHIEF-OF-STAFF may only unblock agents of its OWN team', 'R42.8: only a MANAGER or a CHIEF-OF-STAFF may unblock another agent (caller title: member)', '', '', '', ''],
+    'hibernate-agent': ['', '', cosTail('hibernate-agent'), memTail('hibernate-agent'), '', '', '', ''],
+    'wake-agent': ['', '', cosTail('wake-agent'), memTail('wake-agent'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'link-session': ['', '', cosTail('link-session'), memTail('link-session'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'delete-session': ['', '', cosTail('delete-session'), memTail('delete-session'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'create-session': ['', '', cosTail('create-session'), memTail('create-session'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'register-agent': [OWNER_REG, OWNER_REG, OWNER_REG, OWNER_REG, '', OWNER_REG, OWNER_REG, OWNER_REG],
+    'create-agent': ['', '', '', CREATE_DENY, '', '', '', CREATE_DENY],
+    'manage-team': ['', MGR_ONLY_TEAM, MGR_ONLY_TEAM, MGR_ONLY_TEAM, '', '', MGR_ONLY_TEAM, MGR_ONLY_TEAM],
+    'manage-skills': ['', '', cosTail('manage-skills'), memTail('manage-skills'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'manage-group': ['', '', cosTail('manage-group'), memTail('manage-group'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+    'manage-trdd': [TRDD_CTX, TRDD_CTX, TRDD_CTX, TRDD_CTX, '', TRDD_CTX, TRDD_CTX, TRDD_CTX],
+    'export-agent': [OWNER_EXP, OWNER_EXP, OWNER_EXP, OWNER_EXP, '', OWNER_EXP, OWNER_EXP, OWNER_EXP],
+    'view-agent': ['', '', cosTail('view-agent'), memTail('view-agent'), '', SELF_MOD, SELF_MOD, SELF_MOD],
+  }
+  const ASSISTANT = 'R42.8: no title may unblock an ASSISTANT — its session is a human conversation surface, so injected text is indistinguishable from something the human said.'
+  const mk = (t: string) => authenticateFromRequest(requestWith({ Authorization: `Bearer ${t}` }))
+  const cell = (d: { allowed: boolean; reason?: string }) => (d.allowed ? '' : (d.reason ?? '<no reason>'))
+
+  it('the fixture lists exactly the actions of ACTION_POLICY (none added or lost)', () => {
+    expect(Object.keys(BASELINE).sort()).toEqual(Object.keys(ACTION_POLICY).sort())
+  })
+
+  it('the baseline is not degenerate: COS own-team differs from other-team, MANAGER differs from MEMBER', () => {
+    const names = Object.keys(BASELINE)
+    expect(names.some((a) => BASELINE[a][1] === '' && BASELINE[a][2] !== '')).toBe(true)
+    expect(names.some((a) => BASELINE[a][0] === '' && BASELINE[a][3] !== '')).toBe(true)
+    expect(names.every((a) => BASELINE[a][4] === '')).toBe(true)
+  })
+
+  it('every cell of the HEAD baseline is reproduced by the current source', () => {
+    // Default registry answer: a resolvable non-assistant agent for any id (beforeEach resets the mock with no default),
+    // so 'unblock-prompt' is decided by title/team and not by a fixture gap.
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'member' }))
+    const mgr = mk(managerToken), cos = mk(cosAToken), mem = mk(memberToken)
+    const owner = {} as AgentAuthResult
+    const callers: Array<[AgentAuthResult, string]> = [
+      [mgr, 'member-b1'], [cos, 'member-a2'], [cos, 'member-b1'], [mem, 'member-a2'],
+      [owner, 'member-b1'], [mgr, 'manager-1'], [cos, 'cos-a'], [mem, 'member-a1'],
+    ]
+    const mismatches: string[] = []
+    for (const [action, row] of Object.entries(BASELINE)) {
+      callers.forEach(([auth, target], i) => {
+        const got = cell(authorize(auth, action as AuthAction, target))
+        if (got !== row[i]) mismatches.push(`${action} | ${COLUMNS[i]}: got ${JSON.stringify(got)}, baseline ${JSON.stringify(row[i])}`)
+      })
+    }
+    expect(mismatches).toEqual([])
+  })
+
+  it('the unblock-prompt branch paths are reproduced: absent target, ASSISTANT target, registry read that THROWS', () => {
+    const mgr = mk(managerToken), cos = mk(cosAToken)
+    const cases: Array<[string, () => void, AgentAuthResult, string, string]> = [
+      ['MANAGER absent', () => mockGetAgent.mockImplementation(() => undefined), mgr, 'member-b1', 'R42.8: target agent member-b1 is not in the registry — refusing to unblock an unknown session'],
+      ['COS absent', () => mockGetAgent.mockImplementation(() => undefined), cos, 'member-a2', 'R42.8: target agent member-a2 is not in the registry — refusing to unblock an unknown session'],
+      ['MANAGER ASSISTANT', () => mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'assistant' })), mgr, 'member-b1', ASSISTANT],
+      ['COS ASSISTANT', () => mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'assistant' })), cos, 'member-a2', ASSISTANT],
+      ['MANAGER THROWS', () => mockGetAgent.mockImplementation(() => { throw new Error('boom') }), mgr, 'member-b1', 'R42.8: could not read the target agent record — refusing to unblock'],
+    ]
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const mismatches: string[] = []
+      for (const [name, setup, auth, target, expected] of cases) {
+        setup()
+        const got = cell(authorize(auth, 'unblock-prompt', target))
+        if (got !== expected) mismatches.push(`${name}: got ${JSON.stringify(got)}, baseline ${JSON.stringify(expected)}`)
+      }
+      expect(mismatches).toEqual([])
+    } finally {
+      errSpy.mockRestore()
+    }
   })
 })

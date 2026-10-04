@@ -232,6 +232,86 @@ const DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
   'restart-session',
 ])
 
+
+/**
+ * ── TRDD-L6VV9Q7U — the EXPLICIT per-action authorization matrix ───────────
+ *
+ * Before this existed, authorize() ended with two blanket branches: a MANAGER was
+ * unconditionally allowed on any other agent, and a CHIEF-OF-STAFF was allowed
+ * across its own team. So an AuthAction with no dedicated branch ABOVE those two
+ * lines was granted to the two most powerful titles in the system — not because
+ * anyone weighed it, but because nobody wrote a line. The grant was invisible
+ * precisely because it was the ABSENCE of code: adding an AuthAction granted it,
+ * with no diff to review and no test to fail.
+ *
+ * The card's proof is a pair of comments, not a theory: `register-agent` is
+ * system-owner-only because a security review reasoned about the exact
+ * "registry-write + tmux-spawn" primitive that `create-session` IS — and
+ * `create-session` was handed to every MANAGER and every COS over its team. Two
+ * identical dangers, two opposite policies, and the difference between them was
+ * an omission rather than a judgment. `link-session` sits in the same family.
+ *
+ * The matrix inverts the default. ACTION_POLICY is Record<AuthAction, ActionPolicy>,
+ * so adding an AuthAction without a row is a TYPE ERROR — the decision becomes a
+ * diff a human reviews instead of a silence nobody sees. An action absent from the
+ * map (a value cast in from outside the enum) is DENIED at the matrix tail, never
+ * admitted.
+ *
+ * Every row cites the rule that authorises it. A row with no rule is, by
+ * construction, an invention — which is what this matrix makes visible.
+ */
+type ActionPolicy =
+  /** A dedicated branch ABOVE the matrix decides this action and always returns. */
+  | { kind: 'branch'; rule: string }
+  /** The matrix tail evaluates it: which titles may act on ANOTHER agent. */
+  | { kind: 'grant'; manager: boolean; cosOwnTeam: boolean; rule: string }
+  /** Fail-closed spelling for a FUTURE action with no rule yet — DENY, pending a USER ruling. The four legacy undecided actions are flagged 'grant' rows ('UNRULED' rule text) instead. */
+  | { kind: 'unruled'; rule: string }
+
+export const ACTION_POLICY: Record<AuthAction, ActionPolicy> = {
+  // ── Governed by a dedicated branch ABOVE the matrix ──────────────────────
+  // Each of these returns before the matrix is reached, because its rule is not
+  // expressible as a title grant: it carries a self-ban, a required target shape,
+  // an approval tier, or an unconditional refusal. The row keeps the Record
+  // exhaustive AND makes REMOVING the branch fail CLOSED here, instead of quietly
+  // reopening the fall-through grant the branch was written to close.
+  'change-title': { kind: 'branch', rule: 'R9/R10 + the no-self-title-change ban — the change-title branch above' },
+  'delete-agent': { kind: 'branch', rule: 'R11 + the no-self-delete ban — the delete-agent branch above' },
+  'manage-team': { kind: 'branch', rule: 'R9/R10/R12 — the manage-team branch above' },
+  'create-agent': { kind: 'branch', rule: 'R30.1/R30.2 — the create-agent branch above' },
+  'register-agent': { kind: 'branch', rule: 'SVC2-CRIT-04, system-owner only — the register-agent branch above' },
+  'export-agent': { kind: 'branch', rule: 'TRDD-YEE33F3A, system-owner only — the export-agent branch above' },
+  'manage-trdd': { kind: 'branch', rule: 'TRDD-K2WJH7RF, the approval-tier matrix — the manage-trdd branch above' },
+  'unblock-prompt': { kind: 'branch', rule: 'R42.8 — the unblock-prompt branch above (never an ASSISTANT target; MANAGER, or CHIEF-OF-STAFF over its own team)' },
+
+  // ── Evaluated by the matrix tail (the former "General rules") ────────────
+  // `manager` / `cosOwnTeam` are the grants that used to be IMPLICIT in the two
+  // blanket branches. Each row states the rule that authorises it: these are the
+  // DECIDED policies the card contrasts with the undecided four below.
+  'modify-agent': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'R42.6 (cross-agent CONFIGURATION is preserved; only cross-agent DRIVE is revoked)' },
+  'manage-skills': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'R42.6 (cross-agent CONFIGURATION is preserved; only cross-agent DRIVE is revoked)' },
+  'wake-agent': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'R10.3 (LIFECYCLE: start a process; it never makes the victim act)' },
+  'hibernate-agent': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'R10.3 (LIFECYCLE: stop a process; it never makes the victim act)' },
+  'view-agent': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'read-only — the card classes it harmless, so there is no restriction to state' },
+  // R42 revokes cross-agent DRIVE for EVERY title. The R42 branch above denies it
+  // first, so these rows are reached only on a self-target, which SELF_DRIVE_ACTIONS
+  // already decided. `false/false` restates the rule HERE too, so no future
+  // re-ordering of the branches can resurrect the grant it revoked.
+  'send-command': { kind: 'grant', manager: false, cosOwnTeam: false, rule: 'R42 (no agent may inject a command into another agent, under any title)' },
+  'restart-session': { kind: 'grant', manager: false, cosOwnTeam: false, rule: 'R42 (stop/restart are keystroke injection, whatever the route is named)' },
+
+  // ── UNRULED LEGACY GRANTS — status quo preserved, NOT a decision (TRDD-L6VV9Q7U) ──
+  // These four are the ones the card names. This change is a pure no-op: they keep
+  // the grant they always had (MANAGER and own-team CHIEF-OF-STAFF allowed), which
+  // was never a decision but the ABSENCE of one. Each rule string starts with
+  // 'UNRULED' so the set stays greppable and a test pins it; the USER ruling moves
+  // the row. An engineer must not choose for them in either direction.
+  'delete-session': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. PENDING USER ANSWER asked 2026-10-05: a process-level session kill may be a hard-kill reserved to the user (see TRDD-A50RC5G8). TRDD-L6VV9Q7U ruling 1.' },
+  'create-session': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. Pending TRDD-L6VV9Q7U ruling 2: registry-write + tmux-spawn primitive; register-agent is system-owner only.' },
+  'link-session': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. Pending TRDD-L6VV9Q7U ruling 2: the same registry-write primitive family as create-session/register-agent.' },
+  'manage-group': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. Pending TRDD-L6VV9Q7U ruling 3: R1 defines groups but never says who administers them.' },
+}
+
 // ============================================================================
 // Authorization
 // ============================================================================
@@ -706,22 +786,66 @@ export function authorize(
     return { allowed: false, reason: 'No agent can modify itself via the AI Maestro API' }
   }
 
-  // ── General rules ──────────────────────────────────────────
-
-  // MANAGER → always allowed (for actions on OTHER agents)
-  if (title === 'manager') {
-    return { allowed: true }
+  // ── General rules → THE MATRIX TAIL (TRDD-L6VV9Q7U) ─────────
+  //
+  // Before this, the tail was two BLANKET branches: MANAGER -> unconditional
+  // allow, CHIEF-OF-STAFF -> own-team allow. So any AuthAction with no dedicated
+  // branch ABOVE them was granted to both titles — not by a decision, but by the
+  // ABSENCE of one, and an AuthAction added tomorrow would be granted the moment
+  // it was defined, with no diff to review and no test to fail.
+  //
+  // Every action still reaching this point is now decided from ACTION_POLICY.
+  // An action absent from the map (a value cast in from outside the enum) is
+  // DENIED: the safe default for a new value is do-nothing, and only this
+  // spelling has it.
+  const policy = ACTION_POLICY[action]
+  if (!policy) {
+    return {
+      allowed: false,
+      reason: `No authorization policy is defined for action "${String(action)}" — denying (TRDD-L6VV9Q7U)`,
+    }
   }
 
-  // CHIEF-OF-STAFF → own team agents only (target required for agent-scoped actions)
+  // A 'branch' action is decided by its own branch ABOVE and must never arrive
+  // here. If one does, its branch was lost or re-ordered: DENY rather than fall
+  // through to a grant, or removing a gate would reopen the hole silently —
+  // which is precisely the failure mode this matrix exists to prevent.
+  if (policy.kind === 'branch') {
+    return {
+      allowed: false,
+      reason: `The policy for "${action}" is decided by its own branch, which did not run — denying rather than inheriting a grant (TRDD-L6VV9Q7U)`,
+    }
+  }
+
+  // UNRULED: no governance rule authorises this action yet. Fail CLOSED and name
+  // the ruling that must be made — a plausible value shipped by an engineer
+  // becomes law by deployment, indistinguishable from a decision anyone made.
+  if (policy.kind === 'unruled') {
+    return {
+      allowed: false,
+      reason: `No rule authorises "${action}" — undecided governance question, denied by default (TRDD-L6VV9Q7U: ${policy.rule})`,
+    }
+  }
+
+  // ── Decided grants: R42.6 configuration, R10.3 lifecycle, read-only ──
+  // MANAGER → only where its row grants it. This was the blanket; it is now the
+  // same decision, STATED, with the authorising rule named beside it.
+  if (title === 'manager') {
+    if (policy.manager) return { allowed: true }
+    return { allowed: false, reason: `MANAGER may not ${action} another agent (${policy.rule})` }
+  }
+
+  // CHIEF-OF-STAFF → own team agents only, and only where its row grants it.
   if (title === 'chief-of-staff') {
     if (!targetAgentId) {
       return { allowed: false, reason: 'Chief-of-Staff must specify a target agent' }
     }
-    const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-    const targetTeamId = lookupTeamIdForAgent(targetAgentId)
-    if (cosTeamId && cosTeamId === targetTeamId) {
-      return { allowed: true }
+    if (policy.cosOwnTeam) {
+      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
+      if (cosTeamId && cosTeamId === targetTeamId) {
+        return { allowed: true }
+      }
     }
     return { allowed: false, reason: `Chief-of-Staff can only ${action} agents in their own team` }
   }

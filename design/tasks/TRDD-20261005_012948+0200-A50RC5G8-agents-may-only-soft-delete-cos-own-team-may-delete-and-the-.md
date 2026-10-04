@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: todo
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T01:37:47+0200
+updated: 2026-10-05T01:41:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,9 +17,10 @@ mandated-by: user
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T01:29:48+0200
-parent-trdd: L6VV9Q7U
-derived: true
-derived-kind: eht
+
+derived: false
+
+relevant: [TRDD-L6VV9Q7U]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only

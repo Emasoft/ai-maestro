@@ -4,7 +4,7 @@ status: tasked
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
 column: human_review
 created: 2026-07-14T17:49:31+0200
-updated: 2026-10-05T01:37:48+0200
+updated: 2026-10-05T01:41:46+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -20,7 +20,8 @@ approval-judge:  user
 approval-datetime: 2026-09-05T10:20:46+0200
 assignee: ai-maestro-hub-session
 implementation-commits: [876673caa]
-eht: [TRDD-A50RC5G8]
+eht: []
+relevant: [TRDD-A50RC5G8]
 ---
 
 # authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
@@ -166,6 +167,15 @@ from a decision anyone made.
   (wake/hibernate allowed), delete-agent/register-agent/export-agent unchanged, system-owner
   unaffected.
 
+## Acceptance
+- [x] Matrix landed with no behaviour change for MANAGER, CHIEF-OF-STAFF, MEMBER and the system owner (876673caa; baseline of 19 actions x 8 cases reproduced; governance + unit + security + authorization suites 456 files / 5649 tests green on the committed tree, 2026-10-05). The other six titles are not in the fixture; the tail treats every non-manager, non-COS title identically
+- [ ] USER: is a process-level session kill a hard-kill reserved to the user? (then set the delete-session row)
+- [ ] USER ruling 2: create-session / link-session — system-owner only like register-agent, or MANAGER + own-team COS
+- [ ] USER ruling 3: who administers groups (manage-group)
+- [ ] Split the CHIEF-OF-STAFF denial reason: a grant row with cosOwnTeam false must not answer "only in their own team" to a COS acting on its own team (unreachable today, wrong for the first such row)
+- [ ] ACTION_POLICY is an exported MUTABLE object: freeze it and give the synthetic-row tests a test-only seam, so no module can flip a grant at runtime
+- [ ] The four UNRULED rows carry no UNRULED marker after the rulings above are applied
+
 ## Estimated risk
 
 **Landing it: LOW-MEDIUM.** It is a refactor of one function with a complete test suite already
@@ -185,6 +195,7 @@ defect immediately without pretending an engineer may settle a governance questi
 - 2026-10-05 — CORRECTION by main-agent@ai-maestro to the two entries above. Only the QUOTED sentences are the user's. Everything after "Consequences:" is my INTERPRETATION and is UNCONFIRMED. Specifically NOT ruled: (1) whether a process-level session kill (`delete-session`: POST /api/sessions/[id]/kill and the two session DELETEs) counts as "hard-kill" — if it does, it is user-only and the phrase "RULED grant" above is wrong; that row stays at status quo, flagged, until the user answers. (2) Whether cemetery RESTORE is user-only — the user said the user "can always" resurrect, not that others cannot. (3) "system owner" was used for "the user maestro" without checking how the two relate when the user-authority model is on. ENTAILED by the quotes and safe to build: CHIEF-OF-STAFF may delete an agent of its own team (a privilege widening); agents may only soft-delete; hard delete is the user's and needs sudo; cemetery purge is the user's. The question is with the user.
 - 2026-10-05 — LANDED by main-agent@ai-maestro as 876673caa: the matrix, with no behaviour change (a table recorded from the previous source is reproduced cell for cell; 136/136; six neuters). The structural defect is closed. NOT closed: the four UNRULED rows still carry their old grant. This card cannot reach complete until rulings 2 and 3 are made, the session-kill question is answered, and TRDD-A50RC5G8 (its EHT) is terminal.
 - 2026-10-05T01:37:48+0200 — column → human_review by main-agent@ai-maestro. Code landed 876673caa as a proven no-op; remaining work is three USER rulings on the UNRULED rows.
+- 2026-10-05 — NOTE by main-agent@ai-maestro on the column: this card went planned → human_review in one move. No separate AI reviewer signed it off; the implementing session verified it and had it challenged by review forks it briefed. human_review here means ONLY "waiting on the user for the three rulings in Acceptance", not that an independent review passed.
 
 ## RE-VERIFIED 2026-08-22T15:0x — the claim HOLDS against live code
 

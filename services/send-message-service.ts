@@ -183,6 +183,21 @@ async function resolveRecipientUserTitle(
 }
 
 /**
+ * R39.5/R39.9/R39.10 (TRDD-U4KP0H92) — resolve the ASSISTANT's channel set SERVER-SIDE from the
+ * registries (user-registry bound user + governance MANAGER pointer + the collaboration store).
+ * Returns null for a non-assistant sender, so every other title is untouched; an assistant sender
+ * whose context cannot be resolved falls through to the graph's fail-closed deny. Recomputed PER
+ * MESSAGE — a collaboration revoked between two sends is closed on the second one, no cache to expire.
+ */
+async function resolveAssistantChannelContext(
+  senderAgentId: string,
+  recipientAgentId: string | null,
+): Promise<import('@/lib/communication-graph').AssistantSenderContext | null> {
+  const { resolveAssistantSenderContext } = await import('@/lib/assistant-collaboration')
+  return resolveAssistantSenderContext(senderAgentId, recipientAgentId)
+}
+
+/**
  * All-in-one message sender. Validates, routes, delivers, and notifies.
  */
 export async function SendMessage(
@@ -388,10 +403,21 @@ export async function SendMessage(
         ? await resolveRecipientUserTitle(to)
         : undefined
 
+
+      // R39.5/R39.9/R39.10 (TRDD-U4KP0H92) — the ASSISTANT's channel set is resolved
+      // SERVER-SIDE, per message, from the registries (user-registry + governance
+      // MANAGER pointer + collaboration store). Null for any non-assistant sender, so
+      // every other title's route is byte-identical to before; an assistant whose
+      // context cannot be resolved falls through to the graph's fail-closed deny.
+      const assistantSender = senderTitle === 'assistant' && senderAgentId
+        ? await resolveAssistantChannelContext(senderAgentId, recipientAgentId)
+        : null
+
       const gate = assertAgentRouteAllowed({
         senderTitle,
         recipient: { title: recipientTitle, hostId: recipientHostId, isHuman: recipientIsHuman, userTitle: recipientUserTitle },
         inReplyTo: input.inReplyTo,
+        ...(assistantSender ? { assistantSender } : {}),
       })
       ops.push(...gate.ops.map(o => o.replace(/^GATE:/, 'G06:')))
       if (!gate.allowed) {

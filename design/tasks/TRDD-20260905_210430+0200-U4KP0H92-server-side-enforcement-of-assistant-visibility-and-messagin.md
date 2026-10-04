@@ -4,7 +4,7 @@ status: tasked
 title: Server-side enforcement of ASSISTANT visibility and messaging restrictions
 column: todo
 created: 2026-09-05T21:04:30+0200
-updated: 2026-09-05T21:07:20+0200
+updated: 2026-10-04T18:22:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: security
@@ -30,9 +30,9 @@ This EHT gates TRDD-3QRUDK12's completion — the parent mandate is not complete
 Implement SERVER-SIDE (not merely hook-based) enforcement of the ASSISTANT visibility/messaging matrix: by default an ASSISTANT sees and messages nobody except the MANAGER; once the MANAGER approves the USER as a project collaborator, the ASSISTANT gains visibility/messaging ONLY to agents working that same project. This closes the hole that auto-provisioning (TRDD-HB3OKWBN) opens — an ASSISTANT must not reach unauthorized agents even if a hook is bypassed.
 
 ## Acceptance
-- [ ] By default a newly-provisioned ASSISTANT can message only the MANAGER, enforced server-side (not solely by a client-side or hook check)
-- [ ] After MANAGER approval of a project collaboration, the ASSISTANT's visibility/messaging server-side check expands to exactly the agents on that one project, no others
-- [ ] Revoking the collaboration approval removes the ASSISTANT's server-side visibility/messaging grant for that project
+- [x] By default a newly-provisioned ASSISTANT can message only the MANAGER, enforced server-side (not solely by a client-side or hook check) — wired in send-message-service G06 + amp-service local delivery + getReachableAgents via lib/assistant-collaboration.ts (R39.9 approval-gated)
+- [x] After MANAGER approval of a project collaboration, the ASSISTANT's visibility/messaging server-side check expands to exactly the agents on that one project, no others — R39.10 collaborator grants in ~/.aimaestro/assistant-collaborations.json, the graph's recipientIsProjectCollaborator allow branch
+- [x] Revoking the collaboration approval removes the ASSISTANT's server-side visibility/messaging grant for that project — revokeCollaboration sets revokedAt; the resolver recomputes per message so the edge re-closes on the next send
 
 ## Approval log
 

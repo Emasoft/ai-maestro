@@ -81,6 +81,15 @@ export interface AssistantSenderContext {
    * USER-gated task assignment, "never a command, never a mandate (R41 holds)".
    */
   userPermitsManagerCollaboration: boolean
+  /**
+   * Recipient is a collaborator the MANAGER assigned on a shared project (R39.10, TRDD-U4KP0H92).
+   *
+   * The server-side collaboration registry decides this — an approved, UNREVOKED
+   * assistant↔collaborator edge for one project. Scoped to exactly that collaborator, never
+   * general visibility; revoking the approval removes the grant, so the resolver recomputes it
+   * from the store on every message and never caches it into the assistant's own record.
+   */
+  recipientIsProjectCollaborator: boolean
 }
 
 /** Edge type between two graph nodes. */
@@ -402,6 +411,15 @@ export function validateMessageRoute(
         suggestion: ROUTING_SUGGESTIONS['assistant->*'],
         edgeType: 'deny',
       }
+    }
+    // R39.10 (TRDD-U4KP0H92) — the scoped collaboration expansion. With the bound user's
+    // R39.9 permission, the MANAGER may assign a collaborator agent on a shared project; the
+    // assistant then becomes MUTUALLY visible with exactly that agent (and only that agent —
+    // never a general visibility opening). The resolver recomputes this flag from the
+    // server-side collaboration registry on EVERY message, so revoking the approval re-closes
+    // the edge with no code change and no cached grant to expire.
+    if (as?.recipientIsProjectCollaborator) {
+      return { allowed: true, edgeType: 'allow' }
     }
     return {
       allowed: false,

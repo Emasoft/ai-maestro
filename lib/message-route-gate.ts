@@ -109,6 +109,13 @@ export interface AgentRouteGateInput {
   recipient: RouteGateRecipient
   /** Set when this message replies to a prior one; R6 reply-only edges need it. */
   inReplyTo?: string
+  /**
+   * R39.5/R39.9/R39.10 (TRDD-U4KP0H92) — the ASSISTANT relational block, resolved
+   * SERVER-SIDE by lib/assistant-collaboration.ts. Context for an assistant
+   * sender: without it the graph denies (fail-closed), the correct default for
+   * a title with no resolved channel set.
+   */
+  assistantSender?: import('@/lib/communication-graph').AssistantSenderContext
 }
 
 export interface RouteGateResult {
@@ -171,6 +178,11 @@ export function assertAgentRouteAllowed(input: AgentRouteGateInput): RouteGateRe
       recipientIsHuman,
       recipientUserTitle: recipient.userTitle,
       inReplyToMessageId: inReplyTo,
+      // TRDD-U4KP0H92 — the ASSISTANT relational block flows through the ONE gate like
+      // every other relational context: both send paths resolve it server-side
+      // (lib/assistant-collaboration.ts) and hand it in here. An assistant sender with
+      // no block stays denied — fail-closed, unchanged.
+      ...(input.assistantSender ? { assistantSender: input.assistantSender } : {}),
     })
 
     if (!graph.allowed) {

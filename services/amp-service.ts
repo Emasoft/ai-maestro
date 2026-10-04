@@ -1285,6 +1285,20 @@ export async function routeMessage(
         recipientIsUser: false,
       }
     }
+    // TRDD-U4KP0H92 — resolve the ASSISTANT's channel set SERVER-SIDE (R39.5/R39.9/R39.10):
+    // bound user + the MANAGER while the user approves the collaboration + exactly the
+    // unrevoked R39.10 project collaborators. Null for any non-assistant sender, so every
+    // other title's route is unchanged; an assistant with no resolvable context stays
+    // fail-closed. Recomputed per message so a revocation re-closes the edge immediately.
+    let assistantSenderCtx: import('@/lib/communication-graph').AssistantSenderContext | null = null
+    if (String(senderTitle ?? '').toLowerCase() === 'assistant') {
+      try {
+        const { resolveAssistantSenderContext } = await import('@/lib/assistant-collaboration')
+        assistantSenderCtx = await resolveAssistantSenderContext(senderAgent?.id || '', resolvedAgentId || null)
+      } catch {
+        assistantSenderCtx = null
+      }
+    }
 
     const graphCheck = validateMessageRoute(senderTitle, recipientTitle, {
       // Model ON + user sender → relational userSender (R38.2). Otherwise the
@@ -1293,6 +1307,8 @@ export async function routeMessage(
       ...(userSenderCtx ? { userSender: userSenderCtx } : { isUserMessage: isUserSender }),
       recipientIsHuman,
       inReplyToMessageId: inReplyToId,
+      // TRDD-U4KP0H92 — the ASSISTANT's channel set rides into the graph here.
+      ...(assistantSenderCtx ? { assistantSender: assistantSenderCtx } : {}),
     })
     if (!graphCheck.allowed) {
       const suggestion = graphCheck.suggestion ? ` ${graphCheck.suggestion}.` : ''

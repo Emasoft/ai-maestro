@@ -308,12 +308,12 @@ Row format is fixed so a regex parses each line:
 | R39.2 | UNENFORCED | — | — |
 | R39.3 | UNENFORCED | — | — |
 | R39.4 | UNENFORCED | — | — |
-| R39.5 | CONTRADICTED | lib/communication-graph.ts:361-373 — the branch grants `recipientIsOwnUser \|\| recipientIsActiveMaestro`, i.e. the pre-2026-07-22 shape; the CURRENT text grants own user + **the MANAGER** and says outright it obeys "not the MAESTRO *user*". Also UNREACHABLE — nothing in production builds an `assistantSender` block, so the branch always falls through to deny. Downgraded from ENFORCED by the TRDD-SPS63XHA ruling: a citation naming real, working code that enforces a SUPERSEDED rule is invisible to every instrument we have. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
+| R39.5 | ENFORCED | lib/assistant-collaboration.ts, lib/message-route-gate.ts, services/send-message-service.ts | tests/unit/assistant-collaboration.test.ts |
 | R39.6 | ENFORCED | services/element-management-service.ts (DeleteAgent::G01b) | tests/services/element-management-assistant-title.test.ts |
-| R39.7 | CONTRADICTED | lib/communication-graph.ts:113-118 — the empty `'assistant'` edge set is a CORRECT encoding of invisibility, but its own comment states the pre-2026-07-22 shape ("its own user + the active MAESTRO") and the relational branch it defers to is the R39.5 one downgraded above. The current text adds **the MANAGER** (R39.9) and any MANAGER-assigned collaborator on a shared repo (R39.10) as the exceptions to invisibility, and neither is encoded anywhere. Downgraded by the TRDD-SPS63XHA ruling. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
+| R39.7 | ENFORCED | lib/communication-graph.ts, services/governance-service.ts | tests/unit/assistant-collaboration.test.ts, tests/unit/communication-graph-user-routing.test.ts |
 | R39.8 | UNENFORCED | — | — |
-| R39.9 | UNENFORCED | — | — |
-| R39.10 | UNENFORCED | — | — |
+| R39.9 | ENFORCED | lib/communication-graph.ts, lib/assistant-collaboration.ts, types/user.ts | tests/unit/assistant-collaboration.test.ts, tests/unit/communication-graph-user-routing.test.ts |
+| R39.10 | ENFORCED | lib/communication-graph.ts, lib/assistant-collaboration.ts, services/governance-service.ts | tests/unit/assistant-collaboration.test.ts |
 | R40.1 | ENFORCED | services/element-management-service.ts:245-272, services/element-management-service.ts:7517-7531, services/teams-service.ts:271-277 | tests/governance/r40-foreign-user-creation.test.ts |
 | R40.2 | INVENTED | — | — |
 | R41.1 | ENFORCED | lib/trdd-authz.ts:105-131 | tests/unit/manage-trdd-authorization.test.ts |

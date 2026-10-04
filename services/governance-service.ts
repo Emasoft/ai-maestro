@@ -237,6 +237,10 @@ export async function setGovernancePassword(params: {
 // ---------------------------------------------------------------------------
 const reachableCache = new Map<string, { ids: string[]; expiresAt: number }>()
 const CACHE_TTL_MS = 5_000
+// R39.10 (TRDD-U4KP0H92) — the ASSISTANT visibility authority: unrevoked collaborator grants.
+import { getAssistantCollaborators } from '@/lib/assistant-collaboration'
+// R39.9 — the bound user's standing MANAGER-collaboration approval.
+import { loadUsers } from '@/lib/user-registry'
 
 export function getReachableAgents(agentId: string | null): ServiceResult<{ reachableAgentIds: string[] }> {
   if (!agentId) {
@@ -254,10 +258,41 @@ export function getReachableAgents(agentId: string | null): ServiceResult<{ reac
     return { data: { reachableAgentIds: cached.ids }, status: 200 }
   }
 
+
   const allAgents = loadAgents()
   const reachableAgentIds: string[] = []
 
+  // R39.5/R39.7/R39.9/R39.10 (TRDD-U4KP0H92) — SERVER-SIDE VISIBILITY for an ASSISTANT:
+  // the team-membership filter below is meaningless for an assistant (it can never join a
+  // team — R39.4), so its reachable set comes from the collaboration authority instead:
+  // the MANAGER (only while the bound user approves the R39.9 collaboration) and exactly
+  // the unrevoked R39.10 project collaborators. Everyone else is invisible — recomputed
+  // per call so a revocation re-closes the visibility on the next poll.
+  const senderAgent = allAgents.find(a => a.id === agentId)
+  if (senderAgent && String(senderAgent.governanceTitle || '').toLowerCase() === 'assistant') {
+    const boundUser = loadUsers().find(u => !u.deletedAt && u.assistantAgentId === agentId)
+    const permitted = boundUser?.managerCollaborationApproved === true
+    const collaboratorIds = new Set(getAssistantCollaborators(agentId))
+    for (const agent of allAgents) {
+      if (agent.id === agentId) continue
+      if (agent.deletedAt) continue
+      const recipientTitle = String(agent.governanceTitle || '').toLowerCase()
+      if (recipientTitle === 'assistant') continue // assistant↔assistant: never (R39.7)
+      if (recipientTitle === 'manager' && isManager(agent.id) && permitted) {
+        reachableAgentIds.push(agent.id)
+        continue
+      }
+      if (collaboratorIds.has(agent.id)) {
+        reachableAgentIds.push(agent.id)
+        continue
+      }
+    }
+    reachableCache.set(agentId, { ids: reachableAgentIds, expiresAt: Date.now() + CACHE_TTL_MS })
+    return { data: { reachableAgentIds }, status: 200 }
+  }
+
   for (const agent of allAgents) {
+
     if (agent.id === agentId) continue
     if (agent.deletedAt) continue
 

@@ -73,6 +73,13 @@ export interface UserRecord {
    * Native users do not need approval.
    */
   approvedByMaestroAt?: string
+  /**
+   * R39.9 (TRDD-U4KP0H92) — the standing approval that opens this user's ASSISTANT's
+   * MANAGER channel. Absent/false → the channel does not exist (server-side, both send
+   * paths). Set only by user-authority flows; the server recomputes the channel set from
+   * this field per message, so clearing it re-closes the channel immediately.
+   */
+  managerCollaborationApproved?: boolean
   /** ISO timestamp when the record was created. */
   createdAt: string
   /** ISO timestamp when soft-deleted (cemetery model, R39.6). Absent → active. */

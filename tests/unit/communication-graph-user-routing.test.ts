@@ -139,12 +139,14 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     recipientIsOwnUser: true,
     recipientIsManager: false,
     userPermitsManagerCollaboration: false,
+    recipientIsProjectCollaborator: false,
   }
   /** The MANAGER, with the bound user's standing approval — the one agent channel R39.9 grants. */
   const toManagerPermitted: AssistantSenderContext = {
     recipientIsOwnUser: false,
     recipientIsManager: true,
     userPermitsManagerCollaboration: true,
+    recipientIsProjectCollaborator: false,
   }
   /** The same recipient with the gate CLOSED. Reachable node, unopened channel — a different fact
    *  from "no edge", and the pair is what makes the gate observable from outside. */
@@ -152,11 +154,13 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     recipientIsOwnUser: false,
     recipientIsManager: true,
     userPermitsManagerCollaboration: false,
+    recipientIsProjectCollaborator: false,
   }
   const toOther: AssistantSenderContext = {
     recipientIsOwnUser: false,
     recipientIsManager: false,
     userPermitsManagerCollaboration: false,
+    recipientIsProjectCollaborator: false,
   }
 
   it('ASSISTANT → own user = allow', () => {
@@ -214,42 +218,25 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     expect(r.allowed).toBe(false)
   })
 
-  it('NO PRODUCTION CALLER builds an assistantSender block — so the whole R39.5 branch is unreachable', () => {
-    // This is the fact that makes the superseded grant above HARMLESS today, and it is exactly the
-    // kind of fact that stops being true silently. `assistantSender` is declared in
-    // lib/communication-graph.ts, read once in validateMessageRoute, and constructed ONLY in tests
-    // — no route, service, or handler supplies it, so at runtime an ASSISTANT sender always falls
-    // through to the fail-closed deny.
-    //
-    // WHAT THIS NOW GUARDS, since the over-broad grant it originally watched for is gone: the
-    // branch is CORRECT but still DEAD, so every assertion above describes code no caller reaches.
-    // That is a weaker claim than it looks, and the honest place to say so is here. This test
-    // reddens the moment a producer appears — the reminder to re-upgrade the CONTRADICTED
-    // R39.5/R39.7 map rows in the same commit, since only then is the rule genuinely enforced.
-    // Verified by reading the call graph, not by grep alone — the TITLE_PLUGIN_MAP episode is what
-    // a confident grep-only reading costs.
-    const roots = ['app', 'services', 'lib']
-    const producers: string[] = []
-    const walk = (dir: string): void => {
-      for (const e of readdirSync(dir, { withFileTypes: true })) {
-        const p = join(dir, e.name)
-        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p); continue }
-        if (!/\.(ts|tsx|mjs)$/.test(e.name)) continue
-        const src = readFileSync(p, 'utf-8')
-        // A PRODUCER passes the block into a call; the declaration and the single read live in
-        // communication-graph.ts itself and are not producers.
-        if (/assistantSender\s*:/.test(src) && !p.endsWith('lib/communication-graph.ts')) producers.push(p)
-      }
-    }
-    for (const r of roots) walk(join(process.cwd(), r))
-    expect(
-      producers,
-      'A production caller now builds an assistantSender block, so the R39.5 branch is LIVE. It ' +
-        'encodes the post-2026-07-22 text (own user, plus the MANAGER while the bound user permits ' +
-        'it) — so this is not a hole to plug but a promotion to make: re-upgrade the CONTRADICTED ' +
-        'R39.5/R39.7 rows in docs/GOVERNANCE-ENFORCEMENT-MAP.md in the SAME commit, and delete ' +
-        'this test, whose whole subject was the absence of a caller.',
-    ).toEqual([])
+  it('a PRODUCTION producer for assistantSender EXISTS — the R39.5/R39.9/R39.10 enforcement is LIVE', () => {
+    // HISTORY (TRDD-U4KP0H92): this slot was the "NO PRODUCTION CALLER" absence-canary, whose own
+    // comment instructed that when a producer appears it must be DELETED and the CONTRADICTED
+    // R39.5/R39.7 rows in docs/GOVERNANCE-ENFORCEMENT-MAP.md re-upgraded in the same change. The
+    // producer now exists — lib/assistant-collaboration.ts::resolveAssistantSenderContext, wired
+    // into send-message-service G06, amp-service local delivery, and getReachableAgents — so the
+    // canary is replaced by this PRESENCE pin: the producer and its two send-path hooks must KEEP
+    // existing. Deleting either side silently reverts the enforcement to dead code, so it reddens
+    // this test. (The pure-graph behaviour of the branch is asserted in
+    // tests/unit/assistant-collaboration.test.ts.)
+    const { readFileSync } = require('fs') as typeof import('fs')
+    const producerSrc = readFileSync(join(process.cwd(), 'lib', 'assistant-collaboration.ts'), 'utf-8')
+    expect(producerSrc).toMatch(/resolveAssistantSenderContext/)
+    const smsSrc = readFileSync(join(process.cwd(), 'services', 'send-message-service.ts'), 'utf-8')
+    expect(smsSrc).toMatch(/resolveAssistantChannelContext/)
+    const ampSrc = readFileSync(join(process.cwd(), 'services', 'amp-service.ts'), 'utf-8')
+    expect(ampSrc).toMatch(/resolveAssistantSenderContext/)
+    const govSrc = readFileSync(join(process.cwd(), 'services', 'governance-service.ts'), 'utf-8')
+    expect(govSrc).toMatch(/getAssistantCollaborators/)
   })
 })
 

@@ -4,11 +4,11 @@ title: Errata and unpinned join for the RC33OAFQ NWTTU0AQ V2BLADSF closures
 column: todo
 status: tasked
 created: 2026-10-05T01:16:19+0200
-updated: 2026-10-05T01:18:10+0200
+updated: 2026-10-05T01:22:03+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
-min-approval-requirement: manager
+min-approval-requirement: none
 scope: project
 project-id: ai-maestro
 assignee: main-agent@ai-maestro
@@ -34,7 +34,7 @@ are wrong or weaker than they read. Archived cards are immutable, so the correct
    card's recommendation and was NOT taken. No ruling existed before the code shipped; the text in
    the card was written at closure by the closing session, describing the diff. Option 1
    was neither chosen nor rejected by anyone with the authority to rule. Whether the agent surface stays is
-   UNDECIDED, see the acceptance box below. An earlier draft of this card said declining option 1 "costs nothing" because an agent can read its own transcript from disk; that was an inference, never measured (same OS user? every client stores transcripts there? file modes?), and is withdrawn.
+   UNDECIDED and filed as proposal TRDD-L1DWSSOZ. An earlier draft of this card said declining option 1 "costs nothing" because an agent can read its own transcript from disk; that was an inference, never measured, and is withdrawn.
 2. **All three cards record `--approver user`. The USER did not approve those moves personally.**
    They were made by the main session under the standing goal "complete all TRDDs. do not wait for
    my approval". The truthful identity was `main-agent@<project-id>`.
@@ -46,7 +46,7 @@ are wrong or weaker than they read. Archived cards are immutable, so the correct
    are the shared route-authorization ledger.
 
 Checked and NOT a defect: headless parity for RC33OAFQ. `services/headless-router.ts:783-785`
-delegates to the same route handler, and `forwardAuthHeaders` (same file) copies `authorization`, `cookie`, `x-agent-id` and `x-sudo-token` into the delegated request, so `requireAuth` sees the real caller in both server modes. READ on 2026-10-05, not tested: no headless test drives this route.
+delegates to the same route handler, and `forwardAuthHeaders` (same file) copies `authorization`, `cookie`, `x-agent-id` and `x-sudo-token` into the delegated request. `authenticateAgent` (lib/agent-auth.ts) returns 401 for a request with no credentials and 401 for `X-Agent-Id` without `Authorization`; only a valid session cookie resolves to the system owner. READ on 2026-10-05, not tested: no headless test drives this route.
 
 ## Proposed fix
 
@@ -63,9 +63,9 @@ delegates to the same route handler, and `forwardAuthHeaders` (same file) copies
 - [ ] NWTTU0AQ mutations 1 and 2 re-run at HEAD, red sets recorded
 - [ ] V2BLADSF neuters A and B re-run at HEAD, red sets recorded
 - [ ] Un-mocked route-to-service 403 test added, with its own neuter
-- [ ] DECISION (manager tier, inherited from RC33OAFQ): keep agent own-transcript access on conversations/parse, or tighten to operator-only (option 1, the original recommendation — no agent-side caller exists)
+The operator-only vs own-transcript DECISION is not this card's to make: it is filed as proposal TRDD-L1DWSSOZ (manager tier). This card is the errata record plus the Tier-0 verification chores below.
 - [ ] Headless: one test driving conversations/parse through the headless router with an agent credential, asserting the foreign-transcript refusal
-- [x] KNOWN PERMANENT DEFECT, not forgotten work: the three archived Approval logs still attribute the moves to the user. Archived cards are immutable (the tool refuses even Approval-log appends), so this erratum is the only correction there will be.
+KNOWN PERMANENT DEFECT, not forgotten work: the three archived Approval logs still attribute the moves to the user. `trddgrep edit` refuses any change to an archived card ("nothing may change one, not even `updated:` or the Approval log"), so this erratum is the only correction there will be.
 
 ## Approval log
 

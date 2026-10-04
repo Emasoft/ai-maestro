@@ -6,7 +6,7 @@ column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-10-04T15:49:51+0200
+updated: 2026-10-05T01:22:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,11 +23,15 @@ effort: small
 relevant-rules: [R17]
 npt: []
 eht: []
-blocked-by: issue:ai-maestro#163
+blocked-by: [TRDD-4DC4QYP1]
 release-via: none
 labels: [security, prompt-injection, wake-gate, cross-repo]
 external-refs: [Emasoft/ai-maestro-janitor#167]
 pre-block-column: design
+unblock-when: [trdd:TRDD-4DC4QYP1]
+blocker-probe: gh issue view 163 --repo Emasoft/ai-maestro --json state -q .state
+blocker-holds-if: match:OPEN
+blocker-probe-canary: match:OPEN|CLOSED
 ---
 
 # Refuse to wake an agent whose auto-loaded context is poisoned

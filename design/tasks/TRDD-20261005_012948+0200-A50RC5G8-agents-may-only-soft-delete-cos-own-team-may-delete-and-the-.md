@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: todo
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T01:29:48+0200
+updated: 2026-10-05T01:30:45+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -61,10 +61,12 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
 - [ ] Cemetery purge (and restore, if that is the POST) system-owner only
 - [ ] Each guard neutered, red set recorded; headless path exercised
+- [ ] Hard delete requires BOTH system owner AND a sudo token, enforced where both server modes pass; a test where the owner without a sudo token is refused
 
 ## Approval log
 
 - 2026-10-05 — MANDATE issued by USER (min-approval-requirement: user), relayed and filed by main-agent@ai-maestro. The ruling quoted under Problem is the mandate; no approval request was sent.
+- 2026-10-05 — USER RULING (general rule on hard-kill), verbatim: "in general hard-kill is strictly reserved to the user maestro. it also needs a sudo confirmation from the user." Consequences: no agent, under any title, may hard-kill or hard-delete; the hard path is system-owner only AND requires a sudo token. This settles the reading that agents are soft-only.
 
 ## Approval log
 

@@ -762,3 +762,46 @@ describe('TRDD-L6VV9Q7U — HEAD baseline: every (action x caller x target) cell
     }
   })
 })
+
+/**
+ * TRIPWIRE, not a control. `decideFromPolicy(table, ...)` evaluates only the matrix tail against a caller-supplied
+ * table, so a production module calling it with its own table would bypass every dedicated branch of authorize().
+ * This scan catches the obvious ways to reach it (any mention of the identifier, a wholesale re-export); it cannot
+ * stop dynamic access such as `require('@/lib/authorization')['decide' + 'FromPolicy']`.
+ */
+describe('TRDD-A50RC5G8 — decideFromPolicy is referenced by lib/authorization.ts alone', () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const root = path.resolve(__dirname, '..')
+  const owner = path.join(root, 'lib', 'authorization.ts')
+  const scan = () => {
+    const files: string[] = []
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name)
+        if (e.isDirectory()) { if (e.name !== 'node_modules' && e.name !== '.next') walk(p) }
+        else if (/\.(ts|tsx|mjs|js|sh)$/.test(e.name)) files.push(p)
+      }
+    }
+    for (const d of ['app', 'services', 'lib', 'scripts']) walk(path.join(root, d))
+    files.push(path.join(root, 'server.mjs'))
+    return files.map((f) => ({ f, text: fs.readFileSync(f, 'utf-8') }))
+  }
+
+  it('no other file mentions the identifier anywhere in its text', () => {
+    const all = scan()
+    const hits = all.filter(({ text }) => text.includes('decideFromPolicy')).map(({ f }) => f)
+    // Non-vacuity: the walk is real, and it does see the one legitimate owner.
+    expect(all.length).toBeGreaterThan(100)
+    expect(hits).toContain(owner)
+    expect(hits.filter((f) => f !== owner)).toEqual([])
+  })
+
+  it('no other file re-exports lib/authorization wholesale', () => {
+    const re = /export\s*\*\s*(as\s+\w+\s+)?from\s*['"](\.\/authorization|@\/lib\/authorization|(\.\.\/)+lib\/authorization)['"]/
+    const offenders = scan().filter(({ f, text }) => f !== owner && re.test(text)).map(({ f }) => f)
+    expect(offenders).toEqual([])
+    expect(re.test("export * from '@/lib/authorization'")).toBe(true)
+    expect(re.test("export * from './authorization'")).toBe(true)
+  })
+})

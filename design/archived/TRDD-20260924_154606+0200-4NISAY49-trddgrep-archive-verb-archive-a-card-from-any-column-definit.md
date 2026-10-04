@@ -1,10 +1,10 @@
 ---
 trdd-id: 4NISAY49
-status: tasked
+status: archived
 title: trddgrep archive verb - archive a card from any column, definitively
-column: design
+column: complete
 created: 2026-09-24T15:46:06+0200
-updated: 2026-09-25T17:52:10+0200
+updated: 2026-10-04T15:33:41+0200
 current-owner: ai-maestro-main-session
 created-by: ai-maestro-main-session
 task-type: feature
@@ -26,6 +26,7 @@ implementation-commits: [4bc408427]
 
 - 2026-09-24T15:46:06+0200 — MANDATE issued by ai-maestro-main-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent. (identity redacted 2026-09-24: OS login replaced)
 - 2026-09-24T15:55:39+0200 — column → design by user. owner-mandated 2026-09-24; the design is the pending proposal
+- 2026-10-04T15:33:41+0200 — COMPLETE by main-agent@ai-maestro. Triage CLOSE-MECH: archive verb live in installed trddgrep (~/.local/bin), tests 4a3d94aef+2a58dcd03 landed; column lag was the only gap. Worker grep-verified 2026-10-04..
 
 ## Source
 

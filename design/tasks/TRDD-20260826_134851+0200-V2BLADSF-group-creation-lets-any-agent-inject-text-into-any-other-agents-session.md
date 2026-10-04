@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:48:51+0200
-updated: 2026-09-05T10:21:00+0200
+updated: 2026-10-04T19:00:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -161,12 +161,12 @@ must be **self-only for a plain agent, unrestricted for MANAGER and the system o
       affected path is the CLI's arbitrary `--subscribers`, which is the vector itself.** Section
       above. It also fixes the rule's shape: self-only for a plain agent, unrestricted for
       MANAGER/owner (the operator UI genuinely needs multi-subscriber creation)
-- [ ] Ruling recorded here (fix 1, fix 2, or both; fix 3 is independent and cheap)
-- [ ] Guard implemented in ONE helper shared by `createNewGroup` and `updateGroupById`
-- [ ] Refusal tests (create-with-foreign-subscriber, update-adds-foreign-subscriber) + neuter recorded
-- [ ] Assertion that no notification was delivered on refusal
-- [ ] Positive control (self-only create; MANAGER may name others) still green
-- [ ] Sender attribution decided — `'AI Maestro'` vs the real agent
+- [x] Ruling recorded here (fix 1, fix 2, or both; fix 3 is independent and cheap)
+- [x] Guard implemented in ONE helper shared by `createNewGroup` and `updateGroupById`
+- [x] Refusal tests (create-with-foreign-subscriber, update-adds-foreign-subscriber) + neuter recorded
+- [x] Assertion that no notification was delivered on refusal
+- [x] Positive control (self-only create; MANAGER may name others) still green
+- [x] Sender attribution decided — `'AI Maestro'` vs the real agent
 
 ## Approval log
 
@@ -180,3 +180,15 @@ must be **self-only for a plain agent, unrestricted for MANAGER and the system o
   against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
   `design/proposals/`. Zone only — no content changed and nothing withdrawn.
 - 2026-09-05T10:21:00+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  groups-service still lets create/update set arbitrary subscriberIds . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+
+## RULING (2026-10-04) — fix 1 AND fix 3; fix 2 deliberately NOT taken
+
+**FIX 1 — TAKEN.** One shared helper `checkSubscriberListAuth(subscriberIds, authContext)` in `services/groups-service.ts`, called from BOTH `createNewGroup` and `updateGroupById`, so the two doors cannot drift. The predicate is `subscribeAgent`'s own, lifted verbatim: system owner -> allowed; MANAGER -> allowed (via `isManager`); otherwise every id in the list must be the caller's own. A foreign id is refused 403 naming the id. The guard sits in the SERVICE, so both server modes get it — `services/headless-router.ts` calls `createNewGroup`/`updateGroupById` directly.
+
+**FIX 2 — NOT TAKEN.** Gating `notifyGroupSubscribers` on the R6 graph per recipient would change behaviour for legitimately-built operator groups and was called out as the more invasive option. Fix 1 closes the same vector at its root — the delivery list can no longer be filled with agents the caller does not own — so the graph gate is not needed to close THIS card. It remains the right follow-up if groups ever acquire a legitimate multi-owner model; noted here rather than silently dropped.
+
+**FIX 3 — TAKEN.** `notifyGroupSubscribers` now passes `fromName` = the caller itself (`authContext.agentId` resolved to its registry name), and keeps `"AI Maestro"` ONLY for the system owner, which is the one caller that actually is the system. Hardcoded, an agent-initiated broadcast rendered as `From: AI Maestro - <attacker prose>` at the target, indistinguishable from an operator message.
+
+**ALSO FIXED, FOUND WHILE IMPLEMENTING (a latent defect in this file, not in the card).** All four `isManager` call sites used `const { isManager } = require("@/lib/governance")` — a bare `@` specifier that vitest does not resolve, so it THREW `Cannot find module "@/lib/governance"` rather than evaluating. `subscribeAgent`/`unsubscribeAgent` and `checkGroupMutationAuth` were therefore unreachable under test, and a guard that cannot be driven cannot be neutered. Now a static `import { isManager } from "@/lib/governance"`, matching `services/teams-service.ts`. Safe: `lib/governance.ts` imports `team-registry` and `agent-registry` only, so no cycle exists — the comment justifying the lazy require was wrong.
+
+**Verified:** `tests/unit/group-creation-injection.test.ts` 6/6 (2 refusal + 1 no-delivery + 2 positive controls + 1 attribution), neuter A (both call sites deleted) reds exactly the 3 refusal/delivery tests, neuter B (restore the hardcoded fromName) reds exactly the attribution test. Neighbouring suites green: `r1-groups-are-lightweight` 5/5, `groups-cli` 19/19, `all-in-one-single-path` 3/3, `agent-route-authorization-coverage` 12/12 (ledger did NOT move, as the card predicted). `tsc --noEmit` clean, eslint clean on both touched files.

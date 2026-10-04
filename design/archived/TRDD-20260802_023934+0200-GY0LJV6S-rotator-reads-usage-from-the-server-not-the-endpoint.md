@@ -1,12 +1,12 @@
 ---
 trdd-id: GY0LJV6S
-status: tasked
+status: archived
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-09-29T19:44:26+0200
+updated: 2026-10-04T15:07:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -575,6 +575,7 @@ key* was dead.
 - 2026-09-28T22:20:16+0200 — column → dev by main-agent@ai-maestro. Blocker spent: D8OYFG35/MVZTEKX4 completed — the statusline hook is wired live, snapshots arrive, the verification step can run.
 - 2026-09-28T23:55:00+0200 — second-source for the unblock: live statusline records are verifiably FLOWING (this session's leak-detector saga exists precisely because ~/.aimaestro/statusline-state/ churns fresh .json/.lock/tmp artifacts every ~3s — see governance-rules commits e225d5479/54f00841/71e9cabb), not merely wired. Box-2 condition (snapshots arrive) is evidenced, single-sourcing on settings.json closed.
 - 2026-09-29T17:31:56+0200 — column → testing. Code complete + unit-verified + verify-by-EFFECT done 2026-09-29 (snapshots flow, tick stamp advances, ORH handover confirmed, stash audit closed, 50/50 green)
+- 2026-10-04T15:07:48+0200 — COMPLETE by main-agent@ai-maestro. LIVE-VERIFIED 2026-10-04: docs_dev/TRDD-GY0LJV6S-LIVEVERIFY.md — server serving, usage routes found, statusline hook delivering 13 snapshots today (5h=19/7d=41 matching rotator state), R16 flag off by design (ORH handover)..
 
 ## UNBLOCKED 2026-08-02T11:47:52+0200 — read this before wiring `tick.ts:422`
 

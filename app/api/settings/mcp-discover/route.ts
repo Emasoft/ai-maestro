@@ -28,7 +28,8 @@ import { readFile, realpath } from 'fs/promises'
 import { existsSync, writeFileSync, unlinkSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import os from 'os'
-import { enforceAuth } from '@/lib/route-auth'
+import { z } from 'zod'
+import { enforceAuth, enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,10 +42,32 @@ function shellSafe(input: string): string {
   return input.replace(/[^a-zA-Z0-9._/@:+=-]/g, '')
 }
 
+/**
+ * TRDD-NWTTU0AQ — the ONLY shape the inline `serverConfig` branch may carry.
+ *
+ * An MCP server config's whole purpose is to name a command to spawn, so this branch is a
+ * command-execution surface by definition. The sole legitimate caller
+ * (`components/agent-profile/McpTab.tsx`) echoes back exactly two keys from a config the host
+ * already holds — `command` and `args` — so the branch is narrowed to that shape rather than
+ * to a list of allowed commands. `.strict()` is the load-bearing half: a config carrying `env`,
+ * `cwd` or anything else is REFUSED, not silently forwarded to the spawned process.
+ */
+const HOST_ECHO_SERVER_CONFIG = z
+  .object({
+    command: z.string().min(1),
+    args: z.array(z.string()).optional(),
+  })
+  .strict()
+
 export async function POST(req: NextRequest) {
   // MCP discovery spawns a Python subprocess that reads the caller-
   // supplied configPath. Any authenticated caller may discover tools;
   // agents legitimately need this for the mcp-discovery skill.
+  //
+  // TRDD-NWTTU0AQ: that reasoning is sound for the CONTAINED `configPath` branch below —
+  // discovering a plugin the operator already installed. It does NOT extend to `serverConfig`,
+  // where the caller DEFINES the server, and it never did: the comment is evidence the second
+  // branch was never considered under this ruling, not evidence it was approved.
   const authErr = enforceAuth(req)
   if (authErr) return authErr
 
@@ -108,9 +131,30 @@ export async function POST(req: NextRequest) {
     tmpFile = join(os.tmpdir(), `mcp-discover-${Date.now()}.json`)
     writeFileSync(tmpFile, mcpJsonContent)
   } else if (serverConfig && typeof serverConfig === 'object') {
-    // Standalone: create temp .mcp.json from inline server config
+    // ── TRDD-NWTTU0AQ — the inline branch must not reach a spawn unchecked ──
+    // `mcp_discovery.py` does `subprocess.Popen(command)` from the config it is handed, so this
+    // branch was arbitrary command execution for ANY authenticated agent:
+    // `{"serverName":"x","serverConfig":{"command":"/bin/sh","args":["-c","…"]}}`. `shellSafe`
+    // never covered it — the payload is a JSON object, not a shell string — so hardening
+    // `shellSafe` was never a fix.
+    //
+    // Two layers, per the card's ruling, and BOTH run BEFORE the temp file is written, so a
+    // refused request never produces a config for the script to read:
+    //   1. the OPERATOR must make the call. The sole caller is the operator UI, so owner-only
+    //      breaks nothing; the `configPath` branch above stays available to agents as intended.
+    //   2. a `.strict()` two-key schema, so the branch cannot express more than the shape that
+    //      one caller already sends — defence in depth if the gate is ever loosened.
+    const ownerErr = enforceSystemOwner(req)
+    if (ownerErr) return ownerErr
+    const parsedConfig = HOST_ECHO_SERVER_CONFIG.safeParse(serverConfig)
+    if (!parsedConfig.success) {
+      return NextResponse.json(
+        { error: 'serverConfig must be exactly { command: string, args?: string[] }' },
+        { status: 400 },
+      )
+    }
     const safeName = shellSafe(serverName)
-    const mcpJson = { mcpServers: { [safeName]: serverConfig } }
+    const mcpJson = { mcpServers: { [safeName]: parsedConfig.data } }
     tmpFile = join(os.tmpdir(), `mcp-discover-${Date.now()}.json`)
     writeFileSync(tmpFile, JSON.stringify(mcpJson))
   } else {

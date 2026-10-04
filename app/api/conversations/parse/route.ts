@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseConversationFile } from '@/services/config-service'
-import { enforceAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 import { internalError } from '@/lib/error-response'
 import path from 'path'
 import os from 'os'
@@ -12,10 +12,19 @@ import os from 'os'
  * API2-MAJ-14: conversationFile is restricted to ~/.claude/projects/**.
  * Without this guard the route was a path-traversal vector — an
  * authenticated caller could read arbitrary JSONL files on disk.
+ *
+ * TRDD-RC33OAFQ: that allowlist is the CORRECT boundary and it is also the boundary being abused —
+ * it confines the read to the transcript store, and the transcript store holds every agent's full
+ * conversation. `enforceAuth` admitted AGENTS, so agent A could name agent B's transcript. The
+ * authority now comes from the caller's VERIFIED identity, handed to the service as
+ * `requestingAgentId`; the OWNERSHIP decision is made in `parseConversationFile`, so it also covers
+ * the headless mode (which delegates to this same handler via `delegateNextRoute`).
  */
 export async function POST(request: NextRequest) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  // requireAuth (not enforceAuth) because the handler needs the resolved agentId to forward;
+  // authentication alone is not authority here.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
 
   try {
     let body
@@ -55,7 +64,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = parseConversationFile(resolved)
+    // TRDD-RC33OAFQ: forward the VERIFIED caller identity — never a parameter. An agent caller
+    // is authorized here against the transcript's owning project slug; a system owner (web UI,
+    // no agentId) is exempt.
+    const result = parseConversationFile(resolved, auth.agentId)
 
     if (result.error) {
       return NextResponse.json(

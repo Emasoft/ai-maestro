@@ -31,6 +31,9 @@ import {
 import { statePath } from '@/lib/ecosystem-constants'
 import type { MessageCheckResult } from '@/types/subconscious'
 
+import { getAgent } from '@/lib/agent-registry'
+import { conversationSlug } from '@/lib/claude-conversation'
+
 const execFileAsync = promisify(execFile)
 
 // ---------------------------------------------------------------------------
@@ -549,12 +552,48 @@ export async function getDockerInfo(): Promise<ServiceResult<DockerInfo>> {
 /**
  * Parse a JSONL conversation file and return messages with metadata.
  */
-export function parseConversationFile(conversationFile: string): ServiceResult<ParsedConversation> {
+export function parseConversationFile(
+  conversationFile: string,
+  requestingAgentId?: string
+): ServiceResult<ParsedConversation> {
   if (!conversationFile) {
     console.error('[Parse Conversation] Missing conversationFile parameter')
     return {
       error: 'conversationFile is required',
       status: 400,
+    }
+  }
+
+  // ── TRDD-RC33OAFQ — the caller's VERIFIED identity decides, never a parameter ──
+  // This function is reached from `POST /api/conversations/parse`, whose only gate used to be
+  // `enforceAuth`. That admits AGENTS, not just the operator: `authenticateFromRequest` returns
+  // `{ agentId }` for a valid AID token, so agent A could name agent B's transcript and receive
+  // its parsed contents — and a transcript is everything that agent saw and did, including any
+  // credential that passed through its context.
+  //
+  // Enforced HERE, in the service and not in the route, because `services/headless-router.ts`
+  // delegates to this same Next route (`delegateNextRoute`) — the guard must live where both
+  // modes converge, and it must be a property of parsing a transcript, not of one caller.
+  //
+  // A SYSTEM OWNER (the dashboard/web UI) has no agentId and is exempt: it drives the whole fleet
+  // and is not an agent impersonating anyone. An AGENT may read only its OWN transcript: the
+  // conversation lives under `~/.claude/projects/<slug>/`, where `<slug>` is the agent's absolute
+  // working directory with every '/' replaced by '-' (`lib/claude-conversation.ts:conversationSlug`).
+  // FAIL-CLOSED on an unresolvable requester or workdir — an unknown agent is never a pass.
+  if (requestingAgentId) {
+    const requester = getAgent(requestingAgentId)
+    const ownSlug = requester?.workingDirectory
+      ? conversationSlug(requester.workingDirectory)
+      : undefined
+    const requestedSlug = path.basename(path.dirname(path.resolve(conversationFile)))
+    if (!ownSlug || requestedSlug !== ownSlug) {
+      console.error(
+        '[Parse Conversation] Ownership refused: caller is not the owner of the requested transcript',
+      )
+      return {
+        error: 'Access denied — an agent may read only its own conversation transcript',
+        status: 403,
+      }
     }
   }
 

@@ -403,7 +403,18 @@ const relNonAgents = (f: string) => path.relative(nonAgentsRoot, f)
  *  six. The forward-only tier below now takes them, and it is the more interesting number: 18,
  *  twelve of which were in no ledger at all. */
 const NON_AGENTS_AUTHN_ONLY: string[] = [
-  'conversations/parse/route.ts',
+  // REMOVED 2026-10-04: 'conversations/parse/route.ts'. RAISED to requireAuth + a forwarded
+  // verified agentId (TRDD-RC33OAFQ), so CALLS_ENFORCE_AUTH no longer matches and the needle no
+  // longer returns it. The route's only gate was `enforceAuth`, which admits AGENTS — so agent A
+  // could name agent B's transcript and receive its parsed contents. The OWNERSHIP decision is in
+  // `parseConversationFile` (services/config-service.ts), which resolves the caller's
+  // `workingDirectory` to its `~/.claude/projects/<slug>/` transcript root and refuses anything
+  // else — service-level because `services/headless-router.ts` delegates to this same handler via
+  // `delegateNextRoute`, so a route-only guard would have covered one of the two server modes.
+  // Pinned in tests/unit/conversation-parse-ownership.test.ts.
+  // NEITHER needle sees the new shape (requireAuth rather than enforceAuth; the agentId is
+  // forwarded as a bare `auth.agentId` argument, not a context object), so it lands in no debt
+  // tier — correct for a route that no longer asserts "any authenticated caller can call this".
   'export/jobs/[jobId]/route.ts',
   // DECIDED 2026-08-22 (TRDD-R268J32X) — authentication-only is CORRECT here. Kept in the
   // ledger rather than removed: the entry's job is to stop the assertion changing unnoticed,
@@ -441,7 +452,17 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   // the receiver, not this file. Pinned in BOTH modes: the service-level test in
   // tests/services/sessions-service.test.ts and the headless listener.
   'sessions/restore/route.ts',
-  'settings/mcp-discover/route.ts',
+  // REMOVED 2026-10-04: 'settings/mcp-discover/route.ts'. The inline `serverConfig` branch was
+  // raised to enforceSystemOwner (so STRONG_AUTHZ matches the FILE and the needle no longer
+  // returns it) plus a `.strict()` two-key schema (TRDD-NWTTU0AQ): `mcp_discovery.py` does
+  // `subprocess.Popen` on the command the config names, so any authenticated agent posting
+  // `{"serverConfig":{"command":"/bin/sh","args":["-c","…"]}}` had arbitrary command execution.
+  // The `configPath` branch stays agent-available, as the route header intends. Pinned in
+  // tests/unit/mcp-discover-serverconfig-gate.test.ts.
+  //
+  // NOTE: the `settings/global-elements/convert-skill` removal above was the same shape, and so
+  // is every "REMOVED" line in this list — none is rewritten as a comment when the FILE still
+  // needs no entry.
   'v1/mesh/chat/route.ts',
   'vpn-chat/block/route.ts',
 ]

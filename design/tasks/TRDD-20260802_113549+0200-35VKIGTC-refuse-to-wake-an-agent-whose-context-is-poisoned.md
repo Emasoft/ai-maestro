@@ -6,7 +6,7 @@ column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-10-05T01:24:36+0200
+updated: 2026-10-05T01:27:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,7 +28,7 @@ release-via: none
 labels: [security, prompt-injection, wake-gate, cross-repo]
 external-refs: [Emasoft/ai-maestro-janitor#167]
 pre-block-column: 
-unblock-when: [decision: the janitor ships a FLEET-scoped context scan that walks every registered workdir, and its detector precision is re-measured as adequate]
+unblock-when: [decision: the owner revives the wake-gate design after the ai-maestro#163 re-examination — superseded on ai-maestro#151, see STATE]
 
 
 
@@ -89,6 +89,7 @@ FORBIDDING the runner from puppeting the fleet), `:101`/`:112` (rows of a diagno
 agent's launch on this signal would refuse to start agents over their own safety documentation.
 That precision problem belongs upstream with the detector, and it must be fixed BEFORE, not after,
 any enforcement is wired to it.
+**RECONCILIATION 2026-10-05 (newest facts; the table above is from 2026-08-05 and still holds).** Re-probed 2026-10-04 against janitor 3.7.0: the scan is still session-scoped and no `context-integrity.json` writer exists. The janitor cancelled its write-half card (CGOV2XO4) on 2026-09-29. The owner closed ai-maestro#151 the same day: "archive this — no need ... the context-integrity design is being superseded by the broader #163 batch-design-cycle re-examination ... If that work resurrects the wake-gate read path, it will re-ask the schema question on its own terms." So this design is SHELVED BY THE OWNER, not waiting on a janitor feature request — do NOT open one. On 2026-10-04 the card was moved to `blocked` naming #163; on 2026-10-05 it was moved back to `backburner`, because #163 is a corpus-layout migration that does not itself resurrect the gate, and `blocked` needs an open card that names the blocker. If the #163 re-examination revives a wake gate, supersede this card with a new one rather than resuming it.
 
 ## Why this exists
 

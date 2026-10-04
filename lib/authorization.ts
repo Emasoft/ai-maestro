@@ -268,7 +268,7 @@ type ActionPolicy =
   /** Fail-closed spelling for a FUTURE action with no rule yet — DENY, pending a USER ruling. The four legacy undecided actions are flagged 'grant' rows ('UNRULED' rule text) instead. */
   | { kind: 'unruled'; rule: string }
 
-export const ACTION_POLICY: Record<AuthAction, ActionPolicy> = {
+const ACTION_POLICY_ROWS: Record<AuthAction, ActionPolicy> = {
   // ── Governed by a dedicated branch ABOVE the matrix ──────────────────────
   // Each of these returns before the matrix is reached, because its rule is not
   // expressible as a title grant: it carries a self-ban, a required target shape,
@@ -311,6 +311,11 @@ export const ACTION_POLICY: Record<AuthAction, ActionPolicy> = {
   'link-session': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. Pending TRDD-L6VV9Q7U ruling 2: the same registry-write primitive family as create-session/register-agent.' },
   'manage-group': { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'UNRULED — status quo preserved, NOT a decision. Pending TRDD-L6VV9Q7U ruling 3: R1 defines groups but never says who administers them.' },
 }
+
+// Deeply frozen at module load: any importer could otherwise flip `manager: true` on a row and
+// authorize() would read the live object, making "every row is a reviewed diff" a compile-time-only property.
+for (const row of Object.values(ACTION_POLICY_ROWS)) Object.freeze(row)
+export const ACTION_POLICY: Readonly<Record<AuthAction, Readonly<ActionPolicy>>> = Object.freeze(ACTION_POLICY_ROWS)
 
 // ============================================================================
 // Authorization
@@ -798,7 +803,20 @@ export function authorize(
   // An action absent from the map (a value cast in from outside the enum) is
   // DENIED: the safe default for a new value is do-nothing, and only this
   // spelling has it.
-  const policy = ACTION_POLICY[action]
+  return decideFromPolicy(ACTION_POLICY, auth, title, action, targetAgentId)
+}
+
+// Exists so tests can exercise the lost-branch and unruled guards without a mutable ACTION_POLICY; authorize() cannot be given a table.
+export function decideFromPolicy(
+  table: Readonly<Record<string, Readonly<ActionPolicy>>>,
+  auth: AgentAuthResult,
+  title: string | undefined,
+  action: AuthAction,
+  targetAgentId?: string
+): AuthorizationResult {
+  // authorize() already returned for the system-owner case; the tail needs a caller identity, so deny without one.
+  if (!auth.agentId) return { allowed: false, reason: 'No caller identity for a matrix decision' }
+  const policy = table[action]
   if (!policy) {
     return {
       allowed: false,
@@ -840,12 +858,14 @@ export function authorize(
     if (!targetAgentId) {
       return { allowed: false, reason: 'Chief-of-Staff must specify a target agent' }
     }
-    if (policy.cosOwnTeam) {
-      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
-      if (cosTeamId && cosTeamId === targetTeamId) {
-        return { allowed: true }
-      }
+    // A row with cosOwnTeam:false denies COS regardless of team; saying "own team" there would be a false reason.
+    if (!policy.cosOwnTeam) {
+      return { allowed: false, reason: `Chief-of-Staff may not ${action} another agent (${policy.rule})` }
+    }
+    const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+    const targetTeamId = lookupTeamIdForAgent(targetAgentId)
+    if (cosTeamId && cosTeamId === targetTeamId) {
+      return { allowed: true }
     }
     return { allowed: false, reason: `Chief-of-Staff can only ${action} agents in their own team` }
   }

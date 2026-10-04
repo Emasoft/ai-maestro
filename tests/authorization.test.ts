@@ -108,7 +108,7 @@ vi.mock('@/lib/agent-registry', () => ({
 
 import { issueGovernanceToken } from '@/lib/aid-token'
 import { authenticateFromRequest, buildAuthContext, type AgentAuthResult } from '@/lib/agent-auth'
-import { authorize, ACTION_POLICY, type AuthAction } from '@/lib/authorization'
+import { authorize, decideFromPolicy, ACTION_POLICY, type AuthAction } from '@/lib/authorization'
 import { ChangeTitle } from '@/services/element-management-service'
 
 function requestWith(headers: Record<string, string>, agentId = 'member-a2'): NextRequest {
@@ -602,32 +602,44 @@ describe('TRDD-L6VV9Q7U — the matrix preserves today\'s behaviour and denies b
 
   it('lost-branch guard: a kind "branch" row whose branch never ran is DENIED for MANAGER, not granted', () => {
     const name = 'synthetic-branch-action' as AuthAction
-    // Mutates the exported ACTION_POLICY (restored in `finally`): this file must NOT be marked concurrent.
-    const table = ACTION_POLICY as Record<string, unknown>
-    table[name] = { kind: 'branch', rule: 'synthetic' }
-    try {
-      const d = authorize(asManager(), name, 'member-b1')
-      expect(d.allowed).toBe(false)
-      expect(d.reason).toMatch(/decided by its own branch, which did not run/)
-    } finally {
-      delete table[name]
-    }
+    const table = { ...ACTION_POLICY, [name]: { kind: 'branch', rule: 'synthetic' } } as const
+    const d = decideFromPolicy(table, asManager(), 'manager', name, 'member-b1')
+    expect(d.allowed).toBe(false)
+    expect(d.reason).toMatch(/decided by its own branch, which did not run/)
     expect(name in ACTION_POLICY).toBe(false)
   })
 
   it('unruled guard: a kind "unruled" row is DENIED for MANAGER and names the card', () => {
     const name = 'synthetic-unruled-action' as AuthAction
-    // Mutates the exported ACTION_POLICY (restored in `finally`): this file must NOT be marked concurrent.
-    const table = ACTION_POLICY as Record<string, unknown>
-    table[name] = { kind: 'unruled', rule: 'synthetic' }
-    try {
-      const d = authorize(asManager(), name, 'member-b1')
-      expect(d.allowed).toBe(false)
-      expect(d.reason).toMatch(/TRDD-L6VV9Q7U/)
-    } finally {
-      delete table[name]
-    }
+    const table = { ...ACTION_POLICY, [name]: { kind: 'unruled', rule: 'synthetic' } } as const
+    const d = decideFromPolicy(table, asManager(), 'manager', name, 'member-b1')
+    expect(d.allowed).toBe(false)
+    expect(d.reason).toMatch(/TRDD-L6VV9Q7U/)
     expect(name in ACTION_POLICY).toBe(false)
+  })
+
+  it('ACTION_POLICY is immutable at runtime: row edits and new keys are refused and authorize() is unchanged', () => {
+    const before = authorize(asCosA(), 'send-command', 'member-a2')
+    const table = ACTION_POLICY as unknown as Record<string, Record<string, unknown>>
+    expect(() => { table['send-command'].manager = true }).toThrow(TypeError)
+    expect(() => { table['synthetic-new-key'] = { kind: 'unruled', rule: 'x' } }).toThrow(TypeError)
+    expect(Object.isFrozen(ACTION_POLICY)).toBe(true)
+    expect(Object.values(ACTION_POLICY).every((r) => Object.isFrozen(r))).toBe(true)
+    expect(ACTION_POLICY['send-command']).toMatchObject({ manager: false, cosOwnTeam: false })
+    expect(authorize(asCosA(), 'send-command', 'member-a2')).toEqual(before)
+    expect(authorize(asManager(), 'send-command', 'member-b1').allowed).toBe(false)
+  })
+
+  it('COS on a cosOwnTeam:false grant row gets its own reason; the own-team text stays for the other-team case', () => {
+    const table = { synth: { kind: 'grant', manager: true, cosOwnTeam: false, rule: 'synthetic' } } as const
+    const act = 'synth' as AuthAction
+    const own = decideFromPolicy(table, asCosA(), 'chief-of-staff', act, 'member-a2')
+    expect(own.allowed).toBe(false)
+    expect(own.reason).toBe('Chief-of-Staff may not synth another agent (synthetic)')
+    const grantTable = { synth: { kind: 'grant', manager: true, cosOwnTeam: true, rule: 'synthetic' } } as const
+    const other = decideFromPolicy(grantTable, asCosA(), 'chief-of-staff', act, 'member-b1')
+    expect(other.allowed).toBe(false)
+    expect(other.reason).toBe('Chief-of-Staff can only synth agents in their own team')
   })
 
   it('the UNRULED marker: exactly the four legacy rows carry it; kind "unruled" is the only other place the word may appear', () => {

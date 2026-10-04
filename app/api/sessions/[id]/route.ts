@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteSession } from '@/services/sessions-service'
-import { enforceAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
@@ -23,8 +23,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  const auth = requireAuth(request)
+  if ('error' in auth) return auth.error
 
   // API2-MAJ-04: deprecated route still ships and is still destructive
   // (drops the tmux session and deletes the session record). Until the
@@ -36,7 +36,7 @@ export async function DELETE(
   logDeprecation()
   try {
     const { id: sessionName } = params
-    const result = await deleteSession(sessionName)
+    const result = await deleteSession(sessionName, auth.context)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

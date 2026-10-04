@@ -1257,9 +1257,32 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
  * Uses soft-delete by default — agent data and project folder are preserved.
  * The agent can be restored from the registry (deletedAt is set, not removed).
  */
-export async function deleteSession(sessionName: string): Promise<ServiceResult<{ success: boolean; name: string; type?: string }>> {
+export async function deleteSession(sessionName: string, authContext: import('@/lib/agent-auth').AuthContext | undefined): Promise<ServiceResult<{ success: boolean; name: string; type?: string }>> {
   const agent = getAgentBySession(sessionName)
   const isCloudAgent = agent?.deployment?.type === 'cloud'
+
+  // Authorization MUST stay ahead of every side effect (killSession, unpersistSession,
+  // deleteAgentBySession): both server modes reach this service, and a check placed in
+  // a route would leave the other mode letting any agent kill any other agent's session.
+  // Fail closed: no identity -> 401; a non-owner naming a session that resolves to no
+  // agent -> 403, because an unidentifiable target must never read as "fine".
+  if (!authContext) {
+    return { error: 'Auth context required for deleteSession', status: 401, data: undefined }
+  }
+  if (!authContext.isSystemOwner) {
+    if (!agent?.id) {
+      return { error: 'Not authorized to delete a session that does not resolve to an agent', status: 403, data: undefined }
+    }
+    const { authorize } = await import('@/lib/authorization')
+    const authz = authorize(
+      { agentId: authContext.agentId, governanceTitle: authContext.governanceTitle, teamId: authContext.teamId },
+      'delete-session',
+      agent.id,
+    )
+    if (!authz.allowed) {
+      return { error: authz.reason || 'Not authorized to delete this session', status: 403, data: undefined }
+    }
+  }
 
   if (isCloudAgent) {
     if (!agent?.id) {

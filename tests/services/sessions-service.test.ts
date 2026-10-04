@@ -479,7 +479,7 @@ describe('deleteSession', () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(null)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    const result = await deleteSession('my-agent')
+    const result = await deleteSession('my-agent', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -490,7 +490,7 @@ describe('deleteSession', () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(null)
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await deleteSession('nonexistent')
+    const result = await deleteSession('nonexistent', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })
@@ -501,7 +501,7 @@ describe('deleteSession', () => {
       deployment: { type: 'cloud' },
     })
 
-    const result = await deleteSession('cloud-agent')
+    const result = await deleteSession('cloud-agent', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.type).toBe('cloud')
@@ -514,7 +514,7 @@ describe('deleteSession', () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(null)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await deleteSession('my-agent')
+    await deleteSession('my-agent', SYSTEM_OWNER_CTX)
 
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
     expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('my-agent', false)

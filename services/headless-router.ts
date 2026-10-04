@@ -891,7 +891,7 @@ const routes: Route[] = [
     // SVC2-MAJ-12 (2026-05-06): authenticate before killing tmux sessions.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    sendServiceResult(res, await deleteSession(params.id))
+    sendServiceResult(res, await deleteSession(params.id, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/sessions\/([^/]+)\/command$/, paramNames: ['id'], handler: async (_req, res, params) => {
     // BUG-2 fix: checkIdleStatus returns a plain object, not a ServiceResult — use sendJson directly

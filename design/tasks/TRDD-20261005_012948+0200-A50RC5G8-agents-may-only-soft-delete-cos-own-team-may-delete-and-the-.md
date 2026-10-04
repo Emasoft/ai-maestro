@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: todo
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T01:30:45+0200
+updated: 2026-10-05T01:31:41+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -59,14 +59,16 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
 - [ ] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
 - [ ] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
-- [ ] Cemetery purge (and restore, if that is the POST) system-owner only
+- [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
 - [ ] Each guard neutered, red set recorded; headless path exercised
-- [ ] Hard delete requires BOTH system owner AND a sudo token, enforced where both server modes pass; a test where the owner without a sudo token is refused
+- [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
+- [ ] USER ANSWER recorded: is a process-level session kill a "hard-kill" reserved to the user, or may MANAGER / own-team CHIEF-OF-STAFF do it?
 
 ## Approval log
 
 - 2026-10-05 — MANDATE issued by USER (min-approval-requirement: user), relayed and filed by main-agent@ai-maestro. The ruling quoted under Problem is the mandate; no approval request was sent.
 - 2026-10-05 — USER RULING (general rule on hard-kill), verbatim: "in general hard-kill is strictly reserved to the user maestro. it also needs a sudo confirmation from the user." Consequences: no agent, under any title, may hard-kill or hard-delete; the hard path is system-owner only AND requires a sudo token. This settles the reading that agents are soft-only.
+- 2026-10-05 — CORRECTION by main-agent@ai-maestro to the two entries above. Only the QUOTED sentences are the user's. Everything after "Consequences:" is my INTERPRETATION and is UNCONFIRMED. Specifically NOT ruled: (1) whether a process-level session kill (`delete-session`: POST /api/sessions/[id]/kill and the two session DELETEs) counts as "hard-kill" — if it does, it is user-only and the phrase "RULED grant" above is wrong; that row stays at status quo, flagged, until the user answers. (2) Whether cemetery RESTORE is user-only — the user said the user "can always" resurrect, not that others cannot. (3) "system owner" was used for "the user maestro" without checking how the two relate when the user-authority model is on. ENTAILED by the quotes and safe to build: CHIEF-OF-STAFF may delete an agent of its own team (a privilege widening); agents may only soft-delete; hard delete is the user's and needs sudo; cemetery purge is the user's. The question is with the user.
 
 ## Approval log
 

@@ -56,7 +56,20 @@
  * When this module gains a real caller, give it the connected-socket-obtained-before-detaching
  * shape from the card's own guidance, or the credential-inheritance shape already proven above —
  * never a heuristic resolved after the fact.
+ *
+ * ── TRDD-7YRXXKE8: PID REUSE IS CLOSED AT EVERY HOP, NOT ONLY AT THE LIVE PEER ────────────────
+ * TRDD-EVO7T245's "the connection is live, so no recycled pid can answer" reasoning covers the
+ * PEER pid only. The ANCESTOR pids the walk touches, and the pane pid the server holds on
+ * record, are bare integers the kernel recycles (demonstrated live on macOS: kern.maxproc is
+ * 16000 and a fork/wait hammer handed a dead child's pid to a NEW process with a LATER
+ * p_starttime). The walk therefore matches on (pid, start-time) PAIRS — see WalkDeps and the
+ * pairwise compare inside walkToPane — and a recorded pane pid whose current holder has a
+ * different start time REFUSES with reason "recycled" instead of resolving. lib/proc-identity.ts
+ * owns the pair semantics; the macOS kernel read (sysctl KERN_PROC_PID → kinfo_proc.p_starttime)
+ * is the concrete ProcIdentityDeps.readProcIdentity a caller supplies.
  */
+
+import { sameProcess, type ProcIdentity } from '@/lib/proc-identity'
 
 /** An orphaned child is reparented to init (macOS launchd, Linux pid 1). */
 const REPARENT_PID = 1
@@ -65,41 +78,80 @@ const REPARENT_PID = 1
 const DEFAULT_MAX_HOPS = 64
 
 export interface WalkDeps {
-  /** Returns `pid`'s parent pid, or `null` when `pid` can no longer be read (already exited). */
+  /**
+   * Returns `pid`'s parent pid, or `null` when `pid` can no longer be read (already exited).
+   * TRDD-7YRXXKE8: this and every other pid touchpoint in the walk is paired with a kernel
+   * start time — a bare ppid answer about a RECYCLED pid is worthless, so real deps must read
+   * the pair atomically (on macOS: one sysctl(KERN_PROC_PID) returns both).
+   */
   getParentPid(pid: number): number | null
-  /** True when `pid` is a pane_pid this server holds on record for some agent. */
-  isKnownPanePid(pid: number): boolean
+  /**
+   * TRDD-7YRXXKE8: pids recorded for panes are stored as (pid, start-time) pairs, and the
+   * match is PAIRWISE — `pid` alone is never accepted. `readRecordedPane(pid)` returns the
+   * recorded start time for the pane record holding this pid (or null when the pid is not on
+   * record); the walk matches only when the CURRENT process at `pid` carries exactly that
+   * start time. A recycled pid therefore REFUSES instead of resolving, no matter which tree
+   * the new holder lives in.
+   */
+  readRecordedPane(pid: number): ProcIdentity | null
+  /** Kernel read of the CURRENT (pid, start-time) pair; null when pid does not exist. */
+  readProcIdentity(pid: number): ProcIdentity | null
 }
 
 export type WalkResult =
   | { ok: true; panePid: number; hops: number }
-  | { ok: false; reason: 'severed' | 'unreadable' | 'hop-limit'; hops: number }
+  | {
+      ok: false
+      reason: 'severed' | 'unreadable' | 'hop-limit' | 'recycled'
+      hops: number
+    }
 
 /**
- * Climb the ppid chain from `startPid` looking for a known pane_pid.
+ * Climb the ppid chain from `startPid` looking for a recorded pane, matching on (pid,
+ * start-time) PAIRS — TRDD-7YRXXKE8.
  *
- * FAIL CLOSED, NO FALLBACK — TRDD-9JUEJFY3. Every exit that is not the explicit match on line
- * with `isKnownPanePid` returns `ok: false`. DO NOT add an `else` branch to any of the three
- * refusal sites below that resolves identity by env var, cwd, session name, or process name —
- * that is precisely the bug-fix shape TRDD-9JUEJFY3 exists to forbid: it looks like closing a
- * false-positive report from legitimate detached tooling, and it is actually handing an attacker
- * a forgeable substitute for the one thing this walk was built to make unforgeable. A legitimate
- * caller that hits one of these refusals needs a real credential obtained before it detached
- * (see the enumeration above), not a softer walk.
+ * FAIL CLOSED, NO FALLBACK — TRDD-9JUEJFY3. Every exit that is not the explicit pairwise match
+ * returns `ok: false`. DO NOT add an `else` branch to any of the refusal sites below that
+ * resolves identity by env var, cwd, session name, or process name — that is precisely the
+ * bug-fix shape TRDD-9JUEJFY3 exists to forbid: it looks like closing a false-positive report
+ * from legitimate detached tooling, and it is actually handing an attacker a forgeable
+ * substitute for the one thing this walk was built to make unforgeable. A legitimate caller
+ * that hits one of these refusals needs a real credential obtained before it detached (see the
+ * enumeration above), not a softer walk.
+ *
+ * TRDD-7YRXXKE8 adds the pairwise rule: a match on the bare pid would let a RECYCLED pid
+ * (kernel handed the dead pane's pid to a new process, demonstrated on macOS) resolve to the
+ * dead pane's identity. The match therefore requires `readProcIdentity(pid)` to return exactly
+ * the recorded pair; any mismatch refuses with `recycled` and never walks past the recorded
+ * pane — the first recorded pane pid in a live ancestry IS the pane or the chain is broken.
  */
 export function walkToPane(startPid: number, deps: WalkDeps, opts: { maxHops?: number } = {}): WalkResult {
   const maxHops = opts.maxHops ?? DEFAULT_MAX_HOPS
   let pid = startPid
 
   for (let hops = 0; hops <= maxHops; hops++) {
-    if (deps.isKnownPanePid(pid)) {
-      return { ok: true, panePid: pid, hops }
-    }
-
     if (pid === REPARENT_PID) {
       // Reached init without ever matching a known pane — an intermediate process in the chain
       // died and this pid was reparented. REFUSE. See the file-level comment: no fallback.
       return { ok: false, reason: 'severed', hops }
+    }
+
+    // TRDD-7YRXXKE8: the match is on the (pid, start-time) PAIR, never the bare pid. The pane
+    // record carries the start time captured when the pane was registered; the CURRENT process
+    // at this pid must still be that same lifetime. When the recorded pane's pid was recycled,
+    // the current holder has a LATER start time and the pairwise compare refuses it — a foreign
+    // process cannot inherit a dead pane's identity by landing on its pid. A refused recycle is
+    // NOT a reason to walk further: pid values above the recorded pane in a live tree are the
+    // recorded pane itself or nothing.
+    const recorded = deps.readRecordedPane(pid)
+    if (recorded !== null) {
+      const current = deps.readProcIdentity(pid)
+      if (current !== null && sameProcess(recorded, current)) {
+        return { ok: true, panePid: pid, hops }
+      }
+      // Recorded pane pid now held by a different lifetime (recycled) or gone entirely:
+      // REFUSE — see the file-level comment, no fallback, no "try the next hop".
+      return { ok: false, reason: 'recycled', hops }
     }
 
     const parent = deps.getParentPid(pid)

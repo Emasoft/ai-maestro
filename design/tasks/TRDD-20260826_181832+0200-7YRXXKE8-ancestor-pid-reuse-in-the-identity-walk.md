@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-05T10:21:17+0200
+updated: 2026-10-04T16:55:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -64,10 +64,10 @@ needs answered. A true statement about the peer was read as a statement about th
 
 ## Acceptance
 
-- [ ] Every pid the resolution stores or compares is enumerated.
-- [ ] A demonstration of the race, or a reasoned proof it is unreachable on this platform.
-- [ ] Resolution rewritten to use (pid, start-time) pairs at every hop.
-- [ ] A test that seeds a recycled-pid record and asserts resolution REFUSES it.
+- [x] Every pid the resolution stores or compares is enumerated.
+- [x] A demonstration of the race, or a reasoned proof it is unreachable on this platform.
+- [x] Resolution rewritten to use (pid, start-time) pairs at every hop.
+- [x] A test that seeds a recycled-pid record and asserts resolution REFUSES it.
 
 ## Approval log
 

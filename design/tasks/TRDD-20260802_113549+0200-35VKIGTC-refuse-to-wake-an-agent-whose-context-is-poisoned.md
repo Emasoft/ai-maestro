@@ -2,11 +2,11 @@
 trdd-id: 35VKIGTC
 status: tasked
 title: Refuse to wake an agent whose auto-loaded context is poisoned
-column: blocked
+column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-10-05T01:22:37+0200
+updated: 2026-10-05T01:24:36+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,15 +23,15 @@ effort: small
 relevant-rules: [R17]
 npt: []
 eht: []
-blocked-by: [TRDD-4DC4QYP1]
+blocked-by: []
 release-via: none
 labels: [security, prompt-injection, wake-gate, cross-repo]
 external-refs: [Emasoft/ai-maestro-janitor#167]
-pre-block-column: design
-unblock-when: [trdd:TRDD-4DC4QYP1]
-blocker-probe: gh issue view 163 --repo Emasoft/ai-maestro --json state -q .state
-blocker-holds-if: match:OPEN
-blocker-probe-canary: match:OPEN|CLOSED
+pre-block-column: 
+unblock-when: [decision: the janitor ships a FLEET-scoped context scan that walks every registered workdir, and its detector precision is re-measured as adequate]
+
+
+
 ---
 
 # Refuse to wake an agent whose auto-loaded context is poisoned
@@ -189,6 +189,7 @@ this card buys one wake of delay and should be re-scoped rather than shipped.
   Tier 0 self-mandate: wholly inside this agent's own assignment scope, no baseline deviation, no
   cross-team reach. No approval request was sent.
 - 2026-10-04T15:49:51+0200 — column → blocked by main-agent@ai-maestro. Precondition NEGATIVE per worker probe: janitor 3.7.0 scan session-scoped, no context-integrity.json writer, CGOV2XO4 cancelled, #151 superseded by owner pending #163. Card STATE: DO NOT BUILD. Re-unblocks when #163 lands the canonical layout.
+- 2026-10-05T01:24:36+0200 — column → backburner by main-agent@ai-maestro. Per the card STATE block: backburner is the honest column; the blocker is a janitor capability (fleet-scoped context scan), not a card in this repo. Yesterday move to blocked contradicted STATE. Cleared blocked-by (--clear-blocker override).
 
 ## DESIGN CHANGED 2026-08-02T13:06:10+0200 — the write path is a FILE, not a CLI verb
 

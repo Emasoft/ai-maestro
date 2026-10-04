@@ -2,9 +2,9 @@
 trdd-id: L6VV9Q7U
 status: tasked
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
-column: planned
+column: human_review
 created: 2026-07-14T17:49:31+0200
-updated: 2026-10-05T01:31:39+0200
+updated: 2026-10-05T01:37:48+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -19,6 +19,8 @@ labels: [security, authorization, governance, root-cause, structural]
 approval-judge:  user 
 approval-datetime: 2026-09-05T10:20:46+0200
 assignee: ai-maestro-hub-session
+implementation-commits: [876673caa]
+eht: [TRDD-A50RC5G8]
 ---
 
 # authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
@@ -181,6 +183,8 @@ defect immediately without pretending an engineer may settle a governance questi
 - 2026-10-05 — USER RULING 1 (delete-session / kill), verbatim: "1 - yes, MANAGER and CHIEF-OF-STAFF (this one only in its own team) can kill/delete an agent. but only soft-kill. the agent corpse in the cemetery can always be resurrected by the user maestro." Consequences: the `delete-session` row is a RULED grant (MANAGER any agent; CHIEF-OF-STAFF own team only). An AGENT caller, whatever its title, may only SOFT-delete: the cemetery archive must survive, and hard delete / cemetery purge / resurrection stay with the user (MAESTRO). Rulings 2 (create-session, link-session) and 3 (manage-group) remain OPEN.
 - 2026-10-05 — USER RULING (general rule on hard-kill), verbatim: "in general hard-kill is strictly reserved to the user maestro. it also needs a sudo confirmation from the user." Consequences: no agent, under any title, may hard-kill or hard-delete; the hard path is system-owner only AND requires a sudo token. This settles the reading that agents are soft-only.
 - 2026-10-05 — CORRECTION by main-agent@ai-maestro to the two entries above. Only the QUOTED sentences are the user's. Everything after "Consequences:" is my INTERPRETATION and is UNCONFIRMED. Specifically NOT ruled: (1) whether a process-level session kill (`delete-session`: POST /api/sessions/[id]/kill and the two session DELETEs) counts as "hard-kill" — if it does, it is user-only and the phrase "RULED grant" above is wrong; that row stays at status quo, flagged, until the user answers. (2) Whether cemetery RESTORE is user-only — the user said the user "can always" resurrect, not that others cannot. (3) "system owner" was used for "the user maestro" without checking how the two relate when the user-authority model is on. ENTAILED by the quotes and safe to build: CHIEF-OF-STAFF may delete an agent of its own team (a privilege widening); agents may only soft-delete; hard delete is the user's and needs sudo; cemetery purge is the user's. The question is with the user.
+- 2026-10-05 — LANDED by main-agent@ai-maestro as 876673caa: the matrix, with no behaviour change (a table recorded from the previous source is reproduced cell for cell; 136/136; six neuters). The structural defect is closed. NOT closed: the four UNRULED rows still carry their old grant. This card cannot reach complete until rulings 2 and 3 are made, the session-kill question is answered, and TRDD-A50RC5G8 (its EHT) is terminal.
+- 2026-10-05T01:37:48+0200 — column → human_review by main-agent@ai-maestro. Code landed 876673caa as a proven no-op; remaining work is three USER rulings on the UNRULED rows.
 
 ## RE-VERIFIED 2026-08-22T15:0x — the claim HOLDS against live code
 

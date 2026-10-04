@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceAuth, requireAuth } from '@/lib/route-auth'
 import { broadcastActivityUpdate } from '@/services/sessions-service'
 
 // Disable caching
@@ -14,6 +14,15 @@ export async function POST(request: NextRequest) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
 
+  // ── TRDD-91TLL7DW — authentication is not identity handoff ──
+  // enforceAuth proves WHO called; the body's `sessionName` names WHOSE session
+  // to update. requireAuth re-resolves the same credential into the VERIFIED
+  // identity + AuthContext that the service now cross-checks (the teams/notify
+  // pattern — the ownership decision lives in the service so the headless
+  // router's twin handler gets it too).
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
+
   try {
     let body
     try { body = await request.json() } catch {
@@ -21,19 +30,14 @@ export async function POST(request: NextRequest) {
     }
     const { sessionName, status, hookStatus, notificationType } = body
 
-    // API2-MIN-10: known limitation — `sessionName` is validated for format
-    // but not cross-checked against the authenticated caller's identity.
-    // This means any authenticated agent can broadcast a fake activity
-    // status for any session (the worst case is a misleading UI badge for
-    // a few seconds). This route is fed by the Claude Code hook
-    // (`ai-maestro-hook.cjs`) which calls it with the LOCAL session's
-    // name; cross-session impersonation requires the attacker to already
-    // have authenticated access. Tightening to "sessionName must resolve
-    // to the same agent as auth.agentId" would require an agent-registry
-    // lookup on every hook callback — currently rejected on perf grounds
-    // (the hook is invoked very frequently). If this becomes a security
-    // concern, cache the agent->session mapping in memory and check it
-    // in O(1).
+    // TRDD-91TLL7DW — the old API2-MIN-10 "known limitation" is CLOSED. That
+    // comment accepted cross-session broadcasts as "a misleading UI badge for a
+    // few seconds", rejected tightening on hook-frequency perf grounds, and
+    // UNDERSTATED the stakes: notificationType === 'idle_prompt' drains the
+    // target session's command QUEUE (a command-injection primitive). The check
+    // now lives in broadcastActivityUpdate (the service), covering the headless
+    // router's twin handler too; loadAgents() is mtime-cached, so the perf
+    // objection was never real. Only sessionName FORMAT is validated here.
     // Validate sessionName format: only alphanumeric, hyphens, underscores, @, and dots allowed
     // (tmux session names are restricted to this charset per CLAUDE.md)
     if (sessionName && (typeof sessionName !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(sessionName))) {
@@ -69,7 +73,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = broadcastActivityUpdate(sessionName, status, hookStatus, notificationType)
+    const result = broadcastActivityUpdate(
+      sessionName,
+      status,
+      hookStatus,
+      notificationType,
+      // TRDD-91TLL7DW — pass the VERIFIED caller identity (never a body field).
+      // The service resolves sessionName back to it and 403s a mismatch, so an
+      // authenticated agent cannot broadcast activity (or an idle_prompt, which
+      // drains the command queue) for a session it does not own.
+      auth.agentId,
+    )
 
     if (result.error) {
       return NextResponse.json(

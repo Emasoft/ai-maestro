@@ -744,16 +744,46 @@ export async function getActivity(): Promise<Record<string, SessionActivityInfo>
 
 /**
  * Broadcast a status update via WebSocket.
+ *
+ * TRDD-91TLL7DW — the caller's VERIFIED identity rides in as `requestingAgentId`
+ * (built from authenticateFromRequest in the route), and the ownership check
+ * happens HERE, in the service, so BOTH server modes get it:
+ * services/headless-router.ts reimplements this route and calls this function
+ * directly, so a guard in the route would protect exactly one of the two modes
+ * (the teams/notify lesson, commit 647a1044).
+ *
+ * WHY THE OLD PERF OBJECTION IS GONE. The route's previous comment rejected
+ * "sessionName must resolve to the same agent as the caller" on hook-frequency
+ * perf grounds — but lib/agent-registry.ts loadAgents() is mtime-cached, so
+ * getAgentBySession is one stat() plus an in-memory find, not a disk walk. And
+ * the objection understated the stakes: notificationType === 'idle_prompt'
+ * drains that session's command QUEUE (services/agents-core-service.ts
+ * drainCommandQueueForSession) — a command-injection primitive — so a fake
+ * idle_prompt for someone else's session was never just a misleading badge.
  */
 export function broadcastActivityUpdate(
   sessionName: string,
   status: string,
   hookStatus?: string,
-  notificationType?: string
+  notificationType?: string,
+  requestingAgentId?: string
 ): ServiceResult<{ success: boolean }> {
   if (!sessionName) {
     return { error: 'sessionName is required', status: 400, data: undefined }
   }
+
+  // ── TRDD-91TLL7DW — verify the caller owns the session it names ──
+  // An authenticated caller (requestingAgentId present) must resolve sessionName
+  // to ITSELF. Fail-closed on unresolvable: an unknown sessionName is never a
+  // pass. System owner (web UI, no agentId) is exempt — it drives the whole
+  // fleet and is not an agent impersonating anyone.
+  if (requestingAgentId) {
+    const target = getAgentBySession(sessionName)
+    if (!target || target.id !== requestingAgentId) {
+      return { error: 'sessionName does not resolve to the authenticated caller', status: 403, data: undefined }
+    }
+  }
+
 
   try {
     broadcastStatusUpdate(sessionName, status, hookStatus, notificationType)

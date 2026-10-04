@@ -944,6 +944,50 @@ describe('broadcastActivityUpdate', () => {
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/sessionName/i)
   })
+
+// ============================================================================
+// broadcastActivityUpdate — TRDD-91TLL7DW ownership check
+// ============================================================================
+
+describe('broadcastActivityUpdate — caller owns the named session (TRDD-91TLL7DW)', () => {
+  it('NON-VACUITY CONTROL: the owner broadcasting its own session is allowed through', () => {
+    /** Validates the happy path reaches the broadcast, so the refusals below are decisions, not a blanket deny */
+    mockAgentRegistry.getAgentBySession.mockReturnValue({ id: 'agent-self', name: 'my-agent' })
+    const result = broadcastActivityUpdate('my-agent', 'active', undefined, undefined, 'agent-self')
+
+    expect(result.status).toBe(200)
+    expect(result.data?.success).toBe(true)
+    expect(mockSharedState.broadcastStatusUpdate).toHaveBeenCalledWith('my-agent', 'active', undefined, undefined)
+  })
+
+  it('refuses an authenticated caller naming a session it does not own', () => {
+    /** Validates that sessionName is cross-checked against the verified caller (the closed API2-MIN-10 gap) */
+    mockAgentRegistry.getAgentBySession.mockReturnValue({ id: 'agent-other', name: 'victim' })
+    const result = broadcastActivityUpdate('victim', 'active', undefined, 'idle_prompt', 'agent-attacker')
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/does not resolve to the authenticated caller/i)
+    // The command-queue drain rides on idle_prompt — it must NOT run for a forged broadcast.
+    expect(mockSharedState.broadcastStatusUpdate).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on an unresolvable sessionName — unknown is never a pass', () => {
+    /** Validates that a sessionName matching no agent is refused rather than broadcast */
+    mockAgentRegistry.getAgentBySession.mockReturnValue(null)
+    const result = broadcastActivityUpdate('ghost', 'active', undefined, undefined, 'agent-self')
+
+    expect(result.status).toBe(403)
+    expect(mockSharedState.broadcastStatusUpdate).not.toHaveBeenCalled()
+  })
+
+  it('exempts the system owner (no agentId) — the web UI drives the whole fleet', () => {
+    /** Validates the hook/UI path, which carries no agent identity, is not blocked by the ownership check */
+    const result = broadcastActivityUpdate('any-session', 'active', undefined, undefined, undefined)
+
+    expect(result.status).toBe(200)
+    expect(mockSharedState.broadcastStatusUpdate).toHaveBeenCalled()
+  })
+})
 })
 
 // ============================================================================

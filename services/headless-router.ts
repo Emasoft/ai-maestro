@@ -867,7 +867,23 @@ const routes: Route[] = [
   }},
   { method: 'POST', pattern: /^\/api\/sessions\/activity\/update$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
-    const result = broadcastActivityUpdate(body.sessionName, body.status, body.hookStatus, body.notificationType)
+    // TRDD-91TLL7DW — mirror the Next route: resolve the VERIFIED caller here and
+    // let the SERVICE enforce that sessionName belongs to it. Headless reimplements
+    // the route, so without this the ownership check would cover one mode only.
+    // authenticateFromRequestAsync is the SAME helper the global semantic gate uses,
+    // so this never rejects a token the gate already accepted (an IBCT token the
+    // sync authenticateAgent would not parse). A resolution ERROR is fail-closed:
+    // it must never fall through to an undefined agentId, which the service reads as
+    // "system owner" and skips the ownership check for.
+    const hlAuth = await authenticateFromRequestAsync({ headers: { get: (n: string) => getHeader(req, n) } })
+    if (hlAuth.error) { sendJson(res, hlAuth.status || 401, { error: hlAuth.error }); return }
+    const result = broadcastActivityUpdate(
+      body.sessionName,
+      body.status,
+      body.hookStatus,
+      body.notificationType,
+      hlAuth.agentId,
+    )
     sendServiceResult(res, result)
   }},
   // Parameterized session routes AFTER all static sub-paths
@@ -1188,7 +1204,13 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/by-name\/([^/]+)$/, paramNames: ['name'], handler: async (_req, res, params) => {
     sendServiceResult(res, lookupAgentByName(params.name))
   }},
-  { method: 'GET', pattern: /^\/api\/agents\/email-index$/, paramNames: [], handler: async (_req, res, _params, query) => {
+  { method: 'GET', pattern: /^\/api\/agents\/email-index$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // TRDD-91TLL7DW — mirror the Next route (which had NO auth at all): the email
+    // index discloses agent identity, so it authenticates like every sibling read.
+    // authenticateFromRequestAsync is the helper the global semantic gate uses, so
+    // this never rejects a token that gate already accepted.
+    const hlAuth = await authenticateFromRequestAsync({ headers: { get: (n: string) => getHeader(req, n) } })
+    if (hlAuth.error) { sendJson(res, hlAuth.status || 401, { error: hlAuth.error }); return }
     sendServiceResult(res, await queryEmailIndex({
       addressQuery: query.address || undefined,
       agentIdQuery: query.agentId || undefined,

@@ -434,6 +434,12 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   // tests/unit/headless-session-rename-system-owner.test.ts — because headless reimplements it.
   // The ledger shrinks again, which is the only direction it may move without a deliberate edit.
   'sessions/activity/update/route.ts',
+  // TRDD-91TLL7DW (2026-10-04): stays authn-only IN THE ROUTE on purpose — the
+  // ownership check (sessionName must resolve to auth.agentId) lives in
+  // broadcastActivityUpdate, because headless-router reimplements this route and
+  // calls the service directly. The route's job is the identity HANDOFF; verify
+  // the receiver, not this file. Pinned in BOTH modes: the service-level test in
+  // tests/services/sessions-service.test.ts and the headless listener.
   'sessions/restore/route.ts',
   'settings/mcp-discover/route.ts',
   'v1/mesh/chat/route.ts',

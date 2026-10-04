@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-05T10:21:18+0200
+updated: 2026-10-04T18:40:04+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -56,10 +56,10 @@ would have to catch is one an existing CLI flag makes look normal.
 
 - [x] Route inventory with the identity source for each — 257 route files enumerated, 89
       reference an agent id. See the investigation section below.
-- [ ] Every parameter-sourced route has a named authorization check. **THREE DO NOT**:
+- [x] Every parameter-sourced route has a named authorization check. all now closed (email-index + activity/update fixed here; teams/notify already fixed+pinned on this branch at 647a1044).
       `teams/notify` (reaches a tmux keystroke primitive, 0 authz calls), `agents/email-index`
-      (no auth call at all), `sessions/activity/update` (unverified `sessionName`).
-- [ ] A guard test reddens when a new route reads an agent id unchecked.
+      (no auth call at all -- NOW authenticates), `sessions/activity/update` (unverified `sessionName` -- NOW checks ownership in the SERVICE, both modes). CLOSED 2026-10-04; docs_dev/trdd-91TLL7DW-report.md.
+- [x] A guard test reddens when a new route reads an agent id unchecked.
 
 ## Investigation — 2026-08-26 (read-only; inventory delegated, findings verified first-hand)
 

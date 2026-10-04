@@ -57,6 +57,12 @@ const AUTH_NEEDLES = [
   'delegateNextRoute',
   'enforceAuth(',
   'enforceSystemOwner(',
+  // Added 2026-10-04 (TRDD-91TLL7DW): the async credential resolver, used by the
+  // headless activity/update handler. For non-IBCT tokens it falls through to
+  // authenticateFromRequest (lib/agent-auth.ts:311), so it is a real auth call;
+  // the global semantic gate uses the SAME helper, so a handler reaching for it
+  // never rejects a token that gate already accepted.
+  'authenticateFromRequestAsync(',
   'authorize(',
   'checkTeamAccess(',
   // a business call, not a refusal primitive: it counts as a guard only because routeMessage
@@ -117,14 +123,12 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/export\\/jobs\\/([^/]+)$/',
   'DELETE /^\\/api\\/export\\/jobs\\/([^/]+)$/',
   'GET /^\\/api\\/sessions\\/activity$/',
-  'POST /^\\/api\\/sessions\\/activity\\/update$/',
   'GET /^\\/api\\/sessions\\/([^/]+)\\/command$/',
   'GET /^\\/api\\/agents\\/unified$/',
   'GET /^\\/api\\/agents\\/startup$/',
   'POST /^\\/api\\/agents\\/startup$/',
   'POST /^\\/api\\/agents\\/health$/',
   'GET /^\\/api\\/agents\\/by-name\\/([^/]+)$/',
-  'GET /^\\/api\\/agents\\/email-index$/',
   'POST /^\\/api\\/agents\\/docker\\/create$/',
   'POST /^\\/api\\/agents\\/import$/',
   'GET /^\\/api\\/agents\\/directory$/',

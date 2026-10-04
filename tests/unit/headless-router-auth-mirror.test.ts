@@ -792,3 +792,29 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
     expect(res.bodyText()).not.toMatch(/workingDirectory/)
   })
 })
+
+/**
+ * TRDD-91TLL7DW — the audit's three parameter-sourced routes are gated in BOTH
+ * modes. The Next routes are covered by their own behavioral tests; this block is
+ * the headless twin, which reimplements them and would otherwise be the one mode
+ * left open (the teams/notify lesson: a route-only guard protects half the system).
+ *
+ * A forged-but-shape-valid token reaches the per-handler auth (the same FORGED_BEARER
+ * the rest of this file uses), so a 401 here is the HANDLER's verdict, not the gate's.
+ */
+describe('TRDD-91TLL7DW — parameter-sourced routes authenticate in headless mode', () => {
+  it('GET /api/agents/email-index rejects a forged token (no agent-identity enumeration)', async () => {
+    const res = await call('GET', '/api/agents/email-index', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    // Must not be the structural gate's shape: prove the HANDLER refused.
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyText()).not.toMatch(/@/) // no email-address roster leaked
+  })
+  it('POST /api/sessions/activity/update rejects a forged token before broadcasting', async () => {
+    // The handler authenticates before reading the body, so an empty body is fine:
+    // a 401 here is the handler's verdict, reached without touching broadcastActivityUpdate.
+    const res = await call('POST', '/api/sessions/activity/update', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+  })
+})

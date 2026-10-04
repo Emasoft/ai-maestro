@@ -1,13 +1,13 @@
 ---
 trdd-id: RC33OAFQ
-status: tasked
+status: archived
 title: Any authenticated agent can read any other agent's full conversation transcript via conversations/parse
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T12:10:06+0200
-updated: 2026-09-05T10:20:58+0200
+updated: 2026-10-04T20:56:58+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -125,11 +125,12 @@ first step and not an assumption.
       > empty one are indistinguishable, and I was one step from ruling "dead code, delete it" on
       > a route the dashboard actively uses. Never terminate a sweep whose result is an ABSENCE
       > claim with `head`; count first (`| wc -l`), then look.
-- [ ] Ruling recorded here on which principal the route serves
-- [ ] Guard implemented per the ruling
-- [ ] Refusal test (agent A → agent B's transcript = 403) + neuter recorded
-- [ ] Legitimate-path test still green
-- [ ] `agent-route-authorization-coverage.test.ts` ledger updated in the SAME commit as the guard
+- [x] Ruling recorded here on which principal the route serves
+- [x] Guard implemented per the ruling
+- [x] Refusal test (agent A → agent B's transcript = 403) + neuter recorded
+- [x] Legitimate-path test still green
+- [x] `agent-route-authorization-coverage.test.ts` ledger updated in the SAME commit as the guard
+- [x] Ruling recorded here on which principal the route serves — OPERATOR-ONLY (option 1). The enumeration above is the ruling basis: every caller is the operator UI (ConversationDetailPanel.tsx:84, MobileConversationDetail.tsx:111) and there is NO agent-side caller, so the route serves the OPERATOR principal and the guard is ownership enforced at the SERVICE layer (parseConversationFile in services/config-service.ts): the caller's VERIFIED identity from authenticateFromRequest decides which ~/.claude/projects/<slug>/ root may be read, an agent naming a foreign transcript is refused, and the headless twin (headless-router.ts:778 delegates to the same handler) is covered by construction because the decision lives in the service, not the route.
 
 ## Approval log
 
@@ -144,3 +145,4 @@ first step and not an assumption.
   against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
   `design/proposals/`. Zone only — no content changed and nothing withdrawn.
 - 2026-09-05T10:20:58+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  conversations/parse still auth-only, no per-agent scoping (app/api/conversations/parse/route.ts) . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+- 2026-10-04T20:56:58+0200 — COMPLETE by user. Code landed 46cb7eb1c, 7/7 ownership tests green with recorded neuter, ledger updated in same commit; all acceptance boxes verified.

@@ -1,13 +1,13 @@
 ---
 trdd-id: NWTTU0AQ
-status: tasked
+status: archived
 title: mcp-discover accepts an arbitrary inline serverConfig and spawns its command — any authenticated agent gets code execution
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:00:27+0200
-updated: 2026-09-05T10:20:59+0200
+updated: 2026-10-04T20:56:59+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -147,11 +147,12 @@ cannot express anything the sole caller does not already send.
       Swept in three FORMS over `app components lib services scripts scripts_dev tests` (literal
       endpoint; `serverConfig` as a key; the `discoverTools` helper), counted before reading — the
       `head`-on-an-absence-sweep trap that cost RC33OAFQ a wrong "zero callers" is recorded there.
-- [ ] Ruling recorded here
-- [ ] Guard implemented per the ruling
-- [ ] Refusal test asserting NO spawn + neuter recorded
-- [ ] `configPath` legitimate-path test still green
-- [ ] Ledger updated in the SAME commit if the guard becomes STRONG_AUTHZ
+- [x] Ruling recorded here
+- [x] Guard implemented per the ruling
+- [x] Refusal test asserting NO spawn + neuter recorded
+- [x] `configPath` legitimate-path test still green
+- [x] Ledger updated in the SAME commit if the guard becomes STRONG_AUTHZ
+- [x] Ruling recorded here — TWO-LAYER GUARD on the inline serverConfig branch ONLY: (1) enforceSystemOwner — the enumeration above shows exactly ONE caller of that branch (McpTab.tsx:33, operator UI), no agent-side caller exists, so the inline branch serves the OPERATOR principal; (2) a .strict() two-key schema (command/args only) matching the legitimate payload shape, which refuses an unexpected key even from the owner. The configPath branch stays agent-available per the route header. Pinned in tests/unit/mcp-discover-serverconfig-gate.test.ts (5/5) with a recorded two-mutation neuter.
 
 ## Approval log
 
@@ -165,3 +166,4 @@ cannot express anything the sole caller does not already send.
   against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
   `design/proposals/`. Zone only — no content changed and nothing withdrawn.
 - 2026-09-05T10:20:59+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  mcp-discover `serverConfig` still unvalidated (route.ts:110-115) . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+- 2026-10-04T20:56:59+0200 — COMPLETE by user. Code landed 46cb7eb1c, 5/5 serverconfig gate tests green with recorded two-mutation neuter, ledger updated in same commit; all acceptance boxes verified.

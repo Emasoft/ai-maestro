@@ -48,9 +48,14 @@ vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
 
 const mockGetAgent = vi.fn()
 const mockUpdateAgent = vi.fn()
+const mockLoadAgentsLoud = vi.fn()
 vi.mock('@/lib/agent-registry', () => ({
   getAgent: (...a: unknown[]) => mockGetAgent(...a),
   updateAgent: (...a: unknown[]) => mockUpdateAgent(...a),
+  // TRDD-DQ6XN2VP (f8d635c31) added the R51.7 loud registry read to ChangeClient but
+  // missed this suite's mock — a vi.mock factory must define every export the subject
+  // imports, or destructuring it throws.
+  loadAgentsLoud: (...a: unknown[]) => mockLoadAgentsLoud(...a),
 }))
 
 const mockScanAgentLocalConfig = vi.fn()
@@ -136,6 +141,20 @@ beforeEach(() => {
   mockGetAgent.mockReturnValue(agentFixture())
   mockUpdateAgent.mockResolvedValue(true)
   mockScanAgentLocalConfig.mockReturnValue(scanFixture())
+  // R51.7's G09 post-condition reads the registry LOUD and must find the migrated
+  // program on the agent. Default: ok + the fixture already at the target program;
+  // the R18.10 test overrides to pin the exact write shape.
+  mockLoadAgentsLoud.mockImplementation(async () => {
+    // G09 (R51.7) verifies the migration by finding the agent in the loud read and
+    // checking its program EQUALS the new client. Reflect the current updateAgent
+    // patch so the stub mirrors a registry that actually moved (same source of truth
+    // the G-write half of the test observes via mockUpdateAgent.mock.calls).
+    const patch = (mockUpdateAgent.mock.calls[0]?.[1] ?? {}) as Record<string, unknown>
+    return {
+      ok: true as const,
+      agents: [agentFixture(patch)],
+    }
+  })
 
   // Default resolution: every plugin already has a native version for the target client, which is
   // the R18.3d-preferred path and keeps the converter out of the picture unless a test wants it.

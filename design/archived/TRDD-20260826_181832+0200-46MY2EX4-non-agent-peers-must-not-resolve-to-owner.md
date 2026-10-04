@@ -1,13 +1,13 @@
 ---
 trdd-id: 46MY2EX4
-status: tasked
+status: archived
 title: A local process that resolves to no agent must be refused and never conflated with the system owner
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-09-05T10:21:09+0200
+updated: 2026-10-04T18:34:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -119,3 +119,8 @@ local process on the machine, agent or not.
 ## Approval log
 
 - 2026-09-05T10:21:09+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  fail-closed-on-no-match for identity walk still unimplemented (no such code exists) . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+- 2026-10-04T18:34:42+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
+
+## Implementation
+
+2026-10-04 — implemented, commits 71672f697 + b5d536391, verified: git log shows both TRDD-46MY2EX4 commits; git cat-file -e HEAD confirms lib/agent-auth.ts + tests/security/non-agent-peer-refusal.test.ts. Closing to complete.

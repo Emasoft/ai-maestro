@@ -1,10 +1,10 @@
 ---
 trdd-id: U4KP0H92
-status: tasked
+status: archived
 title: Server-side enforcement of ASSISTANT visibility and messaging restrictions
-column: todo
+column: complete
 created: 2026-09-05T21:04:30+0200
-updated: 2026-10-04T18:22:38+0200
+updated: 2026-10-04T18:34:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: security
@@ -37,3 +37,8 @@ Implement SERVER-SIDE (not merely hook-based) enforcement of the ASSISTANT visib
 ## Approval log
 
 - 2026-09-05T21:04:30+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-10-04T18:34:42+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
+
+## Implementation
+
+2026-10-04 — implemented, commit c6b73834e, verified: git log shows the TRDD-U4KP0H92 commit; git cat-file -e HEAD confirms lib/assistant-collaboration.ts + services/send-message-service.ts. Closing to complete.

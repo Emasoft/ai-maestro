@@ -1,10 +1,10 @@
 ---
 trdd-id: U7MJUHWJ
-status: tasked
+status: archived
 title: ASSISTANT-role filesystem containment hook set
-column: todo
+column: complete
 created: 2026-09-05T21:04:45+0200
-updated: 2026-09-05T21:07:20+0200
+updated: 2026-10-04T18:34:43+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: security
@@ -30,10 +30,15 @@ This EHT gates TRDD-3QRUDK12's completion — the parent mandate is not complete
 Build the ASSISTANT-role hook set that blocks reads AND writes outside the ASSISTANT's own workdir, with an enumerated exception list ONLY: designated locally-scoped folders, project-scoped folders (for approved collaborations per TRDD-U4KP0H92), the ASSISTANT's own files, and files needed for an approved collaboration. This closes the filesystem hole every newly-provisioned ASSISTANT opens until it is installed.
 
 ## Acceptance
-- [ ] A newly-provisioned ASSISTANT cannot read or write any host file outside its workdir except the enumerated exceptions
-- [ ] The exception list is enforced as an allowlist (locally-scoped folders, approved project-scoped folders, the ASSISTANT's own files) — nothing outside it is reachable
-- [ ] The hook set installs automatically as part of ASSISTANT provisioning (TRDD-HB3OKWBN), never as a manual opt-in step
+- [x] A newly-provisioned ASSISTANT cannot read or write any host file outside its workdir except the enumerated exceptions
+- [x] The exception list is enforced as an allowlist (locally-scoped folders, approved project-scoped folders, the ASSISTANT's own files) — nothing outside it is reachable
+- [x] The hook set installs automatically as part of ASSISTANT provisioning (TRDD-HB3OKWBN), never as a manual opt-in step
 
 ## Approval log
 
 - 2026-09-05T21:04:45+0200 — MANDATE issued by ai-maestro-hub-session (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-10-04T18:34:43+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
+
+## Implementation
+
+2026-10-04 — implemented, commit 7f98793f1. Boxes 1-2 verified against tests/unit/assistant-fs-containment.test.ts (19 tests pass, real bash spawnSync of rules/aimaestro-hooks/assistant-fs-containment-guard.sh: blocks BOTH reads and writes outside workdir, allowlist-admits env-declared local+project folders while refusing a sibling-prefix dir, ignores heredoc bodies, fails closed with no workdir). Box 3 verified against the real wiring: lib/agent-invariants.ts:187 row 'assistant-fs-containment' (triggers create+wake+periodic) is invoked by enforceAgentInvariants at services/element-management-service.ts:10744 (CreateAgent G05 pipeline, trigger 'create'), services/agents-core-service.ts:2077 (wakeAgent, trigger 'wake'), and server.mjs:1933 boot sweep. Provisioning installs the hook automatically via that row; no manual opt-in. HB3OKWBN (auto-provision-on-registration) only governs WHO gets an ASSISTANT, not whether an ASSISTANT gets containment — that is this invariant, and it is live. Note: worker's report claimed it ticked these; the file read [ ]. Now resolved box-by-box. Closing to complete.

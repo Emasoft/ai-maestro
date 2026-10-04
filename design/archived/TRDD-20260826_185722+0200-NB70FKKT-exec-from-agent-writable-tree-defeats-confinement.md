@@ -1,13 +1,13 @@
 ---
 trdd-id: NB70FKKT
-status: tasked
+status: archived
 title: An unconfined process executing a script from the agent-writable tree defeats the sandbox entirely
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-10-04T17:03:51+0200
+updated: 2026-10-04T18:34:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -619,3 +619,8 @@ with total confidence.
   as `accepted-hole` with the card's own rulings quoted.
 - Remaining box-1 residue deliberately NOT done (per the card's own note): the per-site process
   column across ~300 sites — the answer is one of five values and the card says so.
+- 2026-10-04T18:34:42+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
+
+## Implementation
+
+2026-10-04 — implemented, commit 2270ef7e2, verified: git log shows the TRDD-NB70FKKT commit; git cat-file -e HEAD confirms lib/agent-keychain-probe.ts + lib/agent-exec-site-inventory.ts. Closing to complete.

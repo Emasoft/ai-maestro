@@ -1,13 +1,13 @@
 ---
 trdd-id: 7YRXXKE8
-status: tasked
+status: archived
 title: PID reuse is closed for the peer and open for every ancestor the identity walk touches
-column: planned
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-10-04T16:55:00+0200
+updated: 2026-10-04T18:34:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -72,3 +72,8 @@ needs answered. A true statement about the peer was read as a statement about th
 ## Approval log
 
 - 2026-09-05T10:21:17+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  PID-reuse gap beyond the live peer still unaddressed . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+- 2026-10-04T18:34:42+0200 — COMPLETE by main-agent@ai-maestro. archived → complete.
+
+## Implementation
+
+2026-10-04 — implemented, commit 0dd612bf5, verified: git log shows the TRDD-7YRXXKE8 commit; git cat-file -e HEAD confirms lib/identity-walk.ts + lib/proc-identity.ts. Closing to complete.

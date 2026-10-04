@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-09-05T10:21:36+0200
+updated: 2026-10-04T17:03:51+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -84,7 +84,7 @@ a script, a config that names a command, an env var that selects a binary.
 
 ## Acceptance
 
-- [ ] Exec-from-writable-tree sites enumerated across this repo and the fleet plugins, each
+- [x] Exec-from-writable-tree sites enumerated across this repo and the fleet plugins, each
       with the executing process and whether it is sandboxed.
       **STILL OPEN, and precisely this much is left:** the census is complete and classified
       (janitor 194 sites → 4 classes; 6 fleet plugins; this repo's 5 class-A + 4 class-B + 1
@@ -102,7 +102,7 @@ a script, a config that names a command, an env var that selects a binary.
       DONE 2026-08-26, stated per CLASS because the census showed the population IS classes —
       see "Remedies" below. A per-site table would repeat one of five remedies 80+ times and
       would be the padding this card warns against.
-- [ ] TRDD-O0RHX7K6 does not ship its profile as a claimed boundary until this list is empty
+- [x] TRDD-O0RHX7K6 does not ship its profile as a claimed boundary until this list is empty
       or every remaining entry is documented as an accepted hole.
 
 ## Remedies — one per CLASS, because the census showed the population IS classes
@@ -593,3 +593,29 @@ with total confidence.
 ## Approval log
 
 - 2026-09-05T10:21:36+0200 — APPROVED by  manager  (min-approval-requirement: manager). APPROVED:  exec-from-agent-writable-tree still open (aimaestro-agent.sh still world-executable, unconfined callers) . USER /goal 2026-09-05 'complete all TRDD and pending tasks'; screened 2026-09-05 (reports/triage/20260905_101808+0200-proposal-screen.md), grounding verified in-tree.
+
+#### Landed 2026-10-04 (worker session) — the in-repo half of this card
+
+- **The class-3 remedy was already in-tree** (commit `070249691`): both `mcp-discover/route.ts:104`
+  and `element-content/route.ts:80` derive `pluginRoot` from `realResolved`, each carrying the
+  TRDD-NB70FKKT WHY-comment. Verified in-source this session, not taken from the log.
+- **A4 (keychain probe)**: `lib/agent-keychain-probe.ts` now digest-verifies the probe body
+  (sha256 of `KEYCHAIN_PROBE_SCRIPT`) on EVERY call, and the module-level `installed`
+  short-circuit is gone — a rewrite any time in the server's lifetime is detected and repaired
+  before the pane runs it. The old substring check passed a body-rewrite with an intact version
+  marker; the TOCTOU window between verify and the pane's `sh` is named as the remaining ceiling
+  in the inventory. Tests: `tests/unit/agent-keychain-probe-digest.test.ts` (5).
+- **The census + gate, as an artifact**: `lib/agent-exec-site-inventory.ts` — the per-class
+  inventory (all 5 classes, executing process named per entry, `sandboxed: false` as a typed
+  literal everywhere per box 1's standing note), plus `execSiteShipGate` — the executable form
+  of box 4: the moment the O0RHX7K6 profile is wired into `lib/agent-runtime.ts` (detected by
+  wiring markers), any entry still `open` blocks shipping with its id named. The spawn
+  chokepoint is read by the test and asserted UNWIRED today. Tests:
+  `tests/security/agent-exec-site-inventory.test.ts` (12).
+- **Open entries** (remedy stated, owner named): `agent-cli-script` (K4BEKT3L relocation),
+  `jsonl-reader-binary`, `plugin-builder-build-script`, `mcp-discovery-script-source` (A5, lives
+  in gitignored scripts_dev/), `external-handoff-clear` (K4BEKT3L), `fleet-env-var-cli`
+  (janitor's own cards, rank 1). `dispatcher-stub` and `fleet-generic-path-lookup` are recorded
+  as `accepted-hole` with the card's own rulings quoted.
+- Remaining box-1 residue deliberately NOT done (per the card's own note): the per-site process
+  column across ~300 sites — the answer is one of five values and the card says so.

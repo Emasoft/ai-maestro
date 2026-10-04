@@ -14,6 +14,7 @@
  */
 
 import { promises as fs } from 'fs'
+import { createHash } from 'crypto'
 import path from 'path'
 import os from 'os'
 
@@ -50,26 +51,34 @@ export const KEYCHAIN_PROBE_INSTALL_PATH = path.join(
   'agent-keychain-probe.sh',
 )
 
-let installed = false
-
-export function resetKeychainProbeInstallForTests() {
-  installed = false
-}
-
 /**
- * Idempotent installer. Writes the probe to KEYCHAIN_PROBE_INSTALL_PATH only if
- * missing or version-stale, using tmp+rename so concurrent installers cannot
- * tear the file.
+ * Idempotent installer, verified by DIGEST on every call.
+ *
+ * TRDD-NB70FKKT (A4): this file lives in ~/.aimaestro, inside the tree an agent pane can
+ * reach, and every launch executes it via `sh "<path>"` in that pane. Two earlier
+ * weaknesses, both closed here:
+ *
+ *  1. The old integrity test was a SUBSTRING match on the version marker — a file whose
+ *     version line was intact but whose BODY was rewritten passed the check and got
+ *     executed. Only a digest of the whole body pins it.
+ *  2. The module-level `installed` short-circuit skipped ALL verification after the first
+ *     install, so a rewrite any time later in the server's lifetime went unnoticed
+ *     forever. The check now runs on every call — one file read per launch, against a
+ *     spawn — and repairs a tampered/stale file in place before the pane ever runs it.
+ *
+ * Remaining ceiling, named honestly in the inventory (keychain-probe-script entry): the
+ * TOCTOU window between this verify and the pane's `sh` is not closable server-side.
  */
 export async function ensureKeychainProbeInstalled(): Promise<void> {
-  if (installed) return
   const dir = path.dirname(KEYCHAIN_PROBE_INSTALL_PATH)
   await fs.mkdir(dir, { recursive: true })
 
   let needsWrite = true
   try {
     const existing = await fs.readFile(KEYCHAIN_PROBE_INSTALL_PATH, 'utf8')
-    if (existing.includes(`keychain preflight — version ${KEYCHAIN_PROBE_VERSION} `)) {
+    const expected = createHash('sha256').update(KEYCHAIN_PROBE_SCRIPT).digest('hex')
+    const actual = createHash('sha256').update(existing).digest('hex')
+    if (expected === actual) {
       needsWrite = false
     }
   } catch {
@@ -81,5 +90,4 @@ export async function ensureKeychainProbeInstalled(): Promise<void> {
     await fs.writeFile(tmpPath, KEYCHAIN_PROBE_SCRIPT, { encoding: 'utf8', mode: 0o700 })
     await fs.rename(tmpPath, KEYCHAIN_PROBE_INSTALL_PATH)
   }
-  installed = true
 }

@@ -132,7 +132,7 @@ export function getTmuxServerKeychainAlarm(): AlarmState {
   return { ...alarmState }
 }
 
-/** Test-only reset — mirrors resetKeychainProbeInstallForTests' shape. */
+/** Test-only reset. */
 export function resetTmuxServerKeychainAlarmForTests(): void {
   alarmState = { active: false }
 }

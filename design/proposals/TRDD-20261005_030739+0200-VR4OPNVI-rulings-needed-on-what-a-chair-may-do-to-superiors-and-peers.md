@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:12:23+0200
+updated: 2026-10-05T04:27:45+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -57,6 +57,10 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [x] 12 WIDENED: the same tool limit blocks every edit inside the two largest pipeline functions (title change, agent delete). One confirmed defect stays open only because of it: a failed token revocation after a title change is reported as success
 - [x] 12 NO LONGER BLOCKING: a fastedit-only method for line-range edits was found and used. No answer needed unless you want the Edit tool allowed anyway
 - [ ] 15 (FYI/DECIDE) In headless mode five routes never run because an earlier generic route answers first: the four creation-helper session/chat routes and listing role plugins. Nothing is exposed. Do you use the creation helper or role-plugin listing in headless? If not I leave them; if yes they need authentication added before being made reachable
+- [ ] 16 (DECIDE) Deleting a SESSION today also soft-deletes the agent's registry record, with no cemetery archive (TRDD-TCDIVXPS). Should killing a session remove the agent at all, or only stop the process?
+- [ ] 17 (DECIDE) When a new agent is created with a soft-deleted agent's name it adopts the old agent's folder. Refuse the name, adopt, or start clean?
+- [ ] 18 (DECIDE) Full mode requires sudo for ANY agent delete by the owner, soft included. Headless will require it for hard delete only. Should the owner's soft delete need sudo in headless too?
+- [x] 14 UPDATED: soft delete leaves the agent's portfolio tokens dormant (usable again only if the delete is rolled back); hard delete will revoke them; revive creates a new id. Open part unchanged: re-issue equivalent tokens to a resurrected agent automatically? Default: no
 
 ## Approval log
 

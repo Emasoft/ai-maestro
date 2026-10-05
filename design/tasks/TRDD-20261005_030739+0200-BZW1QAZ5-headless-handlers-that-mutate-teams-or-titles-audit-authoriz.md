@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:12:23+0200
+updated: 2026-10-05T04:27:43+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -65,6 +65,10 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] LANDED 6e1b24aa0: the dropped non-owner-user purge case is back. CAVEATS read in its diff AFTER committing: the test applies the model-ON owner rule through a wrapper around buildAuthContext, because the real one reads the flag through a lazy require the mock cannot reach — so it partly tests the wrapper. Fix dispatched (make that require a static import). FINDING per worker, unread by me: the full-mode cemetery handler's own owner check tests only auth.agentId; with the model on, only the sudo guard's title gate stops a non-owner user. Also: the d437e8a54 boot-test red was rerun in the main tree, 3/3 pass
 - [ ] RESERVED NAMES (dispatched): a request for /api/agents/role-plugins, /creation-helper or /cemetery that misses its own route is answered by the generic by-id handler; an agent NAMED one of those would be acted on (a plugin uninstall would delete an agent). Refuse those names at agent creation and rename. The four creation-helper routes and GET role-plugins otherwise stay shadowed (decision: no exposure today; reachability is a feature change) — put to the user on TRDD-VR4OPNVI
 - [ ] STRAY FILE: some test or spawned script creates a 3-byte file literally named -o (content {}) in the working directory on every full run (seen in the repo root and in a fresh worktree). Untracked; a wildcard stage would sweep it in. Find the command passing -o where a filename is expected
+- [x] LANDED d51a40385: role-plugins and cemetery are reserved agent names (create, and rename to a new name). Evidence and neuter in the commit message. OPEN: import/revive bypasses the check
+- [ ] CORRECTION TO EVERY 'full suite' CLAIM OF 2026-10-05: the orchestrator's run covers tests/governance, unit, security, services, api, lib and tests/*.test.ts. tests/integration was NEVER in it. A worker saw 6 CreateAgent reds in two integration files, not compared with a baseline. Owed: one tests/integration run at a pre-session commit and one at HEAD, compare the red lists
+- [ ] IN PROGRESS (uncommitted), commit order has real dependencies — static import of the user-authority flag (lib/agent-auth.ts + the delegated-routes test losing its wrapper) THEN headless hard delete (its test copies that harness) THEN cemetery owner checks. Cemetery: the orchestrator's brief wrongly said GET already used the owner check — it did not; GET and the download route (neither sudo-strict, so the handler check is the ONLY gate) are now fixed with tests per the worker; the POST/DELETE handler checks cannot be isolated from the sudo guard. ERRATUM on e5988b911: its headless cemetery-list comment says it mirrors a full-mode owner check; full mode had only a bare agentId test until this change. Headless hard delete: the owner can hard-delete with no sudo today — being routed to the full-mode handler; owner SOFT delete stays sudo-free in headless by choice (question for the user)
+- [x] HYGIENE: a worker redirected three scratch files (r1.txt-r3.txt, one a copy of a source file) into the repo root; moved to gitignored reports_dev/stray/. The stray -o file comes from a fake curl in tests/unit/cli-help-exit-contract.test.ts writing to its second positional argument; fix written (TRDD-RB72KQI2 box 1), uncommitted. Worker briefs now say: scratch only under /tmp
 
 ## Approval log
 

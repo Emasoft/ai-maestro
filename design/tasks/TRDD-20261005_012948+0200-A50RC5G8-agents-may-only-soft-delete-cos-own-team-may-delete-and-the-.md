@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T04:15:19+0200
+updated: 2026-10-05T04:27:44+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -107,6 +107,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] CLOSING THIS CARD: boxes above whose subject moved (slot writers, cross-host, token claims, headless audit, user questions) are to be ticked as 'moved to TRDD-…' one by one, each only after checking the destination card carries it. Boxes that stay: un-mocked delete-restore round trip, folder adoption on name reuse, status code on DeleteAgentResult, UI label, cemetery purge/restore gate, hard delete = user + sudo on three surfaces, neuters recorded
 - [ ] The relevant: field set on the four split cards is read by no tool I could find (grep of lib/trdd*.ts found nothing) — NOT ESTABLISHED that the split is machine-readable; implementation-commits: is still unfilled on all five cards
 - [x] The two PROJECT memory pages that taught 'only the MANAGER can delete agents' are corrected (memory commit after 40ca151fd): ruled / implemented / awaiting-the-user stated separately. Residue: an overstated first lesson stands beside its correction on each page because memgrep cannot rewrite a lesson by id — to be raised on the janitor repo
+- [x] Filed Emasoft/ai-maestro-janitor issue 331 for four memgrep gaps (a lesson cannot be corrected by its id; no verb for a page description; undocumented stdin contract; repair shrinks descriptions). The repair chore's eight shortened descriptions are committed; verified only desc and lmd changed on those lines; the dropped specifics are NOT restored (owed: add them to keywords). A follow-up comment is owed to separate gap 1 from closed issue 277 and gap 3 from open issue 322
+- [ ] TRIAGE 2026-10-05 (worker-classified, mostly unread by the orchestrator): this card 7 met, 4 small, 1 large, 5 for the user, 1 stale; report reports/triage/20261005_042403+0200-XTDMQO68-A50RC5G8-triage.md. Do not tick a box from the triage without reading its evidence
 
 ## Approval log
 

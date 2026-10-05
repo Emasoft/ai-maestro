@@ -60,6 +60,31 @@ function assertSafeSubjectId(agentId: string): void {
   }
 }
 
+export type PortfolioStoreFaultKind = 'unreadable' | 'unparseable' | 'wrong-shape'
+
+/**
+ * A portfolio file that exists but cannot be used. `kind` says why (the read itself failed /
+ * not valid JSON or empty / valid JSON that is not a token list); `file` is the basename only.
+ */
+export class PortfolioStoreFault extends Error {
+  constructor(readonly kind: PortfolioStoreFaultKind, readonly file: string, message: string) {
+    super(message)
+    this.name = 'PortfolioStoreFault'
+  }
+}
+
+
+/**
+ * Recognise a fault by its own properties, not `instanceof`: a second loaded instance of this
+ * module (vi.resetModules, a test that redirects HOME) has a different class object, so
+ * `instanceof` would be false for an error that is a fault by every other measure.
+ */
+export function isPortfolioStoreFault(err: unknown): err is PortfolioStoreFault {
+  if (!(err instanceof Error) || err.name !== 'PortfolioStoreFault') return false
+  const f = err as Partial<PortfolioStoreFault>
+  return (f.kind === 'unreadable' || f.kind === 'unparseable' || f.kind === 'wrong-shape') && typeof f.file === 'string'
+}
+
 function portfolioFilePath(agentId: string): string {
   assertSafeSubjectId(agentId)
   return path.join(PORTFOLIOS_DIR, `${agentId}.json`)
@@ -124,19 +149,30 @@ export function loadPortfolio(agentId: string): PortfolioToken[] {
   // '' throws anyway. The message carries the basename and error class/code only: a JSON
   // SyntaxError message quotes file content, and the content is credentials. Read/validation
   // paths (findActiveTokens, findTokenAnywhere) catch this and honour no token.
+  // Each fault is a PortfolioStoreFault whose `kind` is set HERE, where the cause is known, so a
+  // caller classifies the error it caught instead of re-reading the file.
   const base = path.basename(filePath)
+  const failed = (kind: PortfolioStoreFaultKind, message: string): never => {
+    dropCacheEntry(agentId)
+    throw new PortfolioStoreFault(kind, base, message)
+  }
+  const causeOf = (err: unknown): string =>
+    (err as NodeJS.ErrnoException)?.code ?? (err instanceof Error ? err.name : 'unknown error')
+  let raw: string
+  try {
+    raw = fs.readFileSync(filePath, 'utf-8')
+  } catch (err) {
+    return failed('unreadable', `[portfolio-store] ${base} exists but could not be read or parsed (${causeOf(err)})`)
+  }
   let data: unknown
   try {
-    data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    data = JSON.parse(raw)
   } catch (err) {
-    dropCacheEntry(agentId)
-    const cause = (err as NodeJS.ErrnoException)?.code ?? (err instanceof Error ? err.name : 'unknown error')
-    throw new Error(`[portfolio-store] ${base} exists but could not be read or parsed (${cause})`)
+    return failed('unparseable', `[portfolio-store] ${base} exists but could not be read or parsed (${causeOf(err)})`)
   }
   const list = (data as { tokens?: unknown } | null)?.tokens
   if (!Array.isArray(list) || !list.every(t => t && typeof t === 'object' && typeof t.token_id === 'string')) {
-    dropCacheEntry(agentId)
-    throw new Error(`[portfolio-store] ${base} exists but is not a list of token records`)
+    return failed('wrong-shape', `[portfolio-store] ${base} exists but is not a list of token records`)
   }
 
   const pruned = pruneStatuses(list as PortfolioToken[], now)

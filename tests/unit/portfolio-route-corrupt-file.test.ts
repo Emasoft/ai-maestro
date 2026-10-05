@@ -142,15 +142,19 @@ describe('portfolio route over an unreadable file: no oracle for unauthorized ca
     await expectUnreadable(await route.POST(await postReq(), ctx))
   })
 
-  it('GET with an id outside the safe token set never reflects the id in the message', async () => {
+  it('GET with an id valid for the store but outside the route-safe set never reflects the id in the message', async () => {
+    // The store accepts '.' and '@' in a subject id; the route names the file only for [A-Za-z0-9_-].
+    const odd = 'a.b@c'
+    fs.mkdirSync(DIR, { recursive: true })
+    fs.writeFileSync(path.join(DIR, `${odd}.json`), CORRUPT)
     const res = await route.GET(
       new NextRequest(new URL('http://localhost:23000/api/agents/x/portfolio')),
-      { params: Promise.resolve({ id: 'a<b>.c/d' }) },
+      { params: Promise.resolve({ id: odd }) },
     )
     expect(res.status).toBe(500)
     const raw = await res.text()
     expect(JSON.parse(raw).error).toBe('portfolio_unreadable')
-    expect(raw).not.toContain('a<b>')
+    expect(raw).not.toContain('a.b@c')
   })
 })
 
@@ -247,5 +251,40 @@ describe('portfolio route: only the store fault is reported as an unreadable fil
       return 'sig'
     })
     await expectUnreadable(await route.POST(await postReq(), ctx))
+  })
+})
+
+describe('portfolio route: the caught error is classified, the file is not re-read', () => {
+  it('an unreadable-kind fault answers portfolio_unreadable with the permissions wording and never suggests removal', async () => {
+    fs.mkdirSync(FILE, { recursive: true }) // exists but cannot be read (EISDIR)
+    const res = await route.GET(req('GET'), ctx)
+    expect(res.status).toBe(500)
+    const raw = await res.text()
+    const body = JSON.parse(raw)
+    expect(body.error).toBe('portfolio_unreadable')
+    expect(body.message).toContain(`${SUBJECT}.json`)
+    expect(body.message).toMatch(/could not be read/)
+    expect(body.message).toMatch(/permissions/)
+    expect(raw).not.toMatch(/remove/i)
+    expect(raw).not.toContain(TMP_HOME)
+  })
+
+  it('a generic non-store Error from the load answers the generic 500 even though the file on disk IS corrupt', async () => {
+    writeFile(CORRUPT)
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const boom = vi.spyOn(fs, 'existsSync').mockImplementationOnce(() => {
+      throw new Error('simulated lock timeout')
+    })
+    try {
+      const res = await route.GET(req('GET'), ctx)
+      const raw = await res.text()
+      expect(res.status).toBe(500)
+      expect(JSON.parse(raw).error).not.toBe('portfolio_unreadable')
+      expect(raw).not.toMatch(/repair|remove|parsed/i)
+      expect(raw).not.toContain('simulated lock timeout')
+    } finally {
+      boom.mockRestore()
+      quiet.mockRestore()
+    }
   })
 })

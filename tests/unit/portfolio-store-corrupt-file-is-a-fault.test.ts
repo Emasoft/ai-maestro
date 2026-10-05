@@ -190,3 +190,78 @@ describe('fault reporting and mutators', () => {
     }
   })
 })
+
+describe('the fault is typed at its source (PortfolioStoreFault)', () => {
+  function catchLoad(): unknown {
+    try {
+      store.loadPortfolio(SUBJECT)
+    } catch (e) {
+      return e
+    }
+    return undefined
+  }
+
+  it('unparseable: invalid JSON throws PortfolioStoreFault kind unparseable with the basename', () => {
+    writeFile(CORRUPT)
+    const e = catchLoad() as InstanceType<StoreModule['PortfolioStoreFault']>
+    expect(e).toBeInstanceOf(store.PortfolioStoreFault)
+    expect(e.kind).toBe('unparseable')
+    expect(e.file).toBe(`${SUBJECT}.json`)
+  })
+
+  it('unparseable: an empty file is the same kind', () => {
+    writeFile('')
+    const e = catchLoad() as InstanceType<StoreModule['PortfolioStoreFault']>
+    expect(e).toBeInstanceOf(store.PortfolioStoreFault)
+    expect(e.kind).toBe('unparseable')
+  })
+
+  it('wrong-shape: valid JSON that is not a token list throws kind wrong-shape with the basename', () => {
+    writeFile('{"agent_id":"x","tokens":"nope"}')
+    const e = catchLoad() as InstanceType<StoreModule['PortfolioStoreFault']>
+    expect(e).toBeInstanceOf(store.PortfolioStoreFault)
+    expect(e.kind).toBe('wrong-shape')
+    expect(e.file).toBe(`${SUBJECT}.json`)
+  })
+
+  it('unreadable: a path that exists but cannot be read (a directory, EISDIR) throws kind unreadable', () => {
+    fs.mkdirSync(FILE, { recursive: true }) // existsSync is true, readFileSync fails: no chmod, so it also fails as root
+    const e = catchLoad() as InstanceType<StoreModule['PortfolioStoreFault']>
+    expect(e).toBeInstanceOf(store.PortfolioStoreFault)
+    expect(e.kind).toBe('unreadable')
+    expect(e.file).toBe(`${SUBJECT}.json`)
+    expect(e.message).toContain('EISDIR')
+    fs.rmSync(FILE, { recursive: true, force: true })
+  })
+
+  it('a missing file is still an empty portfolio, not a fault', () => {
+    expect(catchLoad()).toBeUndefined()
+    expect(store.loadPortfolio(SUBJECT)).toEqual([])
+  })
+})
+
+describe('isPortfolioStoreFault recognises a fault by its properties', () => {
+  it('a fault thrown by a separately loaded module instance is recognised by this instance guard', async () => {
+    writeFile(CORRUPT)
+    vi.resetModules()
+    const other = await import('@/lib/portfolio-store')
+    expect(other).not.toBe(store) // a genuinely second instance, with its own class object
+    let thrown: unknown
+    try {
+      other.loadPortfolio(SUBJECT)
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown).toBeInstanceOf(other.PortfolioStoreFault)
+    expect(thrown).not.toBeInstanceOf(store.PortfolioStoreFault) // instanceof alone would miss it
+    expect(store.isPortfolioStoreFault(thrown)).toBe(true)
+  })
+
+  it('a plain Error, or an error with a wrong kind, is not a fault', () => {
+    expect(store.isPortfolioStoreFault(new Error('x'))).toBe(false)
+    const e = new Error('x')
+    e.name = 'PortfolioStoreFault'
+    expect(store.isPortfolioStoreFault(e)).toBe(false)
+    expect(store.isPortfolioStoreFault('PortfolioStoreFault')).toBe(false)
+  })
+})

@@ -12,7 +12,8 @@ import {
   setLedgerSeq,
   findActiveTokens,
   loadPortfolio,
-  portfolioStoreFault,
+  type PortfolioStoreFault,
+  isPortfolioStoreFault,
   getTokenById,
   revokeToken,
 } from '@/lib/portfolio-store'
@@ -42,16 +43,19 @@ const DEFAULT_APPROVAL_TTL_SECONDS = 3600
 const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it sooner)
 
 
-// A portfolio file that EXISTS but cannot be parsed is a fault, not an empty portfolio
-// (TRDD-8E6XMDEX). loadPortfolio THROWS on it; uncaught, the throw reached the route-level catch and
-// answered a bare "Internal server error". (findActiveTokens, by contrast, swallows the same fault
-// into an empty list, so a handler relying on it alone would tell the owner the agent has no tokens.)
+// A portfolio file that EXISTS but cannot be used is a fault, not an empty portfolio
+// (TRDD-8E6XMDEX). loadPortfolio THROWS a PortfolioStoreFault on it, whose `kind` says why
+// (unreadable: the read itself failed; unparseable: not valid JSON; wrong-shape: not a token list).
+// Uncaught, the throw reached the route-level catch and answered a bare "Internal server error".
+// (findActiveTokens, by contrast, swallows the same fault into an empty list, so a handler relying
+// on it alone would tell the owner the agent has no tokens.)
 //
-// GET and DELETE load once, at the read site (tryLoadPortfolio), so the answer and the data cannot
-// disagree. POST loads twice (the pre-check, then the mint's own load inside issueToken), so a file
-// corrupted between the two is caught by the same store-fault test wrapped around the mint. The
-// store throws one plain Error type for every fault: a store fault means "unreadable or unsafe id",
-// any other throw propagates to the route's generic 500.
+// GET and DELETE load once, at the read site (tryLoadPortfolio); POST loads twice (the pre-check,
+// then the mint's own load inside issueToken), so a file that goes bad between the two is caught by
+// the same classification wrapped around the mint. The caught error itself is classified with
+// isPortfolioStoreFault (a property check: a second loaded copy of the store has its own class, so instanceof is unsafe): nothing re-reads the file, so the answer describes the throw that
+// happened. Any other throw (lock timeout, an unsafe id, a bug) propagates to the route's generic
+// 500 and never tells the owner to repair or remove a credential file.
 //
 // An unreadable file is also an ORACLE if disclosed to anyone: a caller that is neither the system
 // owner nor allowed to read the portfolio must get exactly the answer a healthy file would give
@@ -61,28 +65,22 @@ const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it so
 // token (the system owner's id is the literal "system-owner", so UUIDs cannot be required); otherwise
 // the message says "portfolio file" without it.
 
-function tryLoadPortfolio(subjectAgentId: string): PortfolioToken[] | null {
+function tryLoadPortfolio(subjectAgentId: string): PortfolioToken[] | PortfolioStoreFault {
   try {
     return loadPortfolio(subjectAgentId)
   } catch (err) {
-    // Only the store's own fault (corrupt/wrong-shape file, unsafe id) means "unreadable". Any other
-    // throw (lock timeout, a bug) must not tell the owner to repair or remove a credential file: it
-    // propagates to the route's generic 500. The fault is re-evaluated ONLY here, so the healthy path
-    // still does one read.
-    if (portfolioStoreFault(subjectAgentId) === null) throw err
-    return null
+    if (isPortfolioStoreFault(err)) return err
+    throw err
   }
 }
 
-function portfolioUnreadableResponse(subjectAgentId: string): NextResponse {
+function portfolioUnreadableResponse(subjectAgentId: string, fault: PortfolioStoreFault): NextResponse {
   const named = /^[A-Za-z0-9_-]+$/.test(subjectAgentId) ? ` ${subjectAgentId}.json` : ''
-  return NextResponse.json(
-    {
-      error: 'portfolio_unreadable',
-      message: `The portfolio file${named} for this agent is unreadable: it exists but could not be parsed. Inspect and repair it; remove it only if it cannot be repaired (removal discards every token in it).`,
-    },
-    { status: 500 },
-  )
+  const message =
+    fault.kind === 'unreadable'
+      ? `The portfolio file${named} for this agent is unreadable: it exists but could not be read. Check its permissions.`
+      : `The portfolio file${named} for this agent is unreadable: it exists but could not be parsed. Inspect and repair it; remove it only if it cannot be repaired (removal discards every token in it).`
+  return NextResponse.json({ error: 'portfolio_unreadable', message }, { status: 500 })
 }
 
 function readForbiddenResponse(): NextResponse {
@@ -182,7 +180,8 @@ export async function POST(
     // TRDD-8E6XMDEX: an unreadable subject file would otherwise surface as a bare 500 from issueToken.
     // Placed after authentication, canIssue and the live-subject check, so only an authorized minter
     // can learn the file is unreadable, and before anything is minted or signed.
-    if (tryLoadPortfolio(subjectAgentId) === null) return portfolioUnreadableResponse(subjectAgentId)
+    const preLoad = tryLoadPortfolio(subjectAgentId)
+    if (!Array.isArray(preLoad)) return portfolioUnreadableResponse(subjectAgentId, preLoad)
 
     // Build the token. The issuer title comes from the AID-derived context and is
     // SIGNED, so it is the token's own claim about what authority minted it.
@@ -248,9 +247,10 @@ export async function POST(
     try {
       await issueToken(token)
     } catch (err) {
-      // The file went bad between the pre-check and the mint's own read: same answer as the pre-check.
-      if (portfolioStoreFault(subjectAgentId) === null) throw err
-      return portfolioUnreadableResponse(subjectAgentId)
+      // The file went bad between the pre-check and the mint's own read: same answer as the pre-check,
+      // classified from the error that was thrown (no second read).
+      if (isPortfolioStoreFault(err)) return portfolioUnreadableResponse(subjectAgentId, err)
+      throw err
     }
     const seq = await emitPortfolioOp('issue_portfolio_token', token.token_id, issueDiff(token), {
       action: 'issue-portfolio-token',
@@ -305,10 +305,10 @@ export async function GET(
     const ctx = buildAuthContext(auth)
 
     const all = tryLoadPortfolio(subjectAgentId)
-    if (all === null) {
+    if (!Array.isArray(all)) {
       // Issuer status cannot be known over an unreadable file, so it is denied: only the system owner
       // and the subject itself are told why; everyone else gets the ordinary 403 (no oracle).
-      if (ctx.isSystemOwner || ctx.agentId === subjectAgentId) return portfolioUnreadableResponse(subjectAgentId)
+      if (ctx.isSystemOwner || ctx.agentId === subjectAgentId) return portfolioUnreadableResponse(subjectAgentId, all)
       return readForbiddenResponse()
     }
     const isSelf = ctx.agentId === subjectAgentId
@@ -361,9 +361,10 @@ export async function DELETE(
     }
 
     // Ensure the subject's portfolio is loaded so getTokenById resolves it.
-    if (tryLoadPortfolio(subjectAgentId) === null) {
+    const loaded = tryLoadPortfolio(subjectAgentId)
+    if (!Array.isArray(loaded)) {
       // Same rule as GET: only the system owner is told; everyone else gets the ordinary 403.
-      if (ctx.isSystemOwner) return portfolioUnreadableResponse(subjectAgentId)
+      if (ctx.isSystemOwner) return portfolioUnreadableResponse(subjectAgentId, loaded)
       return revokeForbiddenResponse()
     }
     const token = getTokenById(tokenId)

@@ -1137,6 +1137,26 @@ describe('performRequestExecution (via approve flow)', () => {
         )
       })
 
+      // getTeamsForAgent counts agentIds OR chiefOfStaffId OR orchestratorId as membership: a slot holder
+      // that is not listed in agentIds is still in that team.
+      it('refuses an agent that is only the ORCHESTRATOR of another team (not in its agentIds)', async () => {
+        /** Slot-only membership counts as a team membership (R4.1) */
+        const teams = [...teamsFor('agent-g1'), baseTeam({ id: 'team-other', agentIds: [], orchestratorId: 'agent-g1' })]
+        expectRefused(
+          await runExec(type, payloadFor('agent-g1'), teams, { id: 'agent-g1' }),
+          `Cannot execute ${type}: agent 'agent-g1' is already in team 'team-other'; remove it from that team first`,
+        )
+      })
+
+      it('refuses an agent that is only the chair of another team (not in its agentIds)', async () => {
+        /** Slot-only membership counts as a team membership (R4.1) */
+        const teams = [...teamsFor('agent-g1'), baseTeam({ id: 'team-other', agentIds: [], chiefOfStaffId: 'agent-g1' })]
+        expectRefused(
+          await runExec(type, payloadFor('agent-g1'), teams, { id: 'agent-g1' }),
+          `Cannot execute ${type}: agent 'agent-g1' is already in team 'team-other'; remove it from that team first`,
+        )
+      })
+
       it('the MANAGER is exempt from single-team membership (as in validateTeamMutation)', async () => {
         /** The MANAGER may sit in any team, so the R4.1 refusal must not apply to it */
         const teams = [...teamsFor('manager-agent'), baseTeam({ id: 'team-other', agentIds: ['manager-agent'] })]
@@ -1144,6 +1164,30 @@ describe('performRequestExecution (via approve flow)', () => {
         expect(out.result.status).toBe(200)
         expect(teams[1].agentIds).toContain('manager-agent')
       })
+    })
+
+    it('transfer-agent refuses a destination that already lists a soft-deleted id (liveness is not skipped)', async () => {
+      /** The destination already listing the id used to skip the live-agent check and report success */
+      const registry: Record<string, { id: string; deletedAt?: string }> = { 'gone-agent': { id: 'gone-agent', deletedAt: '2025-06-01T00:00:00Z' } }
+      mockGetAgent.mockImplementation((id: string, includeDeleted = false) => {
+        const a = registry[id] ?? null
+        return a && a.deletedAt && !includeDeleted ? null : a
+      })
+      expectRefused(
+        await runExec('transfer-agent', { agentId: 'gone-agent', fromTeamId: 'team-src', toTeamId: 'team-dest' },
+          [baseTeam({ id: 'team-src', agentIds: ['gone-agent'] }), baseTeam({ id: 'team-dest', agentIds: ['gone-agent'] })], undefined),
+        "Cannot execute transfer-agent: agent 'gone-agent' is not a live agent",
+      )
+    })
+
+    it('transfer-agent of a live agent listed in BOTH source and destination leaves it in the destination only (pinned, not a design claim)', async () => {
+      /** Pins today's outcome: removed from the source, not duplicated in the destination */
+      const src = baseTeam({ id: 'team-src', agentIds: ['agent-g1', 'agent-s1'] })
+      const dest = baseTeam({ id: 'team-dest', agentIds: ['agent-d1', 'agent-g1'] })
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest], { id: 'agent-g1' })
+      expect(out.result.status).toBe(200)
+      expect(src.agentIds).toEqual(['agent-s1'])
+      expect(dest.agentIds).toEqual(['agent-d1', 'agent-g1'])
     })
 
     it('a refusal that could not be recorded tells the requester the stored request may still read executed', async () => {

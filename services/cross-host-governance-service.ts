@@ -524,12 +524,15 @@ function notifySourceOfExecutionRefusal(request: GovernanceRequest, reason: stri
 // (chief-of-staff grants, portfolio-token mint), so an approved request must not seat (1) an id no live agent
 // holds -- getAgent excludes soft-deleted -- nor (2) a second membership: R4.1, one team per agent, MANAGER
 // exempt, as validateTeamMutation does. `leavingTeamId` is the transfer source: the agent is leaving it.
-function membershipRefusal(type: string, agentId: string, teams: ReturnType<typeof loadTeams>, landingTeamId: string, leavingTeamId?: string): string | null {
+function membershipRefusal(type: string, agentId: string, teams: ReturnType<typeof loadTeams>, landingTeamId: string, leavingTeamId?: string, alreadyInLanding = false): string | null {
   if (!getAgent(agentId)) {
     return `Cannot execute ${type}: agent '${agentId}' is not a live agent`
   }
-  if (agentId === getManagerId()) return null
-  const other = teams.find(t => t.id !== landingTeamId && t.id !== leavingTeamId && t.agentIds.includes(agentId))
+  // Liveness above is unconditional; the one-team half is skipped when the landing team already lists the agent.
+  if (alreadyInLanding || agentId === getManagerId()) return null
+  // Same three-condition membership test as getTeamsForAgent: a chair or orchestrator not listed in agentIds is still a member.
+  const other = teams.find(t => t.id !== landingTeamId && t.id !== leavingTeamId &&
+    (t.agentIds.includes(agentId) || t.chiefOfStaffId === agentId || t.orchestratorId === agentId))
   if (other) {
     return `Cannot execute ${type}: agent '${agentId}' is already in team '${other.id}'; remove it from that team first`
   }
@@ -651,10 +654,8 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
             return refuse(`Cannot execute transfer-agent: destination team '${request.payload.toTeamId}' not found`)
           }
           // Checked before ANY mutation: refusing after the source removal would leave the agent in no team.
-          if (!toTeam.agentIds.includes(request.payload.agentId)) {
-            const membershipError = membershipRefusal('transfer-agent', request.payload.agentId, teams, toTeam.id, fromTeam?.id)
-            if (membershipError) return refuse(membershipError)
-          }
+          const membershipError = membershipRefusal('transfer-agent', request.payload.agentId, teams, toTeam.id, fromTeam?.id, toTeam.agentIds.includes(request.payload.agentId))
+          if (membershipError) return refuse(membershipError)
           if (fromTeam) {
             fromTeam.agentIds = fromTeam.agentIds.filter(id => id !== request.payload.agentId)
           }

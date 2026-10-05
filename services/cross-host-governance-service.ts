@@ -518,6 +518,24 @@ function notifySourceOfExecutionRefusal(request: GovernanceRequest, reason: stri
   }
 }
 
+// TRDD-XTDMQO68: refusal reason when seating `agentId` in a team would break a membership rule, else null.
+// Why: this path writes through loadTeams/saveTeams, which validate nothing, and it runs inside the
+// non-reentrant 'teams' lock so it cannot call updateTeam (TRDD-A50RC5G8). team.agentIds is read as authority
+// (chief-of-staff grants, portfolio-token mint), so an approved request must not seat (1) an id no live agent
+// holds -- getAgent excludes soft-deleted -- nor (2) a second membership: R4.1, one team per agent, MANAGER
+// exempt, as validateTeamMutation does. `leavingTeamId` is the transfer source: the agent is leaving it.
+function membershipRefusal(type: string, agentId: string, teams: ReturnType<typeof loadTeams>, landingTeamId: string, leavingTeamId?: string): string | null {
+  if (!getAgent(agentId)) {
+    return `Cannot execute ${type}: agent '${agentId}' is not a live agent`
+  }
+  if (agentId === getManagerId()) return null
+  const other = teams.find(t => t.id !== landingTeamId && t.id !== leavingTeamId && t.agentIds.includes(agentId))
+  if (other) {
+    return `Cannot execute ${type}: agent '${agentId}' is already in team '${other.id}'; remove it from that team first`
+  }
+  return null
+}
+
 async function performRequestExecution(request: GovernanceRequest): Promise<ExecutionOutcome> {
   console.log(`${LOG_PREFIX} Executing request ${request.id} (type=${request.type})`)
 
@@ -539,6 +557,8 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
             return refuse(`Cannot execute add-to-team: team '${request.payload.teamId}' not found`)
           }
           if (!team.agentIds.includes(request.payload.agentId)) {
+            const membershipError = membershipRefusal('add-to-team', request.payload.agentId, teams, team.id)
+            if (membershipError) return refuse(membershipError)
             team.agentIds.push(request.payload.agentId)
           }
           // All teams are closed (governance simplification) — no open team membership revocation needed
@@ -629,6 +649,11 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
           }
           if (!toTeam) {
             return refuse(`Cannot execute transfer-agent: destination team '${request.payload.toTeamId}' not found`)
+          }
+          // Checked before ANY mutation: refusing after the source removal would leave the agent in no team.
+          if (!toTeam.agentIds.includes(request.payload.agentId)) {
+            const membershipError = membershipRefusal('transfer-agent', request.payload.agentId, teams, toTeam.id, fromTeam?.id)
+            if (membershipError) return refuse(membershipError)
           }
           if (fromTeam) {
             fromTeam.agentIds = fromTeam.agentIds.filter(id => id !== request.payload.agentId)

@@ -509,6 +509,8 @@ describe('approveCrossHostRequest', () => {
     mockLoadTeams.mockReturnValue([
       { id: 'team-backend-001', name: 'Backend', type: 'closed', agentIds: ['existing-agent'], chiefOfStaffId: null, createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }
     ])
+    // TRDD-XTDMQO68: a cross-host add-to-team only seats a live agent
+    mockGetAgent.mockReturnValue({ id: 'agent-target-001' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
@@ -778,6 +780,7 @@ describe('performRequestExecution (via approve flow)', () => {
       }
     ]
     mockLoadTeams.mockReturnValue(teams)
+    mockGetAgent.mockReturnValue({ id: 'new-remote-agent' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
@@ -1031,7 +1034,7 @@ describe('performRequestExecution (via approve flow)', () => {
       /** Proves the transfer refusals below are caused by the checks, and a valid transfer still writes both teams */
       const src = baseTeam({ id: 'team-src', agentIds: ['agent-g1', 'agent-s1'] })
       const dest = baseTeam({ id: 'team-dest', agentIds: ['agent-d1'] })
-      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest])
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest], { id: 'agent-g1' })
       expect(out.result.status).toBe(200)
       expect(out.result.data?.status).toBe('executed')
       expect(src.agentIds).toEqual(['agent-s1'])
@@ -1074,11 +1077,73 @@ describe('performRequestExecution (via approve flow)', () => {
       /** Proves the same-host refusal above is caused by the unknown source, not by the same-host request shape */
       const src = baseTeam({ id: 'team-src', agentIds: ['agent-g1'] })
       const dest = baseTeam({ id: 'team-dest', agentIds: [] })
-      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest], null,
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest], { id: 'agent-g1' },
         { sourceHostId: 'host-local', targetHostId: 'host-local' })
       expect(out.result.status).toBe(200)
       expect(src.agentIds).toEqual([])
       expect(dest.agentIds).toEqual(['agent-g1'])
+    })
+
+    // TRDD-XTDMQO68: team membership is read as authority elsewhere (chair grants, portfolio-token mint), so an
+    // approved cross-host add-to-team / transfer-agent must not seat an id no live agent holds (R4.1 live-agent
+    // rule, as assertNewSlotHolderIsLiveAgent does for chairs) nor a SECOND team membership (R4.1).
+    describe.each(['add-to-team', 'transfer-agent'] as const)('%s membership checks', (type) => {
+      const registryOf = (entries: Record<string, { id: string; deletedAt?: string }>) =>
+        mockGetAgent.mockImplementation((id: string, includeDeleted = false) => {
+          const a = entries[id] ?? null
+          return a && a.deletedAt && !includeDeleted ? null : a
+        })
+      const payloadFor = (agentId: string): GovernanceRequest['payload'] => type === 'add-to-team'
+        ? { agentId, teamId: 'team-dest' }
+        : { agentId, fromTeamId: 'team-src', toTeamId: 'team-dest' }
+      // team-src holds the agent only for a transfer (the agent leaves it); team-dest is where it lands
+      const teamsFor = (agentId: string) => [
+        baseTeam({ id: 'team-src', agentIds: type === 'transfer-agent' ? [agentId] : ['agent-s1'] }),
+        baseTeam({ id: 'team-dest', agentIds: ['agent-d1'] }),
+      ]
+
+      it('positive control: a live agent in no other team is seated', async () => {
+        /** Proves the refusals below come from the checks, not from the harness */
+        const teams = teamsFor('agent-g1')
+        const out = await runExec(type, payloadFor('agent-g1'), teams, { id: 'agent-g1' })
+        expect(out.result.status).toBe(200)
+        expect(teams[1].agentIds).toEqual(['agent-d1', 'agent-g1'])
+      })
+
+      it('refuses an id that is not in the registry', async () => {
+        /** A dangling member would be read as team authority; the teams must stay untouched */
+        registryOf({})
+        expectRefused(
+          await runExec(type, payloadFor('ghost-agent'), teamsFor('ghost-agent'), undefined),
+          `Cannot execute ${type}: agent 'ghost-agent' is not a live agent`,
+        )
+      })
+
+      it('refuses a soft-deleted agent (registry entry exists, deletedAt set)', async () => {
+        /** Only not passing includeDeleted refuses it -- models lib/agent-registry getAgent's real filter */
+        registryOf({ 'gone-agent': { id: 'gone-agent', deletedAt: '2025-06-01T00:00:00Z' } })
+        expectRefused(
+          await runExec(type, payloadFor('gone-agent'), teamsFor('gone-agent'), undefined),
+          `Cannot execute ${type}: agent 'gone-agent' is not a live agent`,
+        )
+      })
+
+      it('refuses an agent that is already a member of ANOTHER team (R4.1)', async () => {
+        /** Single-team membership: a second membership must not be created */
+        const teams = [...teamsFor('agent-g1'), baseTeam({ id: 'team-other', name: 'Other Team', agentIds: ['agent-g1'] })]
+        expectRefused(
+          await runExec(type, payloadFor('agent-g1'), teams, { id: 'agent-g1' }),
+          `Cannot execute ${type}: agent 'agent-g1' is already in team 'team-other'; remove it from that team first`,
+        )
+      })
+
+      it('the MANAGER is exempt from single-team membership (as in validateTeamMutation)', async () => {
+        /** The MANAGER may sit in any team, so the R4.1 refusal must not apply to it */
+        const teams = [...teamsFor('manager-agent'), baseTeam({ id: 'team-other', agentIds: ['manager-agent'] })]
+        const out = await runExec(type, payloadFor('manager-agent'), teams, { id: 'manager-agent' })
+        expect(out.result.status).toBe(200)
+        expect(teams[1].agentIds).toContain('manager-agent')
+      })
     })
 
     it('a refusal that could not be recorded tells the requester the stored request may still read executed', async () => {
@@ -1111,7 +1176,7 @@ describe('performRequestExecution (via approve flow)', () => {
     it('transfer-agent with an unknown source team still adds the agent to the destination', async () => {
       /** Left as-is deliberately for a CROSS-host request (default fixture: host-local -> host-remote): the source team may live on the peer host, so a missing source is a no-op, not a refusal */
       const dest = baseTeam({ id: 'team-dest', agentIds: [] })
-      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-elsewhere', toTeamId: 'team-dest' }, [dest])
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-elsewhere', toTeamId: 'team-dest' }, [dest], { id: 'agent-g1' })
       expect(out.result.status).toBe(200)
       expect(dest.agentIds).toEqual(['agent-g1'])
       expect(mockMarkExecutionRefused).not.toHaveBeenCalled()
@@ -1219,6 +1284,7 @@ describe('performRequestExecution (via approve flow)', () => {
       }
     ]
     mockLoadTeams.mockReturnValue(teams)
+    mockGetAgent.mockReturnValue({ id: 'transfer-agent' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
@@ -1396,6 +1462,8 @@ describe('refused execution notifies the source host (TRDD-XTDMQO68)', () => {
     mockLoadTeams.mockReturnValue(
       refuse ? [] : [{ id: 'team-nope', name: 'T', type: 'closed', agentIds: [], chiefOfStaffId: null, createdAt: 'x', updatedAt: 'x' }],
     )
+    // TRDD-XTDMQO68: the success path seats a live agent
+    mockGetAgent.mockReturnValue({ id: 'agent-x' })
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')

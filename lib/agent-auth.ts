@@ -464,6 +464,10 @@ function findAgentBySessionSecret(secret: string): { id: string; name: string } 
   try {
     const agents = loadAgents()
     for (const agent of agents) {
+      // TRDD-8E6XMDEX: a soft delete keeps the row (for resurrection / rollback),
+      // so an identity check must treat a row with deletedAt as gone. Removing
+      // deletedAt (rolled-back delete) restores validity with no other step.
+      if (agent.deletedAt) continue
       const storedHash = agent.metadata?.sessionSecretHash as string | undefined
       if (storedHash && validateSessionSecret(secret, storedHash)) {
         return { id: agent.id, name: agent.name }

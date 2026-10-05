@@ -2,7 +2,7 @@
 name: an-unenforced-rule-produces-a-success-not-an-error
 description: "the scenario passed / the tests are green / the feature works — but is the governance rule actually ENFORCED? how do I test authorization? why didn't the test suite catch that anyone can create an agent?"
 ocd: 2026-07-14
-lmd: 2026-09-27
+lmd: 2026-10-05
 metadata:
   node_type: memory
   type: project
@@ -56,7 +56,7 @@ Only an **adversarial** test finds one — attempt the forbidden act and assert 
 Same shape as `[[TRDD-SB5I53K1]]`'s sibling lesson from the approval verifier: *a verifier that
 never fails is not a verifier.*
 
-^S7X879S9 [desc: "Where rules are SILENT, code invents policy read as law: lib/authorization.ts hard-denies COS agent deletion though R30 governs only creation. Unenforced looks missing; invented looks DECIDED.", keywords: code_invents_policy_when_rule_silent lib_authorization_delete_agent_invention R30_says_nothing_about_deletion invented_policy_more_dangerous_than_unenforced hard_denial_not_in_any_rule what_if_code_denies_something_rules_do_not Say agent_policy_undefined_same_shape strict_route_agent_policy, ocd: 2026-07-14, lmd: 2026-09-27]
+^S7X879S9 [desc: "Where rules are SILENT, code invents policy read as law: lib/authorization.ts hard-denies COS agent deletion though R30 governs only creation. Unenforced looks missing; invented looks DECIDED.", keywords: code_invents_policy_when_rule_silent lib_authorization_delete_agent_invention R30_says_nothing_about_deletion invented_policy_more_dangerous_than_unenforced hard_denial_not_in_any_rule what_if_code_denies_something_rules_do_not Say agent_policy_undefined_same_shape strict_route_agent_policy, ocd: 2026-07-14, lmd: 2026-09-27] [^3] [^4]
 ## The third category — worse than an unenforced rule
 
 Where the rules are **SILENT**, the code invents a policy, and the invention is then read
@@ -127,3 +127,5 @@ is the most dangerous, and it is the same shape as the `agent_policy_undefined` 
   Lesson: **before declaring a question unanswerable, grep the governance rules for the answer.**
   This is the same error as `[[agent-claims-the-api-was-never-delivered]]`, committed while
   writing a TRDD about that very error.
+[^3]: [id: ATOM-TWGA-A6Z7, status: valid, supersedes: S7X879S9, desc: "The COS-cannot-delete example is historical: MANAGER/COS may soft-delete, hard delete and purge are user-only", keywords: "only_manager_can_delete_agents_stale_example can_a_chief_of_staff_delete_an_agent who_can_delete_an_agent soft_delete_vs_hard_delete who_can_purge_the_cemetery invented_policy_example_now_historical delete-agent_authorization cos_cannot_delete_superseded hard_delete_user_only cemetery_purge_sudo", ocd: 2026-10-05, lmd: 2026-10-05] DO NOT read the quoted 'Only MANAGER can delete agents / COS cannot delete' denial as current policy, BECAUSE the user has since ruled otherwise (TRDD-A50RC5G8, TRDD-8K68E16G): a MANAGER may soft-delete any agent and a CHIEF-OF-STAFF one in its own team (archive stays in the cemetery, user can resurrect); HARD delete and cemetery purge are user-only and sudo-protected. The lesson that code invented a policy where the rules were silent still stands; the example is now historical. DO check lib/authorization.ts for the current rule. SUPERSEDED BODY: (empty)
+[^4]: [id: ATOM-KEDP-4P3D, status: valid, supersedes: S7X879S9, desc: "Corrects the earlier delete-authority lesson: ruled vs implemented vs awaiting the user", keywords: "can_a_chief_of_staff_delete_an_agent who_can_delete_an_agent only_manager_can_delete_agents_stale soft_delete_vs_hard_delete who_can_purge_the_cemetery delete_authority_ruled_vs_implemented headless_hard_delete_not_sudo_gated cemetery_purge_sudo_full_mode chair_soft_delete_interpretation_awaiting_user correction_of_overstated_lesson", ocd: 2026-10-05, lmd: 2026-10-05] DO NOT cite the earlier delete-authority lesson on this atom as unqualified, BECAUSE it overstated what is implemented. RULED BY THE USER: a MANAGER may soft-delete any agent; a CHIEF-OF-STAFF may soft-delete an agent in its OWN team; the archive stays in the cemetery and the user can always resurrect it; hard delete is reserved to the user and needs a sudo confirmation. AS IMPLEMENTED: in full mode (the dashboard) hard delete and cemetery purge require sudo; headless mode has no sudo layer, so cemetery purge is forwarded to the full-mode handler (and so requires sudo there too), but headless hard delete is NOT yet sudo-gated (open on TRDD-A50RC5G8). INTERPRETATIONS AWAITING THE USER (TRDD-VR4OPNVI): that a chair may not soft-delete a MANAGER, and which titles a chair may soft-delete. DO read lib/authorization.ts and the delete routes for the current behaviour. SUPERSEDED BODY: (empty)

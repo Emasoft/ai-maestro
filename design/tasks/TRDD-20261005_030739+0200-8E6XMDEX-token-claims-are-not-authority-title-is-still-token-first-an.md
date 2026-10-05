@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:18:27+0200
+updated: 2026-10-05T06:29:18+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca, 42cae0be0]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -84,9 +84,10 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 TWO READS behind today's commits: portfolioStoreFault returns null when the file is readable and the fault message otherwise, so the route's '=== null means rethrow' has the right polarity — limit: it reports ANY failed re-read as a fault, so a persistent non-corruption error (permissions) is still answered 'could not be parsed'. The token route answers 401 no_keypair when loadKeyPair(agent.id) is null and provisions nothing, so no token can be issued for a new id before G10. Live data: the one per-agent portfolio file parses under the strict shape (structure only); the live token store file was NOT checked.
 - [x] 2026-10-05 7ea22acca: the store's fault is typed (unreadable / unparseable / wrong-shape) and the route answers the error it caught, with no second read; an unreadable file no longer gets advice to remove it. This supersedes the limit recorded above (any failed re-read counted as a fault). Still open on this card: owner-visible alert for a corrupt token or portfolio store; a non-owner issuer gets 403 over a corrupt file; the caller-asserted creation flag; no integration test of a retitle against the real token store; where in the mint the load sits relative to its writes (not reported to me yet — in the worker's report, unread).
 - [x] HYGIENE 2026-10-05: 15 boxes ticked as overtaken notes, on a read-only worker's mapping (reports/8e6xmdex/20261005_061433+0200-open-boxes-mapped-to-commits.md) that I checked as follows — every sha it cites (0f0e49400, 49f411162, d9bbf1bb9, 40ca151fd, 66a55c866, ccd8c10d1, eadc2c9ff, 0cea6c6a7, c1fdf417c) exists and already has a TICKED landing box on this card; I read lib/agent-auth.ts (the deletedAt skip in the session-secret lookup), and the G14b throw and the agentCreatedInThisRun skip in services/element-management-service.ts; the three cited test titles exist in tests/unit (not run now). Ticked: 3 landed (soft-deleted session secret refused; a failed G14b revocation fails the title change; creation skips revocation for the id minted in the same run), 10 progress notes whose work those landing boxes carry, 2 search/investigation records. A tick here means 'this note is overtaken', never 'everything it mentioned is done' — the leftovers are carried by the three boxes below and by the still-open PARTLY boxes.
-- [ ] CARRIED from the ticked 'IN VERIFICATION: session-secret lookup skips deletedAt' note (per the worker's grep, not read by me): the other credential paths were never re-closed for a soft-deleted agent — the AMP key path (lib/amp-auth.ts has no deletedAt check), the AID token path, IBCT, and tokens of a hard-deleted id. Read each path and either show the soft-deleted row is refused or fix it at the lookup.
+- [x] CARRIED from the ticked 'IN VERIFICATION: session-secret lookup skips deletedAt' note (per the worker's grep, not read by me): the other credential paths were never re-closed for a soft-deleted agent — the AMP key path (lib/amp-auth.ts has no deletedAt check), the AID token path, IBCT, and tokens of a hard-deleted id. Read each path and either show the soft-deleted row is refused or fix it at the lookup.
 - [ ] CARRIED from the ticked hard-delete note: REVIVE calls the registry delete directly, so the hard-delete revocation gate never runs for the old id; tokens issued BY a deleted agent are untouched; hard delete does not remove the per-agent token file; no owner-visible alert names a corrupt token store (log line only).
 - [ ] OPEN-WORK per the mapping, bounded and needing no ruling: (a) issuer_team_id at mint comes from the token-derived context (app/api/agents/[id]/portfolio/route.ts) — take it from the registry, with a test whose token team claim differs; (b) one portfolio-token test against the REAL registry on a temp state root; (c) a test that an agent demoted from MANAGER cannot use a pre-demotion token for manage-team; (d) a fault-path test for the governance-context resolver (teams unreadable).
+- [x] 2026-10-05 42cae0be0: governance token, message API key and cross-host identity token of a soft-deleted agent are refused at authentication (lib/agent-auth.ts only; token store and key module untouched; nothing revoked, so clearing deletedAt restores them). My runs: 32 test files / 435 passed, tsc 0; check forced to false in a scratch worktree → 4 of 11 cases red, positive controls and 'revocation still finds the token' green. Whole suite owed. NOT covered: a HARD-deleted id (row missing) is deliberately not refused here — it relies on the delete pipeline having revoked its credentials; the 'tokens of a hard-deleted id' part of the carried box is therefore still open and is restated in the revive box above.
 
 ## Approval log
 

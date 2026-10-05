@@ -71,7 +71,8 @@ async function withUserModelOn<T>(fn: () => Promise<T>): Promise<T> {
 const NON_OWNER_USER = { userId: 'u-1', userTitle: 'user' }
 
 function drive(method: string, url: string, body?: unknown, headers: Record<string, string> = {}) {
-  const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))]
+  // a string body is sent as the raw request text (so a malformed-JSON case can be expressed); anything else is JSON-encoded
+  const chunks = body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]
   const req = {
     url, method,
     headers: { authorization: 'Bearer aim_tk_AAAAAAAAAAAAAAAAAAAAAAAA', 'content-type': 'application/json', ...headers },
@@ -171,6 +172,17 @@ describe('TRDD-BZW1QAZ5 — PATCH agents/:id/metadata (twin: authenticate, then 
     const out = await run('PATCH', META, { k: 1 })
     expect(out.status).toBe(status)
     expect(out.json.error).toBe(error)
+  })
+})
+
+describe('TRDD-BZW1QAZ5 — a malformed JSON body is a client error, not a server error', () => {
+  it('PATCH agents/:id/metadata with the body text `{not json`: 400 and the response does not echo the request text', async () => {
+    /** readJsonBody rejects with status 400; the router catch must honour it instead of answering 500 */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('PATCH', META, '{not json')
+    expect(out.status).toBe(400)
+    expect(JSON.stringify(out.json)).not.toContain('not json')
+    expect(m.changeMetadata).not.toHaveBeenCalled()
   })
 })
 

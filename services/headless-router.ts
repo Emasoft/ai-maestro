@@ -2372,11 +2372,8 @@ const routes: Route[] = [
     // rate limits + store cap.
     const { POST } = await import('../app/api/v1/auth/challenge/route')
     // Parity fix: the full-mode challenge route returns 400 invalid_request on a
-    // malformed JSON body (its own try/catch around request.json()). Here,
-    // readJsonBody() rejects with an Error whose `.status=400` the router's
-    // top-level catch does NOT honor (it maps only `.statusCode===413`), so an
-    // unwrapped readJsonBody would surface as a 500 — a mode divergence. Wrap it to
-    // emit the SAME 400 body/status the full-mode route returns.
+    // malformed JSON body (its own try/catch around request.json()). Wrap
+    // readJsonBody to emit the SAME 400 body/status the full-mode route returns.
     let body: unknown
     try {
       body = await readJsonBody(req)
@@ -5036,9 +5033,11 @@ export function createHeadlessRouter() {
       } catch (error: any) {
         console.error(`[Headless] Error handling ${method} ${pathname}:`, error)
         if (!res.headersSent) {
-          // Honor 413 from readJsonBody and readRawBody (both attach statusCode: 413); all other errors default to 500
-          const statusCode = error?.statusCode === 413 ? 413 : 500
-          const message = statusCode === 413 ? 'Request body too large' : 'Internal server error'
+          // Honor 413 (readJsonBody/readRawBody: statusCode) and 400 (readJsonBody malformed JSON: status). Bug: this
+          // read only `.statusCode===413`, so the `.status=400` readJsonBody attaches fell through to 500 — a malformed
+          // client body was reported as a server error. The messages are fixed strings: never echo the request text.
+          const statusCode = error?.statusCode === 413 ? 413 : error?.status === 400 ? 400 : 500
+          const message = statusCode === 413 ? 'Request body too large' : statusCode === 400 ? 'Invalid JSON body' : 'Internal server error'
           sendJson(res, statusCode, { error: message })
         }
         // Return true — the request was matched and handled (even if it resulted in an error).

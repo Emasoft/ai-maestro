@@ -135,32 +135,29 @@ function loadTokens(): AIDTokenRecord[] {
     return []
   }
 
+  // TRDD-8E6XMDEX: a file that EXISTS but cannot be read or parsed is a FAULT, not an empty
+  // store. Returning [] made revocation report "nothing to revoke" over a store that holds
+  // tokens (bypassing the fail-closed title-change gate) and let the next save overwrite the
+  // corrupt, still-recoverable file with []. ENOENT (handled above) is the only legal absence.
+  // The message carries the basename and the error class/code only: a JSON SyntaxError message
+  // quotes a snippet of the file, and the file holds credentials.
+  const base = path.basename(filePath)
+  let data: unknown
   try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    const tokens = Array.isArray(data) ? data as AIDTokenRecord[] : []
-    // Prune expired tokens on load
-    const validTokens = tokens.filter(t => new Date(t.expires_at).getTime() > now)
-    _tokenCache = validTokens
-    _tokenIndex = rebuildTokenIndex(validTokens)
-    _tokenCacheTimestamp = now
-    return validTokens
+    data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
   } catch (err) {
-    // LIB2-MIN-08: don't swallow parse errors silently. A corrupt
-    // active-tokens.json file (partial write, disk pressure, manual
-    // tampering) makes EVERY token validation silently fail because
-    // we return an empty list. Logging gives operators a chance to
-    // diagnose. The behaviour (return []) is preserved — there is
-    // no recoverable action this function can take, but the failure
-    // is no longer invisible.
-    console.error(
-      '[aid-token] Failed to parse active-tokens.json — all token validations will fail until the file is repaired or removed:',
-      err instanceof Error ? err.message : err
-    )
-    _tokenCache = []
-    _tokenIndex = new Map()
-    _tokenCacheTimestamp = now
-    return []
+    const cause = (err as NodeJS.ErrnoException)?.code ?? (err instanceof Error ? err.name : 'unknown error')
+    throw new Error(`[aid-token] ${base} exists but could not be read or parsed (${cause})`)
   }
+  if (!Array.isArray(data) || !data.every(t => t && typeof t === 'object' && typeof t.token_hash === 'string' && typeof t.expires_at === 'string')) {
+    throw new Error(`[aid-token] ${base} exists but is not an array of token records`)
+  }
+  // Prune expired tokens on load
+  const validTokens = (data as AIDTokenRecord[]).filter(t => new Date(t.expires_at).getTime() > now)
+  _tokenCache = validTokens
+  _tokenIndex = rebuildTokenIndex(validTokens)
+  _tokenCacheTimestamp = now
+  return validTokens
 }
 
 function saveTokens(tokens: AIDTokenRecord[]): void {
@@ -477,21 +474,20 @@ export function validateGovernanceToken(token: string): AIDTokenRecord | null {
 
   const tokenHash = hashToken(token)
   // Force load + index rebuild if cache stale (also populates _tokenIndex).
-  loadTokens()
+  // TRDD-8E6XMDEX: loadTokens now THROWS on a corrupt store; a validation that cannot read the
+  // store must REJECT (null -> 401), never accept and never crash the request.
+  try {
+    loadTokens()
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : '[aid-token] token store unreadable')
+    return null
+  }
   const index = _tokenIndex
   if (!index) return null
   const now = Date.now()
 
-  // LIB2-MAJ-13: O(1) lookup by token hash. The hash is a SHA256 of the
-  // input token, so map.get(tokenHash) reveals only whether that exact hash
-  // exists — no information leaks about other tokens via timing. We then
-  // run timingSafeEqual on the SINGLE candidate to preserve the
-  // constant-time-per-request behaviour that the previous linear-scan
-  // approach was simulating. (Map.get on a String hash IS constant-time
-  // relative to map size in V8 / SpiderMonkey: hash bucket lookup +
-  // string compare on collision; the input-derived hash means the bucket
-  // accessed is fully determined by the input, leaking no information
-  // about other entries.)
+  // LIB2-MAJ-13: O(1) lookup by token hash; map.get reveals only whether that exact hash exists.
+  // timingSafeEqual then runs on the SINGLE candidate, preserving constant-time-per-request.
   const candidate = index.get(tokenHash)
   if (!candidate) return null
 

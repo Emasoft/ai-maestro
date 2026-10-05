@@ -47,6 +47,8 @@ vi.mock('@/lib/agent-registry', async () => {
 vi.mock('@/lib/governance', async () => (await import(HELPER)).stubs.governance())
 vi.mock('@/lib/team-registry', async () => ({
   ...(await import(HELPER)).stubs.teamRegistry(),
+  // team-1 holds victim-1: authorize() needs it to see a COS and its target as same-team (USER ruling 2026-10-05).
+  loadTeams: () => [{ id: 'team-1', agentIds: ['victim-1'], chiefOfStaffId: 'cos-1', orchestratorId: null }],
   freezeIncompleteTeam: async () => ({ frozen: false, hibernated: [] }),
 }))
 vi.mock('@/lib/group-registry', async () => (await import(HELPER)).stubs.groupRegistry())
@@ -83,7 +85,7 @@ let workdir: string
 beforeEach(() => {
   H.killed.length = 0
   store.clear()
-  workdir = seedAgent(store, H.FAKE_HOME, H.FAKE_STATE, { id: 'victim-1', name: 'victim-1' })
+  workdir = seedAgent(store, H.FAKE_HOME, H.FAKE_STATE, { id: 'victim-1', name: 'victim-1', governanceTitle: 'member' })
 })
 afterAll(() => { /* the temp home is under TMPDIR and holds only fixtures */ })
 
@@ -119,11 +121,10 @@ describe('DeleteAgent — an agent caller may only soft-delete (TRDD-A50RC5G8)',
     expectNoSideEffects()
   })
 
-  it('a CHIEF-OF-STAFF agent + hard:true never reaches the guard: G00 denies it first (its own-team grant is not landed)', async () => {
-    // Pins the CURRENT truth, not the ruling: the guard is title-independent, but a COS is stopped earlier.
+  it('a CHIEF-OF-STAFF agent + hard:true passes G00 (own team, USER ruling 2026-10-05) and is refused by the soft-only guard', async () => {
     const r = await DeleteAgent('victim-1', { authContext: cosOwnTeam, hard: true })
     expect(r.success).toBe(false)
-    expect(r.error).toBe('Only MANAGER can delete agents')
+    expect(r.error).toBe(REASON)
     expectNoSideEffects()
   })
 

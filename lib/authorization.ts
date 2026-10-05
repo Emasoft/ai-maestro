@@ -276,7 +276,7 @@ const ACTION_POLICY_ROWS: Record<AuthAction, ActionPolicy> = {
   // exhaustive AND makes REMOVING the branch fail CLOSED here, instead of quietly
   // reopening the fall-through grant the branch was written to close.
   'change-title': { kind: 'branch', rule: 'R9/R10 + the no-self-title-change ban — the change-title branch above' },
-  'delete-agent': { kind: 'branch', rule: 'R11 + the no-self-delete ban — the delete-agent branch above' },
+  'delete-agent': { kind: 'branch', rule: 'R11 + the no-self-delete ban + USER ruling 2026-10-05 (MANAGER, or CHIEF-OF-STAFF over its own team; soft only) — the delete-agent branch above' },
   'manage-team': { kind: 'branch', rule: 'R9/R10/R12 — the manage-team branch above' },
   'create-agent': { kind: 'branch', rule: 'R30.1/R30.2 — the create-agent branch above' },
   'register-agent': { kind: 'branch', rule: 'SVC2-CRIT-04, system-owner only — the register-agent branch above' },
@@ -320,6 +320,16 @@ export const ACTION_POLICY: Readonly<Record<AuthAction, Readonly<ActionPolicy>>>
 // ============================================================================
 // Authorization
 // ============================================================================
+
+/**
+ * The ONLY titles a CHIEF-OF-STAFF may soft-delete, inside its own team (TRDD-A50RC5G8). Strings are the AgentRole
+ * values of types/agent.ts (lowercase-kebab). This list is the orchestrator's INTERPRETATION of the USER ruling of
+ * 2026-10-05 ("CHIEF-OF-STAFF (this one only in its own team) can kill/delete an agent"), not the ruling itself;
+ * the user may amend it. Anything not listed is denied — manager, chief-of-staff, maintainer, autonomous, assistant,
+ * and any title added in future stays denied until someone decides.
+ * To change who a COS may delete, edit this const.
+ */
+const COS_DELETABLE_TITLES: readonly string[] = ['member', 'architect', 'orchestrator', 'integrator']
 
 /**
  * Authorize an action based on authenticated identity.
@@ -413,8 +423,9 @@ export function authorize(
   }
 
   // ── Special rule: delete-agent ──────────────────────────────
-  // Only system-owner and MANAGER can delete agents.
-  // No agent can delete itself via API. COS cannot delete.
+  // USER ruling 2026-10-05 (TRDD-A50RC5G8): MANAGER, and a CHIEF-OF-STAFF over its OWN team, may delete an agent —
+  // soft only; DeleteAgent (services/element-management-service.ts) refuses hard/deleteFolder for any agent caller.
+  // No agent can delete itself via API.
   if (action === 'delete-agent') {
     if (targetAgentId && targetAgentId === auth.agentId) {
       return { allowed: false, reason: 'No agent can delete itself via API' }
@@ -422,7 +433,50 @@ export function authorize(
     if (title === 'manager') {
       return { allowed: true }
     }
-    return { allowed: false, reason: 'Only MANAGER can delete agents' }
+    if (title === 'chief-of-staff') {
+      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+      const targetTeamId = targetAgentId ? lookupTeamIdForAgent(targetAgentId) : null
+      if (!(cosTeamId && cosTeamId === targetTeamId)) {
+        return { allowed: false, reason: 'Chief-of-Staff can only delete agents in their own team (soft delete only)' }
+      }
+      // Team equality is not enough: a MANAGER may sit in a team's agentIds (team-registry exempts it) and
+      // lookupTeamIdForAgent also matches the COS slot, so without a TARGET-title test a subordinate could
+      // soft-delete its superior or a peer. Fail CLOSED like the unblock-prompt branch: unknown target or a
+      // throwing registry read → denied.
+      let rawTitle: unknown
+      try {
+        const targetAgent = getAgent(targetAgentId as string)
+        if (!targetAgent) {
+          return {
+            allowed: false,
+            reason: `A CHIEF-OF-STAFF may not delete ${targetAgentId}: target agent is not in the registry (TRDD-A50RC5G8)`,
+          }
+        }
+        rawTitle = targetAgent.governanceTitle
+      } catch (err) {
+        console.error('[authorization] delete-agent target lookup failed:', err)
+        return {
+          allowed: false,
+          reason: 'A CHIEF-OF-STAFF may not delete an agent whose record could not be read (TRDD-A50RC5G8)',
+        }
+      }
+      // Untitled / empty / non-string title is NOT defaulted to member: fail closed.
+      const targetTitle = typeof rawTitle === 'string' ? rawTitle.trim().toLowerCase() : ''
+      if (!targetTitle) {
+        return {
+          allowed: false,
+          reason: 'A CHIEF-OF-STAFF may not delete an agent that has no governance title (TRDD-A50RC5G8)',
+        }
+      }
+      if (!COS_DELETABLE_TITLES.includes(targetTitle)) {
+        return {
+          allowed: false,
+          reason: `A CHIEF-OF-STAFF may delete only team members it supervises (${COS_DELETABLE_TITLES.join(', ')}); target title is ${targetTitle}`,
+        }
+      }
+      return { allowed: true }
+    }
+    return { allowed: false, reason: 'Only MANAGER, or a CHIEF-OF-STAFF over its own team, can delete agents (soft delete only)' }
   }
 
   // ── Special rule: manage-team (create/delete teams) ─────────

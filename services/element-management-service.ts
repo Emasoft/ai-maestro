@@ -8626,9 +8626,10 @@ export async function DeleteTeam(
      * removed. The default (false) preserves agents as AUTONOMOUS — the
      * long-standing behavior. Set from the "Delete Agents Too" checkbox
      * in the sidebar Team Delete dialog. Deletion goes through the full
-     * DeleteAgent pipeline (never raw registry deletion), with hard=true
-     * and deleteFolder=true, so each agent's ~/agents/<name>/ workdir
-     * is wiped and a per-agent ledger entry is emitted.
+     * DeleteAgent pipeline (never raw registry deletion). The system owner's
+     * cascade is hard + deleteFolder (each ~/agents/<name>/ workdir is wiped);
+     * an agent caller's cascade is SOFT (cemetery archive kept, folder kept) —
+     * TRDD-A50RC5G8. A per-agent ledger entry is emitted either way.
      */
     deleteAgents?: boolean
   },
@@ -9279,8 +9280,8 @@ export async function DeleteAgent(
 
   try {
     // ── G00: Authorization ─────────────────────────────────────
-    // Delete is a privileged operation: only system-owner and MANAGER.
-    // COS cannot delete agents (they request MANAGER to do it).
+    // Delete is a privileged operation: system-owner, MANAGER, or a COS over its OWN team
+    // (USER ruling 2026-10-05, TRDD-A50RC5G8; the COS/MANAGER grant is soft-only, see the guard below).
     // No agent can delete itself via API (use /exit to stop, MANAGER deletes).
     if (!options?.authContext) {
       result.error = 'authContext is mandatory for DeleteAgent (security invariant)'

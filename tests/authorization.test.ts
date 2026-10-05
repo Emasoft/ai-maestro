@@ -673,7 +673,9 @@ describe('TRDD-L6VV9Q7U — HEAD baseline: every (action x caller x target) cell
   const OWNER_REG = 'Only the system owner can register agent records'
   const OWNER_EXP = 'Only the system owner can export an agent — the archive contains keys/private.pem'
   const TRDD_CTX = 'manage-trdd requires the TRDD context (verb + min-approval-requirement)'
-  const MGR_ONLY_DEL = 'Only MANAGER can delete agents'
+  // delete-agent row changed deliberately by the USER ruling of 2026-10-05 (TRDD-A50RC5G8); every other row is still the recorded baseline
+  const DEL_DENY = 'Only MANAGER, or a CHIEF-OF-STAFF over its own team, can delete agents (soft delete only)'
+  const DEL_COS_OTHER = 'Chief-of-Staff can only delete agents in their own team (soft delete only)'
   const MGR_ONLY_TEAM = 'Only MANAGER can manage teams'
   const CREATE_DENY = 'Only MANAGER and CHIEF-OF-STAFF can create agents (R30.1/R30.2); a COS additionally requires a MANAGER mandate'
   const r42 = (a: string) => `R42: no agent may ${a} on another agent — not even a MANAGER or CHIEF-OF-STAFF. Messaging is the only channel of agent-to-agent influence: ask, never inject.`
@@ -686,7 +688,7 @@ describe('TRDD-L6VV9Q7U — HEAD baseline: every (action x caller x target) cell
   const BASELINE: Record<string, string[]> = {
     'modify-agent': ['', '', cosTail('modify-agent'), memTail('modify-agent'), '', SELF_MOD, SELF_MOD, SELF_MOD],
     'change-title': ['', '', 'Chief-of-Staff can only change titles of agents in their own team', 'Only MANAGER or CHIEF-OF-STAFF can change governance titles', '', SELF_TITLE, SELF_TITLE, SELF_TITLE],
-    'delete-agent': ['', MGR_ONLY_DEL, MGR_ONLY_DEL, MGR_ONLY_DEL, '', SELF_DEL, SELF_DEL, SELF_DEL],
+    'delete-agent': ['', '', DEL_COS_OTHER, DEL_DENY, '', SELF_DEL, SELF_DEL, SELF_DEL],
     'send-command': [r42('send-command'), r42('send-command'), r42('send-command'), r42('send-command'), '', '', '', ''],
     'restart-session': [r42('restart-session'), r42('restart-session'), r42('restart-session'), r42('restart-session'), '', SELF_MOD, SELF_MOD, SELF_MOD],
     'unblock-prompt': ['', '', 'R42.8: a CHIEF-OF-STAFF may only unblock agents of its OWN team', 'R42.8: only a MANAGER or a CHIEF-OF-STAFF may unblock another agent (caller title: member)', '', '', '', ''],
@@ -803,5 +805,80 @@ describe('TRDD-A50RC5G8 — decideFromPolicy is referenced by lib/authorization.
     expect(offenders).toEqual([])
     expect(re.test("export * from '@/lib/authorization'")).toBe(true)
     expect(re.test("export * from './authorization'")).toBe(true)
+  })
+})
+
+/**
+ * TRDD-A50RC5G8 — USER ruling 2026-10-05: a CHIEF-OF-STAFF may delete an agent of its OWN team (soft-only is enforced
+ * in DeleteAgent). Literal reasons, asserted directly (not derived from the policy table).
+ */
+describe('TRDD-A50RC5G8 — delete-agent: CHIEF-OF-STAFF over its own team', () => {
+  const mk = (t: string) => authenticateFromRequest(requestWith({ Authorization: `Bearer ${t}` }))
+  beforeEach(() => { mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'member' })) })
+
+  it('COS deleting a member of its own team is allowed', () => {
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({ allowed: true })
+  })
+  it('COS deleting a member of another team is denied with the own-team reason', () => {
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-b1')).toEqual({
+      allowed: false, reason: 'Chief-of-Staff can only delete agents in their own team (soft delete only)',
+    })
+  })
+  it('COS deleting itself is denied with the self reason', () => {
+    expect(authorize(mk(cosAToken), 'delete-agent', 'cos-a')).toEqual({
+      allowed: false, reason: 'No agent can delete itself via API',
+    })
+  })
+  it('MEMBER deleting an agent is denied', () => {
+    expect(authorize(mk(memberToken), 'delete-agent', 'member-a2')).toEqual({
+      allowed: false, reason: 'Only MANAGER, or a CHIEF-OF-STAFF over its own team, can delete agents (soft delete only)',
+    })
+  })
+  it('MANAGER deleting an agent is allowed', () => {
+    expect(authorize(mk(managerToken), 'delete-agent', 'member-b1')).toEqual({ allowed: true })
+  })
+
+  // Target-title narrowing: the own-team test alone would let a COS delete a MANAGER / peer COS sitting in its team.
+  const asTitle = (t: string | undefined) => () => mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: t }))
+  it.each(['member', 'architect', 'orchestrator', 'integrator'])('COS deleting an own-team %s is allowed', (t) => {
+    asTitle(t)()
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({ allowed: true })
+  })
+  const LIST = 'member, architect, orchestrator, integrator'
+  const deniedTitle = (t: string) => ({ allowed: false, reason: `A CHIEF-OF-STAFF may delete only team members it supervises (${LIST}); target title is ${t}` })
+  it.each(['manager', 'chief-of-staff', 'maintainer', 'autonomous', 'assistant', 'future-role'])('COS deleting an own-team %s is denied', (t) => {
+    asTitle(t)()
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual(deniedTitle(t))
+  })
+  it.each([[' Member '], ['ARCHITECT']])('COS deleting an own-team target titled "%s" is allowed (normalised)', (t) => {
+    asTitle(t)()
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({ allowed: true })
+  })
+  it('COS deleting an own-team target titled " MANAGER " is denied (normalised)', () => {
+    asTitle(' MANAGER ')()
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual(deniedTitle('manager'))
+  })
+  it.each([['undefined', undefined], ['null', null], ['empty', ''], ['blank', '   '], ['non-string', 42]])('COS deleting an own-team target with %s title is denied', (_n, t) => {
+    asTitle(t as string | undefined)()
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({
+      allowed: false, reason: 'A CHIEF-OF-STAFF may not delete an agent that has no governance title (TRDD-A50RC5G8)',
+    })
+  })
+  it('COS deleting an own-team target absent from the registry is denied', () => {
+    mockGetAgent.mockImplementation(() => undefined)
+    expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({
+      allowed: false,
+      reason: 'A CHIEF-OF-STAFF may not delete member-a2: target agent is not in the registry (TRDD-A50RC5G8)',
+    })
+  })
+  it('COS deleting an own-team target whose registry read throws is denied', () => {
+    mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({
+        allowed: false,
+        reason: 'A CHIEF-OF-STAFF may not delete an agent whose record could not be read (TRDD-A50RC5G8)',
+      })
+    } finally { spy.mockRestore() }
   })
 })

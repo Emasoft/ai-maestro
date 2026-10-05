@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T02:26:03+0200
+updated: 2026-10-05T04:34:26+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -55,6 +55,7 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [ ] The pillar leak guard gives the same verdict with the server up and down
 - [ ] Each of the 7 CreateAgent failures has a named cause and is fixed or filed
 - [ ] `tests/integration` is green on a machine with a live server
+- [x] 2026-10-05 box 1: the stray file named -o came from a fake curl in tests/unit/cli-help-exit-contract.test.ts writing to its second positional argument; fixed in 4a65e9a81 (writes to the argument after -o, spawn in a temp dir, one assertion). The old stray file was moved to reports_dev/stray/. Integration reds measured today at HEAD: 12 tests in 5 files, list in the BZW1QAZ5 card
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

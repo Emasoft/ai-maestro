@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:27:43+0200
+updated: 2026-10-05T04:34:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -69,6 +69,8 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] CORRECTION TO EVERY 'full suite' CLAIM OF 2026-10-05: the orchestrator's run covers tests/governance, unit, security, services, api, lib and tests/*.test.ts. tests/integration was NEVER in it. A worker saw 6 CreateAgent reds in two integration files, not compared with a baseline. Owed: one tests/integration run at a pre-session commit and one at HEAD, compare the red lists
 - [ ] IN PROGRESS (uncommitted), commit order has real dependencies — static import of the user-authority flag (lib/agent-auth.ts + the delegated-routes test losing its wrapper) THEN headless hard delete (its test copies that harness) THEN cemetery owner checks. Cemetery: the orchestrator's brief wrongly said GET already used the owner check — it did not; GET and the download route (neither sudo-strict, so the handler check is the ONLY gate) are now fixed with tests per the worker; the POST/DELETE handler checks cannot be isolated from the sudo guard. ERRATUM on e5988b911: its headless cemetery-list comment says it mirrors a full-mode owner check; full mode had only a bare agentId test until this change. Headless hard delete: the owner can hard-delete with no sudo today — being routed to the full-mode handler; owner SOFT delete stays sudo-free in headless by choice (question for the user)
 - [x] HYGIENE: a worker redirected three scratch files (r1.txt-r3.txt, one a copy of a source file) into the repo root; moved to gitignored reports_dev/stray/. The stray -o file comes from a fake curl in tests/unit/cli-help-exit-contract.test.ts writing to its second positional argument; fix written (TRDD-RB72KQI2 box 1), uncommitted. Worker briefs now say: scratch only under /tmp
+- [x] LANDED e3eb988a5 (user-authority flag via static import; the purge test now runs the real owner rule) and 0f1baf0e5 (cemetery list and download are system-owner only with the model on; revive/purge handler checks are defence in depth, not isolatable from the sudo guard). Evidence and my neuters are in the commit messages. INTEGRATION BASELINE: tests/integration at HEAD before and after all pending sets — the same 12 tests in 5 files fail both times (createagent-g05c, -g06-g07, -g08, -g11, pillar-cli-e2e), so none is caused by this session's pending sets; whether earlier commits of the session caused any is still unknown (no run at a pre-session commit)
+- [ ] IN VERIFICATION (uncommitted): headless hard delete is forwarded to the full-mode handler (needs a sudo token). Read by the orchestrator: the headless detection and the full-mode handler both treat hard=true|1|yes as hard. Found by the worker: before, a MANAGER sending hard=1 or hard=yes in headless was silently downgraded to a SOFT delete that succeeded. The inventory test moved DELETE /api/agents/[id] from the in-router list to the delegated list although soft delete is still handled in the router — half true, to be stated in the commit
 
 ## Approval log
 

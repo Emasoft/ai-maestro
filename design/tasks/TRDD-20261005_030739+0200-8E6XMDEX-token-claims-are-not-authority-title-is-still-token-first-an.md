@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:27:44+0200
+updated: 2026-10-05T04:34:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -66,6 +66,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] LANDED d9bbf1bb9: a token store that exists but cannot be read/parsed (or is 0 bytes, or the wrong shape) is a fault; a missing one is empty; a presented token is rejected while the store is corrupt. Closes the hole left by 49f411162. Evidence and my neuter are in the commit message. CONSEQUENCE TO KNOW: a corrupt store locks out every agent using governance tokens until the file is repaired by hand; the only signal is one log line per request. OPEN: no owner-facing alert or repair path; lib/agent-teardown.ts post-condition throws on a corrupt store instead of reporting; module cache untouched on the throw path; older-format records not looked for
 - [x] CORRECTION to the d9bbf1bb9 box and commit message: the fleet-wide rejection of governance tokens over a corrupt store is NOT new — before, a corrupt store read as empty and every validation already failed. New is: the file is no longer overwritten; revocation faults; a 0-byte or wrong-shape file is a fault; each validation re-reads and logs. Consequence not stated before: while the store is corrupt NO agent can be deleted (G06) and NO title changed (G14b). READ by the orchestrator: the live store is a valid empty array; loadTokens serves a warm cache until its TTL; the delete pipeline counts a throwing teardown probe as residue. OWED: owner-visible alert (top open item); a neuter for the shape-check throw; the grep that the owner path never imports the store
 - [ ] IN PROGRESS (uncommitted): G06b revokes held portfolio tokens on HARD delete only (soft leaves them dormant, so the user's answer on resurrected agents is not foreclosed); compensated; the rollback is reachable from every later in-sequence gate but not from the post-commit folder removal. Revive calls the registry delete directly, so G06b never runs there (per worker). Six tests/integration CreateAgent reds seen by the worker, baseline unknown
+- [x] LANDED 66a55c866: a HARD delete revokes the portfolio tokens the agent holds, compensated on rollback; soft delete leaves them dormant. Limits in the commit message (folder removal is past the rollback; revive bypasses the pipeline; tokens issued by the deleted agent untouched)
 
 ## Approval log
 

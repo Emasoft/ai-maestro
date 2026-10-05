@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T06:16:02+0200
+updated: 2026-10-05T06:20:57+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -21,7 +21,7 @@ approval-datetime: 2026-10-05T01:29:48+0200
 derived: false
 
 relevant: [TRDD-L6VV9Q7U]
-implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b, fb676e33c]
+implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b, fb676e33c, 398b1721d]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
@@ -118,7 +118,9 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] 2026-10-05 CORRECTION to the eighteen ticks above (review): box 21 held three obligations and only two were carried — its G11 half (a failed chair clear on retitle is only a WARN) was carried nowhere; it is now an open box on TRDD-XTDMQO68. Box 35's 'audit of other headless handlers' is LANDED on TRDD-BZW1QAZ5 rather than moved. Box 20's quoted destination is about agentIds, not chair writers; its tick stands on the commits (5ce4c6a5a, 96245c34c), not on that line. Checked since: the destination boxes for 27 (8E6XMDEX 'issuer_team_id comes from the registry') and 42 (XTDMQO68 'DeleteTeam G03 undo traced') are both still unticked. Plainly: ticking these eighteen finished no new work — six were code already landed, six were records, six moved elsewhere.
 - [x] 2026-10-05 PROPOSAL WITHDRAWN after review: I proposed closing this card, TRDD-XTDMQO68 and TRDD-8E6XMDEX as complete by ticking their open boxes as 'moved' to successor cards. Rejected: that would satisfy the checklist gate with ticks that mean 'not done', and this card's own original obligations (the un-mocked delete-restore round trip, a status on DeleteAgentResult, several user rulings) are open. The cards stay OPEN. If they are split later it is by subject (cross-host membership and status model; owner-visible alerts and detector surfacing; delete/restore integrity), boxes left unticked, the originals moved to superseded — after the user has seen the split. Ledger pointer correction: the latest scratch ledger is docs_dev/TRDD-DRAIN-LEDGER-20261005-0540.md.
 - [x] 2026-10-05 fb676e33c tests/integration/agent-soft-delete-restore-roundtrip.test.ts — real registry, export/import and authentication lookup under a temp state root; only os is mocked. My run: 7 of 7. Pins: soft delete archives and the session secret is refused; restore gives a NEW id, same name. The restore ROUTE is not driven (needs a sudo token); the test calls the functions it calls.
-- [ ] FOUND by that test, pinned as OBSERVED (UNSAFE): after a restore the OLD session secret authenticates again, now as the NEW id — the import copies the exported row's metadata including the stored secret hash (per worker; the copy site in importAgent not read by me). The same copy would carry a foreign host's secret hash on a cross-host import. Fix dispatched: the import drops the stored session-secret hash, so a restored or imported agent authenticates only with a secret issued after the import.
+- [x] FOUND by that test, pinned as OBSERVED (UNSAFE): after a restore the OLD session secret authenticates again, now as the NEW id — the import copies the exported row's metadata including the stored secret hash (per worker; the copy site in importAgent not read by me). The same copy would carry a foreign host's secret hash on a cross-host import. Fix dispatched: the import drops the stored session-secret hash, so a restored or imported agent authenticates only with a secret issued after the import.
+- [x] 2026-10-05 398b1721d: the import drops the stored session-secret hash at its one metadata assembly site and the export omits it; session bootstrap writes a fresh one at the next session start (lib/session-env.ts, read by me). My runs: round-trip file 7 of 7; the ten import/export test files together twice, 229 of 229 (an earlier run and the worker's run failed different tests under a load average above 100 — read as load, by inference). Import-side neuter is the worker's.
+- [ ] NOT COVERED by that fix (read by me: app/api/agents/cemetery/route.ts calls importAgent with newName and newId only — no skipKeys): a restored agent keeps the archive's AMP signing keys and fingerprint under its new id. Whether a resurrected agent should keep its old signing identity is a question for the owner (it is the same agent, restored by the owner) — but it must be a decision, not an accident. Also untested: the restore ROUTE itself (the test calls its steps).
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:16:01+0200
+updated: 2026-10-05T06:20:57+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f, b555d389c]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -95,6 +95,7 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] 2026-10-05 05a35574f: the transfer route answers 400 for a non-object body and for a mode that is present and not 'move' or 'clone' (the service's type and the one interface caller use exactly those two); 'Use copy mode' removed from the refusal text. My run: 4 transfer test files / 68 passed, tsc 0. Neuters are the worker's (2 red each), not repeated. This closes two of the 'recorded not fixed' items in the reachability box (unknown mode, null body) and nothing else in it. Session-delete service body read by me the same day: it authorizes with a hand-built object {agentId, governanceTitle, teamId} — same pattern as the metadata-delete handler under audit; apply that audit's result there too.
 - [ ] READ BY ME 2026-10-05: components/TransferAgentDialog.tsx calls the transfer route with a plain fetch carrying only a Content-Type header, and the file imports no sudo-aware fetch (grep) — so the owner's own transfer from the interface would be refused by the sudo guard. A second, independent reason transfer does not work today. Not fixed: PARKED with the rest of the transfer corner behind question 21; repairing transfer is one piece of work (dialog through the sudo-aware fetch, export without the self-fetch, a host-to-host credential for the import, cemetery archive before a move).
 - [ ] WORKER FAILED 2026-10-05 (no change applied; report reports/bzw1qaz5/20261005_061424+0200-metadata-delete-authorize.md, findings NOT re-read by me): (1) per the worker, authorize reads only agentId, error, governanceTitle, teamId, userId, userTitle, so the hand-built object in the metadata DELETE handler (and the one I read in sessions-service deleteSession, which omits userId and userTitle — to check) drops nothing it reads today; the drift risk remains. (2) per the worker, by reading and NOT by test: malformed JSON in headless is answered 500 because readJsonBody attaches .status = 400 while the router's global catch honours only .statusCode === 413. The edit tool could not edit services/headless-router.ts (killed three times). Re-dispatched with the part-and-join method.
+- [x] 2026-10-05 b555d389c: the API-only server answers a malformed JSON body with 400 'Invalid JSON body' instead of 500 — the router's single catch now honours the status readJsonBody attaches; readJsonBody is the only thrower of that shape in the router, lib and services (grep by me). My runs: 55 headless test files / 839 passed; with the mapping removed in a scratch worktree the new case fails and the other 20 pass. This closes the 'malformed JSON → 500' item; the hand-built authorize object needed no change (per worker: it drops no field authorize reads).
 
 ## Approval log
 

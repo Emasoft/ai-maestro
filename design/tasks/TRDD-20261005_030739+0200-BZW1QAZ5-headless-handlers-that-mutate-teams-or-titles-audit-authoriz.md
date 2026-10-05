@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:11:07+0200
+updated: 2026-10-05T03:25:37+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -39,6 +39,11 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] Table of every mutating headless handler: gate quoted, full-mode twin's gate quoted, verdict
 - [ ] Each weaker handler fixed with a test driven through the real router
 - [ ] A test that fails when a mutating headless handler has authentication but no authorization
+- [x] AUDIT DONE (read-only, by a worker; static reading, nothing executed; report under reports/bzw1qaz5/, headless-authorization-audit): 254 routes, 150 mutating handlers, all 150 classified — 39 gated-equal, 51 gated-in-service, 34 WEAKER than their full-mode twin, 23 authentication-only in BOTH modes, 3 not established. Coverage cross-checked by two counts and a script (per worker)
+- [ ] WEAKER, highest first (each traced by static reading, not executed; a worker is re-verifying and fixing in services/headless-router.ts): W1 config/deploy — any agent writes hooks / MCP servers / launch args into ANY agent (twin: authorize modify-agent); W3 POST /api/agents — any agent creates and spawns an agent (twin: create-agent); W4 cemetery list + download — any agent downloads deleted agents' archives incl. keys (twin: owner only); W5 agents/import — no check at all (twin: owner only); W6 governance trust add/remove — password only (twin: owner + password); W9 any agent reads any mailbox; W7 a dozen owner-only or MANAGER-only mutations with no check; W8 login has no rate limit in headless
+- [ ] W2 PATCH /api/agents/:id/session: the authorization ACTION is read from the request body, so a MANAGER/COS can pick a weaker action and type into another agent's terminal — the act R42 revokes. Fix in services/agents-core-service.ts (a second worker)
+- [ ] CROSS-CUTTING, not being fixed in this round: headless handlers skip the write-block / lockdown / kill-switch checks that full-mode route guards run first; headless has no sudo layer, so a stolen owner session cookie suffices for strict operations; several hand-built contexts read 'no agent id' as system owner and several services rebuild the auth result without the user id (re-opening the non-owner-user hole when the user-authority model is on); 23 handlers are authentication-only in BOTH modes
+- [ ] The ledger test asserts only that an authentication call is present; add a test that fails when a mutating handler authenticates without authorizing
 
 ## Approval log
 

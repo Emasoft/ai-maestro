@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:16:02+0200
+updated: 2026-10-05T03:25:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -43,6 +43,11 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] Reader inventory repeated with a method that covers dynamic access
 - [ ] lib/portfolio-store.ts exports revokeTokensForSubject(agentId) and NOTHING in lib/ services/ app/ calls it (grep by the orchestrator, 2026-10-05): portfolio tokens issued TO an agent are apparently not revoked when that agent is soft-deleted or leaves its team. Verify by reading the verify path (does a token for a non-live subject still verify?) before fixing
 - [ ] Scope of the revokeTokensForSubject finding, widened: its only caller is its own unit test — searched lib services app components hooks scripts tests and server.mjs across .ts .tsx .mjs .js .cjs .sh
+- [ ] INVESTIGATION DONE (read-only, by a worker; report under reports/8e6xmdex/, token-claims): a governance token (aim_tk_) carries the title and team stamped at mint for 3600 s and authorize() prefers it over the registry; session secrets, AMP keys and IBCT resolve live. The only eager invalidation is ChangeTitle gate G14b, whose failure is caught and logged as a WARN. Six other readers trust the token title directly
+- [ ] FIX ATTEMPTED AND REVERTED (worker stop condition): resolving the title live in authenticateAgent for aim_tk_ callers. Blocker: resolveGovernanceContext loads ./governance, ./agent-registry and ./team-registry with lazy require(), which does not resolve under vitest — it always falls into its catch and returns autonomous — so the fix cannot be tested and 88 tests in tests/authorization.test.ts flip. It also means the EXISTING live-title path for session secrets has no working test. The 5 tests written for the fix are parked at tests_dev/aid-token-title-is-resolved-live.test.ts.parked (gitignored)
+- [ ] Soft-deleted agent: its session secret hash stays in the registry row and findAgentBySessionSecret iterates rows including deleted ones, so the secret still authenticates that id with title autonomous (per worker read, not executed). DeleteAgent revokes AMP keys and governance tokens only
+- [ ] Portfolio tokens: the verifier never checks the SUBJECT is live or still in the issuer's team; revokeTokensForSubject and revokeMandatesForTeam have no production caller. Blast radius today is small because the list of operations requiring a token is empty (per worker). revokeTokensForSubject has no compensable twin, so a DeleteAgent gate cannot use it as is
+- [ ] Make a failed G14b revocation fail the title change instead of logging a WARN (the gate already declares an undo)
 
 ## Approval log
 

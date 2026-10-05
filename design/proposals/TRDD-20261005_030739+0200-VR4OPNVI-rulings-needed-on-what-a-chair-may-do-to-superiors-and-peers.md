@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:16:01+0200
+updated: 2026-10-05T03:25:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -41,6 +41,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] Each answer is implemented or filed under the owning card
 - [ ] REPORT, not a question: per a read-only script (2026-10-05, soft-deleted rows excluded) 2 of the 3 live teams name a chiefOfStaffId with no live agent; none names an orchestrator. Nothing was modified. Three behaviours are LIVE awaiting ratification: questions 1, 2 and 4
 - [ ] CORRECTION to the REPORT box above: the parenthetical 'soft-deleted rows excluded' was false for the chair finding. Re-measured 2026-10-05 with one script that distinguishes the cases: 12 registry rows, 10 live; team 'Test Kanban Team' has no chair and no members; teams 'scen003-test-wizard-team' and 'scen8-noplugin-team' have a chair and ALL members (3 and 2) ABSENT from the registry altogether. Nothing was modified
+- [ ] QUESTION 9 (audit trail): an execution that was refused or failed after both managers approved is now stored as status rejected with reason 'Execution refused: …' and no rejector. That mixes machine failures with manager decisions in the governance record. Keep, or add a distinct failed status?
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:16:25+0200
+updated: 2026-10-05T03:25:38+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,6 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -55,6 +56,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [ ] CORRECTION to the 'VERIFIED BY THE ORCHESTRATOR' box above: I saw two call sites, each conditioned on the status being executed — not the absence of other call paths ('only if' over-claimed). The requester-facing answer was then read by the worker (app/api/v1/governance/requests/[id]/approve/route.ts:66-72), not by me
 - [ ] Still open after the landing: 'executed' is written BEFORE the run on the success path (needs the registry to return a ready signal instead); the peer host is never told a request was refused; transfer-agent silently skips missing teams (per worker)
 - [ ] COMMIT MAP: the cross-host refusal fix is INSIDE commit 0f00a70c0, which is titled as a docs commit (a git lock collision swept the staged code into it). Its intended message is recorded verbatim in the body of commit 896822204. Search for the fix by file, not by subject
+- [x] LANDED 8f34f9cc2: markExecutionRefused acts only on an executed request; recording a refusal never throws and never replaces the original reason; transfer-agent refuses a missing destination. JUDGEMENT left in: a missing SOURCE team is not refused (may live on the peer host). Full suites NOT yet run on that tree by the orchestrator (other workers mid-edit) — owed
+- [ ] Tell the peer: on an execution refusal the source host's copy stays pending until TTL and is never told. An existing rejection notification may be reusable without a protocol change (to verify)
 
 ## Approval log
 

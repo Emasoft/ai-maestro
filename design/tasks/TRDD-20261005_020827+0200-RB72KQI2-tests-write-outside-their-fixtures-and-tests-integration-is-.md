@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T04:56:06+0200
+updated: 2026-10-05T04:58:52+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -60,6 +60,7 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [x] REGRESSION FOUND 2026-10-05 by running tests/integration at 1878fd0b6 (10 failed in 4 files) and at 05f2d4bf0 (12 failed in 5 files): two tests in tests/integration/createagent-g06-g07-ordering.test.ts pass before this session and fail after it ('no title + no team → G06 defaults to AUTONOMOUS', 'G07 undo: a gate that aborts AFTER a successful team join'). One of the session's commits between those shas caused it; a bisect worker is finding which and whether the test's mock or production is wrong. The other reds (createagent-g05c, -g08, -g11, pillar-cli-e2e) pre-date the session. package.json and the lockfile did not change in that range
 - [x] 2026-10-05 the regression box is closed by 8162ae19e: bisected to 49f411162 (0f0e49400 = 10/10, 49f411162 = 2 failed); cause is this file's fs mock lacking a default export, which the real lib/aid-token import needs and which the old catch swallowed. Verdict: test mock gap, production right to fail closed. File is 10/10 at ccd8c10d1. Remaining known integration reds, all present at 1878fd0b6: createagent-g05c x1, -g08 x4, -g11 x2, pillar-cli-e2e x3.
 - [ ] 2026-10-05 found while wiring the team-slot detector (worker finding, confirmed by symptom only): tests of the fleet liveness tick reached this machine's LIVE teams file through a default dependency. That one default is now injected (b86907f93). Audit the tick's other default dependencies for the same reach into live state.
+- [x] 2026-10-05 the aid-token mock added by 8162ae19e is removed by 0cea6c6a7; the two createagent-g06-g07 tests pass because creation no longer reaches the token store, not because the store is mocked.
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

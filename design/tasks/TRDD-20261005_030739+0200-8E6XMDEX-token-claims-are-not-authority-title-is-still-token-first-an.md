@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:57:38+0200
+updated: 2026-10-05T04:58:51+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -77,6 +77,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 c1fdf417c closes the review findings on eabbe65c8 (fault answer after the permission check, POST covered, single read, no reflected unsafe id, comment corrected). Its stated costs: a non-owner issuer gets 403 over a corrupt file; DELETE still distinguishes corrupt from healthy for a non-owner probing a nonexistent token id (403 vs 404).
 - [ ] DECISION CHANGED 2026-10-05, IN PROGRESS (supersedes 'the user's call; not implemented' above): agent creation will skip token revocation for the id it minted in the same run. Fact read: lib/agent-registry.ts createAgent assigns the id with an unconditional uuidv4(), so no token can exist for it at creation. A worker is implementing it with an option set only by CreateAgent; the G07b re-title site gets the flag only if the gate order proves no session start or token issue can precede it. Every other ChangeTitle caller stays fail-closed. Not yet landed — until it is, the tree still blocks creation on an unreadable token store.
 - [x] 2026-10-05 GATE ORDER READ BY THE ORCHESTRATOR for the creation skip: CreateAgent's sequence is G03, G04 (createAgent, the only assignment of c.agent), G05, G06, G07, G07b, G07c; the tmux session is created at G09, after the sequence. So no session exists at G06 or G07b and the flag is safe at all three ChangeTitle sites. Also from review of c1fdf417c, dispatched: its message says 'repair or remove it' on ANY throw from the load (a transient fault would get destructive advice), and its claim 'read once at each site' is false for POST, which pre-loads and then mints.
+- [x] 2026-10-05 LANDED 0cea6c6a7: agent creation no longer reaches the token store (option agentCreatedInThisRun, three CreateAgent sites only). This closes item (1) of the consequences box for CREATION; retitle and hard delete still fail closed on an unreadable store, by design. Open: the option is caller-asserted (a future caller could misuse it); the G07b site has no test of its own; no integration test drives a retitle against the real token store. RB72KQI2's line calling the 8162ae19e mock the fix is superseded: the mock is removed.
 
 ## Approval log
 

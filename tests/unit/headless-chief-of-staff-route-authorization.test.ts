@@ -171,6 +171,36 @@ describe('TRDD-A50RC5G8 — headless chief-of-staff route authorization', () => 
     expect(m.updateTeam).toHaveBeenCalledWith(TEAM, { chiefOfStaffId: TARGET, type: 'closed' }, MANAGER)
   })
 
+  // User-authority model ON shapes, quoted from lib/agent-auth.ts authenticateAgent: a web session / user-AID token
+  // resolves to `{ userId, userTitle }` with NO agentId (`{ userId: sess.userId, userTitle }` and
+  // `{ userId, userTitle: aidRecord.user_title ?? 'user' }`). The real authorize() runs (not mocked).
+  it('model ON: the maestro shape { userId, userTitle: maestro } with the stubbed-correct password succeeds, 200', async () => {
+    /** The active maestro keeps the owner password path */
+    m.authenticateAgent.mockReturnValue({ userId: 'user-maestro', userTitle: 'maestro' })
+    const out = await run({ agentId: TARGET, password: 'stub' })
+    expect(out.status).toBe(200)
+    expect(m.verifyPassword).toHaveBeenCalledWith('stub')
+    expect(m.updateTeam).toHaveBeenCalledWith(TEAM, { chiefOfStaffId: TARGET, type: 'closed' }, MANAGER)
+  })
+
+  it('model ON: the maestro shape with a wrong password is refused 401 and nothing is written', async () => {
+    /** The owner path still needs the password */
+    m.authenticateAgent.mockReturnValue({ userId: 'user-maestro', userTitle: 'maestro' })
+    m.verifyPassword.mockResolvedValue(false)
+    const out = await run({ agentId: TARGET, password: 'wrong-stub' })
+    expect(out.status).toBe(401)
+    expect(m.updateTeam).not.toHaveBeenCalled()
+  })
+
+  it('model ON: a non-owner user { userId, userTitle: user } is refused 403 before the password and before updateTeam', async () => {
+    /** A normal user has a session but no authority: it must not reach the password verifier */
+    m.authenticateAgent.mockReturnValue({ userId: 'user-plain', userTitle: 'user' })
+    const out = await run({ agentId: TARGET, password: 'stub' })
+    expect(out.status).toBe(403)
+    expect(m.verifyPassword).not.toHaveBeenCalled()
+    expect(m.updateTeam).not.toHaveBeenCalled()
+  })
+
   it('chief-of-staff-titled agent clearing the chair (null) is refused 403', async () => {
     /** Only MANAGER may clear the chair; a COS may not remove itself or anyone */
     m.authenticateAgent.mockReturnValue({ agentId: COS, governanceTitle: 'chief-of-staff' })

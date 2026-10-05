@@ -45,7 +45,7 @@ vi.mock('@/lib/agent-registry', async () => {
   return h.registryMock(H.store as never, h.registryPath(H.FAKE_STATE))
 })
 vi.mock('@/lib/governance', async () => (await import(HELPER)).stubs.governance())
-// loadTeams feeds authorize()'s own-team test (lookupTeamIdForAgent); the rest of the registry is the shared stub.
+// loadTeams feeds authorize()'s own-team test (cosSupervision); the rest of the registry is the shared stub.
 vi.mock('@/lib/team-registry', async () => ({
   ...(await import(HELPER)).stubs.teamRegistry(),
   freezeIncompleteTeam: async () => ({ frozen: false, hibernated: [] }),

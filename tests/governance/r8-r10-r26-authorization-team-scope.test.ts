@@ -171,7 +171,7 @@ describe('R10.3 — a COS may wake or hibernate only its OWN team’s agents', (
 describe('R8.4 — membership comes from Team.agentIds[], never the free-text Agent.team', () => {
   it("refuses a COS acting on an agent whose registry row merely CLAIMS its team", async () => {
     // PRETENDER's registry entry says `team: 'Alpha Team'`; Alpha's agentIds do not list
-    // it. `lookupTeamIdForAgent` consults ONLY teams.json, so the claim buys nothing —
+    // it. `cosSupervision` consults ONLY the team registry (teams.json), so the claim buys nothing —
     // which is exactly what "display-only" means. Add a fallback to `agent.team` and this
     // flips to allowed.
     const authorize = await freshAuthorize()

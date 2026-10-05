@@ -20,13 +20,13 @@
  * testing at the `authorize()` boundary directly is what SCEN-001 S014/S032
  * defer to and is stable regardless of which HTTP route wires it.)
  *
- * FILESYSTEM STRATEGY: `lib/authorization.ts`'s `lookupTeamIdForAgent()` and
+ * FILESYSTEM STRATEGY: `lib/authorization.ts`'s team-registry reads (`cosSupervision` / `orchestratorOverAssignee`) and
  * `lib/aid-token.ts`'s token store both read real on-disk files (under
  * `~/.aimaestro/`). Rather than `vi.mock('@/lib/team-registry', ...)` — which
  * does NOT get picked up by `lib/authorization.ts`'s internal
  * `require('./team-registry')` under this project's Vitest/vite-node setup
  * (verified empirically: the mock is never observed, the relative require
- * fails to resolve, and `lookupTeamIdForAgent` fails closed to "team-less"
+ * fails to resolve, and the team lookup fails closed to "team-less"
  * every time, silently making every COS-own-team assertion pass or fail for
  * the WRONG reason) — this file leaves BOTH `lib/team-registry.ts` and
  * `lib/aid-token.ts` completely real and unmocked, and instead stubs the
@@ -1092,5 +1092,14 @@ describe('TRDD-A50RC5G8 — change-title: a CHIEF-OF-STAFF may not retitle a MAN
   it('a target absent from the registry is DENIED', () => {
     mockGetAgent.mockImplementation(() => undefined)
     expect(run()).toEqual({ allowed: false, reason: 'Chief-of-Staff cannot change the title of tgt: target agent is not in the registry (TRDD-A50RC5G8)' })
+  })
+  it('a target whose registry read THROWS is DENIED with the exact reason and the error is logged', () => {
+    /** Fail closed: an unreadable target record must not be treated as a harmless untitled agent */
+    mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(run()).toEqual({ allowed: false, reason: 'Chief-of-Staff cannot change the title of an agent whose record could not be read (TRDD-A50RC5G8)' })
+      expect(spy).toHaveBeenCalled()
+    } finally { spy.mockRestore() }
   })
 })

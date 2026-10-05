@@ -16,7 +16,7 @@
  * as "allowed", the exception has eaten the rule and this file says so.
  *
  * FILESYSTEM STRATEGY: copied deliberately from tests/authorization.test.ts —
- * `lookupTeamIdForAgent()` reads a real teams.json through a RELATIVE
+ * the team lookups (`cosSupervision` / `orchestratorOverAssignee`) read a real teams.json through a RELATIVE
  * `./team-registry` import that `vi.mock('@/lib/team-registry')` does not
  * intercept under this project's vite-node setup. Mocking it would silently
  * fail closed to "team-less" and make every COS assertion pass for the WRONG

@@ -10,7 +10,7 @@
  * mocked to a controllable membership table.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import path from 'path'
 import Module from 'module'
 
@@ -32,6 +32,7 @@ const _origResolve = (Module as unknown as { _resolveFilename: (...a: unknown[])
 
 const teamStub = require('@/lib/team-registry') as {
   __setTeams: (t: Array<{ id: string; chiefOfStaffId?: string | null; agentIds: string[] }>) => void
+  __setThrows: (v: boolean) => void
 }
 
 import { canIssue, type IssueRequestBody } from '@/lib/portfolio-issue-guard'
@@ -113,6 +114,21 @@ describe('canIssue — CHIEF-OF-STAFF (narrow)', () => {
   })
   it('TRDD-A50RC5G8: a wrong token teamId does not stop the registry chair (ALLOWED)', () => {
     expect(canIssue(cos('team-other'), mandateAgentCreate)).toEqual({ ok: true })
+  })
+  it('TRDD-A50RC5G8: an unreadable team registry is DENIED with its own reason and logged', () => {
+    /** Fail closed: a throwing registry read must not read as "chairs no team" nor as allowed */
+    teamStub.__setThrows(true)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(canIssue(cos(), mandateAgentCreate)).toEqual({
+        ok: false,
+        reason: 'Team registry could not be read; refusing to mint (TRDD-A50RC5G8).',
+      })
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      teamStub.__setThrows(false)
+      warn.mockRestore()
+    }
   })
 })
 

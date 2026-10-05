@@ -6,8 +6,15 @@
 // runtime `require('@/...')`, so a `vi.mock` cannot intercept that call.
 // Tests patch `Module._resolveFilename` to point `@/lib/team-registry` at this
 // stub; Node's native require loads it cleanly. `__setTeams` drives membership.
+// `__setThrows(true)` makes loadTeams throw (the unreadable-registry branch); default off,
+// a test that turns it on must turn it off again.
 let _teams = []
+let _throws = false
 module.exports = {
-  loadTeams: () => _teams,
+  loadTeams: () => {
+    if (_throws) throw new Error("team registry unreadable (test stub)")
+    return _teams
+  },
   __setTeams: (t) => { _teams = t },
+  __setThrows: (v) => { _throws = v },
 }

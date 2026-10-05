@@ -476,7 +476,7 @@ export function authorize(
         return { allowed: false, reason: 'Chief-of-Staff can only delete agents in their own team (soft delete only)' }
       }
       // Team equality is not enough: a MANAGER may sit in a team's agentIds (team-registry exempts it) and
-      // lookupTeamIdForAgent also matches the COS slot, so without a TARGET-title test a subordinate could
+      // cosSupervision's team membership also matches the COS slot, so without a TARGET-title test a subordinate could
       // soft-delete its superior or a peer. Fail CLOSED like the unblock-prompt branch: unknown target or a
       // throwing registry read → denied.
       let rawTitle: unknown
@@ -1032,8 +1032,8 @@ function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 
 
 /**
  * Registry verdict on an ORCHESTRATOR editing a TRDD card: true when some team has `orchestratorId === orchId` AND
- * contains the assignee (member, chief of staff or orchestrator slot — the membership notion of
- * lookupTeamIdForAgent) — ALL teams searched. TRDD-A50RC5G8: the token's teamId outlives a team change, so it is
+ * contains the assignee (member, chief of staff or orchestrator slot — the same membership notion
+ * cosSupervision uses) — ALL teams searched. TRDD-A50RC5G8: the token's teamId outlives a team change, so it is
  * never consulted; an unreadable registry is its own verdict, not "denied as outsider".
  */
 function orchestratorOverAssignee(orchId: string, assigneeId: string): 'ok' | 'denied' | 'unreadable' {

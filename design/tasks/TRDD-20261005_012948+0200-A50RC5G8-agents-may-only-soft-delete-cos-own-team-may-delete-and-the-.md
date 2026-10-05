@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:38:09+0200
+updated: 2026-10-05T02:51:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -88,6 +88,12 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] Stale token team id still GRANTS at two readers (per worker static trace): lib/authorization.ts ~613 ORCHESTRATOR TRDD edit (token wins over registry) and lib/portfolio-issue-guard.ts:89,92 (COS mints mandate tokens for its token team). Bind both to the registry. app/api/agents/[id]/portfolio/route.ts:164 stamps issuer_team_id from the token (mis-scopes team revocation, no grant)
 - [ ] No target-title guard on the non-delete COS sites (per worker static trace, not executed): a chair can change the TITLE of a MANAGER or of another COS-titled agent listed in its team agentIds; can unblock / wake / hibernate a MANAGER in its team; can archive a failed TRDD assigned to itself. Self title change and soft-deleted targets are stopped. Seven policy-tail actions (modify-agent, manage-skills, view-agent, session and group actions) NOT ESTABLISHED
 - [ ] Token revocation on team change: ChangeTeam / DeleteTeam revoke only indirectly through ChangeTitle, skipped when the title is unchanged; cross-host add/remove/transfer never revoke; lifetime 3600s (per worker). Preferred fix is to stop trusting the token team id at its readers (box above), not an irreversible revoke inside pipelines that roll back — supersedes the earlier 'revoke on team change' box
+- [x] LANDED 3a78439f6: ORCHESTRATOR TRDD edit and the mandate-mint guard decide from the registry (orchestratorId / chiefOfStaffId); the token team id no longer grants anywhere in lib/authorization.ts; lookupTeamIdForAgent deleted. LANDED f53b8a1f6: headless chief-of-staff route requires authorize manage-team for agent callers + self-assign ban. Full suites green on the committed tree (540 files / 7283 tests); two neuters re-run by the orchestrator (title guard, headless authorize)
+- [ ] INTERPRETATION, NOT A USER RULING (overrule in one line): a chair may not change the title of a MANAGER or an ASSISTANT listed in its team (3a78439f6). MANAGER by the authority ladder; ASSISTANT by the unblock-prompt precedent. To overrule: delete the two-title deny in the COS change-title branch
+- [ ] WORDING: the three boxes above that say a chair or agent CAN do something (headless chair route, retitle a MANAGER, unblock/wake/hibernate a MANAGER) were TRACED AS REACHABLE by static reading — no request was run. The earlier 'revoke on team change' box (ChangeTeam does not revoke…) is SUPERSEDED by the reader fix and is not work
+- [ ] New titles a chair can ASSIGN (per worker static trace): manager and assistant stopped by the standalone-title gate (element-management-service.ts ~2811); chief-of-staff stopped by G8 unless the target sits in two teams (NOT ESTABLISHED whether that is possible); orchestrator REACHABLE when the team slot is empty — probably intended, needs a ruling
+- [ ] ROOT: lib/team-registry updateTeam accepts any uuid as chiefOfStaffId (no exists / not-soft-deleted / not-MANAGER check) — one validation there covers the headless route, cross-host assign-cos (which bypasses updateTeam via saveTeams — route it through) and auto-create
+- [ ] Owner path: whoever holds the governance password can obtain an owner session and set a chair (per worker read of lib/agent-auth.ts) — by design; depends on the password never reaching an agent. Untested branches: unreadable registry in the mint guard, throwing lookup in the title guard. Audit of other headless handlers writing membership/titles NOT done. Chair may unblock/wake/hibernate a MANAGER in its team — needs a ruling
 
 ## Approval log
 

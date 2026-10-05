@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:27:32+0200
+updated: 2026-10-05T05:36:21+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -77,6 +77,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] 2026-10-05 CLASSIFICATION of this card's 23 open boxes by a read-only worker (reports/bzw1qaz5/20261005-open-boxes-classified.md): MET 3, SMALL 7, LARGE 1, USER 2, NOTE 5, STALE 5. I have NOT ticked any box from it: the only rows I read myself are the skills finding above. Per the worker (unverified by me): W2 — the session route no longer takes its authorization action from the request body (landed 90b7ef8f5 + e5988b911, two test files named); W1 config/deploy authorizes before reading the body; six routes are still shadowed. Next small items in the worker's order: skills routes (above); agent PATCH, metadata PATCH/DELETE and transfer handlers; a guard test that fails when a mutating handler authenticates without authorizing or ignores auth.error.
 - [x] 2026-10-05 3cd000f2d closes the skills box above, and CORRECTS its severity: the router's two credential gates run before every handler (the first read in full, the second by its opening comment; not executed), so an unauthenticated request should not have reached these handlers. What was missing was the 'manage-skills' authorization for an authenticated agent. The ternary pattern occurred exactly four times in the router and nowhere else (grep). scripts/agent-skill.sh calls these routes and sends credentials only when it has them.
 - [ ] The skills service cannot tell the system owner from nobody: both arrive as a null requester, and null means no governance enforcement. Correct today only because every caller refuses an unauthenticated request first. Give the four service functions an explicit auth context (or owner flag) and make null a refusal; count and update every caller in both modes. Also: a guard test that fails when a mutating headless handler ignores auth.error or authenticates without authorizing (the worker's SMALL item 3), seeded with this pattern.
+- [x] 2026-10-05 64f8ad754: headless metadata PATCH is authenticated and goes through ChangeMetadata; headless agent PATCH passes buildAuthContext(auth) like full mode. 54 headless test files / 804 passed (my run).
+- [x] 2026-10-05 READS that correct the severity of the skills fix (3cd000f2d): the skills service refuses an identified caller unless it is the MANAGER or the chief-of-staff of the target's team, so an authenticated agent could not change another agent's skills before the fix either; removeSkill defaults its type to auto, so that part of the change is a no-op; authorize has an explicit branch so a signed-in non-owner user is not treated as the system owner (read from its guard lines and comments, not the whole function). The one real gap was a credential the router's gate accepts but the handler's own authentication rejects (the worker's inference, not executed). Unchecked on that commit: who calls the settings route in headless and with what body shape; whether any settings file on disk holds the old wrapper shape.
+- [ ] STILL WEAKER in headless, per a worker's handler-vs-twin table (reports/bzw1qaz5/20261005-headless-agent-mutations-authorization.md; NOT read by me): POST /api/agents/:id/transfer — no authentication or sudo in the handler (the worker says delegating to the full-mode handler would apply cleanly); DELETE /api/agents/:id/metadata — no authentication or authorization in the handler. Both sit behind the router's credential gates. Also: readJsonBody turns malformed JSON into a 500 where full mode answers 400.
 
 ## Approval log
 

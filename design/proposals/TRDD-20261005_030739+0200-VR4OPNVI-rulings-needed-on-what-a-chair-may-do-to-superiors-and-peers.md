@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:50:40+0200
+updated: 2026-10-05T05:36:21+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -62,6 +62,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] 18 (DECIDE) Full mode requires sudo for ANY agent delete by the owner, soft included. Headless will require it for hard delete only. Should the owner's soft delete need sudo in headless too?
 - [x] 14 UPDATED: soft delete leaves the agent's portfolio tokens dormant (usable again only if the delete is rolled back); hard delete will revoke them; revive creates a new id. Open part unchanged: re-issue equivalent tokens to a resurrected agent automatically? Default: no
 - [ ] 19 (DECIDE) A session name and an agent name can be the same string: agent alpha's second session is alpha_1, and an agent may also be named alpha_1. Today the exact agent name wins (fbfb841df), so a request about alpha's second session acts on agent alpha_1 when both exist. Options: forbid agent names ending in _digits; record each session's index on the agent record and resolve by ownership; or accept exact-name-first. From TRDD-DEL16Q96 (archived), whose box 3 was closed on the narrower claim.
+- [ ] 20 (DECIDE) Full mode asks for a sudo confirmation before changing an agent's name, title, folder, avatar, program, program arguments or repo through the agent update route; headless mode does not, and cannot issue a sudo token. Should headless refuse those changes until it can ask for sudo (they would then be impossible in headless), or keep allowing them to an authorized caller? Same question for transferring an agent, where the headless handler has no check of its own. From TRDD-BZW1QAZ5.
 
 ## Approval log
 

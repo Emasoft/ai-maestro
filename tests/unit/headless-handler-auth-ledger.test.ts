@@ -212,7 +212,8 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/teams\\/stats$/',
   // 'POST /^\\/api\\/teams\\/notify$/'  — GUARDED 2026-08-26 (TRDD-91TLL7DW). Line removed per
   // this ledger's own rule. It had NO auth at all while reaching a tmux send-keys primitive.
-  'POST /^\\/api\\/teams\\/([^/]+)\\/chief-of-staff$/',
+  // 'POST /^\\/api\\/teams\\/([^/]+)\\/chief-of-staff$/'  — GUARDED 2026-10-05 (TRDD-A50RC5G8): authenticateAgent
+  // + authorize('manage-team') + self-assign ban. Line removed per this ledger's own rule; it was password-only.
   'GET /^\\/api\\/teams$/',
   'GET /^\\/api\\/groups\\/([^/]+)$/',
   'GET /^\\/api\\/groups$/',

@@ -2993,35 +2993,57 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'Invalid team ID format' })
       return
     }
+    // TRDD-A50RC5G8: this handler REIMPLEMENTS app/api/teams/[id]/chief-of-staff/route.ts, and
+    // the password alone is not an identity — it used to be the only gate, so any authenticated
+    // agent of any title holding the password could chair a team, and the chair field now decides
+    // every chief-of-staff grant in lib/authorization.ts. Mirror the full-mode decision exactly:
+    // an AGENT needs authorize('manage-team') (MANAGER only) and may not install itself; the human
+    // owner (no agentId) keeps the password path. The check sits BEFORE the password block so an
+    // unauthorized agent can neither probe the password nor touch the per-team rate limiter.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
     const { agentId: cosAgentId, password } = body || {}
 
-    if (!password || typeof password !== 'string') {
-      sendJson(res, 400, { error: 'Governance password is required' })
+    const authz = authorize(auth, 'manage-team')
+    if (!authz.allowed) {
+      sendJson(res, 403, { error: authz.reason ?? 'Forbidden' })
+      return
+    }
+    // Self-assign ban (CORE, ai-maestro#69): an agent may not seize the sole team gateway.
+    if (auth.agentId && cosAgentId && cosAgentId === auth.agentId) {
+      sendJson(res, 403, { error: 'An agent cannot assign itself as Chief-of-Staff' })
       return
     }
 
-    const config = loadGovernance()
-    if (!config.passwordHash) {
-      sendJson(res, 400, { error: 'Governance password not set' })
-      return
-    }
+    // Human owner only: an agent authenticates by AID and never faces a password gate (R32).
+    if (!auth.agentId) {
+      if (!password || typeof password !== 'string') {
+        sendJson(res, 400, { error: 'Governance password is required' })
+        return
+      }
 
-    // Rate limit per-team to prevent brute-force attacks on one team from blocking others.
-    // Use atomic checkAndRecordAttempt to eliminate TOCTOU window between check and record.
-    const rateLimitKey = `governance-cos-auth:${teamId}`
-    const rateCheck = checkAndRecordAttempt(rateLimitKey)
-    if (!rateCheck.allowed) {
-      sendJson(res, 429, { error: `Too many failed password attempts. Try again in ${Math.ceil(rateCheck.retryAfterMs / 1000)}s` })
-      return
-    }
+      const config = loadGovernance()
+      if (!config.passwordHash) {
+        sendJson(res, 400, { error: 'Governance password not set' })
+        return
+      }
 
-    // Password auth -- only managers know the governance password
-    if (!(await verifyPassword(password))) {
-      sendJson(res, 401, { error: 'Invalid governance password' })
-      return
+      // Rate limit per-team to prevent brute-force attacks on one team from blocking others.
+      // Use atomic checkAndRecordAttempt to eliminate TOCTOU window between check and record.
+      const rateLimitKey = `governance-cos-auth:${teamId}`
+      const rateCheck = checkAndRecordAttempt(rateLimitKey)
+      if (!rateCheck.allowed) {
+        sendJson(res, 429, { error: `Too many failed password attempts. Try again in ${Math.ceil(rateCheck.retryAfterMs / 1000)}s` })
+        return
+      }
+
+      if (!(await verifyPassword(password))) {
+        sendJson(res, 401, { error: 'Invalid governance password' })
+        return
+      }
+      resetRateLimit(rateLimitKey)
     }
-    resetRateLimit(rateLimitKey)
 
     const team = getTeam(teamId)
     if (!team) {

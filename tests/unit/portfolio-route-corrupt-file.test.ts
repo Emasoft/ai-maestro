@@ -84,6 +84,75 @@ async function expectUnreadable(res: Response): Promise<void> {
   expect(raw).not.toContain('SECRET-CONTENT-MARKER')
 }
 
+
+async function postReq(): Promise<NextRequest> {
+  return new NextRequest(new URL(`http://localhost:23000/api/agents/${SUBJECT}/portfolio`), {
+    method: 'POST',
+    body: JSON.stringify({ kind: 'approval', scope: 'agent:create' }),
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+const HEALTHY = JSON.stringify({ agent_id: SUBJECT, updated_at: new Date().toISOString(), tokens: [] })
+const CORRUPT = '{ not json SECRET-CONTENT-MARKER'
+
+async function snapshot(res: Response): Promise<{ status: number; body: unknown }> {
+  return { status: res.status, body: await res.json() }
+}
+
+describe('portfolio route over an unreadable file: no oracle for unauthorized callers', () => {
+  const rando = { agentId: 'rando-agent', isSystemOwner: false, governanceTitle: 'member' }
+
+  it('GET as an unrelated agent over a corrupt file answers the same 403 as over a healthy file', async () => {
+    mockAuth.buildAuthContext.mockReturnValue(rando)
+    writeFile(HEALTHY)
+    const healthy = await snapshot(await route.GET(req('GET'), ctx))
+    store._resetPortfolioCacheForTests()
+    writeFile(CORRUPT)
+    const corrupt = await snapshot(await route.GET(req('GET'), ctx))
+    expect(healthy.status).toBe(403)
+    expect(corrupt).toEqual(healthy)
+  })
+
+  it('DELETE as a non-owner over a corrupt file answers the existing revoke 403', async () => {
+    mockAuth.buildAuthContext.mockReturnValue(rando)
+    writeFile(CORRUPT)
+    const res = await snapshot(await route.DELETE(req('DELETE', `?token_id=${TOKEN_ID}`), ctx))
+    expect(res.status).toBe(403)
+    expect(res.body).toEqual({
+      error: 'portfolio_revoke_forbidden',
+      message: 'Only the token issuer or the system owner may revoke it.',
+    })
+  })
+
+  it('POST by an unauthorized caller over a corrupt file keeps the mint refusal', async () => {
+    mockAuth.buildAuthContext.mockReturnValue(rando)
+    writeFile(HEALTHY)
+    const healthy = await snapshot(await route.POST(await postReq(), ctx))
+    store._resetPortfolioCacheForTests()
+    writeFile(CORRUPT)
+    const corrupt = await snapshot(await route.POST(await postReq(), ctx))
+    expect(healthy.status).toBe(403)
+    expect(corrupt).toEqual(healthy)
+  })
+
+  it('POST by an authorized minter over a corrupt file answers portfolio_unreadable', async () => {
+    writeFile(CORRUPT)
+    await expectUnreadable(await route.POST(await postReq(), ctx))
+  })
+
+  it('GET with an id outside the safe token set never reflects the id in the message', async () => {
+    const res = await route.GET(
+      new NextRequest(new URL('http://localhost:23000/api/agents/x/portfolio')),
+      { params: Promise.resolve({ id: 'a<b>.c/d' }) },
+    )
+    expect(res.status).toBe(500)
+    const raw = await res.text()
+    expect(JSON.parse(raw).error).toBe('portfolio_unreadable')
+    expect(raw).not.toContain('a<b>')
+  })
+})
+
 describe('portfolio route over an unreadable portfolio file', () => {
   it('GET as subject answers an unreadable-file 500 (loadPortfolio site)', async () => {
     mockAuth.buildAuthContext.mockReturnValue({ agentId: SUBJECT, isSystemOwner: false })

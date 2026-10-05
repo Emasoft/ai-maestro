@@ -14,7 +14,6 @@ import {
   loadPortfolio,
   getTokenById,
   revokeToken,
-  portfolioStoreFault,
 } from '@/lib/portfolio-store'
 import { emitPortfolioOp, issueDiff, revokeDiff } from '@/lib/portfolio-ledger'
 
@@ -43,18 +42,51 @@ const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it so
 
 
 // A portfolio file that EXISTS but cannot be parsed is a fault, not an empty portfolio
-// (TRDD-8E6XMDEX). Without this check GET/DELETE answered a bare "Internal server error" and
-// findActiveTokens would have swallowed the fault into an empty list, telling the owner the
-// agent has no tokens. Only the file BASENAME is named: the store's own message carries the
-// full home path, which must not reach a response body.
-function portfolioUnreadableResponse(subjectAgentId: string): NextResponse | null {
-  if (!portfolioStoreFault(subjectAgentId)) return null
+// (TRDD-8E6XMDEX). loadPortfolio THROWS on it; uncaught, the throw reached the route-level catch and
+// answered a bare "Internal server error". (findActiveTokens, by contrast, swallows the same fault
+// into an empty list, so a handler relying on it alone would tell the owner the agent has no tokens.)
+//
+// The load is caught at the read site (tryLoadPortfolio): ONE read, so the answer and the data cannot
+// disagree. The store throws one plain Error type for every fault, so a null here means "unreadable
+// or unsafe id".
+//
+// An unreadable file is also an ORACLE if disclosed to anyone: a caller that is neither the system
+// owner nor allowed to read the portfolio must get exactly the answer a healthy file would give
+// them (the 403 helpers below), because issuer status cannot be known over a corrupt file.
+//
+// The URL segment is reflected in the message, so the file name is named only when the id is a plain
+// token (the system owner's id is the literal "system-owner", so UUIDs cannot be required); otherwise
+// the message says "portfolio file" without it.
+function tryLoadPortfolio(subjectAgentId: string): PortfolioToken[] | null {
+  try {
+    return loadPortfolio(subjectAgentId)
+  } catch {
+    return null
+  }
+}
+
+function portfolioUnreadableResponse(subjectAgentId: string): NextResponse {
+  const named = /^[A-Za-z0-9_-]+$/.test(subjectAgentId) ? ` ${subjectAgentId}.json` : ''
   return NextResponse.json(
     {
       error: 'portfolio_unreadable',
-      message: `The portfolio file ${subjectAgentId}.json for this agent is unreadable (corrupt or wrong shape); repair or remove it.`,
+      message: `The portfolio file${named} for this agent is unreadable (corrupt or wrong shape); repair or remove it.`,
     },
     { status: 500 },
+  )
+}
+
+function readForbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    { error: 'portfolio_read_forbidden', message: 'Only the subject, an issuer, or the system owner may read this portfolio.' },
+    { status: 403 },
+  )
+}
+
+function revokeForbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    { error: 'portfolio_revoke_forbidden', message: 'Only the token issuer or the system owner may revoke it.' },
+    { status: 403 },
   )
 }
 
@@ -137,6 +169,11 @@ export async function POST(
     if (!getAgent(subjectAgentId)) {
       return NextResponse.json({ error: 'Subject agent not found' }, { status: 404 })
     }
+
+    // TRDD-8E6XMDEX: an unreadable subject file would otherwise surface as a bare 500 from issueToken.
+    // Placed after authentication, canIssue and the live-subject check, so only an authorized minter
+    // can learn the file is unreadable, and before anything is minted or signed.
+    if (tryLoadPortfolio(subjectAgentId) === null) return portfolioUnreadableResponse(subjectAgentId)
 
     // Build the token. The issuer title comes from the AID-derived context and is
     // SIGNED, so it is the token's own claim about what authority minted it.
@@ -252,16 +289,17 @@ export async function GET(
     }
     const ctx = buildAuthContext(auth)
 
-    const unreadable = portfolioUnreadableResponse(subjectAgentId)
-    if (unreadable) return unreadable
-    const all = loadPortfolio(subjectAgentId)
+    const all = tryLoadPortfolio(subjectAgentId)
+    if (all === null) {
+      // Issuer status cannot be known over an unreadable file, so it is denied: only the system owner
+      // and the subject itself are told why; everyone else gets the ordinary 403 (no oracle).
+      if (ctx.isSystemOwner || ctx.agentId === subjectAgentId) return portfolioUnreadableResponse(subjectAgentId)
+      return readForbiddenResponse()
+    }
     const isSelf = ctx.agentId === subjectAgentId
     const isIssuer = !!ctx.agentId && all.some(t => t.issuer_agent_id === ctx.agentId)
     if (!ctx.isSystemOwner && !isSelf && !isIssuer) {
-      return NextResponse.json(
-        { error: 'portfolio_read_forbidden', message: 'Only the subject, an issuer, or the system owner may read this portfolio.' },
-        { status: 403 },
-      )
+      return readForbiddenResponse()
     }
 
     const active = findActiveTokens(subjectAgentId).map(t => ({
@@ -308,9 +346,11 @@ export async function DELETE(
     }
 
     // Ensure the subject's portfolio is loaded so getTokenById resolves it.
-    const unreadable = portfolioUnreadableResponse(subjectAgentId)
-    if (unreadable) return unreadable
-    loadPortfolio(subjectAgentId)
+    if (tryLoadPortfolio(subjectAgentId) === null) {
+      // Same rule as GET: only the system owner is told; everyone else gets the ordinary 403.
+      if (ctx.isSystemOwner) return portfolioUnreadableResponse(subjectAgentId)
+      return revokeForbiddenResponse()
+    }
     const token = getTokenById(tokenId)
     if (!token || token.subject_agent_id !== subjectAgentId) {
       return NextResponse.json({ error: 'Token not found in this subject portfolio' }, { status: 404 })
@@ -318,10 +358,7 @@ export async function DELETE(
 
     const isIssuer = !!ctx.agentId && token.issuer_agent_id === ctx.agentId
     if (!ctx.isSystemOwner && !isIssuer) {
-      return NextResponse.json(
-        { error: 'portfolio_revoke_forbidden', message: 'Only the token issuer or the system owner may revoke it.' },
-        { status: 403 },
-      )
+      return revokeForbiddenResponse()
     }
 
     const revoked = await revokeToken(tokenId)

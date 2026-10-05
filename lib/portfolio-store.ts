@@ -116,25 +116,65 @@ export function loadPortfolio(agentId: string): PortfolioToken[] {
     return []
   }
 
-  let tokens: PortfolioToken[] = []
+  // TRDD-8E6XMDEX: a file that EXISTS but cannot be read, parsed or is not a token list is a
+  // FAULT, not an empty portfolio. Returning [] made every revocation report "0 revoked" over a
+  // file that holds tokens (a hard delete then completed leaving credentials behind) and let the
+  // next save overwrite the corrupt, still-recoverable file. A missing file (above) is the only
+  // legal absence; the atomic writer (tmp + rename) never leaves a 0-byte file, and JSON.parse of
+  // '' throws anyway. The message carries the basename and error class/code only: a JSON
+  // SyntaxError message quotes file content, and the content is credentials. Read/validation
+  // paths (findActiveTokens, findTokenAnywhere) catch this and honour no token.
+  const base = path.basename(filePath)
+  let data: unknown
   try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    tokens = Array.isArray(data?.tokens) ? (data.tokens as PortfolioToken[]) : []
+    data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
   } catch (err) {
-    // A corrupt portfolio file makes EVERY token for this subject silently
-    // fail. Mirror aid-token.ts: log loudly, return empty (fail closed), do
-    // not crash the request.
-    console.error(
-      `[portfolio-store] Failed to parse ${path.basename(filePath)} — all of this subject's tokens will be treated as absent until repaired:`,
-      err instanceof Error ? err.message : err,
-    )
-    tokens = []
+    dropCacheEntry(agentId)
+    const cause = (err as NodeJS.ErrnoException)?.code ?? (err instanceof Error ? err.name : 'unknown error')
+    throw new Error(`[portfolio-store] ${base} exists but could not be read or parsed (${cause})`)
+  }
+  const list = (data as { tokens?: unknown } | null)?.tokens
+  if (!Array.isArray(list) || !list.every(t => t && typeof t === 'object' && typeof t.token_id === 'string')) {
+    dropCacheEntry(agentId)
+    throw new Error(`[portfolio-store] ${base} exists but is not a list of token records`)
   }
 
-  const pruned = pruneStatuses(tokens, now)
+  const pruned = pruneStatuses(list as PortfolioToken[], now)
   _cache.set(agentId, { tokens: pruned, ts: now })
   reindex()
   return pruned
+}
+
+/** Forget a subject whose file just failed to load, so a stale entry cannot keep serving (via the index) tokens from a file now known bad. */
+function dropCacheEntry(agentId: string): void {
+  _cache.delete(agentId)
+  reindex()
+}
+
+// Last time a read-path fault was logged, per key. Agents poll, so a persistent fault is logged
+// once per cache window, not once per call (TRDD-8E6XMDEX).
+const _faultLoggedAt = new Map<string, number>()
+
+function logReadFault(key: string, err: unknown): void {
+  const now = Date.now()
+  const last = _faultLoggedAt.get(key)
+  if (last !== undefined && now - last < CACHE_TTL_MS) return
+  _faultLoggedAt.set(key, now)
+  console.error(err instanceof Error ? err.message : '[portfolio-store] portfolio unreadable')
+}
+
+/**
+ * Null when the subject's portfolio is readable (a missing file is readable: empty), else the fault
+ * message (basename + error class, never file content). Lets a caller tell "empty" from
+ * "unreadable" — loadPortfolio throws, findActiveTokens swallows into [].
+ */
+export function portfolioStoreFault(agentId: string): string | null {
+  try {
+    loadPortfolio(agentId)
+    return null
+  } catch (err) {
+    return err instanceof Error ? err.message : 'portfolio unreadable'
+  }
 }
 
 /** Atomic write of a subject's portfolio (caller holds the lock). */
@@ -198,7 +238,16 @@ export function findActiveTokens(subjectAgentId: string): PortfolioToken[] {
   // covered: hard-deleted holders (row gone) and tokens issued BY a deleted agent.
   if (getAgent(subjectAgentId, true)?.deletedAt) return []
   const now = Date.now()
-  return loadPortfolio(subjectAgentId).filter(
+  // TRDD-8E6XMDEX: authorization reads must never throw to the request nor accept on a store
+  // they cannot read — a corrupt portfolio file means NO token is honoured (one logged line).
+  let tokens: PortfolioToken[]
+  try {
+    tokens = loadPortfolio(subjectAgentId)
+  } catch (err) {
+    logReadFault(subjectAgentId, err)
+    return []
+  }
+  return tokens.filter(
     t =>
       t.status === 'active' &&
       !isExpired(t, now) &&
@@ -224,9 +273,16 @@ export function getTokenById(tokenId: string): PortfolioToken | undefined {
  * are willing to trust it for.
  */
 export function findTokenAnywhere(tokenId: string): PortfolioToken | undefined {
-  const holder = findSubjectOf(tokenId)
-  if (!holder) return undefined
-  return loadPortfolio(holder).find(t => t.token_id === tokenId)
+  // TRDD-8E6XMDEX: validation read — a corrupt portfolio file (this subject's, or any file the
+  // scan has to open) means the token is not honoured, never a throw to the verifier.
+  try {
+    const holder = findSubjectOf(tokenId)
+    if (!holder) return undefined
+    return loadPortfolio(holder).find(t => t.token_id === tokenId)
+  } catch (err) {
+    logReadFault('scan:' + tokenId, err)
+    return undefined
+  }
 }
 
 /**
@@ -536,4 +592,5 @@ export async function replaceAllPortfolios(
 export function _resetPortfolioCacheForTests(): void {
   _cache.clear()
   _index = null
+  _faultLoggedAt.clear()
 }

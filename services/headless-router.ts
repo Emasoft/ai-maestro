@@ -1551,10 +1551,23 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills\/settings$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, await getSkillSettings(params.id))
   }},
+  // TRDD-BZW1QAZ5: the four skills MUTATIONS below used to pass `auth.error ? null : auth.agentId` to the service, and the
+  // service reads a null requester as "no auth header = no governance enforcement". So an authentication failure that got
+  // past the router's credential gate (e.g. a valid `eyJ` IBCT, which the sync authenticateAgent does not know) ran the
+  // mutation UNGOVERNED, and an authenticated agent was never checked for 'manage-skills' on the target at all.
+  // Mirror app/api/agents/[id]/skills/{route,settings/route}.ts: body, then 401 on auth.error, then authorize(...,
+  // 'manage-skills', id) -> 403, then the service with `auth.agentId || null` (the system owner has no agentId).
   { method: 'PUT', pattern: /^\/api\/agents\/([^/]+)\/skills\/settings$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    sendServiceResult(res, await saveSkillSettings(params.id, body, auth.error ? null : auth.agentId))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const authz = authorize(auth, 'manage-skills', params.id)
+    if (!authz.allowed) { sendJson(res, 403, { error: authz.reason || 'Forbidden' }); return }
+    // twin: body.settings is the payload, validated after authorization
+    if (!body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) {
+      sendJson(res, 400, { error: 'body.settings must be a non-null object' }); return
+    }
+    sendServiceResult(res, await saveSkillSettings(params.id, body.settings, auth.agentId || null))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
     // H2 sibling (audit C/H mirror): the Next.js skills GET requires auth +
@@ -1570,16 +1583,27 @@ const routes: Route[] = [
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    sendServiceResult(res, await updateSkills(params.id, body, auth.error ? null : auth.agentId))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const authz = authorize(auth, 'manage-skills', params.id)
+    if (!authz.allowed) { sendJson(res, 403, { error: authz.reason || 'Forbidden' }); return }
+    sendServiceResult(res, await updateSkills(params.id, body, auth.agentId || null))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    sendServiceResult(res, await addSkill(params.id, body, auth.error ? null : auth.agentId))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const authz = authorize(auth, 'manage-skills', params.id)
+    if (!authz.allowed) { sendJson(res, 403, { error: authz.reason || 'Forbidden' }); return }
+    sendServiceResult(res, await addSkill(params.id, body, auth.agentId || null))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    const auth = authenticateAgent(getHeader(_req, 'Authorization'), getHeader(_req, 'X-Agent-Id'), getHeader(_req, 'Cookie'))
-    sendServiceResult(res, await removeSkill(params.id, query.skill || '', undefined, auth.error ? null : auth.agentId))
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    // twin: the missing-skill 400 precedes authentication (it reveals nothing about the target)
+    if (!query.skill) { sendJson(res, 400, { error: 'Missing required query parameter: skill' }); return }
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const authz = authorize(auth, 'manage-skills', params.id)
+    if (!authz.allowed) { sendJson(res, 403, { error: authz.reason || 'Forbidden' }); return }
+    sendServiceResult(res, await removeSkill(params.id, query.skill, query.type || 'auto', auth.agentId || null))
   }},
 
   // Config deployment (governance-gated)

@@ -1923,7 +1923,24 @@ const routes: Route[] = [
     }
     sendServiceResult(res, { status: 200, data: { metadata: getAgentById(params.id).data?.agent?.metadata || {} } })
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/metadata$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/metadata$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: this used to wipe the metadata with no authentication and no authorization. Now it authenticates (401)
+    // and applies the twin's modify-agent decision (app/api/agents/[id]/metadata/route.ts DELETE -> ChangeMetadata gate 0:
+    // system owner, else authorize(..., 'modify-agent') with the same context fields; error -> status mapping is the twin's).
+    // The DELETION itself is deliberately unchanged (updateAgentById with {} = replace-all via MF-001): the twin's clear mode
+    // also nulls every key, system-owned ones included (amp.fingerprint, sessionSecretHash), so the two modes agree on the effect;
+    // whether that wipe should spare system keys is an open finding, not something to change here.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ctx = buildAuthContext(auth)
+    if (!ctx.isSystemOwner) {
+      const authz = authorize({ agentId: ctx.agentId, governanceTitle: ctx.governanceTitle, teamId: ctx.teamId, userId: ctx.userId, userTitle: ctx.userTitle }, 'modify-agent', params.id)
+      if (!authz.allowed) {
+        const reason = authz.reason || 'Not authorized'
+        sendJson(res, /not found/i.test(reason) ? 404 : /forbidden|authoris|authoriz/i.test(reason) ? 403 : 400, { error: reason })
+        return
+      }
+    }
     const result = await updateAgentById(params.id, { metadata: {} })
     if (result.error) {
       sendServiceResult(res, result)

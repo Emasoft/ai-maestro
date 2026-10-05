@@ -148,7 +148,6 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/agents\\/([^/]+)\\/email\\/addresses\\/([^/]+)$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/email\\/addresses$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/metadata$/',
-  'DELETE /^\\/api\\/agents\\/([^/]+)\\/metadata$/',
   'GET /^\\/api\\/agents\\/browse-dir$/',
   'GET /^\\/api\\/agents\\/([^/]+)$/',
   'GET /^\\/api\\/hosts\\/identity$/',

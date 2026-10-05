@@ -218,3 +218,52 @@ describe('TRDD-BZW1QAZ5 — PATCH agents/:id passes the twin AuthContext to upda
     expect(String(out.json.error)).toMatch(/not authorized to modify-agent/)
   })
 })
+
+describe('TRDD-BZW1QAZ5 — DELETE agents/:id/metadata (authenticate + the twin modify-agent decision, deletion itself unchanged)', () => {
+  it('bad credentials: 401 and nothing is cleared', async () => {
+    /** The gap: this used to wipe the metadata with no authentication at all */
+    m.authenticateAgent.mockReturnValue({ error: 'Invalid token', status: 401 })
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(401)
+    expect(out.json.error).toBe('Invalid token')
+    expect(m.updateAgentById).not.toHaveBeenCalled()
+  })
+  it('an authenticated MEMBER clearing ANOTHER agent: refused and nothing is cleared (400, as the twin: its status map does not know this reason)', async () => {
+    /** Authentication is not authorization. The reason text ("cannot modify-agent") has neither forbidden nor authoris(z)e, so the twin mapping, copied verbatim, gives 400 not 403; asserted as it actually happens */
+    m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(400)
+    expect(String(out.json.error)).toMatch(/cannot modify-agent/)
+    expect(m.updateAgentById).not.toHaveBeenCalled()
+  })
+  it('the agent itself clearing its OWN metadata is refused (400) and nothing is cleared', async () => {
+    /** The twin's rule, not mine: authorize() denies an agent reconfiguring itself ("No agent can modify itself via the AI Maestro API"); that reason has no forbidden/authoris(z)e, so the verbatim twin mapping gives 400 */
+    m.authenticateAgent.mockReturnValue({ agentId: TARGET, governanceTitle: 'member' })
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(400)
+    expect(String(out.json.error)).toMatch(/cannot modify itself|modify itself/)
+    expect(m.updateAgentById).not.toHaveBeenCalled()
+  })
+  it('a MANAGER clears the metadata', async () => {
+    /** The twin allows MANAGER through gate 0 */
+    m.authenticateAgent.mockReturnValue(MANAGER_AUTH)
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(200)
+    expect(m.updateAgentById).toHaveBeenCalledWith(TARGET, { metadata: {} })
+  })
+  it('the system owner clears the metadata', async () => {
+    /** The owner has no agentId and must still be allowed */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(200)
+    expect(m.updateAgentById).toHaveBeenCalledWith(TARGET, { metadata: {} })
+  })
+  it('a signed-in NON-OWNER user (model ON) is refused 403 and nothing is cleared', async () => {
+    /** Such a caller used to wipe metadata as a null requester; this reason contains "authorized" so the mapping gives 403 */
+    m.authenticateAgent.mockReturnValue(NON_OWNER_USER)
+    const out = await withUserModelOn(() => run('DELETE', META))
+    expect(out.status).toBe(403)
+    expect(String(out.json.error)).toMatch(/not authorized to modify-agent/)
+    expect(m.updateAgentById).not.toHaveBeenCalled()
+  })
+})

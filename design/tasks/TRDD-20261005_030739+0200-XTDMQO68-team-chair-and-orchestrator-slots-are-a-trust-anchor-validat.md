@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:16:01+0200
+updated: 2026-10-05T03:16:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -54,6 +54,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] LANDED (see git log for TRDD-XTDMQO68): refused/failed cross-host executions answer 409 with the reason; stored status becomes rejected with 'Execution refused: …'; no broadcast and no 'approved' notification on refusal. 13 tests, one per refusal, go red under the orchestrator's neuter. INTERPRETATION: 'rejected' was reused rather than adding a 'failed' status — overrule by dropping the two markExecutionRefused calls
 - [ ] CORRECTION to the 'VERIFIED BY THE ORCHESTRATOR' box above: I saw two call sites, each conditioned on the status being executed — not the absence of other call paths ('only if' over-claimed). The requester-facing answer was then read by the worker (app/api/v1/governance/requests/[id]/approve/route.ts:66-72), not by me
 - [ ] Still open after the landing: 'executed' is written BEFORE the run on the success path (needs the registry to return a ready signal instead); the peer host is never told a request was refused; transfer-agent silently skips missing teams (per worker)
+- [ ] COMMIT MAP: the cross-host refusal fix is INSIDE commit 0f00a70c0, which is titled as a docs commit (a git lock collision swept the staged code into it). Its intended message is recorded verbatim in the body of commit 896822204. Search for the fix by file, not by subject
 
 ## Approval log
 

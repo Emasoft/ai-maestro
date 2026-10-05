@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:44:58+0200
+updated: 2026-10-05T06:53:36+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca, 42cae0be0, dfabafef8]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca, 42cae0be0, dfabafef8, 8c965ab81, e1b19361f]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -91,6 +91,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] FOUND 2026-10-05 reviewing 42cae0be0 (read by me): the comment on isSoftDeletedAgent says an unreadable registry fails closed, but lib/agent-registry.ts loadAgents catches every read/parse error and returns an empty list — so the helper catch is unreachable and on a corrupt registry the check answers NOT soft-deleted (fails open for these three paths; the session-secret path finds no row and refuses). Getter semantics confirmed by reading: getAgent(id, true) returns a soft-deleted row. Second neuter run by me: helper forced to true → 6 of 11 red (three live controls and the three restored-after-clear assertions), so the restore half is pinned. To do: correct the comment; decide whether a registry read fault should answer 503 with its own message instead of an invalid-credential 401 — that needs loadAgents to distinguish missing from corrupt, the same repair already made for the token stores.
 - [x] 2026-10-05 dfabafef8: a minted portfolio token takes issuer_team_id from the team registry, not from the credential (item (a) of the OPEN-WORK box above; items (b) real-registry portfolio test, (c) demoted-MANAGER token test and (d) resolver fault-path test remain). My run: 12 portfolio test files / 139 passed. Neuter and the read that the mint authorization does not use the credential team are the worker reports, not mine.
 - [x] RECORD 2026-10-05 on dfabafef8, reads done after review: the owner auth result carries no team with the user model on or off (buildAuthContext copies teamId from the authentication result), so owner-minted tokens never had a team stamp — no behaviour change there; getTeamsForAgent matches the same three conditions in the same order as the authentication layer own team lookup; rule R4.1 limits an agent to one team, and the cross-host path that can break it is an open box on TRDD-XTDMQO68 (fix dispatched). The thirteenth portfolio test file (under tests/services) passes 5 of 5, so 13 files / 144 in all; that run was on a tree holding unrelated uncommitted work. CONSEQUENCE to keep in view: an issuer the registry places in no team mints a token with no team stamp, which team-scoped revocation cannot find.
+- [x] REGRESSION FOUND AND REPAIRED 2026-10-05: 42cae0be0 broke three cases in tests/authorization.test.ts (they assumed authentication never reads the registry); they stayed red for five commits because my subset run skipped test files at the top level of tests/. Found by the whole-suite run in a clean checkout at 50b24a09c; repaired in e1b19361f (148 of 148, my run; nine other auth-using test files 123 passed). Also landed 8c965ab81: three of the four bounded test gaps (demoted-MANAGER token refused; real-registry portfolio token — its neuter fails only at the precondition; governance-context fault path: a registry or governance-store read fault makes even a MANAGER resolve to autonomous while still authenticating). Items (b), (c), (d) of the OPEN-WORK box are thereby done; that box stays open only until this is re-read.
 
 ## Approval log
 

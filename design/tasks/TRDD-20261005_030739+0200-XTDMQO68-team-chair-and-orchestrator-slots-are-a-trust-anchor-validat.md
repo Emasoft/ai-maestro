@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:47:10+0200
+updated: 2026-10-05T06:53:36+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93, ccf7d8475, 5e143620d, 50b24a09c]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93, ccf7d8475, 5e143620d, 50b24a09c, e7c9f5f57]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -78,6 +78,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] 2026-10-05 the single-team block READ IN FULL (lib/team-registry.ts ~206-230): every id in the resulting agentIds that is not already in the team being updated and is not the managerId must not be in another team, else 409. Limits: members already present are never re-checked; a chair seated only through chiefOfStaffId is not covered by this block; 'cross-host writes bypass it' is from a worker's table, not re-read by me. Not traced: whether DeleteTeam's rollback un-hibernates the agents it hibernated and restores their team field ('rolls back' above rests on a code comment).
 - [x] HYGIENE 2026-10-05: 6 boxes ticked from the read-only mapping (reports/trdd-drain/20261005_062907+0200-three-cards-open-boxes-mapped.md). Checked by me: commits a762cc46c, 1878fd0b6, 8f34f9cc2 exist; notifySourceOfExecutionRefusal is in services/cross-host-governance-service.ts; the box the transfer-agent note points at is ticked. Ticked: 2 landed (the source host is told of an execution refusal — its EFFECT on the peer stays open in its own box; a refused or mistyped transfer writes nothing), 3 records (correction, commit map, triage pointer), 1 note overtaken by its own correction. Open work that remains, per the mapping: the four other cross-host request types and live-agent membership on add-to-team / transfer-agent (one change; note the non-reentrant lock constraint recorded on TRDD-A50RC5G8); orchestrator must be listed in the team (deferred on evidence); detector is a server log line only; executed is written before the run.
 - [x] 2026-10-05 50b24a09c: an approved cross-host add-to-team or transfer-agent is refused before any mutation when the agent is not a live agent in this host registry or is already in another team (R4.1; MANAGER exempt; the transfer source team does not count). This closes the box ticked with it. An agent that lives only on the peer host is therefore refused — consistent with R43.2-R43.4 (a host governs only its own agents; the sanctioned cross-host channels are migration and groups). My runs: 13 cross-host test files / 355 passed; each check disabled in a scratch worktree fails its cases (4 and 2). The four-other-request-types box stays OPEN: remove-from-team, assign-cos and remove-cos were not changed or re-read.
+- [x] 2026-10-05 e7c9f5f57: the cross-host one-team check now counts chair and orchestrator like the rest of the code, and a transfer always checks liveness. My run: 13 cross-host test files / 361 passed; neuters are the worker runs. Still open: add-to-team with an id the team already lists is a success no-op; the three other request types.
 
 ## Approval log
 

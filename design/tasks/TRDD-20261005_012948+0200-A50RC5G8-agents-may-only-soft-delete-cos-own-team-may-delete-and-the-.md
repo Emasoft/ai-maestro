@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T06:38:35+0200
+updated: 2026-10-05T06:53:35+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -125,6 +125,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] SMALL: tests/integration/agent-soft-delete-restore-roundtrip.test.ts depends on the order of its own cases (each step uses the previous one's state); under vitest's shuffled order 5 to 6 of its 7 cases fail (three runs, 2026-10-05). The suite does not shuffle today, so it is green, but mark the block as sequential (or fold the steps into one case with named assertions) so a future shuffle setting cannot red it for a reason unrelated to the code.
 - [x] HYGIENE 2026-10-05: 4 boxes ticked from the same mapping — three records (the neuter/red-set process note, the pins-current-behaviour note whose ruling is carried by the COS_DELETABLE_TITLES box, the triage pointer) and the closing proposal that a later ticked box withdrew (checked: that box is ticked).
 - [ ] CARRIED, per the mapping (each unread by me): (1) a MANAGER may delete another MANAGER (lib/authorization.ts, the delete branch) with no ruling and no test — a question for the owner; (2) seven policy-tail actions for a chair (modify-agent, manage-skills, view-agent, session and group actions) are not established, nor a chair archiving a failed card assigned to itself; (3) this card implementation-commits list lacks commits its own boxes name.
+- [ ] STILL TO APPLY (worker could not edit the line with the edit tool; proven on a scratch copy): add { shuffle: false } to the describe at line 134 of tests/integration/agent-soft-delete-restore-roundtrip.test.ts — describe.sequential does not stop shuffling. Closes the SMALL order-dependence box.
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:38:40+0200
+updated: 2026-10-05T03:53:59+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -45,6 +45,9 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] QUESTION 10: should a governance token's title and team be read LIVE at authentication (as session secrets already are) instead of trusted as stamped for up to an hour? Not applied. It closes the demoted-MANAGER-keeps-authority window; it also means an unreadable teams file demotes every caller to autonomous until it is readable again
 - [ ] QUESTION 11 (R42): answering a pending prompt lets a MANAGER or a team chair type arbitrary text into another agent. Is the exception meant to cover free text, or only the prompt's own options?
 - [ ] REPORT: this host currently has NO manager pointer set and all 10 live agents carry no governance title (read-only script, 2026-10-05)
+- [ ] 12 (DECIDE) fastedit cannot edit route-table entries in services/headless-router.ts or top-level imports. May workers use the line-level Edit tool for exactly those two shapes? Until answered, six shadowed headless routes and one test-fidelity fix stay undone (safe: the routes are unreachable)
+- [ ] 13 (DECIDE) Headless mode has no sudo layer. Cemetery purge (permanent) is now reachable there by the owner without sudo, like hard-delete. Your ruling says hard-kill needs a sudo confirmation: should headless REFUSE purge and hard-delete outright until it has one?
+- [ ] 14 (DECIDE) When you resurrect a soft-deleted agent, does it get back the portfolio tokens it held and its old session secret, or come back without them? In progress as an interpretation: tokens stay revoked
 
 ## Approval log
 

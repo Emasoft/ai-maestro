@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:09:41+0200
+updated: 2026-10-05T07:11:33+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -114,13 +114,14 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] After d8dade818 two conventions coexist: only ChangeMetadata sets the denied flag. Other Change* pipelines and their routes were not audited for refusals answered with the wrong status.
 - [ ] DEFECT: tests/unit/teams-stats-verb.test.ts sends a request to the real running server (/api/teams/stats) and its outcome depends on that process. It timed out at 30 s in the whole-suite run. A unit test must not depend on or call the production server.
 - [x] 19e15c337 (review of d8dade818): the refusal is decided before the not-found wording at all four sites, and the API-only DELETE pre-check always answers 403, so the status cannot reveal whether a target exists. Neuter of the flag rerun by me in a scratch checkout: baseline 35 of 35 green, flag removed 4 red (PATCH member, PATCH non-owner user, both parity refusals). The two table tests that inject the flag into a double test only the route mapping and stay green without the flag line. The neuter of the ordering (2 new cases red) is the worker report only.
-- [x] Left open after 19e15c337: (1) the full-mode metadata route has the same refusal-first order but no test with a denied result worded not found; (2) the API-only DELETE pre-check has no test with a refusal worded not found (the file uses the real authorize); (3) a failure from deeper in the pipeline worded forbidden now answers 400; (4) not checked whether any plugin script tells 404 from 403 on these routes (one grep of the plugin caches found no caller of the metadata routes); (5) root fix: a typed result from the shared gate so every Change pipeline carries the refusal.
-- [ ] (split 1 of 5, first: shipped code unpinned) full-mode metadata route: a test with a denied result worded not found must expect 403 for PATCH and DELETE; today reversing the order there reddens nothing.
+- [x] SUPERSEDED by the five split boxes below, NOT DONE (ticked only to retire the bundle) — Left open after 19e15c337: (1) the full-mode metadata route has the same refusal-first order but no test with a denied result worded not found; (2) the API-only DELETE pre-check has no test with a refusal worded not found (the file uses the real authorize); (3) a failure from deeper in the pipeline worded forbidden now answers 400; (4) not checked whether any plugin script tells 404 from 403 on these routes (one grep of the plugin caches found no caller of the metadata routes); (5) root fix: a typed result from the shared gate so every Change pipeline carries the refusal.
+- [x] (split 1 of 5, first: shipped code unpinned) full-mode metadata route: a test with a denied result worded not found must expect 403 for PATCH and DELETE; today reversing the order there reddens nothing.
 - [ ] (split 2 of 5) API-only DELETE pre-check: a test with an authorize refusal worded not found expecting 403.
 - [ ] (split 3 of 5, accepted behaviour change to confirm or revert) a failure from deeper in the metadata pipeline worded forbidden now answers 400, because the text fallback was removed.
 - [ ] (split 4 of 5) search plugin scripts properly for a caller that tells 404 from 403 on the metadata routes; one grep of the plugin caches found none.
 - [ ] (split 5 of 5, design) typed result from the shared authorization gate so every Change pipeline carries the refusal, not only ChangeMetadata.
 - [x] NOTE: the box ticked just above (Left open after 19e15c337) was ticked ONLY because it is replaced by the five split boxes that follow it (review: one bundled box loses four of its items). None of its five items is done.
+- [x] e96126899 closes split 1 of 5: tests/unit/metadata-route-refusal-before-not-found.test.ts, six cases; neuter run by me (order swapped back at both full-mode sites: the two 403 cases red, four green; baseline 6 of 6).
 
 ## Approval log
 

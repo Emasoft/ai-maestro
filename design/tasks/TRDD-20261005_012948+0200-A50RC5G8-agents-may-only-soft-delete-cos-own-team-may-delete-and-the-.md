@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T06:53:35+0200
+updated: 2026-10-05T07:11:33+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -126,6 +126,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] HYGIENE 2026-10-05: 4 boxes ticked from the same mapping — three records (the neuter/red-set process note, the pins-current-behaviour note whose ruling is carried by the COS_DELETABLE_TITLES box, the triage pointer) and the closing proposal that a later ticked box withdrew (checked: that box is ticked).
 - [ ] CARRIED, per the mapping (each unread by me): (1) a MANAGER may delete another MANAGER (lib/authorization.ts, the delete branch) with no ruling and no test — a question for the owner; (2) seven policy-tail actions for a chair (modify-agent, manage-skills, view-agent, session and group actions) are not established, nor a chair archiving a failed card assigned to itself; (3) this card implementation-commits list lacks commits its own boxes name.
 - [ ] STILL TO APPLY (worker could not edit the line with the edit tool; proven on a scratch copy): add { shuffle: false } to the describe at line 134 of tests/integration/agent-soft-delete-restore-roundtrip.test.ts — describe.sequential does not stop shuffling. Closes the SMALL order-dependence box.
+- [x] MEASURED 2026-10-05, no change made: the shuffle-false flag is not needed on tests/integration/agent-soft-delete-restore-roundtrip.test.ts today. The vitest config and package.json set no shuffle, so cases in a file run in source order. The file IS order-dependent: one round trip split across 7 cases sharing module-level state (agent id, secret, archive file, restored id). So the flag would only guard against a future config change, and the root fix would be one case or per-case seeding. A worker attempt to add the flag was refused by the write tool; nothing was changed.
 
 ## Approval log
 

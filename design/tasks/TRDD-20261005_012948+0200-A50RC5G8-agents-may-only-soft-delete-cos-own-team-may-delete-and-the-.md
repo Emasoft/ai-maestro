@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T06:20:57+0200
+updated: 2026-10-05T06:23:11+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -121,6 +121,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] FOUND by that test, pinned as OBSERVED (UNSAFE): after a restore the OLD session secret authenticates again, now as the NEW id — the import copies the exported row's metadata including the stored secret hash (per worker; the copy site in importAgent not read by me). The same copy would carry a foreign host's secret hash on a cross-host import. Fix dispatched: the import drops the stored session-secret hash, so a restored or imported agent authenticates only with a secret issued after the import.
 - [x] 2026-10-05 398b1721d: the import drops the stored session-secret hash at its one metadata assembly site and the export omits it; session bootstrap writes a fresh one at the next session start (lib/session-env.ts, read by me). My runs: round-trip file 7 of 7; the ten import/export test files together twice, 229 of 229 (an earlier run and the worker's run failed different tests under a load average above 100 — read as load, by inference). Import-side neuter is the worker's.
 - [ ] NOT COVERED by that fix (read by me: app/api/agents/cemetery/route.ts calls importAgent with newName and newId only — no skipKeys): a restored agent keeps the archive's AMP signing keys and fingerprint under its new id. Whether a resurrected agent should keep its old signing identity is a question for the owner (it is the same agent, restored by the owner) — but it must be a decision, not an accident. Also untested: the restore ROUTE itself (the test calls its steps).
+- [x] RECORD 2026-10-05 after 398b1721d: WHOLE SUITE at 013b9004a, clean tree — 593 files / 589 passed, the same 8 known failed tests, tsc 0 lines; the round-trip and foreign-import files are green in it. The earlier failures of the foreign-import file are now read as load with better grounds: three shuffled runs of the ten import/export files never failed it. CONSEQUENCE of the fix, accepted on the same footing as the soft-delete containment on TRDD-8E6XMDEX: a still-running session of a restored or imported agent is refused until its next session start. No other reader of an archive's registry row was found outside the transfer service (grep of services, lib, scripts — names only).
+- [ ] SMALL: tests/integration/agent-soft-delete-restore-roundtrip.test.ts depends on the order of its own cases (each step uses the previous one's state); under vitest's shuffled order 5 to 6 of its 7 cases fail (three runs, 2026-10-05). The suite does not shuffle today, so it is green, but mark the block as sequential (or fold the steps into one case with named assertions) so a future shuffle setting cannot red it for a reason unrelated to the code.
 
 ## Approval log
 

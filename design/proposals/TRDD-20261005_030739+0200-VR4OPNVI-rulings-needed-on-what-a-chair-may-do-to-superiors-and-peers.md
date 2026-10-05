@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:46:56+0200
+updated: 2026-10-05T06:23:11+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -64,6 +64,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] 19 (DECIDE) A session name and an agent name can be the same string: agent alpha's second session is alpha_1, and an agent may also be named alpha_1. Today the exact agent name wins (fbfb841df), so a request about alpha's second session acts on agent alpha_1 when both exist. Options: forbid agent names ending in _digits; record each session's index on the agent record and resolve by ownership; or accept exact-name-first. From TRDD-DEL16Q96 (archived), whose box 3 was closed on the narrower claim.
 - [ ] 20 (DECIDE) Full mode asks for a sudo confirmation before changing an agent's name, title, folder, avatar, program, program arguments or repo through the agent update route; headless mode does not, and cannot issue a sudo token. Should headless refuse those changes until it can ask for sudo (they would then be impossible in headless), or keep allowing them to an authorized caller? Same question for transferring an agent, where the headless handler has no check of its own. From TRDD-BZW1QAZ5.
 - [ ] 21 (DECIDE) The sudo confirmation is asked only of you. An agent is judged by its title instead, and a MANAGER agent passes: it can transfer an agent to another host (move mode removes it here) and change another agent's program or program arguments with no human confirmation, in both modes. Your ruling reserves hard-kill to you with a sudo confirmation. NARROWED 2026-10-05: your rules R32.1-R32.3 already say agents never face sudo and are judged by title, so the general question is answered. What remains: a move-mode transfer deletes the local agent outright with no cemetery copy; As an interim measure (9cb25b142) every agent caller is refused move mode; copy mode stays. QUESTION: does your soft-kill ruling cover moving an agent off this host, so that move stays owner-only — or may a MANAGER move agents once move mode archives to the cemetery first? From TRDD-BZW1QAZ5.
+- [x] POINTER 2026-10-05: the plain-language list of these questions for the owner is reports/decisions/20261005_061520+0200-decisions-waiting-on-the-user.md (gitignored). It holds the 19 questions ranked earlier plus questions 20 and 21 appended unranked, one finding and one main-agent decision; its title line overstates this as '21 questions; first ranked'. An earlier file with the 050327 timestamp lost its title line in an in-place rewrite and was moved to reports_dev/decisions/.
 
 ## Approval log
 

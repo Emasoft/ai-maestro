@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T06:10:30+0200
+updated: 2026-10-05T06:23:11+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -70,6 +70,7 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [x] 2026-10-05 REWORDED after review (replaces 'dies on the same assertion' above): per test, each of the eight red tests prints the same FIRST ERROR LINE in all three of today's runs — that identifies the matcher, not the line of the test that failed, and the header-to-error pairing was inferred from the message distribution, not checked by line position. pillar-cli-e2e test 29 is NOT identical across runs: the middle run listed 8958 entries against 8956 (two extra entries under the real state directory), the other two 8956 against 8956 with differing contents.
 - [x] RECORD 2026-10-05: the '-o' box is ticked on this evidence — after the whole-suite run at 985cf22cb no file named -o exists in the repo root (my ls); the fix in tests/unit/cli-help-exit-contract.test.ts was located by a worker and not re-read by me. The SECOND-RUN box is ticked as a run record only (overtaken by the later runs); it closes no task. Whole suite at 985cf22cb: 592 files / 587 passed, the same 8 failed tests, plus one file-level failure in tests/unit/oauth-alert-delivery.test.ts (real rotator log grew during the run; passes alone 19/19; writer unconfirmed) — a second instance of a live process on this machine disturbing a containment guard.
 - [x] CORRECTION 2026-10-05 to the two records above: (1) the '-o' tick is weaker than written — the test file's name appears in the whole-suite output, but I did not confirm the specific case that used to create the file executed; absence after the run is the evidence, no more. (2) The rotator-log writer is now read, not assumed: the janitor's rotator appends about four lines to that log roughly every 90 seconds in its own format (tail read 2026-10-05, addresses masked), so the oauth-alert-delivery file-level failure is the daemon writing during the run. The suite at 985cf22cb ran on a clean tree: it ended 05:55:53 and the first worker edit landed 05:56:56.
+- [x] RECORD 2026-10-05: whole suite at 013b9004a — 593 files / 589 passed; the same 8 failed tests and NO file-level failure this time (the rotator-log guard did not trip).
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

@@ -434,9 +434,17 @@ export function authorize(
       return { allowed: true }
     }
     if (title === 'chief-of-staff') {
-      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-      const targetTeamId = targetAgentId ? lookupTeamIdForAgent(targetAgentId) : null
-      if (!(cosTeamId && cosTeamId === targetTeamId)) {
+      // TRDD-A50RC5G8: the grant is decided by the REGISTRY alone — the caller must be the chiefOfStaffId of a team
+      // that contains the target. auth.teamId is deliberately NOT consulted (a token's team id outlives a team
+      // change), and the title alone is not supervision (a COS-titled member of a team passed the old team-equality test).
+      const supervision = targetAgentId ? cosSupervision(auth.agentId, targetAgentId) : 'not-cos'
+      if (supervision === 'not-cos') {
+        return {
+          allowed: false,
+          reason: 'You are not the chief of staff of any team that contains this agent (soft delete only)',
+        }
+      }
+      if (supervision === 'other-team') {
         return { allowed: false, reason: 'Chief-of-Staff can only delete agents in their own team (soft delete only)' }
       }
       // Team equality is not enough: a MANAGER may sit in a team's agentIds (team-registry exempts it) and
@@ -955,6 +963,26 @@ function lookupGovernanceTitle(agentId: string): string {
     // error here was previously invisible.
     console.warn('[authorization] lookupGovernanceTitle failed, falling back to autonomous:', { agentId, err })
     return 'autonomous'
+  }
+}
+
+/**
+ * Registry verdict on a CHIEF-OF-STAFF delete: 'ok' when `cosId` is the chiefOfStaffId of some team that contains
+ * `targetId` (member or orchestrator) — ALL teams searched, never the first match; 'other-team' when it chairs a
+ * team but not the target's; 'not-cos' when it chairs no team (or the read threw → deny).
+ * TRDD-A50RC5G8: this must read the registry and require chiefOfStaffId — a token's teamId can be stale, and a
+ * chief-of-staff TITLE alone (or mere membership of a team) is not supervision.
+ */
+function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 'not-cos' {
+  try {
+    const chaired = loadTeams().filter((team) => team.chiefOfStaffId === cosId)
+    if (chaired.length === 0) return 'not-cos'
+    return chaired.some((team) => team.agentIds?.includes(targetId) || team.orchestratorId === targetId)
+      ? 'ok'
+      : 'other-team'
+  } catch (err) {
+    console.warn('[authorization] cosSupervision failed, denying:', { cosId, targetId, err })
+    return 'not-cos'
   }
 }
 

@@ -134,6 +134,18 @@ describe('DeleteAgent as a CHIEF-OF-STAFF — soft delete leaves a cemetery arch
     expect((store.get('asst-1') as { deletedAt?: string | null }).deletedAt).toBeNull()
   })
 
+  it('a COS-titled caller that is only a MEMBER of the target\'s team (not its chiefOfStaffId) is refused at G00: no archive, row intact', async () => {
+    H.teams[0].agentIds = ['own-1', 'cos-member']
+    const memberCos: AuthContext = { agentId: 'cos-member', isSystemOwner: false, governanceTitle: 'chief-of-staff', teamId: 'team-a' }
+    const r = await DeleteAgent('own-1', { authContext: memberCos })
+    expect(r.success).toBe(false)
+    expect(r.error).toBe('You are not the chief of staff of any team that contains this agent (soft delete only)')
+    expect(H.exported).toEqual([])
+    expect(archives()).toEqual([])
+    expect((store.get('own-1') as { deletedAt?: string | null }).deletedAt).toBeNull()
+    expect(existsSync(own)).toBe(true)
+  })
+
   it('own-team MANAGER: refused at G00, no archive written, registry unchanged', async () => {
     seedAgent(store, H.FAKE_HOME, H.FAKE_STATE, { id: 'mgr-1', name: 'mgr-1', governanceTitle: 'manager' })
     H.teams[0].agentIds = ['own-1', 'mgr-1']

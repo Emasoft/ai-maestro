@@ -62,8 +62,13 @@ const fsStubFns = vi.hoisted(() => {
     ],
   })
 
+  // Per-test override of the teams store: `json` replaces the fixture above, `throws` makes the read fail.
+  // beforeEach resets both, so the default fixture is what every other test sees.
+  const teamsState = { json: null as string | null, throws: false }
+
   return {
     ...realFs,
+    teamsState,
     existsSync: (p: unknown) => {
       if (isTokenStorePath(p)) return false
       if (isTeamsFilePath(p)) return true
@@ -74,7 +79,10 @@ const fsStubFns = vi.hoisted(() => {
       (isTokenStorePath(p) || isTeamsDirPath(p)) ? undefined : realFs.mkdirSync(p as never, opts as never),
     readFileSync: (p: unknown, enc?: unknown) => {
       if (isTokenStorePath(p)) return '[]'
-      if (isTeamsFilePath(p)) return teamsFixtureJson
+      if (isTeamsFilePath(p)) {
+        if (teamsState.throws) throw new Error('EIO: simulated team store read failure')
+        return teamsState.json ?? teamsFixtureJson
+      }
       return realFs.readFileSync(p as never, enc as never)
     },
     writeFileSync: (p: unknown, data?: unknown, opts?: unknown) =>
@@ -132,6 +140,8 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
+  fsStubFns.teamsState.json = null
+  fsStubFns.teamsState.throws = false
   mockGetAgent.mockReset()
   mockUpdateAgent.mockReset()
 })
@@ -880,5 +890,70 @@ describe('TRDD-A50RC5G8 — delete-agent: CHIEF-OF-STAFF over its own team', () 
         reason: 'A CHIEF-OF-STAFF may not delete an agent whose record could not be read (TRDD-A50RC5G8)',
       })
     } finally { spy.mockRestore() }
+  })
+})
+
+/**
+ * TRDD-A50RC5G8 — a CHIEF-OF-STAFF's delete grant is decided by the REGISTRY: the caller must be the
+ * chiefOfStaffId of a team that contains the target. The token's teamId is never consulted, and a COS-titled agent
+ * that is merely a MEMBER of a team has no authority over it.
+ */
+describe('TRDD-A50RC5G8 — delete-agent: CHIEF-OF-STAFF must be the registry chiefOfStaffId of the target\'s team', () => {
+  const OTHER = 'Chief-of-Staff can only delete agents in their own team (soft delete only)'
+  const NOT_COS = 'You are not the chief of staff of any team that contains this agent (soft delete only)'
+  const team = (id: string, chiefOfStaffId: string | null, agentIds: string[], orchestratorId: string | null = null) =>
+    ({ id, name: id, type: 'closed', chiefOfStaffId, orchestratorId, agentIds })
+  const setTeams = (...teams: unknown[]) => { fsStubFns.teamsState.json = JSON.stringify({ teams }) }
+  const authFor = async (agentId: string, teamId: string | null) =>
+    authenticateFromRequest(requestWith({ Authorization: `Bearer ${(await issueGovernanceToken(agentId, agentId, 'chief-of-staff', teamId)).access_token}` }))
+  const member = (id: string) => ({ id, governanceTitle: 'member' })
+  beforeEach(() => { mockGetAgent.mockImplementation((id: string) => member(id)) })
+
+  it('the chiefOfStaffId of team A deleting a member of team A is ALLOWED', async () => {
+    setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+    expect(authorize(await authFor('cos-a', 'team-a'), 'delete-agent', 'm1')).toEqual({ allowed: true })
+  })
+
+  it('a COS-titled agent that is only a MEMBER of team B (not its chiefOfStaffId) is DENIED', async () => {
+    setTeams(team('team-b', 'cos-b', ['cos-b', 'cos-x', 'm2']))
+    const d = authorize(await authFor('cos-x', 'team-b'), 'delete-agent', 'm2')
+    expect(d).toEqual({ allowed: false, reason: NOT_COS })
+  })
+
+  it('a stale token teamId (team B) cannot grant a target in team B to the chief of staff of team A', async () => {
+    setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+    const d = authorize(await authFor('cos-a', 'team-b'), 'delete-agent', 'm2')
+    expect(d).toEqual({ allowed: false, reason: OTHER })
+  })
+
+  it('with the same stale token teamId, a target in team A is ALLOWED (the registry decides)', async () => {
+    setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+    expect(authorize(await authFor('cos-a', 'team-b'), 'delete-agent', 'm1')).toEqual({ allowed: true })
+  })
+
+  it('a target in BOTH teams, the other team listed first, is ALLOWED when the caller chairs the second', async () => {
+    setTeams(team('team-b', 'cos-b', ['cos-b', 'shared']), team('team-a', 'cos-a', ['cos-a', 'shared']))
+    expect(authorize(await authFor('cos-a', 'team-a'), 'delete-agent', 'shared')).toEqual({ allowed: true })
+  })
+
+  it('a target only in team B (listed first) is DENIED to the chief of staff of team A', async () => {
+    setTeams(team('team-b', 'cos-b', ['cos-b', 'm2']), team('team-a', 'cos-a', ['cos-a', 'm1']))
+    expect(authorize(await authFor('cos-a', 'team-a'), 'delete-agent', 'm2')).toEqual({ allowed: false, reason: OTHER })
+  })
+
+  it('the team\'s orchestratorId, absent from agentIds, is ALLOWED', async () => {
+    setTeams(team('team-a', 'cos-a', ['cos-a'], 'orch-a'))
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'orchestrator' }))
+    expect(authorize(await authFor('cos-a', 'team-a'), 'delete-agent', 'orch-a')).toEqual({ allowed: true })
+  })
+
+  it('a team store read that throws is DENIED', async () => {
+    const auth = await authFor('cos-a', 'team-a')
+    fsStubFns.teamsState.throws = true
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const d = authorize(auth, 'delete-agent', 'member-a2')
+    expect(warn).toHaveBeenCalled() // positive control: the read really threw and was logged
+    warn.mockRestore()
+    expect(d).toEqual({ allowed: false, reason: NOT_COS })
   })
 })

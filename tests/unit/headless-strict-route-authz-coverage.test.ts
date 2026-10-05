@@ -313,7 +313,8 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
     // genuinely unguarded there. Not fixed in this change — see security-registry.json's
     // _comment for the disclosed, deliberately out-of-scope gap.
     expect(neither).toEqual([
-      'DELETE_/api/agents/[id]',
+      // TRDD-BZW1QAZ5 / TRDD-A50RC5G8: 'DELETE_/api/agents/[id]' left this list — a HARD delete is now delegated
+      // (needs a sudo token); soft delete stays on the in-table path. It is pinned in the delegated breakdown below.
       'DELETE_/api/agents/[id]/session',
       'DELETE_/api/agents/cemetery',
       'DELETE_/api/sessions/[id]',
@@ -353,6 +354,8 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
       .map((k) => `${k} -> ${delegateTargetByKey.get(k)} [${resolveTargetGuards(delegateTargetByKey.get(k)!).join(',')}]`)
       .sort()
     expect(breakdown).toEqual([
+      // Hard delete only is delegated (requireSudoToken); soft delete stays in-table (TRDD-BZW1QAZ5 / TRDD-A50RC5G8).
+      'DELETE_/api/agents/[id] -> app/api/agents/[id]/route [requireSudoToken]',
       'PATCH_/api/trdd/[id] -> app/api/trdd/[id]/route [requireSudoToken]',
       'POST_/api/governance/password -> app/api/governance/password/route [requireSudoToken,enforceSystemOwner]',
       'POST_/api/trdd/[id]/approve -> app/api/trdd/[id]/approve/route [requireSudoToken]',

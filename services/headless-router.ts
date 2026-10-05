@@ -2079,6 +2079,22 @@ const routes: Route[] = [
     sendServiceResult(res, await updateAgentById(params.id, body, auth.agentId))
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
+    // TRDD-A50RC5G8 — USER ruling 2026-10-05: "in general hard-kill is strictly reserved to the user maestro. it also
+    // needs a sudo confirmation from the user." Full mode classifies DELETE /api/agents/[id] "strict" and its Next route
+    // runs requireSudoToken; this router has no sudo layer, so a hard delete handled below would let the owner skip the
+    // confirmation. A hard request is therefore forwarded to the SAME handler full mode runs (credentials + X-Sudo-Token
+    // are carried by delegateNextRoute), so the gate and the owner-only rule are not forked. "Hard" is read exactly as the
+    // twin reads it (every `hard` value, case-insensitive true|1|yes) — a narrower test here would leave a spelling the
+    // twin treats as hard to the weaker path. Soft deletes keep the in-table behaviour below. Fail closed: headless mints
+    // no sudo token, so a hard delete is available here only to a caller who already holds one.
+    const asksHard = new URL(_req.url || '', 'http://localhost').searchParams.getAll('hard')
+      .some((v) => ['true', '1', 'yes'].includes(v.toLowerCase()))
+    if (asksHard) {
+      const mod = await import('@/app/api/agents/[id]/route')
+      await delegateNextRoute(_req, res, mod.DELETE as NextRouteHandler,
+        `/api/agents/${params.id}`, { method: 'DELETE', params: { id: params.id } })
+      return
+    }
     // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(_req, 'Authorization'),

@@ -14,6 +14,7 @@ import {
   loadPortfolio,
   getTokenById,
   revokeToken,
+  portfolioStoreFault,
 } from '@/lib/portfolio-store'
 import { emitPortfolioOp, issueDiff, revokeDiff } from '@/lib/portfolio-ledger'
 
@@ -39,6 +40,23 @@ export const dynamic = 'force-dynamic'
 const MAX_APPROVAL_TTL_SECONDS = 3600 // 1h — matches aim_tk_
 const DEFAULT_APPROVAL_TTL_SECONDS = 3600
 const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it sooner)
+
+
+// A portfolio file that EXISTS but cannot be parsed is a fault, not an empty portfolio
+// (TRDD-8E6XMDEX). Without this check GET/DELETE answered a bare "Internal server error" and
+// findActiveTokens would have swallowed the fault into an empty list, telling the owner the
+// agent has no tokens. Only the file BASENAME is named: the store's own message carries the
+// full home path, which must not reach a response body.
+function portfolioUnreadableResponse(subjectAgentId: string): NextResponse | null {
+  if (!portfolioStoreFault(subjectAgentId)) return null
+  return NextResponse.json(
+    {
+      error: 'portfolio_unreadable',
+      message: `The portfolio file ${subjectAgentId}.json for this agent is unreadable (corrupt or wrong shape); repair or remove it.`,
+    },
+    { status: 500 },
+  )
+}
 
 /**
  * POST /api/agents/[id]/portfolio — mint a token for the subject `[id]`.
@@ -234,6 +252,8 @@ export async function GET(
     }
     const ctx = buildAuthContext(auth)
 
+    const unreadable = portfolioUnreadableResponse(subjectAgentId)
+    if (unreadable) return unreadable
     const all = loadPortfolio(subjectAgentId)
     const isSelf = ctx.agentId === subjectAgentId
     const isIssuer = !!ctx.agentId && all.some(t => t.issuer_agent_id === ctx.agentId)
@@ -288,6 +308,8 @@ export async function DELETE(
     }
 
     // Ensure the subject's portfolio is loaded so getTokenById resolves it.
+    const unreadable = portfolioUnreadableResponse(subjectAgentId)
+    if (unreadable) return unreadable
     loadPortfolio(subjectAgentId)
     const token = getTokenById(tokenId)
     if (!token || token.subject_agent_id !== subjectAgentId) {

@@ -321,7 +321,6 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
       'DELETE_/api/teams/[id]/orchestrator',
       'PATCH_/api/agents/[id]',
       'PATCH_/api/agents/[id]/session',
-      'POST_/api/agents',
       'POST_/api/agents/[id]/transfer',
       'POST_/api/agents/cemetery',
       'POST_/api/agents/import',
@@ -335,6 +334,9 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
       'DELETE_/api/agents/role-plugins',
       'DELETE_/api/agents/role-plugins/install',
       'GET_/api/agents/[id]/probe',
+      // TRDD-BZW1QAZ5: the headless POST /api/agents handler now calls authorize('create-agent'), mirroring the
+      // Next route; it left the "neither" list above (that pin's old comment recorded it as genuinely unguarded).
+      'POST_/api/agents',
       'POST_/api/agents/role-plugins/install',
       'POST_/api/sessions/[id]/restart',
       'POST_/api/sessions/[id]/stop',

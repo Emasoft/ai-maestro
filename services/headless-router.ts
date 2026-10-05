@@ -247,6 +247,8 @@ import { runStopSequence } from '@/lib/session-stop'
 import { authorize } from '@/lib/authorization'
 // Atomic rate limiting for auth endpoints
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
+// TRDD-BZW1QAZ5: the login handler mirrors app/api/auth/login/route.ts' lockdown refusal
+import { isLockedDown } from '@/lib/kill-switch'
 import { isValidUuid } from '@/lib/validation'
 
 import {
@@ -751,6 +753,10 @@ const routes: Route[] = [
     sendServiceResult(res, getOrganization())
   }},
   { method: 'POST', pattern: /^\/api\/organization$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/organization/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, setOrganizationName(body))
   }},
@@ -1185,7 +1191,11 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/startup$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, getStartupInfo())
   }},
-  { method: 'POST', pattern: /^\/api\/agents\/startup$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'POST', pattern: /^\/api\/agents\/startup$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/startup/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await initializeStartup())
   }},
   { method: 'POST', pattern: /^\/api\/agents\/health$/, paramNames: [], handler: async (req, res) => {
@@ -1219,11 +1229,22 @@ const routes: Route[] = [
     }))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/docker\/create$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/docker/create/route.ts (authorize 'create-agent' = MANAGER/COS).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const dockerAuthz = authorize(auth, 'create-agent')
+    if (!dockerAuthz.allowed) { sendJson(res, 403, { error: dockerAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await createDockerAgent(body))
   }},
   // Agent import (multipart form-data)
   { method: 'POST', pattern: /^\/api\/agents\/import$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/import/route.ts (enforceAuth + requireSudoToken, route in
+    // SYSTEM_OWNER_ONLY_STRICT: no agent at all; message as lib/sudo-guard.ts decideAidTitle). Before the
+    // multipart body is read. importAgent re-creates a fully credentialed agent (keys, identity).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'This operation is restricted to the system owner.' }); return }
     try {
       const contentType = getHeader(req, 'content-type') || ''
       const rawBody = await readRawBody(req)
@@ -1247,7 +1268,11 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/directory\/lookup\/([^/]+)$/, paramNames: ['name'], handler: async (_req, res, params) => {
     sendServiceResult(res, lookupAgentByDirectoryName(params.name))
   }},
-  { method: 'POST', pattern: /^\/api\/agents\/directory\/sync$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'POST', pattern: /^\/api\/agents\/directory\/sync$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/directory/sync/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await syncDirectory())
   }},
   // Normalize hosts
@@ -1258,6 +1283,8 @@ const routes: Route[] = [
     // SVC2-MAJ-12 (2026-05-06): authenticate before mutating host-id assignments.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/normalize-hosts/route.ts POST (enforceSystemOwner).
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await normalizeHosts())
   }},
   // Agent list / create (must be AFTER static agent sub-paths)
@@ -1269,19 +1296,20 @@ const routes: Route[] = [
     }
   }},
   { method: 'POST', pattern: /^\/api\/agents$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req)
-    // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
       getHeader(req, 'X-Agent-Id'),
       getHeader(req, 'Cookie')
     )
-    // If auth credentials were provided but invalid, reject immediately — consistent with other governed routes.
-    // When no auth headers are present, auth.error is undefined and governance is not enforced (backward compat).
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/route.ts POST (authorize 'create-agent' = MANAGER/COS; the human
+    // owner passes). CreateAgent has no create-agent gate of its own. Headless has no sudo, so only authorize.
+    const createAuthz = authorize(auth, 'create-agent')
+    if (!createAuthz.allowed) { sendJson(res, 403, { error: createAuthz.reason || 'Forbidden' }); return }
+    const body = await readJsonBody(req)
     // Use all-in-one CreateAgent pipeline
     const { CreateAgent } = await import('@/services/element-management-service')
     const createResult = await CreateAgent({
@@ -1336,7 +1364,15 @@ const routes: Route[] = [
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendAgentSessionCommand(params.id, body, buildAuthContext(auth)))
+    // TRDD-BZW1QAZ5 (W2): mirror app/api/agents/[id]/session/route.ts PATCH — build the params EXPLICITLY. The raw
+    // body let a caller choose `authAction` ('unblock-prompt' / 'view-agent' ...) and so pick the authorize() row the
+    // service evaluates (R42: cross-agent send-command is revoked). Only 'unblock-prompt' from the prompt/answer
+    // route may set it; headless has no such route, so no body field is ever forwarded beyond these three.
+    sendServiceResult(res, await sendAgentSessionCommand(params.id, {
+      command: body.command,
+      requireIdle: body.requireIdle,
+      addNewline: body.addNewline,
+    }, buildAuthContext(auth)))
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (req, res, params, query) => {
     // SVC2-CRIT-02 fix (2026-05-06): authenticate before killing/unlinking
@@ -1548,18 +1584,18 @@ const routes: Route[] = [
 
   // Config deployment (governance-gated)
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/config\/deploy$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
     // Accept host-signature auth (cross-host) or governance password auth (local admin)
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    // Require authenticated identity — authenticateAgent returns 401 when no credentials
-    if (!auth.agentId) {
-      sendJson(res, 401, { error: 'Authenticated agent identity required for config deployment' })
-      return
-    }
+    // TRDD-BZW1QAZ5: authentication is not authorization — mirror app/api/agents/[id]/config/deploy/route.ts
+    // (authorize 'modify-agent'). The service only logs deployedBy, so without this any agent could write
+    // hooks / MCP servers / launch args into ANY other agent. Before the body is read: no side effect first.
+    const deployAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!deployAuthz.allowed) { sendJson(res, 403, { error: deployAuthz.reason || 'Forbidden' }); return }
+    const body = await readJsonBody(req)
     // Strict undefined check -- falsy body.configuration (e.g. empty string) should not fall through to body
     sendServiceResult(res, await deployConfigToAgent(params.id, body.configuration !== undefined ? body.configuration : body, auth.agentId))
   }},
@@ -1713,16 +1749,31 @@ const routes: Route[] = [
     sendServiceResult(res, getAMPAddress(params.id, decodeURIComponent(params.address)))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/amp\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/amp/addresses/[address]/route.ts PATCH (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ampPatchAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!ampPatchAuthz.allowed) { sendJson(res, 403, { error: ampPatchAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await updateAMPAddressOnAgent(params.id, decodeURIComponent(params.address), body))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/amp\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/amp\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/amp/addresses/[address]/route.ts DELETE (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ampDelAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!ampDelAuthz.allowed) { sendJson(res, 403, { error: ampDelAuthz.reason || 'Forbidden' }); return }
     sendServiceResult(res, await removeAMPAddressFromAgent(params.id, decodeURIComponent(params.address)))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/amp\/addresses$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, listAMPAddresses(params.id))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/amp\/addresses$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/amp/addresses/route.ts POST (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ampAddAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!ampAddAuthz.allowed) { sendJson(res, 403, { error: ampAddAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await addAMPAddressToAgent(params.id, body))
   }},
@@ -1732,16 +1783,31 @@ const routes: Route[] = [
     sendServiceResult(res, getEmailAddressDetail(params.id, decodeURIComponent(params.address)))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/email\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/email/addresses/[address]/route.ts PATCH (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const emailPatchAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!emailPatchAuthz.allowed) { sendJson(res, 403, { error: emailPatchAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await updateEmailAddressOnAgent(params.id, decodeURIComponent(params.address), body))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/email\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/email\/addresses\/([^/]+)$/, paramNames: ['id', 'address'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/email/addresses/[address]/route.ts DELETE (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const emailDelAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!emailDelAuthz.allowed) { sendJson(res, 403, { error: emailDelAuthz.reason || 'Forbidden' }); return }
     sendServiceResult(res, await removeEmailAddressFromAgent(params.id, decodeURIComponent(params.address)))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/email\/addresses$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, listEmailAddresses(params.id))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/email\/addresses$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/email/addresses/route.ts POST (authorize 'modify-agent').
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const emailAddAuthz = authorize(auth, 'modify-agent', params.id)
+    if (!emailAddAuthz.allowed) { sendJson(res, 403, { error: emailAddAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await addEmailAddressToAgent(params.id, body))
   }},
@@ -1779,7 +1845,11 @@ const routes: Route[] = [
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await deleteAgentMessage(params.id, params.messageId, buildAuthContext(auth)))
   }},
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/messages$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/messages$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/messages/route.ts GET — authenticate, then pass the caller's
+    // context so listMessages' denyForeignMailbox enforces own-mailbox-only (no context = unchecked read).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     // Explicitly extract query params to match listMessages expected types
     sendServiceResult(res, await listAgentMessages(params.id, {
       box: query.box || undefined,
@@ -1787,7 +1857,7 @@ const routes: Route[] = [
       priority: query.priority || undefined,
       from: query.from || undefined,
       to: query.to || undefined,
-    }))
+    }, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/messages$/, paramNames: ['id'], handler: async (req, res, params) => {
     // SVC2-MAJ-06 fix (2026-05-06): authenticate, then forward AuthContext so
@@ -1964,14 +2034,26 @@ const routes: Route[] = [
     sendServiceResult(res, await listHosts())
   }},
   { method: 'POST', pattern: /^\/api\/hosts$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/hosts/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await addNewHost(body))
   }},
   { method: 'PUT', pattern: /^\/api\/hosts\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/hosts/[id]/route.ts PUT (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await updateExistingHost(params.id, body))
   }},
-  { method: 'DELETE', pattern: /^\/api\/hosts\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/hosts\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/hosts/[id]/route.ts DELETE (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await deleteExistingHost(params.id))
   }},
 
@@ -2642,10 +2724,19 @@ const routes: Route[] = [
     sendServiceResult(res, listTrustedManagers())
   }},
   { method: 'POST', pattern: /^\/api\/governance\/trust$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/governance/trust/route.ts (enforceSystemOwner + password). The password alone is
+    // not an identity: without this any agent holding it could add a trusted foreign manager host.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await addTrust(body))
   }},
   { method: 'DELETE', pattern: /^\/api\/governance\/trust\/([^/]+)$/, paramNames: ['hostId'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/governance/trust/[hostId]/route.ts (enforceSystemOwner + password), as POST above.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await removeTrust(params.hostId, body?.password))
   }},
@@ -3336,7 +3427,11 @@ const routes: Route[] = [
   // =========================================================================
   // Webhooks
   // =========================================================================
-  { method: 'POST', pattern: /^\/api\/webhooks\/([^/]+)\/test$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'POST', pattern: /^\/api\/webhooks\/([^/]+)\/test$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/webhooks/[id]/test/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await testWebhookById(params.id))
   }},
   { method: 'GET', pattern: /^\/api\/webhooks\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
@@ -3364,10 +3459,18 @@ const routes: Route[] = [
     sendServiceResult(res, getDomainById(params.id))
   }},
   { method: 'PATCH', pattern: /^\/api\/domains\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/domains/[id]/route.ts PATCH (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, updateDomainById(params.id, body))
   }},
-  { method: 'DELETE', pattern: /^\/api\/domains\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/domains\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/domains/[id]/route.ts DELETE (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, deleteDomainById(params.id))
   }},
   { method: 'GET', pattern: /^\/api\/domains$/, paramNames: [], handler: async (_req, res) => {
@@ -3449,6 +3552,10 @@ const routes: Route[] = [
     sendServiceResult(res, await captureCreationHelperResponse())
   }},
   { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/raw-materials$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/creation-helper/raw-materials/route.ts POST (enforceSystemOwner).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const body = await readJsonBody(req)
     const { writeFile, mkdir } = await import('fs/promises')
     const { join } = await import('path')
@@ -3750,6 +3857,11 @@ const routes: Route[] = [
   // Create agent from TOML (single endpoint: generate + create folder + install)
   // Unified persona creation — used by both wizard and Haephestos
   { method: 'POST', pattern: /^\/api\/agents\/create-persona$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/create-persona/route.ts (authorize 'create-agent' = MANAGER/COS).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const personaAuthz = authorize(auth, 'create-agent')
+    if (!personaAuthz.allowed) { sendJson(res, 403, { error: personaAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     if (!body.personaName || typeof body.personaName !== 'string') return sendJson(res, 400, { error: 'personaName is required' })
     if (!body.tomlContent && !body.pluginName) return sendJson(res, 400, { error: 'Either tomlContent or pluginName is required' })
@@ -3768,6 +3880,11 @@ const routes: Route[] = [
 
   // Legacy endpoint — delegates to createPersona
   { method: 'POST', pattern: /^\/api\/agents\/create-from-toml$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/create-from-toml/route.ts (authorize 'create-agent' = MANAGER/COS).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const tomlAuthz = authorize(auth, 'create-agent')
+    if (!tomlAuthz.allowed) { sendJson(res, 403, { error: tomlAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     if (!body.tomlContent || typeof body.tomlContent !== 'string') return sendJson(res, 400, { error: 'tomlContent is required' })
     if (!body.personaName || typeof body.personaName !== 'string') return sendJson(res, 400, { error: 'personaName is required' })
@@ -3996,11 +4113,20 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'Password required' })
       return
     }
+    // TRDD-BZW1QAZ5: mirror app/api/auth/login/route.ts — lockdown refusal, per-source rate limit and global cap.
+    // The route is whitelisted from authentication (it must be), so without these the password could be
+    // guessed without limit. Per-source reset on success only; the global bucket keeps accumulating.
+    if (isLockedDown()) { sendJson(res, 503, { error: 'System is in emergency lockdown. Try again later.' }); return }
+    const sourceIp = getHeader(req, 'x-forwarded-for')?.split(',')[0]?.trim() || getHeader(req, 'x-real-ip') || 'unknown'
+    const loginRateKey = `auth-login:${sourceIp}`
+    if (!checkAndRecordAttempt(loginRateKey).allowed) { sendJson(res, 429, { error: 'Too many login attempts. Try again later.' }); return }
+    if (!checkAndRecordAttempt('auth-login:global', 200).allowed) { sendJson(res, 429, { error: 'Too many login attempts. Try again later.' }); return }
     const valid = await verifyPassword(body.password)
     if (!valid) {
       sendJson(res, 401, { error: 'Invalid password' })
       return
     }
+    resetRateLimit(loginRateKey)
     const token = await createSession()
     const cookie = buildSessionCookie(token)
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': cookie, 'Cache-Control': 'no-store' })
@@ -4035,6 +4161,9 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/route.ts GET (system owner only, CC-GOV-017). buildAuthContext's
+    // isSystemOwner (not `!auth.agentId`) so a signed-in non-owner user is refused when the user-authority model is on.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
     const fs = await import('fs')
     const path = await import('path')
     const cemeteryDir = statePath('cemetery')
@@ -4098,6 +4227,9 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/cemetery\/download$/, paramNames: [], handler: async (req, res, _params, query) => {
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/download/route.ts (system owner only, CC-GOV-017); the archive
+    // holds the deleted agent's keys/. isSystemOwner covers the model-on non-owner user as well as any agent.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
     const filename = query.file
     if (!filename) { sendJson(res, 400, { error: 'file parameter required' }); return }
     const fs = await import('fs')

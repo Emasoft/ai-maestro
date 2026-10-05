@@ -40,7 +40,7 @@ TRDD-A50RC5G8 on 2026-10-05:
 
 `tests/integration` is therefore red on this machine (4 files, 8 tests) and has been since at
 least b9d97a308, which means it gates nothing.
-MEASURED 2026-10-05: the one suite run that exited 1 on the real-state leak guard was environmental — the new entry was a status-line state file whose id matches a LIVE Claude session of another project, mtime inside the run window; no test wrote it. The guard cannot tell a concurrent live session from a leaking test: a rerun on the same tree exited 0 (539 files).
+MEASURED 2026-10-05: the one suite run that exited 1 on the real-state leak guard was environmental — the new entry was a status-line state file whose id matches a LIVE Claude session of another project, mtime inside the run window; no test wrote it. The guard cannot tell a concurrent live session from a leaking test: a rerun exited 0 (539 files) — on a tree that also carried one more commit, so it is not a same-tree A/B; and 'no test wrote it' is an inference from the id matching a live session, not an observation of the writer. SEEN AGAIN the same day: a worker run exited 1 on a different external writer (per worker: an observability daemon writing under the state dir) while my rerun minutes later exited 0.
 
 ## Proposed fix
 

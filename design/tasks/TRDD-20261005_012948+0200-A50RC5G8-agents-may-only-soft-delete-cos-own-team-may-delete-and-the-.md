@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:26:02+0200
+updated: 2026-10-05T02:32:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -74,9 +74,14 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
 - [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
 - [x] COS grant bound to the registry: caller must be chiefOfStaffId of a team containing the target; token teamId not consulted; all teams searched (77a02304d)
-- [ ] The same team-equality shape (token teamId first, first-match team, no chiefOfStaffId check) decides the COS own-team grant for change-title, failed-TRDD archiving, unblock-prompt and the generic policy tail in lib/authorization.ts (per worker read, ~lines 413/704/824/927) — verify each by reading, then bind to the registry the same way
+- [x] The same team-equality shape (token teamId first, first-match team, no chiefOfStaffId check) decides the COS own-team grant for change-title, failed-TRDD archiving, unblock-prompt and the generic policy tail in lib/authorization.ts (per worker read, ~lines 413/704/824/927) — verify each by reading, then bind to the registry the same way
 - [ ] ChangeTeam does not revoke the moved agent's tokens (per worker read; ChangeTitle does at G14b) — verify, then revoke on team change so a token cannot carry the old teamId for its lifetime
 - [ ] Two PROJECT memory pages still state the old rule 'Only MANAGER can delete agents' (an-unenforced-rule-produces-a-success-not-an-error, team-creation) — correct through memgrep verbs
+- [ ] Landed d7381136e for the box above: change-title, failed-TRDD archive, unblock-prompt and the policy tail are registry-bound. Remaining: the ORCHESTRATOR manage-trdd edit rule keeps the token-first shape (no chiefOfStaffId to bind to) — decide the binding (team.orchestratorId from the registry?)
+- [ ] WHO CAN WRITE team.chiefOfStaffId — the registry binding is only as strong as its writers. Read (grep, not yet read for authorization): app/api/teams/[id]/chief-of-staff/route.ts, its headless twin (services/headless-router.ts ~3039/3093), services/cross-host-governance-service.ts ~515/532 (writes from a request payload). Read as stripping the field: app/api/teams/[id]/route.ts:116 and services/teams-service.ts:691
+- [ ] The caller TITLE in authorize() is token-first (auth.governanceTitle || registry, lib/authorization.ts ~390) — verify ChangeTitle really revokes tokens (worker read: G14b) and that clearing chiefOfStaffId on a title change cannot fail silently (G11 logs a WARN on failure, element-management-service.ts ~3251)
+- [ ] The test allowing a COS to delete its team orchestratorId pins CURRENT behaviour only — it is not a ruling; the COS_DELETABLE_TITLES box above is still the user's to confirm
+- [ ] Live data 2026-10-05 (read-only): 3 teams, none has a COS-titled non-chair member (no live agent lost authority); 2 teams name a chiefOfStaffId absent from the registry — stale ids, likely scenario litter; clean through the UI pipelines
 
 ## Approval log
 

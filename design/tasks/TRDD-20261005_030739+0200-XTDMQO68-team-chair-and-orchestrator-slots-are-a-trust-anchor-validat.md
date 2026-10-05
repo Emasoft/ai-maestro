@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:16:51+0200
+updated: 2026-10-05T05:18:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -72,6 +72,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] 2026-10-05 5e143620d closes the G11 box above: a failed chair clear now fails the retitle and rolls back. Checked before landing: with no manager the clear succeeds (real team registry over a temp HOME), no rule refuses a chairless team, the teams lock is not held at G11 for call sites inside the service file. Open remainder: G11's second half still swallows a failed auto-reject of the ex-chair's pending requests; outside callers of ChangeTitle not all traced for the lock.
 - [ ] orchestratorId 'must be listed in the team' — DEFERRED 2026-10-05 after a caller enumeration (worker's read, report reports/xtdmqo68/20261005-orchestrator-must-be-member.md; no file changed): services/teams-service.ts createNewTeam (the create-with-project flow) sets orchestratorId on a team whose agentIds holds only the chair, and the ChangeTitle G13b undo can restore a previous orchestrator who has left the team. Enforcing membership in updateTeam would break both. Needs: that create flow adding the orchestrator to agentIds first, and the undo carve-out.
 - [x] 2026-10-05 CORRECTION to 5e143620d's stated severity (read by me at HEAD after review): gate G08b already refuses to retitle a chief-of-staff away from that title while the team it is a member of still lists it as chair, and its own comment says the chair route and the edit-team path clear the slot directly before calling ChangeTitle; I read DeleteTeam G03 and it does the same (clears chiefOfStaffId in the update that removes the agent from agentIds, then retitles). So for a well-formed team G11's loop finds nothing to clear, and failing closed there cannot block those flows. What 5e143620d actually covers is an agent seated as chair of a team it is NOT a member of (malformed data, or an additional team). The commit message's 'moderate' describes which readers would have granted an ex-chair, not how often the state is reachable. Not read: the chair route and edit-team code themselves (taken from the G08b comment).
+- [x] 2026-10-05 SECOND CORRECTION on the scope of 5e143620d (two more reads at HEAD): the team G08b checks is the FIRST team whose agentIds contains the agent (allTeams.find). So besides a chair seated on a team it is not a member of, an agent that is a member of one team and chairs a DIFFERENT team it also belongs to can pass G08b and reach G11 for a well-formed team — the scope I wrote above was too narrow. And DeleteTeam G03's pre-revert slot clear is itself in a try whose catch only logs a WARN; when it fails, the following ChangeTitle is refused by G08b and the failure IS recorded (revertFailures + a FAILED ops line) — what DeleteTeam then does with a recorded revert failure (delete the team anyway, leaving a titled chair with no team, or abort) was NOT read. Two of the three 'flows clear the slot first' claims still rest on a code comment, not on the code.
+- [ ] DeleteTeam G03: trace what the pipeline does after a recorded revert failure (pre-revert clear failed, ChangeTitle then refused): is the team still deleted with its ex-chair keeping the chief-of-staff title?
 
 ## Approval log
 

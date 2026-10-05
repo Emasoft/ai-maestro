@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:08:34+0200
+updated: 2026-10-05T04:12:23+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -56,6 +56,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [x] 13 CORRECTION (review): 'revive stays owner-only in headless' is CONDITIONAL — if the purge worker reports headless can obtain a sudo token, revive should be put behind sudo too (full-mode parity); only if it cannot does your 'can always be resurrected' ruling decide it. Download route's prior reachability was not checked
 - [x] 12 WIDENED: the same tool limit blocks every edit inside the two largest pipeline functions (title change, agent delete). One confirmed defect stays open only because of it: a failed token revocation after a title change is reported as success
 - [x] 12 NO LONGER BLOCKING: a fastedit-only method for line-range edits was found and used. No answer needed unless you want the Edit tool allowed anyway
+- [ ] 15 (FYI/DECIDE) In headless mode five routes never run because an earlier generic route answers first: the four creation-helper session/chat routes and listing role plugins. Nothing is exposed. Do you use the creation helper or role-plugin listing in headless? If not I leave them; if yes they need authentication added before being made reachable
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:08:33+0200
+updated: 2026-10-05T04:12:23+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -62,6 +62,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] LANDED d437e8a54: headless cemetery purge is forwarded to the full-mode handler (sudo + owner). Verified alone in a detached worktree (tsc clean; 545/546 files — the one red is the real-server boot test, which needs a production build the worktree lacks; not rerun in the main tree). Orchestrator's own neuters: table ignored → 4 purge tests red; cemetery block moved back to the table's end → 4 list tests red (pays the neuter owed on 154251963). Revive unchanged
 - [ ] COVERAGE DROPPED by d437e8a54: purge by a signed-in non-owner user with the user-authority model ON is no longer tested (the new file pins the model off). Add that case to tests/unit/headless-delegated-strict-routes.test.ts
 - [x] TOOL LIMIT WORKED AROUND WITHIN THE RULE: fastedit split/create/join replaces a line range with every write made by fastedit (parts proven byte-exact with cmp before joining; full git diff read after). First used for the superseded purge tests in d437e8a54. The six shadowed routes and edits inside the large pipeline functions are therefore no longer blocked on TRDD-VR4OPNVI q12
+- [x] LANDED 6e1b24aa0: the dropped non-owner-user purge case is back. CAVEATS read in its diff AFTER committing: the test applies the model-ON owner rule through a wrapper around buildAuthContext, because the real one reads the flag through a lazy require the mock cannot reach — so it partly tests the wrapper. Fix dispatched (make that require a static import). FINDING per worker, unread by me: the full-mode cemetery handler's own owner check tests only auth.agentId; with the model on, only the sudo guard's title gate stops a non-owner user. Also: the d437e8a54 boot-test red was rerun in the main tree, 3/3 pass
+- [ ] RESERVED NAMES (dispatched): a request for /api/agents/role-plugins, /creation-helper or /cemetery that misses its own route is answered by the generic by-id handler; an agent NAMED one of those would be acted on (a plugin uninstall would delete an agent). Refuse those names at agent creation and rename. The four creation-helper routes and GET role-plugins otherwise stay shadowed (decision: no exposure today; reachability is a feature change) — put to the user on TRDD-VR4OPNVI
+- [ ] STRAY FILE: some test or spawned script creates a 3-byte file literally named -o (content {}) in the working directory on every full run (seen in the repo root and in a fresh worktree). Untracked; a wildcard stage would sweep it in. Find the command passing -o where a filename is expected
 
 ## Approval log
 

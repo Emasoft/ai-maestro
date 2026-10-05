@@ -323,44 +323,9 @@ describe('TRDD-BZW1QAZ5 — system-owner-only headless handlers (twin: enforceSy
   }
 })
 
-describe('TRDD-BZW1QAZ5 W4 — DELETE agents/cemetery (purge) is system-owner only (twin: if (auth.agentId); headless is stricter)', () => {
-  const PURGE_REASON = 'Only system owner can purge archives'
-  const purge = () => run('DELETE', '/api/agents/cemetery', { filename: CEMETERY_FILE })
-  const archiveExists = async () => (await import('node:fs')).existsSync((tmp.dir + '/cemetery/' + CEMETERY_FILE))
-  it('a MEMBER agent is refused 403 and the archive is not removed', async () => {
-    /** Any agent identity is refused */
-    m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
-    const out = await purge()
-    expect(out.status).toBe(403)
-    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
-    expect(await archiveExists()).toBe(true)
-  })
-  it('a MANAGER agent is refused 403 and the archive is not removed', async () => {
-    /** Owner only, whatever the title */
-    m.authenticateAgent.mockReturnValue(MANAGER_AUTH)
-    const out = await purge()
-    expect(out.status).toBe(403)
-    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
-    expect(await archiveExists()).toBe(true)
-  })
-  it('model ON, a signed-in non-owner user is refused 403 and the archive is not removed', async () => {
-    /** Stricter than a bare `!auth.agentId`: this case reaches the unlink if the check regresses to it */
-    m.modelOn.mockReturnValue(true)
-    m.authenticateAgent.mockReturnValue(PLAIN_USER)
-    const out = await purge()
-    expect(out.status).toBe(403)
-    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
-    expect(await archiveExists()).toBe(true)
-  })
-  it('POSITIVE CONTROL — the system owner purges the archive', async () => {
-    /** The gate can say yes */
-    m.authenticateAgent.mockReturnValue(OWNER)
-    const out = await purge()
-    expect(out.status).toBe(200)
-    expect(JSON.parse(text(out)).purged).toBe(CEMETERY_FILE)
-    expect(await archiveExists()).toBe(false)
-  })
-})
+// TRDD-BZW1QAZ5 W4 — the purge (DELETE agents/cemetery) cases moved to tests/unit/headless-delegated-strict-routes.test.ts:
+// purge is now delegated to the full-mode handler (sudo layer + owner-only), so the in-table handler these cases drove is
+// dead code. NOT carried over: the "model ON, signed-in non-owner user" case (the new file pins the model OFF).
 
 describe('TRDD-BZW1QAZ5 W9 — GET agents/:id/messages passes the caller context (twin: requireAuth + auth.context)', () => {
   it('a MEMBER reading its OWN mailbox succeeds and the service receives its context', async () => {

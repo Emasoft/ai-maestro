@@ -4644,6 +4644,8 @@ const routes: Route[] = [
 // ---------------------------------------------------------------------------
 
 function matchRoute(method: string, pathname: string): { handler: RouteHandler; params: Record<string, string> } | null {
+  const delegated = DELEGATED_STRICT_ROUTES[`${method} ${pathname}`]
+  if (delegated) return { handler: delegated, params: {} }
   for (const route of routes) {
     if (route.method !== method) continue
 
@@ -4664,6 +4666,23 @@ function matchRoute(method: string, pathname: string): { handler: RouteHandler; 
     return { handler: route.handler, params }
   }
   return null
+}
+
+
+// TRDD-BZW1QAZ5 — strict routes served by DELEGATING to their full-mode Next.js twin, consulted by matchRoute BEFORE
+// the `routes` scan. WHY: this router has no sudo layer, yet security-registry.json classifies DELETE /api/agents/cemetery
+// (permanent purge) "strict"; a hand-rolled copy here was weaker than full mode. `delegateNextRoute` forwards the caller's
+// credentials and X-Sudo-Token to the SAME handler full mode runs, so the gate (requireSudoToken, then owner-only) is not
+// forked. It is a separate lookup, not a `routes` entry, because first match wins and entries cannot be edited with the
+// mandated tool. The in-table `DELETE /api/agents/cemetery` entry in `routes` is therefore DEAD CODE (superseded by this
+// table); it cannot be removed with the mandated tool (fastedit cannot edit anonymous array elements).
+// Fail closed: a headless client has no route that mints an X-Sudo-Token (/api/auth/sudo-password is not served here),
+// so purge is unavailable in headless unless the caller already holds a token.
+const DELEGATED_STRICT_ROUTES: Record<string, RouteHandler> = {
+  'DELETE /api/agents/cemetery': async (req, res) => {
+    const mod = await import('@/app/api/agents/cemetery/route')
+    await delegateNextRoute(req, res, mod.DELETE as NextRouteHandler, '/api/agents/cemetery', { method: 'DELETE', withBody: true })
+  },
 }
 
 // ── SRV-MAJOR-03 fix (2026-05-04) — middleware.ts parity for headless ──

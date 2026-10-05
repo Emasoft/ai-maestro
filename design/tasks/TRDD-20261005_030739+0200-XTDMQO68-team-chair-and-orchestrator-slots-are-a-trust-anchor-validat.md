@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:38:39+0200
+updated: 2026-10-05T03:47:58+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -60,6 +60,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [ ] Tell the peer: on an execution refusal the source host's copy stays pending until TTL and is never told. An existing rejection notification may be reusable without a protocol change (to verify)
 - [x] The full-suite run owed for 8f34f9cc2 is done: the committed tree including it was green (542 files / 7335 tests, tsc 0 lines) before the next change was restored
 - [ ] READ BY THE ORCHESTRATOR: in transfer-agent both refusals precede any mutation and there is one saveTeams at the end, so a refused transfer writes nothing. OPEN: a missing source team is a no-op even on a SAME-host transfer, where a mistyped source id leaves the agent in its real team and adds it to the destination (breaks single-team membership through a path that bypasses validateTeamMutation) — refuse a missing source when the source host is this host. OPEN: if recording a refusal fails, the stored request still reads executed; say so in the 409 body
+- [x] LANDED 1878fd0b6: a new orchestrator must be a live agent and not the MANAGER; an omitted managerId is resolved from governance; a same-host transfer from an unknown source team is refused; the 409 says when a refusal could not be recorded. Full suites green on that change alone (545 files / 7450 tests). NOT added: orchestrator-must-be-a-member (create-with-project seats the orchestrator before any member exists, per worker). STILL OPEN: the DeleteTeam undo omits managerId (now covered inside team-registry); detector for grandfathered invalid chairs; executed written before the run; tell the peer on refusal
 
 ## Approval log
 

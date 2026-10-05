@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:38:36+0200
+updated: 2026-10-05T03:47:57+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -51,6 +51,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] REMAINING after e5988b911: GET /api/agents/cemetery is unreachable in headless (shadowed by the :id route registered before it — move it above); agent metadata PATCH/DELETE, POST agents/:id/transfer and the skills routes need a service change; cemetery revive/purge use the hand-rolled owner test; headless skips write-block / lockdown / kill-switch and has no sudo layer; in headless the server's own startup calls to normalize-hosts and directory/sync send no credential and already fail (per worker)
 - [ ] Session command, both modes: under unblock-prompt a MANAGER or own-team chair may type ARBITRARY text into another agent while a prompt is pending (full mode: the prompt/answer route; headless has no such route after e5988b911). Unread: how the pending-prompt record is cleared (a stale record would keep the window open) and whether the pane-content check can be satisfied by printed text. Small fixes owed: truncate the echoed authAction value, log the refusal, add a requireIdle:false test
 - [ ] The 23 handlers that are authentication-only in BOTH modes are not a headless defect — they need a card that owns the full-mode routes
+- [x] LANDED (cemetery commit, see git log for TRDD-BZW1QAZ5 after e5988b911): cemetery list/purge reachable (moved above /api/agents/:id), revive/purge owner-gated via isSystemOwner. Full suites green on that change alone (545 files / 7462 tests)
+- [ ] SIX OTHER SHADOWED ROUTES (first-match router; found by executing the matcher over all 254 entries, per worker; table in reports/bzw1qaz5/…cemetery-routes.md): unreachable today, incl. DELETE /api/agents/role-plugins whose authorization block is dead code. Move each above the generic entry that shadows it, with a test that the right handler answers
+- [ ] CORRECTIONS (review): 'authorize like their twins' overstates — headless agent creation and the other sudo-strict routes still lack the human sudo factor full mode has. About a third of the owner-row test reds exercise a test wrapper, not the real buildAuthContext: make the lazy require of ./governance near line 377 of lib/agent-auth.ts static so they test production. READ BY THE ORCHESTRATOR: the full-mode config/deploy route is authenticate + authorize modify-agent with no owner refusal, and the route is not in security-registry.json — so allowing the owner in headless equals the twin. UNREAD: which address keys the headless login limiter; whether lockdown can strand headless login; whether the server's startup fetches really fail in headless (per worker)
 
 ## Approval log
 

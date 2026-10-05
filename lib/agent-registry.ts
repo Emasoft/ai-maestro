@@ -342,6 +342,18 @@ export async function loadAgentsLoud(): Promise<{ ok: true; agents: Agent[] } | 
  * Save agents to registry
  */
 export function saveAgents(agents: Agent[]): boolean {
+  // TRDD-SOPULLUB: a write built from a read which FAILED must not replace the registry.
+  // `loadAgents` returns [] for a corrupt/unreadable/non-array file, so a caller that pushed one
+  // row onto that [] would overwrite the whole registry. Guard BEFORE the try: inside it, the
+  // refusal would be swallowed by the catch below into `return false`, which createAgent ignores
+  // (it would report success on an unwritten file). File exists but unreadable -> THROW, naming
+  // the registry file; file MISSING -> nothing to protect, first-run host saves on. This runs in
+  // the caller's lock hold (all writers take withLock('agents')), so the strict re-read and the
+  // rename observe the same file — no TOCTOU between them.
+  if (fs.existsSync(REGISTRY_FILE)) {
+    loadAgentsStrict()
+  }
+
   try {
     ensureAgentsDir()
 

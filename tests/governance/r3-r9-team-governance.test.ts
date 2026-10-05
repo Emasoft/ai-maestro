@@ -750,6 +750,9 @@ describe('R3.9 — MANAGER is a superset of COS (authorize)', () => {
     // authorize() resolves team membership through the REAL team-registry, so
     // seed a team that contains both the COS and the target.
     seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['cos-1', 'agent-a'], chiefOfStaffId: 'cos-1' }])
+    // The target must EXIST in the registry: the COS change-title and delete-agent branches look its title up
+    // and fail closed on an unknown agent (TRDD-A50RC5G8). A team listing an id no agent holds proves nothing.
+    seedAgents([{ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' }])
   })
 
   it('for EVERY action a same-team COS is allowed, a MANAGER is allowed too — deleting the MANAGER grant inverts the hierarchy (a COS could act where its MANAGER could not)', async () => {

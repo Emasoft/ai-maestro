@@ -31,14 +31,17 @@ const _origResolve = (Module as unknown as { _resolveFilename: (...a: unknown[])
 }
 
 const teamStub = require('@/lib/team-registry') as {
-  __setTeams: (t: Array<{ id: string; agentIds: string[] }>) => void
+  __setTeams: (t: Array<{ id: string; chiefOfStaffId?: string | null; agentIds: string[] }>) => void
 }
 
 import { canIssue, type IssueRequestBody } from '@/lib/portfolio-issue-guard'
 import type { AuthContext } from '@/lib/agent-auth'
 
 beforeAll(() => {
-  teamStub.__setTeams([{ id: 'team-cos', agentIds: ['cos-self', 'member-in', 'orch-1'] }])
+  teamStub.__setTeams([
+    { id: 'team-cos', chiefOfStaffId: 'cos-self', agentIds: ['cos-self', 'member-in', 'orch-1'] },
+    { id: 'team-other', chiefOfStaffId: 'cos-other', agentIds: ['cos-other', 'member-other', 'cos-self-lookalike'] },
+  ])
 })
 
 function ctx(over: Partial<AuthContext> = {}): AuthContext {
@@ -76,7 +79,7 @@ describe('canIssue — bypass authorities', () => {
 })
 
 describe('canIssue — CHIEF-OF-STAFF (narrow)', () => {
-  const cos = (teamId = 'team-cos') => ctx({ governanceTitle: 'chief-of-staff', teamId })
+  const cos = (teamId = 'team-cos', agentId = 'cos-self') => ctx({ governanceTitle: 'chief-of-staff', teamId, agentId })
 
   it('may mint an agent:create mandate for an OWN-team member', () => {
     expect(canIssue(cos(), mandateAgentCreate).ok).toBe(true)
@@ -93,8 +96,23 @@ describe('canIssue — CHIEF-OF-STAFF (narrow)', () => {
   it('is DENIED empowering a NON-member', () => {
     expect(canIssue(cos(), { ...mandateAgentCreate, subject_agent_id: 'outsider' }).ok).toBe(false)
   })
-  it('is DENIED when the COS has no team', () => {
-    expect(canIssue(ctx({ governanceTitle: 'chief-of-staff', teamId: null }), mandateAgentCreate).ok).toBe(false)
+  it('is DENIED when the COS chairs no team', () => {
+    expect(canIssue(cos('team-cos', 'nobody'), mandateAgentCreate)).toEqual({
+      ok: false,
+      reason: 'A CHIEF-OF-STAFF may only empower members of its OWN team.',
+    })
+  })
+  it('TRDD-A50RC5G8: the registry chair of the member\'s team is ALLOWED', () => {
+    expect(canIssue(cos(), mandateAgentCreate)).toEqual({ ok: true })
+  })
+  it('TRDD-A50RC5G8: a COS-titled agent whose token teamId names the member\'s team but who is not its chair is DENIED', () => {
+    expect(canIssue(cos('team-cos', 'cos-other'), mandateAgentCreate)).toEqual({
+      ok: false,
+      reason: 'A CHIEF-OF-STAFF may only empower members of its OWN team.',
+    })
+  })
+  it('TRDD-A50RC5G8: a wrong token teamId does not stop the registry chair (ALLOWED)', () => {
+    expect(canIssue(cos('team-other'), mandateAgentCreate)).toEqual({ ok: true })
   })
 })
 

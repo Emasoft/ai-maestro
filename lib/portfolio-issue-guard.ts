@@ -85,11 +85,17 @@ export function canIssue(ctx: AuthContext, body: IssueRequestBody): IssueDecisio
     if (!COS_ALLOWED_SCOPES.has(body.scope)) {
       return { ok: false, reason: `A CHIEF-OF-STAFF may not mint scope "${body.scope}".` }
     }
-    // The subject MUST be a member of the COS's own team (R30.3).
-    if (!ctx.teamId) {
-      return { ok: false, reason: 'CHIEF-OF-STAFF has no team — cannot empower a member.' }
+    // The subject MUST be a member of a team this COS CHAIRS (R30.3). TRDD-A50RC5G8: decided from the registry
+    // (caller === team.chiefOfStaffId), never from ctx.teamId — a token's team id outlives a team change, and a
+    // COS-titled plain member of a team is not its chair.
+    if (!ctx.agentId) {
+      return { ok: false, reason: 'CHIEF-OF-STAFF has no agent identity — cannot empower a member.' }
     }
-    if (!isAgentInTeam(body.subject_agent_id, ctx.teamId)) {
+    const chair = chairsTeamContaining(ctx.agentId, body.subject_agent_id)
+    if (chair === 'unreadable') {
+      return { ok: false, reason: 'Team registry could not be read; refusing to mint (TRDD-A50RC5G8).' }
+    }
+    if (chair === 'no') {
       return { ok: false, reason: 'A CHIEF-OF-STAFF may only empower members of its OWN team.' }
     }
     return { ok: true }
@@ -100,23 +106,22 @@ export function canIssue(ctx: AuthContext, body: IssueRequestBody): IssueDecisio
 }
 
 /**
- * Synchronous team-membership check via the team registry. Returns false on
- * any read error (fail closed). Uses require() to avoid a top-level cycle
- * (team-registry → agent-registry → … pulls a large graph).
+ * Synchronous registry check: 'ok' when `cosId` is the chiefOfStaffId of SOME team (all searched) whose agentIds
+ * contain `memberId`. A read error is 'unreadable' (deny, distinct reason). Uses require() to avoid a top-level
+ * cycle (team-registry → agent-registry → … pulls a large graph).
  */
-function isAgentInTeam(agentId: string, teamId: string): boolean {
+function chairsTeamContaining(cosId: string, memberId: string): 'ok' | 'no' | 'unreadable' {
   try {
     // Lazy CommonJS require (sync, inside this sync guard) to avoid a circular
     // import with team-registry. (@typescript-eslint is not loaded by the current
     // next/core-web-vitals config, so no no-require-imports disable is needed — and
     // an eslint-disable for an unloaded rule is itself a build error.)
     const teamRegistry = require('@/lib/team-registry') as {
-      loadTeams: () => Array<{ id: string; agentIds: string[] }>
+      loadTeams: () => Array<{ chiefOfStaffId?: string | null; agentIds?: string[] }>
     }
-    const team = teamRegistry.loadTeams().find(t => t.id === teamId)
-    return !!team && team.agentIds.includes(agentId)
+    return teamRegistry.loadTeams().some(t => t.chiefOfStaffId === cosId && t.agentIds?.includes(memberId)) ? 'ok' : 'no'
   } catch (err) {
-    console.warn('[portfolio-issue-guard] team-membership lookup failed, denying:', err)
-    return false
+    console.warn('[portfolio-issue-guard] team lookup failed, denying:', err)
+    return 'unreadable'
   }
 }

@@ -165,7 +165,8 @@ describe('TRDD-0IPK36MS — RBAC change-title authorization matrix (real AID Bea
     expect(auth.agentId).toBe('cos-a')
     expect(auth.teamId).toBe('team-a')
 
-    // member-a2 belongs to team-a, the same team as cos-a.
+    // member-a2 belongs to team-a, the same team as cos-a. The target's title is now read from the registry.
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'member' }))
     const decision = authorize(auth, 'change-title', 'member-a2')
     expect(decision.allowed).toBe(true)
   })
@@ -1018,5 +1019,78 @@ describe('TRDD-A50RC5G8 — sibling CHIEF-OF-STAFF grants require the registry c
       warn.mockRestore()
       expect(d).toEqual({ allowed: false, reason: unreadable })
     })
+  })
+})
+
+/**
+ * TRDD-A50RC5G8 — the ORCHESTRATOR TRDD-edit grant is decided by the registry (orchestratorId of a team containing
+ * the assignee), and a chief of staff may not change the title of a MANAGER, a CHIEF-OF-STAFF or an ASSISTANT.
+ */
+describe('TRDD-A50RC5G8 — ORCHESTRATOR TRDD edit is decided by the registry orchestratorId', () => {
+  const team = (id: string, orchestratorId: string | null, agentIds: string[]) =>
+    ({ id, name: id, type: 'closed', chiefOfStaffId: null, orchestratorId, agentIds })
+  const setTeams = (...teams: unknown[]) => { fsStubFns.teamsState.json = JSON.stringify({ teams }) }
+  const orchAuth = async (agentId: string, teamId: string | null) =>
+    authenticateFromRequest(requestWith({ Authorization: `Bearer ${(await issueGovernanceToken(agentId, agentId, 'orchestrator', teamId)).access_token}` }))
+  const edit = (a: AgentAuthResult, assignee: string) =>
+    authorize(a, 'manage-trdd', undefined, { verb: 'edit', minApproval: 'manager', assigneeAgentId: assignee, createdByAgentId: 'someone-else' })
+  const DENY = 'ORCHESTRATOR can only edit TRDDs assigned within its own team'
+
+  it('the registry orchestrator of the assignee\'s team is ALLOWED', async () => {
+    setTeams(team('team-a', 'orch-1', ['orch-1', 'm1']))
+    expect(edit(await orchAuth('orch-1', 'team-a'), 'm1')).toEqual({ allowed: true })
+  })
+  it('an orchestrator-titled caller whose token names the assignee\'s team but whom the registry does not name is DENIED', async () => {
+    setTeams(team('team-a', 'orch-real', ['orch-real', 'orch-1', 'm1']))
+    expect(edit(await orchAuth('orch-1', 'team-a'), 'm1')).toEqual({ allowed: false, reason: DENY })
+  })
+  it('a token naming another team does not stop the registry orchestrator (ALLOWED)', async () => {
+    setTeams(team('team-a', 'orch-1', ['orch-1', 'm1']), team('team-b', 'orch-b', ['orch-b', 'm2']))
+    expect(edit(await orchAuth('orch-1', 'team-b'), 'm1')).toEqual({ allowed: true })
+  })
+  it('the registry orchestrator is DENIED for an assignee of a different team', async () => {
+    setTeams(team('team-a', 'orch-1', ['orch-1', 'm1']), team('team-b', 'orch-b', ['orch-b', 'm2']))
+    expect(edit(await orchAuth('orch-1', 'team-a'), 'm2')).toEqual({ allowed: false, reason: DENY })
+  })
+  it('a team store read that throws is DENIED with the unreadable reason', async () => {
+    const auth = await orchAuth('orch-1', 'team-a')
+    fsStubFns.teamsState.throws = true
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const d = edit(auth, 'm1')
+    expect(warn).toHaveBeenCalled() // positive control: the read really threw and was logged
+    warn.mockRestore()
+    expect(d).toEqual({ allowed: false, reason: 'Team registry could not be read; refusing to edit the TRDD (TRDD-A50RC5G8)' })
+  })
+})
+
+describe('TRDD-A50RC5G8 — change-title: a CHIEF-OF-STAFF may not retitle a MANAGER or an ASSISTANT', () => {
+  const setTeams = () => {
+    fsStubFns.teamsState.json = JSON.stringify({
+      teams: [{ id: 'team-a', name: 'team-a', type: 'closed', chiefOfStaffId: 'cos-a', orchestratorId: null, agentIds: ['cos-a', 'tgt'] }],
+    })
+  }
+  const run = () => authorize(authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` })), 'change-title', 'tgt')
+  const DENY = 'Chief-of-Staff cannot change the title of a MANAGER or an ASSISTANT (TRDD-A50RC5G8)'
+  beforeEach(setTeams)
+
+  it.each([['manager'], ['assistant']])('a listed %s target is DENIED with the exact reason', (t) => {
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: t }))
+    expect(run()).toEqual({ allowed: false, reason: DENY })
+  })
+  it('a chief-of-staff-titled non-chair target is ALLOWED (control: the title confers no authority)', () => {
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'chief-of-staff' }))
+    expect(run()).toEqual({ allowed: true })
+  })
+  it('a member target is ALLOWED', () => {
+    mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'member' }))
+    expect(run()).toEqual({ allowed: true })
+  })
+  it('an untitled target is ALLOWED', () => {
+    mockGetAgent.mockImplementation((id: string) => ({ id }))
+    expect(run()).toEqual({ allowed: true })
+  })
+  it('a target absent from the registry is DENIED', () => {
+    mockGetAgent.mockImplementation(() => undefined)
+    expect(run()).toEqual({ allowed: false, reason: 'Chief-of-Staff cannot change the title of tgt: target agent is not in the registry (TRDD-A50RC5G8)' })
   })
 })

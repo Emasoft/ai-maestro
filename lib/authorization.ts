@@ -414,6 +414,26 @@ export function authorize(
       // token's team id can be stale and a chief-of-staff TITLE is not supervision.
       const supervision = cosSupervision(auth.agentId, targetAgentId)
       if (supervision === 'ok') {
+        // Target-title deny-list. A MANAGER may sit in a team's agentIds, so supervision alone is not enough: a chair
+        // must not retitle an agent that outranks it (authority ladder: manager > chief-of-staff). An ASSISTANT is
+        // refused by the same precedent as the unblock-prompt branch of this file (`targetTitle === 'assistant'`,
+        // line 846): its session is a human conversation surface. A chief-of-staff TITLE held by a non-chair confers
+        // no authority, so it is deliberately NOT listed. Fail closed on an unknown/unreadable target.
+        let rawTargetTitle: unknown
+        try {
+          const targetAgent = getAgent(targetAgentId)
+          if (!targetAgent) {
+            return { allowed: false, reason: `Chief-of-Staff cannot change the title of ${targetAgentId}: target agent is not in the registry (TRDD-A50RC5G8)` }
+          }
+          rawTargetTitle = targetAgent.governanceTitle
+        } catch (err) {
+          console.error('[authorization] change-title target lookup failed:', err)
+          return { allowed: false, reason: 'Chief-of-Staff cannot change the title of an agent whose record could not be read (TRDD-A50RC5G8)' }
+        }
+        const targetTitle = typeof rawTargetTitle === 'string' ? rawTargetTitle.trim().toLowerCase() : ''
+        if (targetTitle === 'manager' || targetTitle === 'assistant') {
+          return { allowed: false, reason: 'Chief-of-Staff cannot change the title of a MANAGER or an ASSISTANT (TRDD-A50RC5G8)' }
+        }
         return { allowed: true }
       }
       if (supervision === 'unreadable') {
@@ -610,9 +630,13 @@ export function authorize(
           return { allowed: true }
         }
         if (title === 'orchestrator' && trdd.assigneeAgentId) {
-          const orchTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-          const assigneeTeamId = lookupTeamIdForAgent(trdd.assigneeAgentId)
-          if (orchTeamId && orchTeamId === assigneeTeamId) return { allowed: true }
+          // TRDD-A50RC5G8: the registry decides (the caller must be the orchestratorId of a team containing the
+          // assignee). The old `auth.teamId ??` let a token's team id — valid for 1 hour — outlive a team change.
+          const orch = orchestratorOverAssignee(auth.agentId as string, trdd.assigneeAgentId)
+          if (orch === 'ok') return { allowed: true }
+          if (orch === 'unreadable') {
+            return { allowed: false, reason: 'Team registry could not be read; refusing to edit the TRDD (TRDD-A50RC5G8)' }
+          }
           return {
             allowed: false,
             reason: 'ORCHESTRATOR can only edit TRDDs assigned within its own team',
@@ -1005,30 +1029,24 @@ function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 
   }
 }
 
+
 /**
- * Find which team an agent belongs to. Returns team ID or null.
+ * Registry verdict on an ORCHESTRATOR editing a TRDD card: true when some team has `orchestratorId === orchId` AND
+ * contains the assignee (member, chief of staff or orchestrator slot — the membership notion of
+ * lookupTeamIdForAgent) — ALL teams searched. TRDD-A50RC5G8: the token's teamId outlives a team change, so it is
+ * never consulted; an unreadable registry is its own verdict, not "denied as outsider".
  */
-function lookupTeamIdForAgent(agentId: string): string | null {
+function orchestratorOverAssignee(orchId: string, assigneeId: string): 'ok' | 'denied' | 'unreadable' {
   try {
-    const teams = loadTeams()
-    for (const team of teams) {
-      if (
-        team.agentIds?.includes(agentId) ||
-        team.chiefOfStaffId === agentId ||
-        team.orchestratorId === agentId
-      ) {
-        return team.id
-      }
-    }
-    return null
+    return loadTeams().some(
+      (team) =>
+        team.orchestratorId === orchId &&
+        (team.agentIds?.includes(assigneeId) || team.chiefOfStaffId === assigneeId || team.orchestratorId === assigneeId),
+    )
+      ? 'ok'
+      : 'denied'
   } catch (err) {
-    // Surface the swallowed exception in logs instead of silently returning
-    // null — matches the AUTH-MIN-02 treatment of lookupGovernanceTitle. A
-    // team-registry read failure (corruption, disk error) here previously
-    // collapsed a COS membership check to "no team" with zero diagnostics,
-    // which fails CLOSED (the COS is denied, never wrongly granted) — that
-    // safe direction is preserved, but the failure is no longer invisible.
-    console.warn('[authorization] lookupTeamIdForAgent failed, treating agent as team-less (deny):', { agentId, err })
-    return null
+    console.warn('[authorization] orchestratorOverAssignee failed, denying:', { orchId, assigneeId, err })
+    return 'unreadable'
   }
 }

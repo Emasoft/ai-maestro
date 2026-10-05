@@ -82,12 +82,20 @@ describe('TRDD-BZW1QAZ5 — headless transfer needs the sudo confirmation', () =
     expect(out.json).toMatchObject({ error: 'sudo_required', route: 'POST /api/agents/[id]/transfer' })
     expect(m.transferAgent).not.toHaveBeenCalled()
   })
-  it('a MANAGER agent without a token reaches the service ONCE: agents face no sudo gate (R32), the twin authorizes them by title', async () => {
-    /** Parity with full mode, disclosed: the gate the owner path gets is not an agent gate */
+  it('a MANAGER agent without a token reaches the service ONCE in copy mode: agents face no sudo gate (R32), the twin authorizes them by title', async () => {
+    /** Parity with full mode, disclosed: the gate the owner path gets is not an agent gate; move is refused separately below */
     m.authenticateAgent.mockReturnValue(MANAGER)
-    const out = await transfer(XFER)
+    const out = await transfer({ ...XFER, mode: 'clone' })
     expect(out.status).toBe(200)
     expect(m.transferAgent).toHaveBeenCalledTimes(1)
+  })
+  it('a MANAGER agent asking for move mode is refused 403 move_reserved_to_owner and transferAgent is not called', async () => {
+    /** Move hard-removes the local agent; reserved to the owner, also through the headless router */
+    m.authenticateAgent.mockReturnValue(MANAGER)
+    const out = await transfer(XFER)
+    expect(out.status).toBe(403)
+    expect(out.json.error).toBe('move_reserved_to_owner')
+    expect(m.transferAgent).not.toHaveBeenCalled()
   })
   it('an ordinary agent without a token is refused 403 aid_title_forbidden by the twin and transferAgent is not called', async () => {
     /** The twin title check now applies in headless */

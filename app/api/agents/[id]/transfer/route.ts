@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { transferAgent } from '@/services/agents-transfer-service'
 import { isValidUuid } from '@/lib/validation'
-import { enforceAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { internalError } from '@/lib/error-response'
 
@@ -17,8 +17,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
 
   // API2-MAJ-18: agent transfer is destructive — the agent leaves this
   // host and lives on the remote instance. Require sudo so a stolen
@@ -37,6 +37,18 @@ export async function POST(
       body = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    // Owner ruling: agents may only soft-delete. Move mode hard-removes the local agent
+    // (fs.rmSync, no cemetery copy), so only the system owner (no agentId) may use it.
+    // The service acts on `mode === 'move'` only, so that is the exact condition to refuse.
+    if (auth.agentId && body?.mode === 'move') {
+      return NextResponse.json(
+        {
+          error: 'move_reserved_to_owner',
+          message: 'Moving an agent off this host removes it locally with no cemetery copy; only the system owner may do it. Use copy mode.',
+        },
+        { status: 403 }
+      )
     }
     const result = await transferAgent(id, body)
 

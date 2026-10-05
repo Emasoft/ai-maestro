@@ -4,7 +4,7 @@ title: Session name resolves to the wrong agent when an agent name ends in an in
 column: todo
 status: tasked
 created: 2026-10-05T01:57:17+0200
-updated: 2026-10-05T02:08:27+0200
+updated: 2026-10-05T02:19:32+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -53,6 +53,7 @@ creation and rename (if none exist today), or resolve a session name by exact se
 
 ## Approval log
 - 2026-10-05 — READ-FIRST answers (worker report, not re-read by main): `alpha_1` IS a legal agent name and parseSessionName would split it into `alpha` + index 1; the live registry holds 0 names matching _<digits>$; no route or UI path allocates a second session (`addSessionToAgent` has no non-test caller). So the collision is not reachable today — this is HARDENING. Cheapest fix: reject _<digits>$ agent names at creation and rename.
+- 2026-10-05 — WORDING CORRECTION: "not reachable today" above overstates. Supported claim: no agent on THIS host has a name ending in _<digits>, and no route allocates a second session; but such a name is legal, so one can be created through the normal wizard tomorrow.
 
 ## Approval log
 

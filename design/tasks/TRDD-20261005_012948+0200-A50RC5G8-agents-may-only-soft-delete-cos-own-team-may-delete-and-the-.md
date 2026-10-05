@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:08:26+0200
+updated: 2026-10-05T02:19:32+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -21,7 +21,7 @@ approval-datetime: 2026-10-05T01:29:48+0200
 derived: false
 
 relevant: [TRDD-L6VV9Q7U]
-implementation-commits: [68e0c7ade]
+implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
@@ -61,12 +61,18 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 
 - [x] READ FIRST: does `DeleteAgent` already refuse an agent's `hard: true`? Record the file and line either way
 - [x] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
-- [ ] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
-- [ ] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
+- [x] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
+- [x] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
 - [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
 - [ ] Each guard neutered, red set recorded; headless path exercised
 - [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
 - [ ] USER ANSWER recorded: is a process-level session kill a "hard-kill" reserved to the user, or may MANAGER / own-team CHIEF-OF-STAFF do it?
+- [ ] USER confirms or amends COS_DELETABLE_TITLES (member, architect, orchestrator, integrator), including whether a CHIEF-OF-STAFF may delete its ORCHESTRATOR and so freeze its own team
+- [ ] One UN-MOCKED round trip: soft delete, restore from the cemetery, the restored agent authenticates
+- [ ] A new agent taking a soft-deleted agent name adopts the kept folder and its old contents — decide: quarantine the folder, or refuse the name while a tombstone exists
+- [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
+- [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
+- [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
 
 ## Approval log
 
@@ -76,6 +82,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - 2026-10-05 — PARTLY LANDED 68e0c7ade by main-agent@ai-maestro: DeleteAgent refuses a non-system-owner caller asking for hard or deleteFolder (verified first-hand beforehand that G00 checked neither); the DeleteTeam member cascade soft-deletes when the caller is an agent. READ-FIRST answers (worker report reports/a50rc5g8/, gitignored): soft delete writes a cemetery zip, hard delete does not; cemetery POST/DELETE refuse agents in both modes, headless cemetery GET is open to agents (not re-verified); headless DELETE /api/agents/:id makes NO sudo-token check. NOT landed: the COS own-team grant; sudo on the headless hard path; a test in both user-authority-model states; the stale DeleteTeam doc comment and UI label.
 - 2026-10-05T01:57:03+0200 — column → dev by main-agent@ai-maestro. Partly landed in 68e0c7ade; COS grant, headless sudo and model-on verification remain.
 - 2026-10-05 — FACTS READ (worker report reports/a50rc5g8/…baseline-and-callers.md, gitignored; the self-delete branch and the cascade call were also read by main): (1) SOFT delete writes ~/.aimaestro/cemetery/<name>-export-<ts>.zip at gate G01c and a failed archive FAILS the delete; it also kills the tmux session, drops the persisted session, revokes AMP keys and AID tokens, unsubscribes groups, and tombstones the registry row; the folder is kept. So the archive precondition for the COS grant holds. (2) Cemetery RESTORE is refused to any agent caller and needs a sudo token; it re-imports under a new id and carries no team — a restored member of a deleted team comes back teamless. (3) A NEW agent may take a soft-deleted agent name and then ADOPTS the kept folder and its old contents ("Reusing orphaned folder") — not introduced here, but the soft cascade makes it more common; open question whether that folder should be quarantined. (4) app/api/agents/[id]/route.ts maps the new refusal to HTTP 500, not 403, because its status mapping does not recognise the message. (5) DELETE /api/v1/agents/me was ALREADY refused by the self-delete rule at the pre-session commit; not a regression. (6) All 8 tests/integration failures also fail at b9d97a308.
+- 2026-10-05 — LANDED 88b459d1b and 080b5ac29 by main-agent@ai-maestro. INTERPRETATION, NOT THE USER RULING: a CHIEF-OF-STAFF may soft-delete an own-team agent ONLY when its title is member, architect, orchestrator or integrator (COS_DELETABLE_TITLES in lib/authorization.ts). Every other title, an untitled or unknown target, and an unreadable registry are refused. Reason for narrowing "an agent": the MANAGER can be a member of a team, so same-team alone would let a CHIEF-OF-STAFF delete its MANAGER or a peer. TO OVERRULE: name the titles; the change is that one constant plus the delete-agent row of the baseline. ALSO NOTE: deleting the ORCHESTRATOR is allowed and freezes the team (members hibernated; the freeze lifts on roster repair but wakes no one). The MANAGER branch is unchanged (any target but itself) and has not been examined. The archive FILE is proven by test; its content and a real delete-then-restore round trip are not (zip export mocked).
 
 ## Approval log
 

@@ -32,7 +32,7 @@ const OWNER = {}
 const MANAGER = { agentId: '11111111-1111-4111-8111-111111111111', governanceTitle: 'manager' }
 const BASE = { targetHostId: 'h2', targetHostUrl: 'http://example.invalid:23000' }
 
-async function post(body: Record<string, unknown>, headers: Record<string, string> = {}) {
+async function post(body: unknown, headers: Record<string, string> = {}) {
   const { POST } = await import('../../app/api/agents/[id]/transfer/route')
   const req = new NextRequest(`http://localhost/api/agents/${ID}/transfer`, {
     method: 'POST', body: JSON.stringify(body),
@@ -86,5 +86,42 @@ describe('transfer move mode is reserved to the system owner', () => {
     expect(out.status).toBe(200)
     expect(m.transferAgent).toHaveBeenCalledTimes(1)
     expect(m.transferAgent.mock.calls[0][1]).toEqual({ ...BASE, mode: 'move' })
+  })
+})
+
+describe('transfer route rejects malformed bodies before the service', () => {
+  const TOKEN = { 'x-sudo-token': 'good-token' }
+  it('owner + token with body null is refused 400 and the service is not called', async () => {
+    /** The service destructures the body and would throw (500) on null */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await post(null, TOKEN)
+    expect(out.status).toBe(400)
+    expect(out.json.error).toBe('Request body must be a JSON object')
+    expect(m.transferAgent).not.toHaveBeenCalled()
+  })
+  it('owner + token with an array body is refused 400 and the service is not called', async () => {
+    /** An array is not a request object */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await post([BASE], TOKEN)
+    expect(out.status).toBe(400)
+    expect(out.json.error).toBe('Request body must be a JSON object')
+    expect(m.transferAgent).not.toHaveBeenCalled()
+  })
+  it('owner + token with mode teleport is refused 400 naming the allowed values and the service is not called', async () => {
+    /** An unknown mode used to behave silently as a copy */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await post({ ...BASE, mode: 'teleport' }, TOKEN)
+    expect(out.status).toBe(400)
+    expect(out.json.error).toContain('move')
+    expect(out.json.error).toContain('clone')
+    expect(m.transferAgent).not.toHaveBeenCalled()
+  })
+  it('MANAGER agent + mode teleport gets the 400 mode error: the mode check runs before the move refusal', async () => {
+    /** Order: guard (passes for MANAGER), body checks, then move refusal */
+    m.authenticateAgent.mockReturnValue(MANAGER)
+    const out = await post({ ...BASE, mode: 'teleport' })
+    expect(out.status).toBe(400)
+    expect(out.json.error).toContain('clone')
+    expect(m.transferAgent).not.toHaveBeenCalled()
   })
 })

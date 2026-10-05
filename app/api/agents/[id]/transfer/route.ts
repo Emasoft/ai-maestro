@@ -38,14 +38,25 @@ export async function POST(
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
+    // The service destructures the body and throws on null (a 500 today); reject non-objects here.
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+    }
+    // An unknown mode used to behave silently as a copy. An ABSENT mode stays allowed.
+    if (body.mode !== undefined && body.mode !== 'move' && body.mode !== 'clone') {
+      return NextResponse.json({ error: "mode must be 'move' or 'clone'" }, { status: 400 })
+    }
     // Owner ruling: agents may only soft-delete. Move mode hard-removes the local agent
     // (fs.rmSync, no cemetery copy), so only the system owner (no agentId) may use it.
     // The service acts on `mode === 'move'` only, so that is the exact condition to refuse.
-    if (auth.agentId && body?.mode === 'move') {
+    // As read on 2026-10-05, transferAgent's own export fetch sends no credential and the export
+    // route answers 401 to that, so the service currently fails before importing or deleting;
+    // this check becomes load-bearing once those calls carry a credential.
+    if (auth.agentId && body.mode === 'move') {
       return NextResponse.json(
         {
           error: 'move_reserved_to_owner',
-          message: 'Moving an agent off this host removes it locally with no cemetery copy; only the system owner may do it. Use copy mode.',
+          message: 'Moving an agent off this host removes it locally with no cemetery copy; only the system owner may do it.',
         },
         { status: 403 }
       )

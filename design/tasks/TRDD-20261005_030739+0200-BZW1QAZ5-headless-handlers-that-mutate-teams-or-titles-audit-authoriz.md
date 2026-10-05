@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:38:54+0200
+updated: 2026-10-05T05:23:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -73,6 +73,8 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] IN VERIFICATION (uncommitted): headless hard delete is forwarded to the full-mode handler (needs a sudo token). Read by the orchestrator: the headless detection and the full-mode handler both treat hard=true|1|yes as hard. Found by the worker: before, a MANAGER sending hard=1 or hard=yes in headless was silently downgraded to a SOFT delete that succeeded. The inventory test moved DELETE /api/agents/[id] from the in-router list to the delegated list although soft delete is still handled in the router — half true, to be stated in the commit
 - [x] LANDED 4e9fcf807: headless hard delete is forwarded to the full-mode handler (sudo required); the silent hard→soft downgrade for hard=1|yes is closed. Evidence and neuter in the message. READ after the review: e3eb988a5's old flag read was inside a try/catch defaulting to OFF, so any mode where that load failed ignored the user-authority model and now honours it (stricter); the model flag userAuthorityModelEnabled is ABSENT (off) in this machine's governance file (first probe used the wrong field name; re-read with the right one). The doc comment above buildAuthContext still says 'runtime require to avoid a static cycle' — stale. Nothing of today is live in the running server until a build
 - [ ] The delegated-route inventory test cannot see the purge table added in d437e8a54 and cannot express a route that is delegated for one case only (agent delete: hard forwarded, soft in-router). Teach it both
+- [ ] FOUND 2026-10-05 (worker's static read, then READ BY ME at HEAD): the four headless skills mutations in services/headless-router.ts — PUT /api/agents/:id/skills/settings, PATCH, POST and DELETE /api/agents/:id/skills — call authenticateAgent and then pass 'auth.error ? null : auth.agentId' to the service. services/agents-skills-service.ts treats a null requester as 'No auth header = no governance enforcement'. So a request with NO or INVALID credentials is not refused by the handler and reaches the mutation ungoverned. The full-mode twin (app/api/agents/[id]/skills/route.ts) answers 401 on an authentication error and then authorize(auth, 'manage-skills', id). Not established: whether anything in front of the headless route table refuses an unauthenticated request before the handler runs; not executed. Fix dispatched: mirror the twin.
+- [x] 2026-10-05 CLASSIFICATION of this card's 23 open boxes by a read-only worker (reports/bzw1qaz5/20261005-open-boxes-classified.md): MET 3, SMALL 7, LARGE 1, USER 2, NOTE 5, STALE 5. I have NOT ticked any box from it: the only rows I read myself are the skills finding above. Per the worker (unverified by me): W2 — the session route no longer takes its authorization action from the request body (landed 90b7ef8f5 + e5988b911, two test files named); W1 config/deploy authorizes before reading the body; six routes are still shadowed. Next small items in the worker's order: skills routes (above); agent PATCH, metadata PATCH/DELETE and transfer handlers; a guard test that fails when a mutating handler authenticates without authorizing or ignores auth.error.
 
 ## Approval log
 

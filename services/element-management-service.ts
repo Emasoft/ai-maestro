@@ -7838,6 +7838,14 @@ export async function ChangeAvatar(
 }
 
 /**
+ * Metadata keys the SERVER writes, never the user: `sessionSecretHash` (lib/session-env.ts, session bootstrap; nulled on
+ * purpose in hibernateAgent) and the `amp` block (lib/agent-registry.ts + services/amp-service.ts, AMP registration).
+ * A user-facing CLEAR must not wipe them, or a "clear metadata" click silently breaks the agent's session auth and its AMP
+ * identity. Applies to CLEAR mode ONLY: an explicit merge/PATCH that nulls one of them (hibernate, bootstrap) still does.
+ */
+const SYSTEM_OWNED_METADATA_KEYS = ['sessionSecretHash', 'amp'] as const
+
+/**
  * ChangeMetadata — agent-scoped AIO for the `metadata` field.
  *
  * Per R21.4 (AIO composition), all mutations of agent.metadata MUST go through
@@ -7920,13 +7928,15 @@ export async function ChangeMetadata(
     ops.push(`G04: Agent "${agent.name}" found`)
 
     // ── EXE: Apply update ─────────────────────────────────────
-    // 'clear' mode: build an undefined-valued map for every existing key so
+    // 'clear' mode: build an undefined-valued map for every existing USER key so
     // updateAgent's spread-merge wipes them. (See MF-001 in agent-registry.ts.)
+    // System-owned keys are skipped (SYSTEM_OWNED_METADATA_KEYS).
     let payload: Record<string, unknown>
     if (mode === 'clear') {
       const nulled: Record<string, undefined> = {}
       if (agent.metadata) {
         for (const key of Object.keys(agent.metadata)) {
+          if ((SYSTEM_OWNED_METADATA_KEYS as readonly string[]).includes(key)) continue
           nulled[key] = undefined
         }
       }
@@ -7934,6 +7944,9 @@ export async function ChangeMetadata(
     } else {
       payload = metadata
     }
+    // An EMPTY payload is read by updateAgent as "replace everything" (MF-001), which would wipe the system keys we just
+    // spared when they are the only keys left — so a clear that has nothing to null writes nothing.
+    const skipWrite = mode === 'clear' && Object.keys(payload).length === 0 && Object.keys(agent.metadata ?? {}).length > 0
     // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
     // Nothing abortable follows it, so this compensation is LATENT — written because the runner
     // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
@@ -7949,6 +7962,7 @@ export async function ChangeMetadata(
         id: 'EXE',
         what: `metadata ${mode === 'clear' ? 'cleared' : 'merged'} via updateAgent`,
         run: async () => {
+          if (skipWrite) return
           const updated = await updateAgent(agentId, { metadata: payload })
           if (!updated) throw new Error('Failed to update metadata in registry')
         },

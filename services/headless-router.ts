@@ -1983,9 +1983,9 @@ const routes: Route[] = [
     // TRDD-BZW1QAZ5: this used to wipe the metadata with no authentication and no authorization. Now it authenticates (401)
     // and applies the twin's modify-agent decision (app/api/agents/[id]/metadata/route.ts DELETE -> ChangeMetadata gate 0:
     // system owner, else authorize(..., 'modify-agent') with the same context fields; error -> status mapping is the twin's).
-    // The DELETION itself is deliberately unchanged (updateAgentById with {} = replace-all via MF-001): the twin's clear mode
-    // also nulls every key, system-owned ones included (amp.fingerprint, sessionSecretHash), so the two modes agree on the effect;
-    // whether that wipe should spare system keys is an open finding, not something to change here.
+    // The clear itself now goes through ChangeMetadata(mode 'clear') exactly like the twin. It used to be updateAgentById(id, {metadata: {}}),
+    // a replace-all that also wiped the system-owned keys (sessionSecretHash, amp) which ChangeMetadata's clear mode keeps, so the
+    // two server modes must share that one function or they disagree on what "clear" leaves behind.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const ctx = buildAuthContext(auth)
@@ -1997,12 +1997,16 @@ const routes: Route[] = [
         return
       }
     }
-    const result = await updateAgentById(params.id, { metadata: {} })
-    if (result.error) {
-      sendServiceResult(res, result)
-    } else {
-      sendServiceResult(res, { status: 200, data: { success: true } })
+    const { ChangeMetadata } = await import('@/services/element-management-service')
+    const result = await ChangeMetadata(params.id, {}, ctx, { mode: 'clear' })
+    if (!result.success) {
+      const status = /not found/i.test(result.error || '') ? 404
+        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : 400
+      sendJson(res, status, { error: result.error || 'Failed to clear metadata' })
+      return
     }
+    sendServiceResult(res, { status: 200, data: { success: true } })
   }},
 
   // Browse directory (Folder browser in profile panel).
@@ -2163,6 +2167,53 @@ const routes: Route[] = [
     const buffer = fs.readFileSync(realPath)
     res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${sanitized}"`, 'Content-Length': String(buffer.length) })
     res.end(buffer)
+  }},
+
+  // Role-plugins list and delete. TRDD-BZW1QAZ5: these MUST stay above the generic /api/agents/:id GET and DELETE below — first-wins
+  // matching lets `([^/]+)` swallow the segment role-plugins, so below them they were never reached (the generic handlers answered with
+  // the id "role-plugins"). The POST and the /role-plugins/* sub-routes stay in the Role Plugins section: nothing shadows them.
+  { method: 'GET', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (_req, res) => {
+    try {
+      const plugins = await listRolePlugins()
+      sendJson(res, 200, { plugins })
+    } catch (e) { sendJson(res, 500, { error: String(e) }) }
+  }},
+  { method: 'DELETE', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (req, res) => {
+    // SF2 drift-fix — mirror app/api/agents/role-plugins/route.ts DELETE, which is
+    // classed strict and gates via enforceAuth + requireSudoToken('DELETE',
+    // '/api/agents/role-plugins'). For an agent that resolves to
+    // authorize(auth, 'manage-skills') (MANAGER-only here, since there is no path target);
+    // a system-owner session passes. The headless router has no sudo layer, so the
+    // verified session cookie IS the user factor (authorize grants when !auth.agentId).
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'manage-skills')
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to manage role-plugins' })
+      return
+    }
+    const url = new URL(req.url || '/', `http://${getHeader(req, 'host') || 'localhost'}`)
+    const name = url.searchParams.get('name')
+    if (!name) return sendJson(res, 400, { error: 'name query parameter is required' })
+    // Guard: reject path traversal and shell metacharacters in plugin name (route parity).
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      return sendJson(res, 400, { error: 'Invalid plugin name — only alphanumeric, hyphens, and underscores allowed' })
+    }
+    // Guard: prevent deletion of default marketplace role plugins
+    if (Object.keys(PREDEFINED_ROLE_PLUGINS).includes(name)) {
+      return sendJson(res, 403, { error: 'Cannot delete default marketplace role plugins' })
+    }
+    try {
+      await deleteRolePlugin(name)
+      sendJson(res, 200, { success: true })
+    } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
 
   // Agent CRUD (must be LAST among /api/agents/[id]/* routes)
@@ -3811,55 +3862,12 @@ const routes: Route[] = [
   // =========================================================================
   // Role Plugins
   // =========================================================================
-  { method: 'GET', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (_req, res) => {
-    try {
-      const plugins = await listRolePlugins()
-      sendJson(res, 200, { plugins })
-    } catch (e) { sendJson(res, 500, { error: String(e) }) }
-  }},
   { method: 'POST', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
     if (!body.tomlContent || typeof body.tomlContent !== 'string') return sendJson(res, 400, { error: 'tomlContent is required and must be a string' })
     try {
       const result = await generatePluginFromToml(body.tomlContent, body.agentDescription)
       sendJson(res, 200, { success: true, pluginName: result.pluginName, pluginDir: result.pluginDir, mainAgentName: result.mainAgentName })
-    } catch (e) { sendJson(res, 500, { error: String(e) }) }
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (req, res) => {
-    // SF2 drift-fix — mirror app/api/agents/role-plugins/route.ts DELETE, which is
-    // classed strict and gates via enforceAuth + requireSudoToken('DELETE',
-    // '/api/agents/role-plugins'). For an agent that resolves to
-    // authorize(auth, 'manage-skills') (MANAGER-only here, since there is no path target);
-    // a system-owner session passes. The headless router has no sudo layer, so the
-    // verified session cookie IS the user factor (authorize grants when !auth.agentId).
-    const auth = authenticateAgent(
-      getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id'),
-      getHeader(req, 'Cookie')
-    )
-    if (auth.error) {
-      sendJson(res, auth.status || 401, { error: auth.error })
-      return
-    }
-    const decision = authorize(auth, 'manage-skills')
-    if (!decision.allowed) {
-      sendJson(res, 403, { error: decision.reason || 'Not authorized to manage role-plugins' })
-      return
-    }
-    const url = new URL(req.url || '/', `http://${getHeader(req, 'host') || 'localhost'}`)
-    const name = url.searchParams.get('name')
-    if (!name) return sendJson(res, 400, { error: 'name query parameter is required' })
-    // Guard: reject path traversal and shell metacharacters in plugin name (route parity).
-    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-      return sendJson(res, 400, { error: 'Invalid plugin name — only alphanumeric, hyphens, and underscores allowed' })
-    }
-    // Guard: prevent deletion of default marketplace role plugins
-    if (Object.keys(PREDEFINED_ROLE_PLUGINS).includes(name)) {
-      return sendJson(res, 403, { error: 'Cannot delete default marketplace role plugins' })
-    }
-    try {
-      await deleteRolePlugin(name)
-      sendJson(res, 200, { success: true })
     } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
   { method: 'POST', pattern: /^\/api\/agents\/role-plugins\/install$/, paramNames: [], handler: async (req, res) => {

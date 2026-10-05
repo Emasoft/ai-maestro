@@ -20,7 +20,7 @@ const m = vi.hoisted(() => {
     'syncDirectory', 'normalizeHosts', 'testWebhookById', 'updateDomainById', 'deleteDomainById',
     'createPersona', 'createDockerAgent', 'writeFile', 'mkdir', 'sendAgentSessionCommand', 'createSession',
     'getCreationHelperStatus', 'createCreationHelper', 'deleteCreationHelper', 'captureCreationHelperResponse', 'sendCreationHelperMessage',
-    'getAgentSessionStatus', 'linkAgentSession', 'unlinkOrDeleteAgentSession', 'sendChatMessage',
+    'getAgentSessionStatus', 'linkAgentSession', 'unlinkOrDeleteAgentSession', 'sendChatMessage', 'listRolePlugins', 'deleteRolePlugin', 'getAgentById', 'DeleteAgent',
   ] as const
   type AnyFn = (...a: any[]) => any
   const o = {} as Record<(typeof fns)[number], import('vitest').Mock<AnyFn>>
@@ -88,7 +88,7 @@ vi.mock('fs/promises', async (orig) => {
 })
 vi.mock('../../services/agents-config-deploy-service', async (orig) => ({ ...(await orig<object>()), deployConfigToAgent: (...a: unknown[]) => m.deployConfigToAgent(...a) }))
 vi.mock('../../services/agents-transfer-service', async (orig) => ({ ...(await orig<object>()), importAgent: (...a: unknown[]) => m.importAgent(...a) }))
-vi.mock('../../services/element-management-service', async (orig) => ({ ...(await orig<object>()), CreateAgent: (...a: unknown[]) => m.CreateAgent(...a) }))
+vi.mock('../../services/element-management-service', async (orig) => ({ ...(await orig<object>()), CreateAgent: (...a: unknown[]) => m.CreateAgent(...a), DeleteAgent: (...a: unknown[]) => m.DeleteAgent(...a) }))
 vi.mock('../../services/governance-service', async (orig) => ({ ...(await orig<object>()), addTrust: (...a: unknown[]) => m.addTrust(...a), removeTrust: (...a: unknown[]) => m.removeTrust(...a) }))
 vi.mock('../../services/agents-messaging-service', async (orig) => {
   const actual = await orig<typeof import('../../services/agents-messaging-service')>()
@@ -117,12 +117,13 @@ vi.mock('../../services/agents-core-service', async (orig) => ({
   getAgentSessionStatus: (...a: unknown[]) => m.getAgentSessionStatus(...a),
   linkAgentSession: (...a: unknown[]) => m.linkAgentSession(...a),
   unlinkOrDeleteAgentSession: (...a: unknown[]) => m.unlinkOrDeleteAgentSession(...a),
+  getAgentById: (...a: unknown[]) => m.getAgentById(...a),
 }))
 vi.mock('../../services/agents-chat-service', async (orig) => ({ ...(await orig<object>()), sendChatMessage: (...a: unknown[]) => m.sendChatMessage(...a) }))
 vi.mock('../../services/agents-directory-service', async (orig) => ({ ...(await orig<object>()), syncDirectory: (...a: unknown[]) => m.syncDirectory(...a), normalizeHosts: (...a: unknown[]) => m.normalizeHosts(...a) }))
 vi.mock('../../services/webhooks-service', async (orig) => ({ ...(await orig<object>()), testWebhookById: (...a: unknown[]) => m.testWebhookById(...a) }))
 vi.mock('../../services/domains-service', async (orig) => ({ ...(await orig<object>()), updateDomainById: (...a: unknown[]) => m.updateDomainById(...a), deleteDomainById: (...a: unknown[]) => m.deleteDomainById(...a) }))
-vi.mock('../../services/role-plugin-service', async (orig) => ({ ...(await orig<object>()), createPersona: (...a: unknown[]) => m.createPersona(...a) }))
+vi.mock('../../services/role-plugin-service', async (orig) => ({ ...(await orig<object>()), createPersona: (...a: unknown[]) => m.createPersona(...a), listRolePlugins: (...a: unknown[]) => m.listRolePlugins(...a), deleteRolePlugin: (...a: unknown[]) => m.deleteRolePlugin(...a) }))
 // the revive handler looks up a soft-deleted registry entry by name; read an empty registry, never the real one
 vi.mock('../../lib/agent-registry', async (orig) => ({ ...(await orig<object>()), loadAgents: () => [] }))
 vi.mock('../../services/agents-docker-service', async (orig) => ({ ...(await orig<object>()), createDockerAgent: (...a: unknown[]) => m.createDockerAgent(...a) }))
@@ -552,5 +553,35 @@ describe('TRDD-BZW1QAZ5 — ORDER PIN: every creation-helper entry is reached be
     const out = await run('GET', '/api/agents/creation-helper/raw-materials')
     expect(out.status).toBe(200)
     expect(Object.keys(JSON.parse(text(out)))).toContain('uploadedFiles')
+  })
+})
+
+describe('TRDD-BZW1QAZ5 — ORDER PIN: GET and DELETE /api/agents/role-plugins are reached before the generic /api/agents/:id entries', () => {
+  // `([^/]+)` on the generic GET and DELETE /api/agents/:id entries swallowed the single segment 'role-plugins' (id "role-plugins"), so the
+  // role-plugins list and delete handlers were dead code in the API-only server; moving either back below the generic block turns its case red.
+  // POST /api/agents/role-plugins is not covered: no generic POST /api/agents/:id exists, so nothing shadows it.
+  beforeEach(() => {
+    for (const f of [m.listRolePlugins, m.deleteRolePlugin, m.getAgentById, m.DeleteAgent]) f.mockReset()
+    m.listRolePlugins.mockResolvedValue([])
+    m.deleteRolePlugin.mockResolvedValue(undefined)
+    m.getAgentById.mockReturnValue({ data: { agent: { id: 'role-plugins' } }, status: 200 })
+    m.DeleteAgent.mockResolvedValue({ success: true })
+  })
+  it('GET: the system owner reaches listRolePlugins once and getAgentById is not called', async () => {
+    /** The generic GET /api/agents/:id would answer with the agent "role-plugins" */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('GET', '/api/agents/role-plugins')
+    expect(out.status).toBe(200)
+    expect(m.getAgentById).not.toHaveBeenCalled()
+    expect(m.listRolePlugins).toHaveBeenCalledTimes(1)
+  })
+  it('DELETE: the system owner reaches deleteRolePlugin once and the generic DeleteAgent is not called', async () => {
+    /** The generic DELETE /api/agents/:id would run DeleteAgent("role-plugins") and ignore ?name= */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('DELETE', '/api/agents/role-plugins?name=my-plugin')
+    expect(out.status).toBe(200)
+    expect(m.deleteRolePlugin).toHaveBeenCalledWith('my-plugin')
+    expect(m.DeleteAgent).not.toHaveBeenCalled()
+    expect(m.deleteRolePlugin).toHaveBeenCalledTimes(1)
   })
 })

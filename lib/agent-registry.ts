@@ -286,6 +286,28 @@ export function loadAgents(): Agent[] {
 }
 
 /**
+ * Synchronous STRICT registry read for fail-closed callers (TRDD-8E6XMDEX).
+ * `loadAgents` returns [] for a corrupt/unreadable/non-array registry, so a caller deciding
+ * "is this agent soft-deleted?" saw "no row" and treated a soft-deleted holder as live. This
+ * returns [] ONLY when the file does not exist (first-run host) and THROWS when it exists but
+ * cannot be read, parsed, or is not an array. It reuses `_cachedAgents` only on an unchanged
+ * mtime (the cache is only ever set after a successful array parse), never writes it, and has
+ * no migration: `loadAgents` behaviour is untouched.
+ */
+export function loadAgentsStrict(): Agent[] {
+  if (!fs.existsSync(REGISTRY_FILE)) return []
+  try {
+    const stat = fs.statSync(REGISTRY_FILE)
+    if (_cachedAgents && stat.mtimeMs === _cachedMtimeMs) return _cachedAgents
+    const parsed: unknown = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8'))
+    if (!Array.isArray(parsed)) throw new Error('registry is not a JSON array')
+    return parsed as Agent[]
+  } catch (error) {
+    throw new Error(`agent registry ${REGISTRY_FILE} is unreadable: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/**
  * The LOUD registry read: valid / unreadable / missing, never silently `[]` (TRDD-DQ6XN2VP).
  *
  * `loadAgents` is deliberately LENIENT — its `catch` logs and returns `[]` because "callers expect

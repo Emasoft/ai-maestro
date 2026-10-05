@@ -40,6 +40,7 @@ const mockLoadTeams = vi.fn()
 
 vi.mock('@/lib/agent-registry', () => ({
   loadAgents: (...args: unknown[]) => mockLoadAgents(...args),
+  loadAgentsStrict: (...args: unknown[]) => mockLoadAgents(...args),
   getAgent: (...args: unknown[]) => mockGetAgent(...args),
 }))
 

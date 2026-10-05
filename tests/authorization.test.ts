@@ -107,11 +107,14 @@ vi.mock('@/lib/security-config', () => ({
 // Spies for the registry write path — used to prove a DENIED ChangeTitle
 // call never reaches a mutation. Not used to fake the auth decision itself.
 const mockGetAgent = vi.fn()
+// isSoftDeletedAgent reads the STRICT registry (TRDD-8E6XMDEX); default: a readable, empty registry
+const mockLoadAgentsStrict = vi.fn((): unknown[] => [])
 const mockUpdateAgent = vi.fn()
 vi.mock('@/lib/agent-registry', () => ({
   getAgent: (...args: unknown[]) => mockGetAgent(...args),
   updateAgent: (...args: unknown[]) => mockUpdateAgent(...args),
   loadAgents: () => [],
+  loadAgentsStrict: () => mockLoadAgentsStrict(),
 }))
 
 import { issueGovernanceToken } from '@/lib/aid-token'
@@ -143,6 +146,8 @@ beforeEach(() => {
   fsStubFns.teamsState.json = null
   fsStubFns.teamsState.throws = false
   mockGetAgent.mockReset()
+  mockLoadAgentsStrict.mockReset()
+  mockLoadAgentsStrict.mockImplementation(() => [])
   mockUpdateAgent.mockReset()
 })
 
@@ -212,6 +217,7 @@ describe('TRDD-0IPK36MS — RBAC change-title authorization matrix (real AID Bea
 
   it('a registry read that THROWS for the CALLER\'s own id refuses the credential (fail closed)', () => {
     mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    mockLoadAgentsStrict.mockImplementation(() => { throw new Error('boom') })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))

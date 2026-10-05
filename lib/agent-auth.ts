@@ -21,7 +21,7 @@ import { isSessionSecret, validateSessionSecret } from './session-secret'
 import { verifyCompactIbct } from './ibct'
 import { loadSecurityConfig } from './security-config'
 import { isAidAssociated } from './aid-ledger-authority'
-import { getAgent as getAgentRecord, loadAgents } from './agent-registry'
+import { getAgent as getAgentRecord, loadAgents, loadAgentsStrict } from './agent-registry'
 // Static (not lazy require): a runtime `require('./governance')` does not resolve the .ts
 // under vitest and is not seen by vi.mock, so resolveGovernanceContext always fell into its
 // catch and returned 'autonomous' — untestable. Traced: governance / team-registry /
@@ -515,11 +515,16 @@ function findAgentBySessionSecret(secret: string): { id: string; name: string } 
  * by the revocation gates and signature verification, which must keep seeing the credential.
  * Nothing is revoked, so clearing deletedAt restores validity with no other step. A missing row
  * is not refused here (hard-deleted agents had their credentials revoked by DeleteAgent).
- * An unreadable registry fails closed, like findAgentBySessionSecret.
+ * An unreadable (corrupt / non-array) registry fails closed: loadAgentsStrict throws and the catch
+ * below denies. (Before TRDD-8E6XMDEX the catch was dead because getAgent never throws.)
  */
-function isSoftDeletedAgent(agentId: string): boolean {
+// Exported only so the fail-closed behaviour is testable without minting a bearer credential.
+export function isSoftDeletedAgent(agentId: string): boolean {
   try {
-    return Boolean(getAgentRecord(agentId, true)?.deletedAt)
+    // Strict read, not getAgent/loadAgents: those return [] on a corrupt registry, so this
+    // catch was unreachable and a soft-deleted holder looked live (TRDD-8E6XMDEX). Must stay
+    // strict so an unreadable registry reaches the catch and denies. Same id match as getAgent(id, true).
+    return Boolean(loadAgentsStrict().find(a => a.id === agentId)?.deletedAt)
   } catch (err) {
     console.warn("[agent-auth] soft-delete check failed, denying:", err)
     return true

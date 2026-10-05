@@ -76,6 +76,7 @@ vi.mock('@/lib/agent-registry', () => ({
   // STATIC-import view (assertAidLedgerBacked's getAgent). Reads the same global
   // the runtime .cjs stub reads so both paths see one agent.
   loadAgents: () => [(globalThis as Record<string, unknown>).__SPEND_AGENT],
+  loadAgentsStrict: () => [(globalThis as Record<string, unknown>).__SPEND_AGENT],
   getAgent: () => (globalThis as Record<string, unknown>).__SPEND_AGENT,
 }))
 vi.mock('@/lib/governance', () => ({

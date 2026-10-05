@@ -32,6 +32,7 @@ const ibct = vi.hoisted(() => ({ sub: '' }))
 
 vi.mock('@/lib/agent-registry', () => ({
   loadAgents: () => store.rows,
+  loadAgentsStrict: () => store.rows,
   getAgent: (id: string, includeDeleted = false) => {
     const r = store.rows.find(a => a.id === id) ?? null
     return r && r.deletedAt && !includeDeleted ? null : r

@@ -97,6 +97,7 @@ export function registryMock(store: FakeRegistryStore, registryFile: string) {
     getAgentByName: (name: string) => [...store.values()].find(a => a.name === name) ?? null,
     getAgentBySession: () => null,
     loadAgents: () => [...store.values()],
+    loadAgentsStrict: () => [...store.values()],
     saveAgents: () => undefined,
     createAgent: async () => null,
     updateAgent: async (id: string, patch: Partial<FakeAgent>) => {

@@ -118,6 +118,7 @@ const {
       getAgentBySession: vi.fn(() => null),
       normalizeHostId: vi.fn((h?: string) => (h ?? '').toLowerCase()),
       loadAgents: vi.fn(() => []),
+      loadAgentsStrict: vi.fn(() => []),
       saveAgents: vi.fn(),
       createAgent: vi.fn(),
       updateAgent: vi.fn(async () => undefined),

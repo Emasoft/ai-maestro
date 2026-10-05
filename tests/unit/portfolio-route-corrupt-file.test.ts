@@ -13,6 +13,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { NextRequest } from 'next/server'
+import { signPortfolioToken } from '@/lib/portfolio-sign'
 
 const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-portfolio-route-corrupt-'))
 
@@ -77,7 +78,7 @@ async function expectUnreadable(res: Response): Promise<void> {
   expect(body.error).toBe('portfolio_unreadable')
   expect(body.message).toContain(`${SUBJECT}.json`)
   expect(body.message).toMatch(/unreadable/)
-  expect(body.message).toMatch(/repair or remove/)
+  expect(body.message).toMatch(/Inspect and repair it/)
   // Basename only: no home path, no directory, no file contents.
   expect(raw).not.toContain(TMP_HOME)
   expect(raw).not.toContain(DIR)
@@ -205,5 +206,46 @@ describe('portfolio route controls', () => {
     const res = await route.GET(req('GET'), ctx)
     expect(res.status).toBe(200)
     expect((await res.json()).tokens.map((t: { token_id: string }) => t.token_id)).toEqual([TOKEN_ID])
+  })
+})
+describe('portfolio route: only the store fault is reported as an unreadable file', () => {
+  it('the unreadable message says inspect and repair, names the basename, and does not lead with removal', async () => {
+    writeFile(CORRUPT)
+    const body = await (await route.GET(req('GET'), ctx)).json()
+    expect(body.error).toBe('portfolio_unreadable')
+    expect(body.message).toContain(`${SUBJECT}.json`)
+    expect(body.message).toMatch(/inspect/i)
+    expect(body.message).toMatch(/repair/i)
+    expect(body.message).toMatch(/only if it cannot be repaired/)
+  })
+
+  it('a non-corruption throw from the load over a healthy file is a generic 500 and never advice to remove', async () => {
+    writeFile(HEALTHY)
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const boom = vi.spyOn(fs, 'existsSync').mockImplementationOnce(() => {
+      throw new Error('simulated transient fault')
+    })
+    try {
+      const res = await route.GET(req('GET'), ctx)
+      const raw = await res.text()
+      expect(res.status).toBe(500)
+      expect(JSON.parse(raw).error).not.toBe('portfolio_unreadable')
+      expect(raw).not.toMatch(/remove/i)
+      expect(raw).not.toContain('simulated transient fault')
+    } finally {
+      boom.mockRestore()
+      quiet.mockRestore()
+    }
+  })
+
+  it('POST where the file becomes corrupt between the pre-check and the mint answers portfolio_unreadable', async () => {
+    writeFile(HEALTHY)
+    // signPortfolioToken runs after the pre-check and before issueToken loads the file again.
+    vi.mocked(signPortfolioToken).mockImplementationOnce(() => {
+      writeFile(CORRUPT)
+      store._resetPortfolioCacheForTests()
+      return 'sig'
+    })
+    await expectUnreadable(await route.POST(await postReq(), ctx))
   })
 })

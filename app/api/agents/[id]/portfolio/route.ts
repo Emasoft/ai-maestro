@@ -12,6 +12,7 @@ import {
   setLedgerSeq,
   findActiveTokens,
   loadPortfolio,
+  portfolioStoreFault,
   getTokenById,
   revokeToken,
 } from '@/lib/portfolio-store'
@@ -46,9 +47,11 @@ const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it so
 // answered a bare "Internal server error". (findActiveTokens, by contrast, swallows the same fault
 // into an empty list, so a handler relying on it alone would tell the owner the agent has no tokens.)
 //
-// The load is caught at the read site (tryLoadPortfolio): ONE read, so the answer and the data cannot
-// disagree. The store throws one plain Error type for every fault, so a null here means "unreadable
-// or unsafe id".
+// GET and DELETE load once, at the read site (tryLoadPortfolio), so the answer and the data cannot
+// disagree. POST loads twice (the pre-check, then the mint's own load inside issueToken), so a file
+// corrupted between the two is caught by the same store-fault test wrapped around the mint. The
+// store throws one plain Error type for every fault: a store fault means "unreadable or unsafe id",
+// any other throw propagates to the route's generic 500.
 //
 // An unreadable file is also an ORACLE if disclosed to anyone: a caller that is neither the system
 // owner nor allowed to read the portfolio must get exactly the answer a healthy file would give
@@ -57,10 +60,16 @@ const MAX_MANDATE_TTL_SECONDS = 30 * 24 * 3600 // 30d ceiling (revoke ends it so
 // The URL segment is reflected in the message, so the file name is named only when the id is a plain
 // token (the system owner's id is the literal "system-owner", so UUIDs cannot be required); otherwise
 // the message says "portfolio file" without it.
+
 function tryLoadPortfolio(subjectAgentId: string): PortfolioToken[] | null {
   try {
     return loadPortfolio(subjectAgentId)
-  } catch {
+  } catch (err) {
+    // Only the store's own fault (corrupt/wrong-shape file, unsafe id) means "unreadable". Any other
+    // throw (lock timeout, a bug) must not tell the owner to repair or remove a credential file: it
+    // propagates to the route's generic 500. The fault is re-evaluated ONLY here, so the healthy path
+    // still does one read.
+    if (portfolioStoreFault(subjectAgentId) === null) throw err
     return null
   }
 }
@@ -70,7 +79,7 @@ function portfolioUnreadableResponse(subjectAgentId: string): NextResponse {
   return NextResponse.json(
     {
       error: 'portfolio_unreadable',
-      message: `The portfolio file${named} for this agent is unreadable (corrupt or wrong shape); repair or remove it.`,
+      message: `The portfolio file${named} for this agent is unreadable: it exists but could not be parsed. Inspect and repair it; remove it only if it cannot be repaired (removal discards every token in it).`,
     },
     { status: 500 },
   )
@@ -236,7 +245,13 @@ export async function POST(
     token.issuer_sig = signPortfolioToken(token)
 
     // Persist, then anchor in the host-signed ledger and write back the seq.
-    await issueToken(token)
+    try {
+      await issueToken(token)
+    } catch (err) {
+      // The file went bad between the pre-check and the mint's own read: same answer as the pre-check.
+      if (portfolioStoreFault(subjectAgentId) === null) throw err
+      return portfolioUnreadableResponse(subjectAgentId)
+    }
     const seq = await emitPortfolioOp('issue_portfolio_token', token.token_id, issueDiff(token), {
       action: 'issue-portfolio-token',
       agentId: ctx.agentId ?? null,

@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:07:39+0200
+updated: 2026-10-05T03:11:07+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
+relevant: [TRDD-A50RC5G8]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -40,6 +41,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] A test: an agent demoted from MANAGER cannot use a token minted before the demotion for manage-team
 - [ ] issuer_team_id comes from the registry
 - [ ] Reader inventory repeated with a method that covers dynamic access
+- [ ] lib/portfolio-store.ts exports revokeTokensForSubject(agentId) and NOTHING in lib/ services/ app/ calls it (grep by the orchestrator, 2026-10-05): portfolio tokens issued TO an agent are apparently not revoked when that agent is soft-deleted or leaves its team. Verify by reading the verify path (does a token for a non-live subject still verify?) before fixing
 
 ## Approval log
 

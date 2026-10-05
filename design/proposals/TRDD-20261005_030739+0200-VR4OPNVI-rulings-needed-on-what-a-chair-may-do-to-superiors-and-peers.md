@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:07:39+0200
+updated: 2026-10-05T03:11:07+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -13,6 +13,7 @@ scope: project
 project-id: ai-maestro
 assignee: main-agent@ai-maestro
 approved: false
+relevant: [TRDD-A50RC5G8]
 ---
 
 # Rulings needed on what a chair may do to superiors and peers
@@ -38,6 +39,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 
 - [ ] Each of the 8 questions has a verbatim USER answer recorded
 - [ ] Each answer is implemented or filed under the owning card
+- [ ] REPORT, not a question: per a read-only script (2026-10-05, soft-deleted rows excluded) 2 of the 3 live teams name a chiefOfStaffId with no live agent; none names an orchestrator. Nothing was modified. Three behaviours are LIVE awaiting ratification: questions 1, 2 and 4
 
 ## Approval log
 

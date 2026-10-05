@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:07:39+0200
+updated: 2026-10-05T03:11:06+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
+relevant: [TRDD-A50RC5G8]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -48,6 +49,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [ ] Detector (lint or heartbeat finding) for a team whose chair or orchestrator is not a live agent
 - [ ] DeleteTeam G03 undo traced: can the 404 fire inside a rollback? fixed or proven unreachable
 - [ ] The four other cross-host request types obey R4.1 / R4.7
+- [ ] Cross-host add-to-team and transfer-agent can place an id that is not a live agent into agentIds (per worker table; saveTeams, no validation). The COS grants and the mint guard read agentIds as membership; today each consumer is saved only by its own downstream getAgent check
+- [ ] VERIFIED BY THE ORCHESTRATOR (read at HEAD): lib/governance-request-registry.ts sets request.status = 'executed' inside the approval function when both managers have approved; services/cross-host-governance-service.ts then calls performRequestExecution only if status === 'executed' (two call sites); a comment there already says executed means 'execution was attempted'
 
 ## Approval log
 

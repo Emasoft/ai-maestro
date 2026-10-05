@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:14:39+0200
+updated: 2026-10-05T07:34:28+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca, 42cae0be0, dfabafef8, 8c965ab81, e1b19361f]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca, 42cae0be0, dfabafef8, 8c965ab81, e1b19361f, 1b51538f3]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -95,6 +95,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] CALLER ENUMERATION DONE 2026-10-05 (worker read, counts by grep only, report reports/8e6xmdex/20261005_071400+0200-loadagents-callers-on-corrupt-registry.md): loadAgents returns an empty list for a missing file, for corrupt JSON or any read error (logged), and for valid JSON that is not an array (not logged). Of the security callers read, only isSoftDeletedAgent fails OPEN (its catch is dead; used for governance token, API key and IBCT); the others deny or fall to the lowest title. A strict reader exists (loadAgentsLoud) but is async, so the synchronous auth code cannot use it.
 - [ ] Fix from the enumeration: a synchronous strict reader that throws on an unreadable or non-array registry and still returns empty for a missing file; isSoftDeletedAgent uses it so its fail-closed catch becomes reachable. Dispatched.
 - [ ] DATA LOSS found by the enumeration, separate card to be opened: createAgent and the transfer import read through loadAgents, push one row and save, so one bad read of an existing registry would overwrite it with a one-agent file; the G08 undo in the delete pipeline can write an empty snapshot the same way (inferred).
+- [x] 1b51538f3 closes the strict-reader fix: loadAgentsStrict throws for an existing-but-unreadable, unparsable or non-array registry and returns [] only for a missing file; isSoftDeletedAgent (now exported for testing) decides from it, so its catch is reachable and a corrupt registry refuses the credential. Worker results verified by me only through the whole suite at 1b51538f3 (601 files, 597 passed, 8019 of 8029 tests, the same 8 known failures, tsc 0) and by reading the diff. Worker-reported, not rerun by me: the 8-case temp-root test file, the neuter, the cookie-path test (owner sign-in unaffected), the cost (about 0.005 ms warm, 0.05 ms cold), and that no code in the repo writes a non-array registry.
+- [x] WORDING CORRECTION (review): the caller-enumeration box above reads DONE but counts were by grep and tldr references was not run; it is enumeration by grep, incomplete. No rerun done.
 
 ## Approval log
 

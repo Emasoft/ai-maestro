@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:46:17+0200
+updated: 2026-10-05T04:56:06+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -47,7 +47,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] Cross-host: a refused execution is recorded and returned as failed with its reason; test per refusal
 - [ ] orchestratorId: a new value must be a live agent listed in the team; cross-host covered
 - [x] No caller of createTeam/updateTeam skips the MANAGER check by omitting managerId
-- [ ] Detector (lint or heartbeat finding) for a team whose chair or orchestrator is not a live agent
+- [x] Detector (lint or heartbeat finding) for a team whose chair or orchestrator is not a live agent
 - [ ] DeleteTeam G03 undo traced: can the 404 fire inside a rollback? fixed or proven unreachable
 - [ ] The four other cross-host request types obey R4.1 / R4.7
 - [ ] Cross-host add-to-team and transfer-agent can place an id that is not a live agent into agentIds (per worker table; saveTeams, no validation). The COS grants and the mint guard read agentIds as membership; today each consumer is saved only by its own downstream getAgent check
@@ -63,6 +63,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] LANDED 1878fd0b6: a new orchestrator must be a live agent and not the MANAGER; an omitted managerId is resolved from governance; a same-host transfer from an unknown source team is refused; the 409 says when a refusal could not be recorded. Full suites green on that change alone (545 files / 7450 tests). NOT added: orchestrator-must-be-a-member (create-with-project seats the orchestrator before any member exists, per worker). STILL OPEN: the DeleteTeam undo omits managerId (now covered inside team-registry); detector for grandfathered invalid chairs; executed written before the run; tell the peer on refusal
 - [ ] TRIAGE 2026-10-05 (worker-classified, unread by the orchestrator): 6 met, 3 small, 3 large, 2 stale; same report as A50RC5G8. Do not tick from the triage without reading its evidence
 - [x] 2026-10-05 EVIDENCE for the managerId box: lib/team-registry.ts resolveSlotBarredId is used by both createTeam and updateTeam (read at HEAD), pinned by tests/team-chair-validation.test.ts 'refuses setting the MANAGER as chair with 409 when the caller OMITS managerId'. The orchestratorId box stays open: a new value must be a live agent IS enforced (assertNewSlotHolderIsLiveAgent, two 404 tests), 'listed in the team' is enforced only at the dedicated route, and no cross-host request type touches orchestratorId.
+- [x] 2026-10-05 detector box: b86907f93 (lib/team-slot-liveness.ts wired into the fleet liveness tick, report only, transition-only logging). It will report at first server start on this machine (two stale chair ids), and again on every start.
+- [ ] 2026-10-05 a762cc46c sends the source host a rejection when an execution is refused here — but its EFFECT on the peer is NOT PROVEN. Read at HEAD: the peer's rejectGovernanceRequest does nothing if its copy already reads executed; each host keeps its own copy with its own approvals, and I did not trace which status the source copy holds when the target refuses ('pending until TTL' is the card's earlier claim, untraced). No test drives the receiving side with a realistic record. Also open from that commit: refusal reasons disclose local facts to the peer (reason codes would close it); the target is not told when the refusing host is the source; the peer is told refused even when the local record could not be updated; an unknown source host is skipped with no log line; the targetCOS fallback for the wire id has no test.
 
 ## Approval log
 

@@ -26,7 +26,7 @@ import { getAgent as getAgentRecord, loadAgents } from './agent-registry'
 // under vitest and is not seen by vi.mock, so resolveGovernanceContext always fell into its
 // catch and returned 'autonomous' — untestable. Traced: governance / team-registry /
 // agent-registry have no load-time import path back to agent-auth or authorization (TRDD-8E6XMDEX).
-import { isManager, isChiefOfStaffAnywhere } from './governance'
+import { isManager, isChiefOfStaffAnywhere, isUserAuthorityModelEnabled } from './governance'
 import { loadTeams } from './team-registry'
 import type { UserTitle } from '@/types/user'
 
@@ -380,7 +380,6 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
   let isSystemOwner: boolean
   let modelEnabled = false
   try {
-    const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
     modelEnabled = isUserAuthorityModelEnabled()
   } catch {
     modelEnabled = false

@@ -42,15 +42,6 @@ vi.mock('../../lib/agent-auth', async (orig) => {
     authenticateFromRequest: (r: { headers: { get(n: string): string | null } }) =>
       m.authenticateAgent(r.headers.get('Authorization'), r.headers.get('X-Agent-Id'), r.headers.get('Cookie')),
     // the router's semantic credential gate runs before the handler; let it through so the TWIN answers
-    // lib/sudo-guard calls buildAuthContext, which reads the user-authority flag through a runtime require('./governance')
-    // that cannot see this file's governance mock (the flag silently reads OFF). Apply the model-ON owner rule here as
-    // lib/agent-auth.ts defines it: owner = no agentId AND userTitle in {maestro, maestro-delegate}.
-    buildAuthContext: (a: { agentId?: string; userTitle?: string; error?: string }) => {
-      const c = actual.buildAuthContext(a as never)
-      return m.modelOn() && !a.error
-        ? { ...c, isSystemOwner: !a.agentId && (a.userTitle === 'maestro' || a.userTitle === 'maestro-delegate') }
-        : c
-    },
     authenticateFromRequestAsync: vi.fn(async () => ({ agentId: undefined, error: undefined })),
   }
 })

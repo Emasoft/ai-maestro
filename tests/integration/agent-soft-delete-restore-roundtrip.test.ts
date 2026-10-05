@@ -131,7 +131,8 @@ afterAll(() => {
   fs.rmSync(TMP_HOME, { recursive: true, force: true })
 })
 
-describe('agent soft-delete -> cemetery -> restore round trip (real modules, temp state root)', () => {
+// Ordered steps sharing state: shuffle: false keeps them in source order under --sequence.shuffle (describe.sequential does NOT: measured).
+describe('agent soft-delete -> cemetery -> restore round trip (real modules, temp state root)', { shuffle: false }, () => {
   it('setup: creates an agent with a session secret hash and the temp root receives the registry', async () => {
     const workdir = path.join(TMP_HOME, 'agents', NAME)
     fs.mkdirSync(workdir, { recursive: true })

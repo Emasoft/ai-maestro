@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T04:38:54+0200
+updated: 2026-10-05T04:46:17+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -63,7 +63,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
 - [x] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
 - [x] Agent hard delete and agent folder delete refused in the service; the archive WRITE is reached (the export is mocked in that test, so archive CONTENT is unproven — covered by the un-mocked round-trip box below)
-- [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
+- [x] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
 - [ ] Each guard neutered, red set recorded; headless path exercised
 - [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
 - [ ] USER ANSWER recorded: is a process-level session kill a "hard-kill" reserved to the user, or may MANAGER / own-team CHIEF-OF-STAFF do it?
@@ -72,11 +72,11 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] A new agent taking a soft-deleted agent name adopts the kept folder and its old contents — decide: quarantine the folder, or refuse the name while a tombstone exists
 - [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
-- [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
+- [x] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
 - [x] COS grant bound to the registry: caller must be chiefOfStaffId of a team containing the target; token teamId not consulted; all teams searched (77a02304d)
 - [x] The same team-equality shape (token teamId first, first-match team, no chiefOfStaffId check) decides the COS own-team grant for change-title, failed-TRDD archiving, unblock-prompt and the generic policy tail in lib/authorization.ts (per worker read, ~lines 413/704/824/927) — verify each by reading, then bind to the registry the same way
 - [ ] ChangeTeam does not revoke the moved agent's tokens (per worker read; ChangeTitle does at G14b) — verify, then revoke on team change so a token cannot carry the old teamId for its lifetime
-- [ ] Two PROJECT memory pages still state the old rule 'Only MANAGER can delete agents' (an-unenforced-rule-produces-a-success-not-an-error, team-creation) — correct through memgrep verbs
+- [x] Two PROJECT memory pages still state the old rule 'Only MANAGER can delete agents' (an-unenforced-rule-produces-a-success-not-an-error, team-creation) — correct through memgrep verbs
 - [ ] Landed d7381136e for the box above: change-title, failed-TRDD archive, unblock-prompt and the policy tail are registry-bound. Remaining: the ORCHESTRATOR manage-trdd edit rule keeps the token-first shape (no chiefOfStaffId to bind to) — decide the binding (team.orchestratorId from the registry?)
 - [ ] WHO CAN WRITE team.chiefOfStaffId — the registry binding is only as strong as its writers. Read (grep, not yet read for authorization): app/api/teams/[id]/chief-of-staff/route.ts, its headless twin (services/headless-router.ts ~3039/3093), services/cross-host-governance-service.ts ~515/532 (writes from a request payload). Read as stripping the field: app/api/teams/[id]/route.ts:116 and services/teams-service.ts:691
 - [ ] The caller TITLE in authorize() is token-first (auth.governanceTitle || registry, lib/authorization.ts ~390) — verify ChangeTitle really revokes tokens (worker read: G14b) and that clearing chiefOfStaffId on a title change cannot fail silently (G11 logs a WARN on failure, element-management-service.ts ~3251)
@@ -99,7 +99,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] READ BY THE ORCHESTRATOR (lib/authorization.ts ~358-388): authorize denies a failed authentication, denies a userId-bearing non-maestro user, and allows any context with no agentId — so the plain web session and a maestro / maestro-delegate session both reach the headless password block; a non-owner user gets 403. Headless PUT /api/teams/:id/orchestrator read: agent callers must be the MANAGER or that team chief of staff (registry helpers isManager / isChiefOfStaff)
 - [ ] No test drives the headless chief-of-staff route with the user-authority-model-ON owner shape; the throwing-lookup branch of the title guard and the unreadable-registry branch of the mint guard are untested
 - [ ] Mint guard: a soft-deleted subject still listed in agentIds passes chairsTeamContaining; whether the mint route refuses a non-live subject elsewhere is NOT ESTABLISHED (not seen in app/api/agents/[id]/portfolio/route.ts lines 78-104)
-- [ ] Cross-host assign-cos still seats any id as chair (no live-agent / not-MANAGER check): its handlers write inside the non-reentrant teams lock so they cannot call updateTeam (per worker). Add the two checks inline there. Whether cross-host execution is reachable at all is NOT ESTABLISHED
+- [x] Cross-host assign-cos still seats any id as chair (no live-agent / not-MANAGER check): its handlers write inside the non-reentrant teams lock so they cannot call updateTeam (per worker). Add the two checks inline there. Whether cross-host execution is reachable at all is NOT ESTABLISHED
 - [ ] Grandfathered chairs: the differs-only carve-out keeps an already-seated invalid chair forever and silently — add a detector (or a lint over teams.json) rather than re-validating on every update. A rollback restoring a since-soft-deleted chair now fails 404: trace whether DeleteAgent's own compensation can hit it
 - [ ] Stale references to the deleted lookupTeamIdForAgent: lib/authorization.ts comments (~22, ~479, ~1036) and comments in tests/authorization.test.ts, tests/unit/cos-soft-delete-leaves-archive.test.ts, tests/governance/r8-r10-r26-authorization-team-scope.test.ts, tests/governance/r42-8-unblock-prompt-authority.test.ts. An ORCHESTRATOR may edit a TRDD assigned to its own chief of staff (pre-existing; needs a ruling)
 - [x] LANDED fbcdf7b2e (mint refuses a non-live subject, all caller branches), 5ce4c6a5a (cross-host assign-cos refuses the MANAGER and non-live ids), 529e9ea38 (three deny branches + model-ON owner path tested; stale lookupTeamIdForAgent comments fixed). 541 files / 7304 tests green on the tree as committed
@@ -110,6 +110,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] Filed Emasoft/ai-maestro-janitor issue 331 for four memgrep gaps (a lesson cannot be corrected by its id; no verb for a page description; undocumented stdin contract; repair shrinks descriptions). The repair chore's eight shortened descriptions are committed; verified only desc and lmd changed on those lines; the dropped specifics are NOT restored (owed: add them to keywords). A follow-up comment is owed to separate gap 1 from closed issue 277 and gap 3 from open issue 322
 - [ ] TRIAGE 2026-10-05 (worker-classified, mostly unread by the orchestrator): this card 7 met, 4 small, 1 large, 5 for the user, 1 stale; report reports/triage/20261005_042403+0200-XTDMQO68-A50RC5G8-triage.md. Do not tick a box from the triage without reading its evidence
 - [x] LANDED 4e9fcf807: 'headless hard-delete has no sudo' is closed — a hard delete in headless now needs the sudo token (unavailable there unless the caller already holds one). Open: owner SOFT delete is sudo-free in headless while full mode requires sudo for it (TRDD-VR4OPNVI q18)
+- [x] 2026-10-05 EVIDENCE for four boxes ticked today, each read by the orchestrator at HEAD: (purge user-only) app/api/agents/cemetery/route.ts DELETE has requireSudoToken then the isSystemOwner check, and headless delegates to it (d437e8a54); restore in full mode is sudo + owner, headless restore is owner-only with no sudo — that half is carried by TRDD-VR4OPNVI question 13. (UI label) components/sidebar/TeamListView.tsx text 'Permanently removes each member agent plus its folder' is true for the only caller of that dialog, the dashboard owner; agent callers never see it — no change made. (memory pages) both pages carry correcting lessons, committed earlier today. (cross-host assign-cos) services/cross-host-governance-service.ts refuses the MANAGER and a non-live agent before seating a chair (5ce4c6a5a).
+- [x] 2026-10-05 the headless half of the hard-delete box is landed: 4e9fcf807 forwards a hard DELETE /api/agents/:id to the full-mode handler (sudo), d437e8a54 does the same for cemetery purge. The box itself stays open until its third named surface is identified and checked.
 
 ## Approval log
 

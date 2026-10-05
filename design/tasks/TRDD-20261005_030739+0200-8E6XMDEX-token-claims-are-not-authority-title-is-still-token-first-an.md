@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:44:01+0200
+updated: 2026-10-05T04:47:48+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -70,6 +70,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] IN PROGRESS (uncommitted): the portfolio store reads a corrupt per-agent file as empty — the same defect fixed for the AID store in d9bbf1bb9 — so G06b (66a55c866) would report 0 revoked over a damaged file. Fix dispatched: missing = empty; corrupt = fault for every mutator; read paths refuse the token and log once per cache window; a way for the owner's listing route to tell empty from unreadable (route change is a follow-up). To record when it lands: whether teardown removes the per-agent file on hard delete, and that an agent able to corrupt its own portfolio file can block its own HARD delete (soft delete unaffected)
 - [x] 2026-10-05 LANDED ccd8c10d1: a per-agent portfolio file that exists but is corrupt or wrong-shape is a fault for every mutator; the two authorization read paths honour no token and log once per cache window. Evidence and neuter (9 of 13 red) in the commit message.
 - [ ] OPEN after ccd8c10d1 and d9bbf1bb9: (1) a corrupt AID token store or portfolio file now blocks agent CREATION (G06 calls ChangeTitle, whose G14b fails closed), retitle and hard delete — decide whether G14b may be skipped when the agent has no prior title; (2) no owner-visible alert names the corrupt file, only a log line; (3) the portfolio route answers a bare 500 over a corrupt file — use portfolioStoreFault for a usable message; (4) hard delete does not remove the per-agent portfolio file, so an agent able to write that file can block its own hard delete.
+- [x] 2026-10-05 eabbe65c8: the portfolio route names the unreadable file (item 3 of the open box above). Accepted disclosure stated in the commit message.
+- [ ] DECISION BY THE MAIN AGENT, NOT A USER RULING (overrule in one line): agent creation keeps failing closed when the AID token store is unreadable. Review called this an availability regression (a new agent has nothing to revoke). Kept because (a) tokens are keyed by agent id and issued for any title, and I could not establish that an untitled agent can never hold one, so a skip keyed on 'no prior title' would be a bypass resting on an inference; (b) with that store unreadable, token validation already fails for every agent — the fleet is degraded and the fault should be loud; (c) the standing preference is fail fast, no fallbacks. Cost: a corrupt or lock-busy store blocks create, retitle and hard delete until the file is repaired. To overrule: skip G14b when oldTitle is null. Also from review: tests/integration/createagent-g06-g07-ordering.test.ts now mocks lib/aid-token, so no integration test runs creation against the real module; the mechanism in its comment is the bisect worker's finding.
 
 ## Approval log
 

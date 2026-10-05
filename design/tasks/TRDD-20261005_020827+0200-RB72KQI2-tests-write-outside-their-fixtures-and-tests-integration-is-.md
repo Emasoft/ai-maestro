@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T07:03:21+0200
+updated: 2026-10-05T07:06:26+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -76,6 +76,7 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [x] CONFIRMED 2026-10-05 by reading the four entries (review rightly called the timing-only attribution too weak): seq 21412 to 21415 in the real registry ledger all target /agents/33333333-3333-4333-8333-333333333333/metadata — a test fixture id that is not in the real registry (three remove operations and one replace). So they are test writes, and no real agent row was their target. NOT checked: whether the ledger chain still verifies; the real registry file was modified later than the ledger, by something else.
 - [x] HARM ASSESSED 2026-10-05 (review: the box above supports attribution, not harmlessness). Attribution closed: the fixture id is a literal in tests/unit/metadata-clear-keeps-system-keys.test.ts. Verification: scripts/ledger-replay.mjs --registry agents --verify exits 0, hash chain verified, 5721 entries. Replay: the tool (read-only) tolerates the four entries and reconstructs an empty object for the fixture id; it does not fail. NOT assessed: any consumer other than that script and SignedLedger.verify; the server health endpoint was not called.
 - [ ] The four test entries stay in the signed ledger for good: a signed, chained entry cannot be removed by an agent. Whether to leave them or repair the chain is the owner decision recorded on TRDD-VR4OPNVI.
+- [x] CORRECTION to the HARM ASSESSED box above (review): its wording was too strong. Measured: the ledger file that verified holds seq 15706 to 21428 and contains the four entries, so the result is that the current segment verifies, not the whole history. The replay check proved nothing: an id that never appeared also replays to an empty object. Read as: verification and one replay tool unaffected; a phantom row is not ruled out. Entries after 21415 up to 21428 are all change_client_version on /system/; no further fixture writes after the 403 worker ran. Who writes change_client_version (the server or a test) was not established.
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

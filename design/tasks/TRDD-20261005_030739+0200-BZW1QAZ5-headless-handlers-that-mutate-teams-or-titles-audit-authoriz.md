@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:03:22+0200
+updated: 2026-10-05T07:06:26+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f, b555d389c, c8af19db2, 06814860d]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f, b555d389c, c8af19db2, 06814860d, d8dade818]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -110,6 +110,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] READ 2026-10-05: the 400 for an agent clearing its own metadata IS an authorization refusal. Both modes answer 403 only when the reason text matches forbidden|authoris|authoriz; the real reasons (No agent can modify itself via the AI Maestro API; member cannot modify-agent other agents) do not match, so they fall to 400. Five sites map by that text: app/api/agents/[id]/metadata/route.ts two, services/headless-router.ts three. The parity test pins the wrong code.
 - [ ] Fix the above: the metadata pipeline marks an authorization refusal explicitly, both modes answer 403, and the test asserts the reason text as well as the code.
 - [x] Whole suite at 8367d2b36 (main tree, 2026-10-05): 599 files, 593 passed; 8013 tests, 8001 passed, 10 failed, 2 skipped; tsc 0 lines. Eight failures are the same known ones (createagent-g05c 1, g08 4, g11 2, pillar-cli-e2e 1). Two others were 30 s timeouts and both files pass when run alone (24 of 24): assistant-fs-containment (skips without writing for a non-ASSISTANT agent) and teams-stats-verb. Cause of the timeouts not established. Noted: teams-stats-verb sends a request to the real running server.
+- [x] FIXED in d8dade818: metadata refusals answer 403 in both modes from a denied flag set at the ChangeMetadata authorization gate; the tests assert the reason text. Checked by me: 36 files, 983 tests, tsc 0 lines. The neuter (4 refusal tests go red without the flag) is the worker report, not rerun by me. The worker edited the two test files with a script against the write-tool rule; I read the whole diff. Accepted consequence: a fail-closed refusal such as an unreadable team registry now answers 403.
+- [ ] After d8dade818 two conventions coexist: only ChangeMetadata sets the denied flag. Other Change* pipelines and their routes were not audited for refusals answered with the wrong status.
+- [ ] DEFECT: tests/unit/teams-stats-verb.test.ts sends a request to the real running server (/api/teams/stats) and its outcome depends on that process. It timed out at 30 s in the whole-suite run. A unit test must not depend on or call the production server.
 
 ## Approval log
 

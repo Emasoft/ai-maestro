@@ -258,7 +258,6 @@ const COLLECTION_UNREVIEWED: string[] = [
   // tests/unit/creation-helper-wizard-system-owner.test.ts, whose last case now asserts the
   // OPPOSITE of what it used to — that both siblings DO carry the owner gate.
   'creation-helper/kill/route.ts',
-  'creation-helper/session/route.ts',
   // ── 15 → 11, TRDD-CAVCTULL (2026-08-28) ───────────────────────────────────────────────
   // `directory/sync`, `normalize-hosts`, `role-plugins/sync-defaults` and `startup` are gone
   // because they call `enforceSystemOwner(`, which the regex could not see (see AUTHORIZES).

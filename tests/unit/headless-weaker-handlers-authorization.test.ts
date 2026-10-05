@@ -19,6 +19,8 @@ const m = vi.hoisted(() => {
     'addNewHost', 'updateExistingHost', 'deleteExistingHost', 'setOrganizationName', 'initializeStartup',
     'syncDirectory', 'normalizeHosts', 'testWebhookById', 'updateDomainById', 'deleteDomainById',
     'createPersona', 'createDockerAgent', 'writeFile', 'mkdir', 'sendAgentSessionCommand', 'createSession',
+    'getCreationHelperStatus', 'createCreationHelper', 'deleteCreationHelper', 'captureCreationHelperResponse', 'sendCreationHelperMessage',
+    'getAgentSessionStatus', 'linkAgentSession', 'unlinkOrDeleteAgentSession', 'sendChatMessage',
   ] as const
   type AnyFn = (...a: any[]) => any
   const o = {} as Record<(typeof fns)[number], import('vitest').Mock<AnyFn>>
@@ -107,7 +109,16 @@ vi.mock('../../services/agents-messaging-service', async (orig) => {
 })
 vi.mock('../../services/hosts-service', async (orig) => ({ ...(await orig<object>()), addNewHost: (...a: unknown[]) => m.addNewHost(...a), updateExistingHost: (...a: unknown[]) => m.updateExistingHost(...a), deleteExistingHost: (...a: unknown[]) => m.deleteExistingHost(...a) }))
 vi.mock('../../services/config-service', async (orig) => ({ ...(await orig<object>()), setOrganizationName: (...a: unknown[]) => m.setOrganizationName(...a) }))
-vi.mock('../../services/agents-core-service', async (orig) => ({ ...(await orig<object>()), initializeStartup: (...a: unknown[]) => m.initializeStartup(...a), sendAgentSessionCommand: (...a: unknown[]) => m.sendAgentSessionCommand(...a) }))
+vi.mock('../../services/agents-core-service', async (orig) => ({
+  ...(await orig<object>()),
+  initializeStartup: (...a: unknown[]) => m.initializeStartup(...a),
+  sendAgentSessionCommand: (...a: unknown[]) => m.sendAgentSessionCommand(...a),
+  // the generic per-agent session handlers: spied only to prove the wizard routes are NOT answered by them
+  getAgentSessionStatus: (...a: unknown[]) => m.getAgentSessionStatus(...a),
+  linkAgentSession: (...a: unknown[]) => m.linkAgentSession(...a),
+  unlinkOrDeleteAgentSession: (...a: unknown[]) => m.unlinkOrDeleteAgentSession(...a),
+}))
+vi.mock('../../services/agents-chat-service', async (orig) => ({ ...(await orig<object>()), sendChatMessage: (...a: unknown[]) => m.sendChatMessage(...a) }))
 vi.mock('../../services/agents-directory-service', async (orig) => ({ ...(await orig<object>()), syncDirectory: (...a: unknown[]) => m.syncDirectory(...a), normalizeHosts: (...a: unknown[]) => m.normalizeHosts(...a) }))
 vi.mock('../../services/webhooks-service', async (orig) => ({ ...(await orig<object>()), testWebhookById: (...a: unknown[]) => m.testWebhookById(...a) }))
 vi.mock('../../services/domains-service', async (orig) => ({ ...(await orig<object>()), updateDomainById: (...a: unknown[]) => m.updateDomainById(...a), deleteDomainById: (...a: unknown[]) => m.deleteDomainById(...a) }))
@@ -115,6 +126,14 @@ vi.mock('../../services/role-plugin-service', async (orig) => ({ ...(await orig<
 // the revive handler looks up a soft-deleted registry entry by name; read an empty registry, never the real one
 vi.mock('../../lib/agent-registry', async (orig) => ({ ...(await orig<object>()), loadAgents: () => [] }))
 vi.mock('../../services/agents-docker-service', async (orig) => ({ ...(await orig<object>()), createDockerAgent: (...a: unknown[]) => m.createDockerAgent(...a) }))
+vi.mock('../../services/creation-helper-service', async (orig) => ({
+  ...(await orig<object>()),
+  getCreationHelperStatus: (...a: unknown[]) => m.getCreationHelperStatus(...a),
+  createCreationHelper: (...a: unknown[]) => m.createCreationHelper(...a),
+  deleteCreationHelper: (...a: unknown[]) => m.deleteCreationHelper(...a),
+  captureResponse: (...a: unknown[]) => m.captureCreationHelperResponse(...a),
+  sendMessage: (...a: unknown[]) => m.sendCreationHelperMessage(...a),
+}))
 
 const MANAGER = '11111111-1111-4111-8111-111111111111'
 const MEMBER = '22222222-2222-4222-8222-222222222222'
@@ -435,5 +454,103 @@ describe('TRDD-BZW1QAZ5 W8 — POST auth/login lockdown and rate limit (twin: ap
     const out = await login()
     expect(out.status).toBe(401)
     expect(m.resetRateLimit).not.toHaveBeenCalled()
+  })
+})
+
+describe('TRDD-BZW1QAZ5 — GET agents/creation-helper/raw-materials is system-owner only (twin: enforceSystemOwner)', () => {
+  const URL = '/api/agents/creation-helper/raw-materials'
+  it('a MEMBER agent is refused 403 with the forbidden message, not the state', async () => {
+    /** The defect: the GET authenticated nothing and returned the state file to any caller */
+    m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
+    const out = await run('GET', URL)
+    expect(out.status).toBe(403)
+    expect(JSON.parse(text(out))).toStrictEqual({ error: OWNER_REASON })
+  })
+  it('a MANAGER agent is refused 403', async () => {
+    /** Not even the MANAGER title substitutes for the system owner */
+    m.authenticateAgent.mockReturnValue(MANAGER_AUTH)
+    const out = await run('GET', URL)
+    expect(out.status).toBe(403)
+    expect(JSON.parse(text(out)).error).toBe(OWNER_REASON)
+  })
+  it('a bad credential is refused 401', async () => {
+    /** Authentication failure passes through before the owner check */
+    m.authenticateAgent.mockReturnValue({ error: 'Invalid credential', status: 401 })
+    const out = await run('GET', URL)
+    expect(out.status).toBe(401)
+    expect(JSON.parse(text(out)).error).toBe('Invalid credential')
+  })
+  it('POSITIVE CONTROL — the system owner shape {} receives the state', async () => {
+    /** The gate can say yes; the body is the state object, not an error */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('GET', URL)
+    expect(out.status).toBe(200)
+    expect(Object.keys(JSON.parse(text(out)))).toContain('uploadedFiles')
+  })
+})
+
+describe('TRDD-BZW1QAZ5 — creation-helper session and response handlers are system-owner only (the owner wizard)', () => {
+  const ROWS: Array<{ name: string; method: string; url: string; spy: () => import('vitest').Mock<(...a: never[]) => unknown> }> = [
+    { name: 'GET session', method: 'GET', url: '/api/agents/creation-helper/session', spy: () => m.getCreationHelperStatus },
+    { name: 'POST session', method: 'POST', url: '/api/agents/creation-helper/session', spy: () => m.createCreationHelper },
+    { name: 'DELETE session', method: 'DELETE', url: '/api/agents/creation-helper/session', spy: () => m.deleteCreationHelper },
+    { name: 'GET response', method: 'GET', url: '/api/agents/creation-helper/response', spy: () => m.captureCreationHelperResponse },
+  ]
+  beforeEach(() => {
+    for (const f of [m.getCreationHelperStatus, m.createCreationHelper, m.deleteCreationHelper, m.captureCreationHelperResponse]) {
+      f.mockResolvedValue({ data: { ok: true }, status: 200 })
+    }
+  })
+  for (const r of ROWS) {
+    it(`${r.name}: a MEMBER agent is refused 403 and the service is not called`, async () => {
+      /** An agent must not start, stop, inspect or read the owner's wizard session */
+      m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
+      const out = await run(r.method, r.url)
+      expect(out.status).toBe(403)
+      expect(JSON.parse(text(out)).error).toBe(OWNER_REASON)
+      expect(r.spy()).not.toHaveBeenCalled()
+    })
+    it(`${r.name}: POSITIVE CONTROL — the system owner reaches the service once`, async () => {
+      /** The dashboard calls these with the owner's session */
+      m.authenticateAgent.mockReturnValue(OWNER)
+      const out = await run(r.method, r.url)
+      expect(out.status).toBe(200)
+      expect(r.spy()).toHaveBeenCalledTimes(1)
+    })
+  }
+})
+
+describe('TRDD-BZW1QAZ5 — ORDER PIN: every creation-helper entry is reached before the generic /api/agents/:id entries', () => {
+  // first-wins matching + `([^/]+)` swallowing the segment 'creation-helper' made the wizard session and chat routes
+  // dead code in the API-only server; moving any of them below the generic block makes the matching case here red.
+  const GENERIC = () => [m.getAgentSessionStatus, m.linkAgentSession, m.unlinkOrDeleteAgentSession, m.sendChatMessage]
+  const ROWS: Array<{ name: string; method: string; url: string; body?: unknown; wizard: () => import('vitest').Mock<(...a: never[]) => unknown> }> = [
+    { name: 'GET session', method: 'GET', url: '/api/agents/creation-helper/session', wizard: () => m.getCreationHelperStatus },
+    { name: 'POST session', method: 'POST', url: '/api/agents/creation-helper/session', body: {}, wizard: () => m.createCreationHelper },
+    { name: 'DELETE session', method: 'DELETE', url: '/api/agents/creation-helper/session', wizard: () => m.deleteCreationHelper },
+    { name: 'POST chat', method: 'POST', url: '/api/agents/creation-helper/chat', body: { message: 'hi' }, wizard: () => m.sendCreationHelperMessage },
+    { name: 'GET response', method: 'GET', url: '/api/agents/creation-helper/response', wizard: () => m.captureCreationHelperResponse },
+    { name: 'POST raw-materials', method: 'POST', url: '/api/agents/creation-helper/raw-materials', body: { materials: [] }, wizard: () => m.writeFile },
+  ]
+  beforeEach(() => {
+    for (const f of [m.getCreationHelperStatus, m.createCreationHelper, m.deleteCreationHelper, m.sendCreationHelperMessage, m.captureCreationHelperResponse,
+      m.getAgentSessionStatus, m.linkAgentSession, m.unlinkOrDeleteAgentSession, m.sendChatMessage]) f.mockResolvedValue({ data: { ok: true }, status: 200 })
+  })
+  for (const r of ROWS) {
+    it(`${r.name}: the system owner reaches the WIZARD service once and no generic per-agent service`, async () => {
+      /** The wizard entry must precede the generic :id entry that would swallow it */
+      m.authenticateAgent.mockReturnValue(OWNER)
+      const out = await run(r.method, r.url, r.body)
+      expect(out.status).toBe(200)
+      expect(r.wizard()).toHaveBeenCalledTimes(1)
+      for (const g of GENERIC()) expect(g).not.toHaveBeenCalled()
+    })
+  }
+  it('GET raw-materials: the system owner is answered by the wizard handler, not the generic agent-by-id handler', async () => {
+    /** Body shape of the state file / default state, which the agent-by-id handler never returns */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await run('GET', '/api/agents/creation-helper/raw-materials')
+    expect(out.status).toBe(200)
+    expect(Object.keys(JSON.parse(text(out)))).toContain('uploadedFiles')
   })
 })

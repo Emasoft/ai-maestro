@@ -12,15 +12,14 @@ import {
   deleteCreationHelper,
   getCreationHelperStatus,
 } from '@/services/creation-helper-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const auth = authenticateFromRequest(request)
-  if (auth.error) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-  }
+  // Owner's wizard: its chat and raw-materials are already owner-only, so starting/stopping/probing it is too.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
   try {
     const result = await createCreationHelper()
@@ -38,10 +37,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = authenticateFromRequest(request)
-  if (auth.error) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-  }
+  // Owner's wizard: its chat and raw-materials are already owner-only, so starting/stopping/probing it is too.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
   try {
     const result = await deleteCreationHelper()
@@ -59,10 +57,9 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = authenticateFromRequest(request)
-  if (auth.error) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-  }
+  // Owner's wizard: its chat and raw-materials are already owner-only, so starting/stopping/probing it is too.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
   try {
     const result = await getCreationHelperStatus()

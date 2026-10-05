@@ -1365,6 +1365,38 @@ const routes: Route[] = [
   // Agents — parameterized [id] sub-routes (static sub-paths first)
   // =========================================================================
 
+  // Creation helper session AND chat (owner wizard). TRDD-BZW1QAZ5: these MUST stay above the generic /api/agents/:id/session and
+  // /api/agents/:id/chat entries — first-wins matching lets `([^/]+)` swallow the segment creation-helper, so below them they were never reached.
+  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: the creation helper is the owner's wizard; mirror the owner-only gate of raw-materials / chat.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
+    sendServiceResult(res, await getCreationHelperStatus())
+  }},
+  { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: the creation helper is the owner's wizard; mirror the owner-only gate of raw-materials / chat.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
+    sendServiceResult(res, await createCreationHelper())
+  }},
+  { method: 'DELETE', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: the creation helper is the owner's wizard; mirror the owner-only gate of raw-materials / chat.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
+    sendServiceResult(res, await deleteCreationHelper())
+  }},
+  { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/chat$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-MAJ-09 fix (2026-05-06): authenticate before driving the
+    // creation-helper Claude session (which runs with --permission-mode acceptEdits).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const body = await readJsonBody(req)
+    sendServiceResult(res, await sendCreationHelperMessage(body?.message || '', buildAuthContext(auth)))
+  }},
+
   // Session
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, await getAgentSessionStatus(params.id))
@@ -3728,24 +3760,11 @@ const routes: Route[] = [
   // =========================================================================
   // Creation Helper (Haephestos)
   // =========================================================================
-  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await getCreationHelperStatus())
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await createCreationHelper())
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/creation-helper\/session$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await deleteCreationHelper())
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/chat$/, paramNames: [], handler: async (req, res) => {
-    // SVC2-MAJ-09 fix (2026-05-06): authenticate before driving the
-    // creation-helper Claude session (which runs with --permission-mode acceptEdits).
+  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/response$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: the creation helper is the owner's wizard; mirror the owner-only gate of raw-materials / chat.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await sendCreationHelperMessage(body?.message || '', buildAuthContext(auth)))
-  }},
-  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/response$/, paramNames: [], handler: async (_req, res) => {
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     sendServiceResult(res, await captureCreationHelperResponse())
   }},
   { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/raw-materials$/, paramNames: [], handler: async (req, res) => {
@@ -3772,7 +3791,11 @@ const routes: Route[] = [
       sendJson(res, 200, { ok: true })
     } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
-  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/raw-materials$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/raw-materials$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/creation-helper/raw-materials/route.ts GET (enforceSystemOwner), same as the POST above.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     const { readFile } = await import('fs/promises')
     const { join } = await import('path')
     const { homedir } = await import('os')

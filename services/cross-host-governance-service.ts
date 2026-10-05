@@ -470,17 +470,24 @@ type ExecutionOutcome = { executed: true } | { executed: false; reason: string }
 // performRequestExecution's catch, which re-recorded with the recording error as the reason (hiding the
 // original one) and could throw out of the function. A failed or no-op record (null: unknown id or not
 // 'executed') is logged and the request may stay 'executed' on disk -- that is reported, never silent.
-async function recordExecutionRefusal(requestId: string, reason: string): Promise<void> {
+async function recordExecutionRefusal(requestId: string, reason: string): Promise<boolean> {
   try {
     const marked = await markExecutionRefused(requestId, reason)
     if (!marked) {
       console.error(`${LOG_PREFIX} Could not record execution refusal for request ${requestId}: request not found or not in 'executed' status (refusal: ${reason})`)
     }
+    return !!marked
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Failed to record execution refusal for request ${requestId}: ${msg} (refusal: ${reason})`)
+    return false
   }
 }
+
+// Appended to the refusal reason the requester receives when the refusal could not be recorded: the stored
+// request may still read 'executed' although nothing was written, and the requester must not be left to
+// assume the record agrees with the 409.
+const REFUSAL_NOT_RECORDED_NOTE = '; the stored request could not be updated and may still read executed'
 
 async function performRequestExecution(request: GovernanceRequest): Promise<ExecutionOutcome> {
   console.log(`${LOG_PREFIX} Executing request ${request.id} (type=${request.type})`)
@@ -581,8 +588,13 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
           const toTeam = request.payload.toTeamId ? teams.find(t => t.id === request.payload.toTeamId) : null
 
           // TRDD-XTDMQO68: without a destination the agent would be removed from the source and added
-          // nowhere. A missing source team is NOT refused: on a cross-host transfer the source team may
-          // live on the peer host, so "nothing to remove here" is a legitimate no-op.
+          // nowhere. A missing source team is a legitimate no-op ONLY on a cross-host transfer (the source
+          // team may live on the peer host). When sourceHostId === targetHostId both teams are on this host,
+          // so a given-but-unknown fromTeamId is a typo: proceeding would leave the agent in its real team
+          // AND add it to the destination, breaking single-team membership past validateTeamMutation.
+          if (request.payload.fromTeamId && !fromTeam && request.sourceHostId === request.targetHostId) {
+            return refuse(`Cannot execute transfer-agent: source team '${request.payload.fromTeamId}' not found`)
+          }
           if (!request.payload.toTeamId) {
             return refuse(`Cannot execute transfer-agent: no destination team (toTeamId) in the request`)
           }
@@ -637,8 +649,8 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
 
     if (!outcome.executed) {
       // The 'teams' lock is released here, so taking 'governance-requests' respects the lock order.
-      await recordExecutionRefusal(request.id, outcome.reason)
-      return outcome
+      const recorded = await recordExecutionRefusal(request.id, outcome.reason)
+      return recorded ? outcome : { executed: false, reason: outcome.reason + REFUSAL_NOT_RECORDED_NOTE }
     }
 
     // Broadcast the governance state change to all peers (only for an operation that really happened)
@@ -650,8 +662,8 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Failed to execute request ${request.id}: ${msg}`)
     // A throw is a failed execution just like a refusal: same terminal status, same reported outcome.
-    await recordExecutionRefusal(request.id, msg)
-    return { executed: false, reason: msg }
+    const recorded = await recordExecutionRefusal(request.id, msg)
+    return { executed: false, reason: recorded ? msg : msg + REFUSAL_NOT_RECORDED_NOTE }
   }
 }
 

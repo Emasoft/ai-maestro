@@ -46,19 +46,33 @@ export function sanitizeTeamName(raw: string): string {
 }
 
 /**
- * Refuse a NEW chair that no live agent holds. Kept out of the pure validateTeamMutation because
- * team-registry must not statically depend on agent-registry (import cycle / large graph), so the
+ * Refuse a NEW chair or orchestrator that no live agent holds. Kept out of the pure validateTeamMutation
+ * because team-registry must not statically depend on agent-registry (import cycle / large graph), so the
  * lookup is a dynamic import done by createTeam/updateTeam inside the teams lock.
- * Why: team.chiefOfStaffId is the trust anchor for every COS grant (TRDD-A50RC5G8); an id no agent
- * holds, or a soft-deleted one, must never become it. `getAgent` excludes soft-deleted agents.
- * An unchanged chair (or null) is never re-validated.
+ * Why: team.chiefOfStaffId and team.orchestratorId are trust anchors for authorization grants
+ * (lib/authorization.ts cosSupervision / orchestratorOverAssignee, TRDD-A50RC5G8); an id no agent
+ * holds, or a soft-deleted one, must never become one. `getAgent` excludes soft-deleted agents.
+ * An unchanged holder (or null) is never re-validated.
  */
-async function assertNewChairIsLiveAgent(newChairId: string | null | undefined, currentChairId: string | null | undefined): Promise<void> {
-  if (!newChairId || newChairId === (currentChairId ?? null)) return
+async function assertNewSlotHolderIsLiveAgent(newId: string | null | undefined, currentId: string | null | undefined, label: string): Promise<void> {
+  if (!newId || newId === (currentId ?? null)) return
   const { getAgent } = await import('@/lib/agent-registry')
-  if (!getAgent(newChairId)) {
-    throw new TeamValidationException('Chief-of-Staff agent not found', 404)
+  if (!getAgent(newId)) {
+    throw new TeamValidationException(`${label} agent not found`, 404)
   }
+}
+
+/**
+ * The MANAGER id the chair/orchestrator bar must use. An explicit value (including null = "no manager")
+ * is the caller's statement and wins; an OMITTED one is resolved from governance, so a caller that
+ * forgets managerId (the DeleteTeam undo does) cannot skip the check. Lazy: governance is only read when
+ * a slot is actually being set. governance imports team-registry, hence the dynamic import.
+ */
+async function resolveSlotBarredId(managerId: string | null | undefined, data: { chiefOfStaffId?: string | null; orchestratorId?: string | null }): Promise<string | null> {
+  if (managerId !== undefined) return managerId
+  if (!data.chiefOfStaffId && !data.orchestratorId) return null
+  const { getManagerId } = await import('@/lib/governance')
+  return getManagerId()
 }
 
 /**
@@ -95,7 +109,11 @@ export function validateTeamMutation(
     orchestratorId?: string | null
   },
   managerId: string | null,
-  reservedNames?: string[]
+  reservedNames?: string[],
+  // The id barred from the chair/orchestrator slots. Separate from managerId because managerId also
+  // drives the single-team-membership exemption below, which must not change for callers that omitted it
+  // (createTeam/updateTeam resolve the barred id from governance when the caller omitted managerId).
+  slotBarredId: string | null = managerId
 ): { valid: true; sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[]; orchestratorId?: string | null } } | { valid: false; error: string; code: number } {
   const sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[]; orchestratorId?: string | null } = {}
 
@@ -151,8 +169,15 @@ export function validateTeamMutation(
   // lib/authorization.ts (TRDD-A50RC5G8); a MANAGER seated there would hold team-scoped COS grants.
   // Only a NEW, DIFFERENT chair is checked — never re-validate an unchanged chair, or every
   // unrelated update of a team with a stale chair would start failing.
-  if (data.chiefOfStaffId && data.chiefOfStaffId !== (existingTeam?.chiefOfStaffId ?? null) && data.chiefOfStaffId === managerId) {
+  if (data.chiefOfStaffId && data.chiefOfStaffId !== (existingTeam?.chiefOfStaffId ?? null) && data.chiefOfStaffId === slotBarredId) {
     return { valid: false, error: 'The MANAGER cannot be a team\'s Chief-of-Staff', code: 409 }
+  }
+
+  // --- MANAGER cannot be an Orchestrator (same reasoning: R4.3 + R3.1, MANAGER is in no team) ---
+  // team.orchestratorId grants kanban-write / orchestratorOverAssignee in lib/authorization.ts.
+  // Only a NEW, DIFFERENT orchestrator is checked; null and an unchanged value are never re-validated.
+  if (data.orchestratorId && data.orchestratorId !== (existingTeam?.orchestratorId ?? null) && data.orchestratorId === slotBarredId) {
+    return { valid: false, error: 'The MANAGER cannot be a team\'s Orchestrator', code: 409 }
   }
 
   // --- COS Already-Assigned-Elsewhere Check (G3, v2 Rule 7) ---
@@ -334,11 +359,12 @@ export async function createTeam(
     const teams = loadTeams()
 
     // Validate all business rules before creation (name, single-team membership, COS)
-    const result = validateTeamMutation(teams, null, data, managerId ?? null, reservedNames)
+    // Why resolveSlotBarredId: an omitted managerId used to silently skip the MANAGER-as-chair bar.
+    const result = validateTeamMutation(teams, null, data, managerId ?? null, reservedNames, await resolveSlotBarredId(managerId, data))
     if (!result.valid) {
       throw new TeamValidationException(result.error, result.code)
     }
-    await assertNewChairIsLiveAgent(data.chiefOfStaffId, null)
+    await assertNewSlotHolderIsLiveAgent(data.chiefOfStaffId, null, 'Chief-of-Staff')
 
     const now = new Date().toISOString()
     const newTeam: Team = {
@@ -389,11 +415,13 @@ export async function updateTeam(
     // govFields. Otherwise it would be raw-spread via `...updates` below, bypassing
     // validateTeamMutation entirely (the exact bug the proposal flags).
     const govFields = { name: updates.name, type: updates.type, chiefOfStaffId: updates.chiefOfStaffId, agentIds: updates.agentIds, orchestratorId: updates.orchestratorId }
-    const result = validateTeamMutation(teams, id, govFields, managerId ?? null, reservedNames)
+    // Why resolveSlotBarredId: an omitted managerId used to silently skip the MANAGER-as-chair bar.
+    const result = validateTeamMutation(teams, id, govFields, managerId ?? null, reservedNames, await resolveSlotBarredId(managerId, govFields))
     if (!result.valid) {
       throw new TeamValidationException(result.error, result.code)
     }
-    await assertNewChairIsLiveAgent(updates.chiefOfStaffId, teams[index].chiefOfStaffId)
+    await assertNewSlotHolderIsLiveAgent(updates.chiefOfStaffId, teams[index].chiefOfStaffId, 'Chief-of-Staff')
+    await assertNewSlotHolderIsLiveAgent(updates.orchestratorId, teams[index].orchestratorId, 'Orchestrator')
 
     // Apply sanitized corrections (e.g., trimmed name, COS auto-added to agentIds)
     // Force type to 'closed' — all teams are closed after governance simplification

@@ -879,8 +879,10 @@ describe('performRequestExecution (via approve flow)', () => {
       payload: GovernanceRequest['payload'],
       teams: ReturnType<typeof baseTeam>[],
       liveAgent: unknown = null,
+      requestOverrides: Partial<GovernanceRequest> = {},
     ) {
       const stored: GovernanceRequest = makeGovernanceRequest({
+        ...requestOverrides,
         type,
         status: 'executed',
         payload,
@@ -1055,8 +1057,59 @@ describe('performRequestExecution (via approve flow)', () => {
       )
     })
 
+    it('same-host transfer-agent refuses an unknown fromTeamId and leaves both teams unchanged', async () => {
+      /** sourceHostId === targetHostId: a mistyped source would leave the agent in its real team AND add it to the destination */
+      const real = baseTeam({ id: 'team-real', agentIds: ['agent-g1'] })
+      const dest = baseTeam({ id: 'team-dest', agentIds: [] })
+      expectRefused(
+        await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-typo', toTeamId: 'team-dest' }, [real, dest], null,
+          { sourceHostId: 'host-local', targetHostId: 'host-local' }),
+        "Cannot execute transfer-agent: source team 'team-typo' not found",
+      )
+      expect(real.agentIds).toEqual(['agent-g1'])
+      expect(dest.agentIds).toEqual([])
+    })
+
+    it('same-host transfer-agent positive control: a valid source and destination are both updated', async () => {
+      /** Proves the same-host refusal above is caused by the unknown source, not by the same-host request shape */
+      const src = baseTeam({ id: 'team-src', agentIds: ['agent-g1'] })
+      const dest = baseTeam({ id: 'team-dest', agentIds: [] })
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest], null,
+        { sourceHostId: 'host-local', targetHostId: 'host-local' })
+      expect(out.result.status).toBe(200)
+      expect(src.agentIds).toEqual([])
+      expect(dest.agentIds).toEqual(['agent-g1'])
+    })
+
+    it('a refusal that could not be recorded tells the requester the stored request may still read executed', async () => {
+      /** markExecutionRefused returns null (request not found / not executed): the 409 text must carry the extra clause */
+      mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
+      mockApproveGovernanceRequest.mockResolvedValue(makeGovernanceRequest({
+        type: 'add-to-team',
+        status: 'executed',
+        payload: { agentId: 'agent-x', teamId: 'team-missing' },
+        approvals: { sourceManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' } } as any,
+      }))
+      mockMarkExecutionRefused.mockResolvedValue(null)
+      mockLoadTeams.mockReturnValue([baseTeam()])
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+
+      expect(result.status).toBe(409)
+      expect(result.error).toContain("Cannot execute add-to-team: team 'team-missing' not found; the stored request could not be updated and may still read executed")
+    })
+
+    it('a refusal that WAS recorded does not carry the not-recorded clause', async () => {
+      /** control for the clause above */
+      const out = await runExec('add-to-team', { agentId: 'agent-x', teamId: 'team-missing' }, [baseTeam()])
+      expect(out.result.status).toBe(409)
+      expect(out.result.error).not.toContain('could not be updated')
+    })
+
     it('transfer-agent with an unknown source team still adds the agent to the destination', async () => {
-      /** Left as-is deliberately: the source team may live on the peer host, so a missing source is a no-op, not a refusal */
+      /** Left as-is deliberately for a CROSS-host request (default fixture: host-local -> host-remote): the source team may live on the peer host, so a missing source is a no-op, not a refusal */
       const dest = baseTeam({ id: 'team-dest', agentIds: [] })
       const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-elsewhere', toTeamId: 'team-dest' }, [dest])
       expect(out.result.status).toBe(200)

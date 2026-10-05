@@ -130,3 +130,32 @@ describe('createTeam/updateTeam chair must be a live agent', () => {
     expect(updated?.chiefOfStaffId).toBeNull()
   })
 })
+
+describe('MANAGER-as-chair check cannot be skipped by omitting managerId', () => {
+  const GOVERNANCE_FILE = statePath('governance.json')
+  function seedGovernance(managerId: string | null) {
+    fsStore[GOVERNANCE_FILE] = JSON.stringify({
+      version: 1, passwordHash: null, passwordSetAt: null, managerId,
+      userAuthorityModelEnabled: false, maestroUserId: null, maestroDelegateUserId: null, userName: 'tester',
+    })
+  }
+
+  it('refuses setting the MANAGER as chair with 409 when the caller OMITS managerId', async () => {
+    /** managerId is resolved from governance when not passed, so the DeleteTeam-undo style call cannot skip the bar */
+    seedGovernance(MANAGER)
+    seedAgents([{ id: MANAGER, name: 'mgr' }])
+    seedTeams([makeTeam()])
+    await expect(updateTeam('team-1', { chiefOfStaffId: MANAGER }))
+      .rejects.toMatchObject({ message: "The MANAGER cannot be a team's Chief-of-Staff", code: 409 })
+    expect(loadTeams()[0].chiefOfStaffId).toBeUndefined()
+  })
+
+  it('accepts an agent as chair with an explicit null managerId when governance holds no manager', async () => {
+    /** explicit null means "there is no manager": nothing is barred */
+    seedGovernance(null)
+    seedAgents([{ id: MANAGER, name: 'mgr' }])
+    seedTeams([makeTeam()])
+    const updated = await updateTeam('team-1', { chiefOfStaffId: MANAGER }, null)
+    expect(updated?.chiefOfStaffId).toBe(MANAGER)
+  })
+})

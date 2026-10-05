@@ -5533,6 +5533,8 @@ export interface ChangeResult {
    *  from a legitimately absent file or key. `handleDeleteMarketplace` reads this to answer 409
    *  instead of the designed silent-absence partial success. Not set on any other failure. */
   errorKind?: 'unreadable-target'
+  /** Set when gate 0 refused the caller; routes map it to 403 instead of inferring a refusal from the error text (TRDD-BZW1QAZ5). */
+  denied?: boolean
   /** The gate id that failed, forwarded from `GateFailure.failedGateId` alongside `errorKind`. */
   failedGateId?: string
   /** Set when the pipeline deliberately did NOT act, and carries the reason.
@@ -7876,7 +7878,8 @@ export async function ChangeMetadata(
       return result
     }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
-    if (g0err) { result.error = g0err; return result }
+    // TRDD-BZW1QAZ5: flag the refusal so routes answer 403 without regex-matching the reason text
+    if (g0err) { result.error = g0err; result.denied = true; return result }
 
     // ── G01: Shape validation ─────────────────────────────────
     if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {

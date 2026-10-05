@@ -124,12 +124,12 @@ describe('TRDD-BZW1QAZ5 — PATCH agents/:id/metadata (twin: authenticate, then 
     expect(m.changeMetadata).not.toHaveBeenCalled()
   })
   it('an authenticated MEMBER writing ANOTHER agent: the real ChangeMetadata gate 0 refuses it and no metadata is written', async () => {
-    /** Authentication is not authorization; the refusal is the real modify-agent decision, not a stub. 400, not 403: the twin's status mapping only recognises forbidden/authoris(z)e in the reason, and this reason has neither, so full mode answers 400 too */
+    /** Authentication is not authorization; the refusal is the real modify-agent decision, not a stub. 403 via the ChangeMetadata `denied` flag (TRDD-BZW1QAZ5), not via the reason text, which matches no keyword */
     m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
     const actual = await vi.importActual<typeof import('../../services/element-management-service')>('../../services/element-management-service')
     m.changeMetadata.mockImplementation((...a: unknown[]) => (actual.ChangeMetadata as (...x: unknown[]) => unknown)(...a))
     const out = await run('PATCH', META, { k: 1 })
-    expect(out.status).toBe(400)
+    expect(out.status).toBe(403)
     expect(String(out.json.error)).toMatch(/cannot modify-agent/)
     expect(m.changeMetadata).toHaveBeenCalledTimes(1)
   })
@@ -163,12 +163,13 @@ describe('TRDD-BZW1QAZ5 — PATCH agents/:id/metadata (twin: authenticate, then 
   })
   it.each([
     ['Agent x not found', 404],
-    ['forbidden thing', 403],
+    ['denied by gate 0', 403],
     ['Metadata exceeds maximum size (64KB)', 400],
   ])('ChangeMetadata failure "%s" maps to %i as the twin maps it', async (error, status) => {
     /** The twin's error -> status mapping */
     m.authenticateAgent.mockReturnValue(OWNER)
-    m.changeMetadata.mockResolvedValue({ success: false, error, operations: [] })
+    // TRDD-BZW1QAZ5: 403 follows the `denied` flag, not the wording
+    m.changeMetadata.mockResolvedValue({ success: false, error, operations: [], ...(status === 403 ? { denied: true } : {}) })
     const out = await run('PATCH', META, { k: 1 })
     expect(out.status).toBe(status)
     expect(out.json.error).toBe(error)
@@ -240,20 +241,20 @@ describe('TRDD-BZW1QAZ5 — DELETE agents/:id/metadata (authenticate + the twin 
     expect(out.json.error).toBe('Invalid token')
     expect(m.changeMetadata).not.toHaveBeenCalled()
   })
-  it('an authenticated MEMBER clearing ANOTHER agent: refused and nothing is cleared (400, as the twin: its status map does not know this reason)', async () => {
-    /** Authentication is not authorization. The reason text ("cannot modify-agent") has neither forbidden nor authoris(z)e, so the twin mapping, copied verbatim, gives 400 not 403; asserted as it actually happens */
+  it('an authenticated MEMBER clearing ANOTHER agent: refused (403) and nothing is cleared', async () => {
+    /** Authentication is not authorization. TRDD-BZW1QAZ5: the pre-check refuses with 403 whatever the wording of the reason */
     m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
     const out = await run('DELETE', META)
-    expect(out.status).toBe(400)
+    expect(out.status).toBe(403)
     expect(String(out.json.error)).toMatch(/cannot modify-agent/)
     expect(m.changeMetadata).not.toHaveBeenCalled()
   })
-  it('the agent itself clearing its OWN metadata is refused (400) and nothing is cleared', async () => {
-    /** The twin's rule, not mine: authorize() denies an agent reconfiguring itself ("No agent can modify itself via the AI Maestro API"); that reason has no forbidden/authoris(z)e, so the verbatim twin mapping gives 400 */
+  it('the agent itself clearing its OWN metadata is refused (403) and nothing is cleared', async () => {
+    /** The twin's rule, not mine: authorize() denies an agent reconfiguring itself ("No agent can modify itself via the AI Maestro API"); TRDD-BZW1QAZ5: a refusal is 403 whatever its wording */
     m.authenticateAgent.mockReturnValue({ agentId: TARGET, governanceTitle: 'member' })
     const out = await run('DELETE', META)
-    expect(out.status).toBe(400)
-    expect(String(out.json.error)).toMatch(/cannot modify itself|modify itself/)
+    expect(out.status).toBe(403)
+    expect(String(out.json.error)).toMatch(/No agent can modify itself/)
     expect(m.changeMetadata).not.toHaveBeenCalled()
   })
   it('a MANAGER clears the metadata', async () => {
@@ -278,11 +279,12 @@ describe('TRDD-BZW1QAZ5 — DELETE agents/:id/metadata (authenticate + the twin 
     expect(String(out.json.error)).toMatch(/not authorized to modify-agent/)
     expect(m.changeMetadata).not.toHaveBeenCalled()
   })
-  it('a ChangeMetadata failure is mapped like the twin: "not found" 404, an authorization reason 403, anything else 400, with the service text', async () => {
+  it('a ChangeMetadata failure is mapped like the twin: "not found" 404, a denied (gate 0) failure 403, anything else 400, with the service text', async () => {
     /** The handler's status map is the PATCH sibling's and the twin route's; ChangeMetadata is the double here, so each reason is injected */
     m.authenticateAgent.mockReturnValue(OWNER)
     for (const [error, status] of [['Agent x not found', 404], ['not authorized to modify-agent', 403], ['Metadata must be a plain object', 400]] as const) {
-      m.changeMetadata.mockResolvedValueOnce({ success: false, operations: [], error })
+      // the 403 comes from the `denied` flag (TRDD-BZW1QAZ5), so inject it exactly as ChangeMetadata gate 0 sets it
+      m.changeMetadata.mockResolvedValueOnce({ success: false, operations: [], error, ...(status === 403 ? { denied: true } : {}) })
       const out = await run('DELETE', META)
       expect(out.status).toBe(status)
       expect(out.json.error).toBe(error)

@@ -53,6 +53,9 @@ const TARGET = '33333333-3333-4333-8333-333333333333'
 const HASH = 'fake-hash-structural-fixture'
 const SYS_AUTH = { isSystemOwner: true } as const
 
+/** error text of the last response, so a refusal test pins the REASON and not just the status (TRDD-BZW1QAZ5) */
+let lastError = ''
+
 function seed(metadata: Record<string, unknown>) {
   m.agent.v = { id: TARGET, name: 'target', workingDirectory: '/tmp/x', metadata: JSON.parse(JSON.stringify(metadata)) }
 }
@@ -80,6 +83,7 @@ async function headless(method: string, id = TARGET, body?: unknown) {
   const { createHeadlessRouter } = await import('../../services/headless-router')
   const d = drive(method, `/api/agents/${id}/metadata`, body)
   await createHeadlessRouter().handle(d.req, d.res)
+  lastError = d.out.body ? String(JSON.parse(String(d.out.body)).error ?? '') : ''
   return d.out.status
 }
 const headlessClear = () => headless('DELETE')
@@ -93,6 +97,7 @@ async function fullRoute(method: 'DELETE' | 'PATCH', id = TARGET, body?: unknown
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   const res = await route[method](req, { params: Promise.resolve({ id }) })
+  lastError = String(((await res.clone().json().catch(() => ({}))) as { error?: string }).error ?? '')
   return res.status
 }
 
@@ -167,20 +172,22 @@ describe('TRDD-BZW1QAZ5 — merge mode still nulls an EXPLICITLY named system ke
 describe('TRDD-BZW1QAZ5 — PARITY: the same caller gets the same status from the full-mode route and the API-only DELETE', () => {
   // authorize() decides identically on both sides (the handler keeps its modify-agent lines; ChangeMetadata gate 0 repeats them with
   // the same context fields, so it never refuses what the handler admitted); the handler maps success:false like the route.
-  const CLASSES: Array<[string, Record<string, unknown>, number]> = [
+  const CLASSES: Array<[string, Record<string, unknown>, number, RegExp?]> = [
     ['system owner', {}, 200],
-    ['an agent clearing ITS OWN metadata', { agentId: TARGET, governanceTitle: 'member' }, 400],
+    ['an agent clearing ITS OWN metadata', { agentId: TARGET, governanceTitle: 'member' }, 403, /No agent can modify itself/],
     ['a MANAGER clearing another agent', { agentId: MANAGER_ID, governanceTitle: 'manager' }, 200],
-    ['an ordinary agent clearing another agent', { agentId: MEMBER_ID, governanceTitle: 'member' }, 400],
+    ['an ordinary agent clearing another agent', { agentId: MEMBER_ID, governanceTitle: 'member' }, 403, /cannot modify-agent other agents/],
   ]
-  for (const [name, auth, status] of CLASSES) {
+  for (const [name, auth, status, reason] of CLASSES) {
     it(`${name}: both modes answer ${status}, and a refusal clears nothing`, async () => {
       seed(WITH_SYSTEM)
       m.authenticateAgent.mockReturnValue(auth)
       const full = await fullRoute('DELETE')
+      const fullError = lastError
       const afterFull = JSON.stringify(m.agent.v!.metadata)
       seed(WITH_SYSTEM)
       const headlessStatus = await headlessClear()
+      if (reason) { expect(fullError).toMatch(reason); expect(lastError).toMatch(reason) }
       expect(full).toBe(status)
       expect(headlessStatus).toBe(full)
       if (status === 200) expect(afterFull).toBe(JSON.stringify({ sessionSecretHash: HASH, amp: { fingerprint: 'fp' } }))

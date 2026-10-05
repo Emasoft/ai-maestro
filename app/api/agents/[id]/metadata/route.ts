@@ -59,8 +59,9 @@ export async function PATCH(
 
     const result = await ChangeMetadata(agentId, metadata, buildAuthContext(auth), { mode: 'merge' })
     if (!result.success) {
+      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
       const status = /not found/i.test(result.error || '') ? 404
-        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : result.denied ? 403
         : 400
       return NextResponse.json({ error: result.error || 'Failed to update metadata' }, { status })
     }
@@ -95,8 +96,9 @@ export async function DELETE(
 
     const result = await ChangeMetadata(agentId, {}, buildAuthContext(auth), { mode: 'clear' })
     if (!result.success) {
+      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
       const status = /not found/i.test(result.error || '') ? 404
-        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : result.denied ? 403
         : 400
       return NextResponse.json({ error: result.error || 'Failed to clear metadata' }, { status })
     }

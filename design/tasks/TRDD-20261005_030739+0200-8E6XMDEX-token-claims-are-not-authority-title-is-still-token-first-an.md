@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:12:22+0200
+updated: 2026-10-05T04:15:19+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -59,6 +59,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] NEXT (dispatched): lib/aid-token.ts must tell a missing token file (empty) from an unreadable or corrupt one (fault) so the revocation gate cannot report 'nothing to revoke' over a corrupt store, and must not overwrite a corrupt file
 - [ ] NOT CHECKED: a still-running session of a soft-deleted agent now gets 401 from its own hooks/teardown calls. Needs a live soft delete of a running test agent and a read of the server log; no unit test shows it. Also untested: partial revocation before a throw
 - [ ] IN VERIFICATION (uncommitted): portfolio tokens dormant while the holder's registry row is soft-deleted (lib/portfolio-store.ts). Caller-level test skipped by the worker (needs signer + ledger)
+- [x] LANDED 40ca151fd: portfolio tokens held by a soft-deleted agent are dormant (containment; a holder with no local row is unchanged). Orchestrator's own neuter on the worktree copy (guard removed): tests (b) soft-deleted and (c) restored-after-rollback red, (a) live and (d) no-row green. ERRATUM: that commit's message says this neuter 'is recorded on the card' — it was not until this line; the second commit message in a row to point at a record not yet written. RULE ADOPTED: a commit message states its evidence itself and never points at a record that does not exist yet. WEAKNESS: (c) dies on its first assertion under the neuter, so its restore half is unpinned — split it. No caller-level test
+- [ ] IN PROGRESS (uncommitted): lib/aid-token.ts — a store that exists but is unreadable/corrupt/wrong-shape is a fault, a missing one is empty. Worker returned before the amendments reached it and was resumed for: every reader listed with what a throw becomes; a corrupt store must REJECT a presented token (never 500, never accept); owner and session-secret paths must not read the store; boot/timer readers must not crash; fresh-install test. DISCLOSED: the worker applied its neuter with a python one-off on the project file and restored it byte-exact (rule breach; told not to repeat)
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:15:19+0200
+updated: 2026-10-05T04:15:40+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -61,6 +61,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] IN VERIFICATION (uncommitted): portfolio tokens dormant while the holder's registry row is soft-deleted (lib/portfolio-store.ts). Caller-level test skipped by the worker (needs signer + ledger)
 - [x] LANDED 40ca151fd: portfolio tokens held by a soft-deleted agent are dormant (containment; a holder with no local row is unchanged). Orchestrator's own neuter on the worktree copy (guard removed): tests (b) soft-deleted and (c) restored-after-rollback red, (a) live and (d) no-row green. ERRATUM: that commit's message says this neuter 'is recorded on the card' — it was not until this line; the second commit message in a row to point at a record not yet written. RULE ADOPTED: a commit message states its evidence itself and never points at a record that does not exist yet. WEAKNESS: (c) dies on its first assertion under the neuter, so its restore half is unpinned — split it. No caller-level test
 - [ ] IN PROGRESS (uncommitted): lib/aid-token.ts — a store that exists but is unreadable/corrupt/wrong-shape is a fault, a missing one is empty. Worker returned before the amendments reached it and was resumed for: every reader listed with what a throw becomes; a corrupt store must REJECT a presented token (never 500, never accept); owner and session-secret paths must not read the store; boot/timer readers must not crash; fresh-install test. DISCLOSED: the worker applied its neuter with a python one-off on the project file and restored it byte-exact (rule breach; told not to repeat)
+- [ ] REVOCATION ON A COMPLETED DELETE IS STILL UNMET (review of 40ca151fd): the dormancy guard covers only a holder whose row exists and is soft-deleted. A hard delete — and a REVIVE, which removes the old soft-deleted row and imports under a new id — leaves the old id with no row, where the guard's 'no row → unchanged' makes its stored tokens count as active again. Whether anything can still present them is unread (the old id has no row to authenticate as). Fix dispatched: the delete pipeline revokes the tokens the agent HOLDS, with a compensation that restores exactly those on rollback
+- [ ] NOT PROVEN by the portfolio test (it doubles the whole registry): that the real registry and the real store load together and that callers pass an agent ID (the guard looks up by id only). Add one test with the REAL lib/agent-registry against a temp state dir. Call sites to read: lib/portfolio-check.ts, lib/sudo-guard.ts, the portfolio route
 
 ## Approval log
 

@@ -388,6 +388,31 @@ export async function revokeTokensFromIssuer(issuerId: string): Promise<number> 
   return (await revokeTokensFromIssuerCompensable(issuerId)).count
 }
 
+
+/**
+ * Revoke every active token HELD BY a subject (its own portfolio file), returning a handle that can
+ * undo it — the twin of `revokeTokensForSubject`, which has no undo. DeleteAgent G06b needs the undo
+ * so a rolled-back delete gives the agent back exactly the grants it had (TRDD-8E6XMDEX). The handle
+ * is the same shape as the issuer sweep's and restores through the same private `restoreIssuerTokens`,
+ * because both only flip `active → revoked` and so both undo by `(subjectId, token_id)`.
+ */
+export async function revokeTokensForSubjectCompensable(agentId: string): Promise<PortfolioIssuerRevocation> {
+  const flipped: Array<{ subjectId: string; tokenId: string }> = []
+  await withLock('portfolios', () => {
+    let touched = false
+    const next = loadPortfolio(agentId).map(t => {
+      if (t.status === 'active') {
+        flipped.push({ subjectId: agentId, tokenId: t.token_id })
+        touched = true
+        return { ...t, status: 'revoked' as const }
+      }
+      return t
+    })
+    if (touched) savePortfolio(agentId, next)
+  })
+  return { count: flipped.length, restore: () => restoreIssuerTokens(flipped) }
+}
+
 /**
  * Revoke every active mandate scoped to a team (R5 COS-immutability cascade:
  * a deleted team's mandates die). Matches either `target_team_id` or

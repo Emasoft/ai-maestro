@@ -9384,6 +9384,8 @@ export async function DeleteAgent(
       persistedBefore: unknown | null
       keyRevocation: { count: number; restore: () => Promise<number> } | null
       tokenRevocation: { count: number; restore: () => Promise<number> } | null
+      /** G06b (TRDD-8E6XMDEX): portfolio tokens HELD BY this agent — `restore()` flips back exactly those revoked. */
+      portfolioRevocation: { count: number; restore: () => Promise<number> } | null
       requestsBefore: unknown | null
       groupsBefore: unknown[] | null
       registryBefore: unknown[] | null
@@ -9408,6 +9410,7 @@ export async function DeleteAgent(
       persistedBefore: null,
       keyRevocation: null,
       tokenRevocation: null,
+      portfolioRevocation: null,
       requestsBefore: null,
       groupsBefore: null,
       registryBefore: null,
@@ -9745,6 +9748,38 @@ export async function DeleteAgent(
           await c.keyRevocation?.restore()
           c.tokenRevocation = null
           c.keyRevocation = null
+        },
+      },
+      {
+        id: 'G06b',
+        what: 'Revoked portfolio tokens HELD BY this agent',
+        run: async (c: DeleteCtx) => {
+          // WHY (TRDD-8E6XMDEX): a portfolio token issued TO this agent (subject_agent_id) was never
+          // revoked on delete — `revokeTokensForSubject` had no caller. After a HARD delete the old id
+          // has no registry row, so the tokens stored under it would count as active again (commit
+          // 40ca151fd made them dormant only while the holder's row exists soft-deleted).
+          // SOFT delete deliberately does NOTHING here: the tokens are already unusable while the row is
+          // soft-deleted (40ca151fd), the user can resurrect a soft-deleted agent, and whether a
+          // resurrected agent keeps its tokens is an open user question that code must not foreclose.
+          // Fail closed like ChangeTitle G14b (49f411162): a swallowed fault would leave live grants
+          // on a deleted agent while the pipeline reports success; throwing makes the runner roll the
+          // whole delete back. Compensable variant so `undo` restores exactly the tokens revoked here.
+          if (!hard) {
+            ops.push('G06b: soft delete — held portfolio tokens left dormant (TRDD-8E6XMDEX)')
+            return
+          }
+          try {
+            const { revokeTokensForSubjectCompensable } = await import('@/lib/portfolio-store')
+            c.portfolioRevocation = await revokeTokensForSubjectCompensable(agentId)
+            ops.push(`G06b: ${c.portfolioRevocation.count} portfolio token(s) held by this agent revoked`)
+          } catch (err) {
+            throw new Error(`G06b: portfolio token revocation failed — ${err instanceof Error ? err.message : String(err)}`)
+          }
+        },
+        // Nothing recorded ⇒ the import or the revocation threw before anything was flipped.
+        undo: async (c: DeleteCtx) => {
+          await c.portfolioRevocation?.restore()
+          c.portfolioRevocation = null
         },
       },
       {

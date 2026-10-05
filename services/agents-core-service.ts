@@ -1563,6 +1563,18 @@ export async function sendAgentSessionCommand(
     if (!authContext) {
       return { error: 'Auth context required for sendAgentSessionCommand', status: 401 }
     }
+    // The authorization action must NEVER be chosen by the caller (R42; TRDD-BZW1QAZ5, W2).
+    // The TS union is compile-time only and the headless PATCH /api/agents/:id/session handler
+    // passes the raw JSON body as params, so `{"authAction":"view-agent"}` reached authorize()
+    // as a weaker action that MANAGER / own-team COS are granted, skipped the unblock-prompt
+    // precondition, and typed the text into another agent's pane. Validate at runtime, here in
+    // the service, so every transport is covered; never coerce an unknown value to a default.
+    if (authAction !== 'send-command' && authAction !== 'unblock-prompt') {
+      return {
+        error: `Invalid authAction ${JSON.stringify(authAction) ?? String(authAction)} — must be 'send-command' or 'unblock-prompt'`,
+        status: 400,
+      }
+    }
     if (!authContext.isSystemOwner) {
       const { authorize } = await import('@/lib/authorization')
       const authResult: import('@/lib/agent-auth').AgentAuthResult = {

@@ -196,6 +196,9 @@ describe('TRDD-0IPK36MS — RBAC change-title authorization matrix (real AID Bea
     const req = requestWith({ Authorization: `Bearer ${memberToken}` })
     const auth = authenticateFromRequest(req)
     const authContext = buildAuthContext(auth)
+    // Authenticating the caller reads the caller's OWN row (soft-delete check); forget that call so the
+    // assertion below sees only what the pipeline itself touches.
+    mockGetAgent.mockClear()
 
     const result = await ChangeTitle('member-a2', 'member', { authContext })
 
@@ -205,6 +208,16 @@ describe('TRDD-0IPK36MS — RBAC change-title authorization matrix (real AID Bea
     // updateAgent write — the target agent record is provably untouched.
     expect(mockGetAgent).not.toHaveBeenCalled()
     expect(mockUpdateAgent).not.toHaveBeenCalled()
+  })
+
+  it('a registry read that THROWS for the CALLER\'s own id refuses the credential (fail closed)', () => {
+    mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+      expect(auth.error).toMatch(/Invalid or expired governance token/)
+      expect(auth.agentId).toBeUndefined()
+    } finally { spy.mockRestore() }
   })
 
   it('no Bearer token but X-Agent-Id present (identity spoofing shape) -> 401, per lib/agent-auth.ts', () => {
@@ -883,7 +896,8 @@ describe('TRDD-A50RC5G8 — delete-agent: CHIEF-OF-STAFF over its own team', () 
     })
   })
   it('COS deleting an own-team target whose registry read throws is denied', () => {
-    mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    // Throw only for the TARGET so the caller still authenticates (its own row is read at authentication).
+    mockGetAgent.mockImplementation((id: string) => { if (id === 'member-a2') throw new Error('boom'); return { id, governanceTitle: 'member' } })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       expect(authorize(mk(cosAToken), 'delete-agent', 'member-a2')).toEqual({
@@ -1095,7 +1109,8 @@ describe('TRDD-A50RC5G8 — change-title: a CHIEF-OF-STAFF may not retitle a MAN
   })
   it('a target whose registry read THROWS is DENIED with the exact reason and the error is logged', () => {
     /** Fail closed: an unreadable target record must not be treated as a harmless untitled agent */
-    mockGetAgent.mockImplementation(() => { throw new Error('boom') })
+    // Throw only for the TARGET so the caller still authenticates (its own row is read at authentication).
+    mockGetAgent.mockImplementation((id: string) => { if (id === 'tgt') throw new Error('boom'); return { id, governanceTitle: 'member' } })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       expect(run()).toEqual({ allowed: false, reason: 'Chief-of-Staff cannot change the title of an agent whose record could not be read (TRDD-A50RC5G8)' })

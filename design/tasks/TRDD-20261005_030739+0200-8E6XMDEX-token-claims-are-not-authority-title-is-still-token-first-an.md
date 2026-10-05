@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:25:39+0200
+updated: 2026-10-05T03:38:38+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -48,6 +48,9 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] Soft-deleted agent: its session secret hash stays in the registry row and findAgentBySessionSecret iterates rows including deleted ones, so the secret still authenticates that id with title autonomous (per worker read, not executed). DeleteAgent revokes AMP keys and governance tokens only
 - [ ] Portfolio tokens: the verifier never checks the SUBJECT is live or still in the issuer's team; revokeTokensForSubject and revokeMandatesForTeam have no production caller. Blast radius today is small because the list of operations requiring a token is empty (per worker). revokeTokensForSubject has no compensable twin, so a DeleteAgent gate cannot use it as is
 - [ ] Make a failed G14b revocation fail the title change instead of logging a WARN (the gate already declares an undo)
+- [x] LANDED eadc2c9ff: the live resolver (and the session-secret lookup) load governance / agent-registry / team-registry through static imports; a new test pins the live path. Full suites green on that change alone (543 files / 7339 tests). No caller's authorization changes. NOT VERIFIED: the production Next bundle (no build run); under tsx with a throwaway home the orchestrator called authenticateAgent three ways and got the expected 401s
+- [ ] HELD FOR THE USER (see TRDD-VR4OPNVI question 10): take a governance token's title and team from the live resolver. Measured 2026-10-05 on live data (read-only script): 10 live agents, all registry title autonomous, no manager pointer set — the change would alter nothing for any live agent today. Risk that holds it back (per worker read): if the teams file is unreadable the resolver returns autonomous for EVERY caller including the real manager, with only a warning. The five tests for the change are tracked at tests/unit/aid-token-title-is-resolved-live.test.ts.parked (the runner does not collect that name); tests_dev/…parked2 is the same content and tests_dev/…parked is the stale earlier copy
+- [ ] Still unloadable under vitest in lib/agent-auth.ts: the lazy requires for the user-authority-model check and user-registry — so the owner-versus-non-owner-user branch cannot be tested through this file (a headless test had to simulate it in a wrapper). Add a test for the fault path (teams unreadable → every caller autonomous)
 
 ## Approval log
 

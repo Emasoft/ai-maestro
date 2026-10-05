@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:25:37+0200
+updated: 2026-10-05T03:38:36+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,6 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -44,6 +45,12 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] W2 PATCH /api/agents/:id/session: the authorization ACTION is read from the request body, so a MANAGER/COS can pick a weaker action and type into another agent's terminal — the act R42 revokes. Fix in services/agents-core-service.ts (a second worker)
 - [ ] CROSS-CUTTING, not being fixed in this round: headless handlers skip the write-block / lockdown / kill-switch checks that full-mode route guards run first; headless has no sudo layer, so a stolen owner session cookie suffices for strict operations; several hand-built contexts read 'no agent id' as system owner and several services rebuild the auth result without the user id (re-opening the non-owner-user hole when the user-authority model is on); 23 handlers are authentication-only in BOTH modes
 - [ ] The ledger test asserts only that an authentication call is present; add a test that fails when a mutating handler authenticates without authorizing
+- [x] LANDED e5988b911: 30 weaker headless handlers now authorize like their full-mode twins (config/deploy, agent creation routes, cemetery download, import, governance trust, hosts, organization, startup, directory sync, normalize-hosts, webhook test, domains, raw materials, AMP and email addresses, messages, login limits, and the session handler no longer forwarding the request body). Full suites green on that change alone (544 files / 7434 tests). LANDED 90b7ef8f5: the service refuses any authAction but the two real ones
+- [ ] CORRECTION: the 'AUDIT DONE' box above is ticked on a worker's count that the orchestrator did not reproduce (150 mutating handlers, all classified). The orchestrator read the report's coverage statement and findings W1-W9, re-ran one neuter, and ran the full suites; it opened no handler to confirm a row. Commit 90b7ef8f5's title ('cannot be chosen by the caller') overstated: after it the caller could still pick between two actions through headless; e5988b911 is what removed the choice
+- [ ] NOT PURE TIGHTENING in e5988b911: config/deploy now ALLOWS the human owner (it used to require an agent id; the twin allows the owner); owner-only checks via buildAuthContext().isSystemOwner also refuse a signed-in non-owner user, stricter than the twin for cemetery download and import
+- [ ] REMAINING after e5988b911: GET /api/agents/cemetery is unreachable in headless (shadowed by the :id route registered before it — move it above); agent metadata PATCH/DELETE, POST agents/:id/transfer and the skills routes need a service change; cemetery revive/purge use the hand-rolled owner test; headless skips write-block / lockdown / kill-switch and has no sudo layer; in headless the server's own startup calls to normalize-hosts and directory/sync send no credential and already fail (per worker)
+- [ ] Session command, both modes: under unblock-prompt a MANAGER or own-team chair may type ARBITRARY text into another agent while a prompt is pending (full mode: the prompt/answer route; headless has no such route after e5988b911). Unread: how the pending-prompt record is cleared (a stale record would keep the window open) and whether the pane-content check can be satisfied by printed text. Small fixes owed: truncate the echoed authAction value, log the refusal, add a requireIdle:false test
+- [ ] The 23 handlers that are authentication-only in BOTH modes are not a headless defect — they need a card that owns the full-mode routes
 
 ## Approval log
 

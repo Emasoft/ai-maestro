@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:25:39+0200
+updated: 2026-10-05T03:38:40+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -42,6 +42,9 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] REPORT, not a question: per a read-only script (2026-10-05, soft-deleted rows excluded) 2 of the 3 live teams name a chiefOfStaffId with no live agent; none names an orchestrator. Nothing was modified. Three behaviours are LIVE awaiting ratification: questions 1, 2 and 4
 - [ ] CORRECTION to the REPORT box above: the parenthetical 'soft-deleted rows excluded' was false for the chair finding. Re-measured 2026-10-05 with one script that distinguishes the cases: 12 registry rows, 10 live; team 'Test Kanban Team' has no chair and no members; teams 'scen003-test-wizard-team' and 'scen8-noplugin-team' have a chair and ALL members (3 and 2) ABSENT from the registry altogether. Nothing was modified
 - [ ] QUESTION 9 (audit trail): an execution that was refused or failed after both managers approved is now stored as status rejected with reason 'Execution refused: …' and no rejector. That mixes machine failures with manager decisions in the governance record. Keep, or add a distinct failed status?
+- [ ] QUESTION 10: should a governance token's title and team be read LIVE at authentication (as session secrets already are) instead of trusted as stamped for up to an hour? Not applied. It closes the demoted-MANAGER-keeps-authority window; it also means an unreadable teams file demotes every caller to autonomous until it is readable again
+- [ ] QUESTION 11 (R42): answering a pending prompt lets a MANAGER or a team chair type arbitrary text into another agent. Is the exception meant to cover free text, or only the prompt's own options?
+- [ ] REPORT: this host currently has NO manager pointer set and all 10 live agents carry no governance title (read-only script, 2026-10-05)
 
 ## Approval log
 

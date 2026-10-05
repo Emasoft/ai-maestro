@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:25:38+0200
+updated: 2026-10-05T03:38:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -58,6 +58,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [ ] COMMIT MAP: the cross-host refusal fix is INSIDE commit 0f00a70c0, which is titled as a docs commit (a git lock collision swept the staged code into it). Its intended message is recorded verbatim in the body of commit 896822204. Search for the fix by file, not by subject
 - [x] LANDED 8f34f9cc2: markExecutionRefused acts only on an executed request; recording a refusal never throws and never replaces the original reason; transfer-agent refuses a missing destination. JUDGEMENT left in: a missing SOURCE team is not refused (may live on the peer host). Full suites NOT yet run on that tree by the orchestrator (other workers mid-edit) — owed
 - [ ] Tell the peer: on an execution refusal the source host's copy stays pending until TTL and is never told. An existing rejection notification may be reusable without a protocol change (to verify)
+- [x] The full-suite run owed for 8f34f9cc2 is done: the committed tree including it was green (542 files / 7335 tests, tsc 0 lines) before the next change was restored
+- [ ] READ BY THE ORCHESTRATOR: in transfer-agent both refusals precede any mutation and there is one saveTeams at the end, so a refused transfer writes nothing. OPEN: a missing source team is a no-op even on a SAME-host transfer, where a mistyped source id leaves the agent in its real team and adds it to the destination (breaks single-team membership through a path that bypasses validateTeamMutation) — refuse a missing source when the source host is this host. OPEN: if recording a refusal fails, the stored request still reads executed; say so in the 409 body
 
 ## Approval log
 

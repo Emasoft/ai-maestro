@@ -1,0 +1,125 @@
+/**
+ * TRDD-8E6XMDEX — an `aim_tk_` governance token proves IDENTITY only; the title and
+ * team are resolved LIVE (as for `mst_` secrets), never read from the mint-time stamp.
+ *
+ * Real tokens are minted through lib/aid-token.ts (token store served in memory, so
+ * nothing touches the real ~/.aimaestro). The live sources agent-auth consults —
+ * governance pointer, team store, registry — are mocked DATA SOURCES (agent-auth
+ * imports them statically, so vi.mock intercepts them); the guard under test,
+ * authenticateFromRequest + authorize, is real. Live state is changed WITHOUT revoking
+ * the token — what a failed ChangeTitle gate G14b leaves behind.
+ *
+ * The 4th test is NOT "authentication fails when the resolver throws": resolveGovernanceContext
+ * never throws (its catch returns least privilege). Unreadable governance state therefore
+ * yields title 'autonomous' with no team, and manage-team is denied.
+ */
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
+
+const live = vi.hoisted(() => ({
+  managerId: null as string | null,
+  teams: [] as Array<{ id: string; agentIds: string[]; chiefOfStaffId: string | null; orchestratorId: string | null }>,
+  titles: new Map<string, string>(),
+  govThrows: false,
+}))
+
+const tokenFs = vi.hoisted(() => {
+  const realFs = require('fs') as typeof import('fs')
+  const isTokens = (p: unknown) => typeof p === 'string' && p.includes('governance-tokens')
+  return {
+    ...realFs,
+    existsSync: (p: unknown) => (isTokens(p) ? false : realFs.existsSync(p as never)),
+    mkdirSync: (p: unknown, o?: unknown) => (isTokens(p) ? undefined : realFs.mkdirSync(p as never, o as never)),
+    readFileSync: (p: unknown, e?: unknown) => (isTokens(p) ? '[]' : realFs.readFileSync(p as never, e as never)),
+    writeFileSync: (p: unknown, d?: unknown, o?: unknown) =>
+      isTokens(p) ? undefined : realFs.writeFileSync(p as never, d as never, o as never),
+    renameSync: (p: unknown, q: unknown) => (isTokens(p) ? undefined : realFs.renameSync(p as never, q as never)),
+  }
+})
+vi.mock('fs', () => ({ default: tokenFs, ...tokenFs }))
+
+vi.mock('@/lib/security-config', () => ({
+  loadSecurityConfig: () => ({
+    ledger: { enforceAidAssociation: false },
+    sessionAuth: { sudoTokenTtlSeconds: 60, sessionTtlDays: 7 },
+  }),
+}))
+
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: (id: string) => (live.titles.has(id) ? { id, governanceTitle: live.titles.get(id) } : null),
+  loadAgents: () => [],
+}))
+
+vi.mock('@/lib/governance', () => ({
+  isManager: (id: string) => {
+    if (live.govThrows) throw new Error('EIO: simulated governance read failure')
+    return live.managerId === id
+  },
+  isChiefOfStaffAnywhere: (id: string) => live.teams.some((t) => t.chiefOfStaffId === id),
+}))
+
+vi.mock('@/lib/team-registry', () => ({
+  loadTeams: () => live.teams,
+}))
+
+import { issueGovernanceToken } from '@/lib/aid-token'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
+
+const req = (token: string) =>
+  new NextRequest('http://localhost:23000/api/teams', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+
+let managerToken: string
+let memberToken: string
+let teamAToken: string
+
+beforeAll(async () => {
+  managerToken = (await issueGovernanceToken('agent-m', 'agent-m', 'manager', null)).access_token
+  memberToken = (await issueGovernanceToken('agent-p', 'agent-p', 'member', null)).access_token
+  teamAToken = (await issueGovernanceToken('agent-t', 'agent-t', 'member', 'team-a')).access_token
+})
+
+beforeEach(() => {
+  live.managerId = null
+  live.teams = []
+  live.titles.clear()
+  live.govThrows = false
+})
+
+describe('TRDD-8E6XMDEX — aim_tk_ title and team are resolved live', () => {
+  it('demoted manager (token not revoked) gets the NEW title and is DENIED manage-team', () => {
+    live.titles.set('agent-m', 'member') // live: managerId pointer is null, registry says member
+    const auth = authenticateFromRequest(req(managerToken))
+    expect(auth.error).toBeUndefined()
+    expect(auth.governanceTitle).toBe('member')
+    expect(authorize(auth, 'manage-team').allowed).toBe(false)
+  })
+
+  it('member promoted live gets the new title (token is identity only)', () => {
+    live.managerId = 'agent-p'
+    const auth = authenticateFromRequest(req(memberToken))
+    expect(auth.governanceTitle).toBe('manager')
+  })
+
+  it('team comes from live state, not the mint-time stamp', () => {
+    live.titles.set('agent-t', 'member')
+    live.teams = [{ id: 'team-b', agentIds: ['agent-t'], chiefOfStaffId: null, orchestratorId: null }] // minted with team-a
+    const auth = authenticateFromRequest(req(teamAToken))
+    expect(auth.teamId).toBe('team-b')
+  })
+
+  it('unreadable live governance state resolves to least privilege, never the stamped title', () => {
+    live.govThrows = true
+    const auth = authenticateFromRequest(req(managerToken))
+    expect(auth.error).toBeUndefined()
+    expect(auth.governanceTitle).toBe('autonomous')
+    expect(authorize(auth, 'manage-team').allowed).toBe(false)
+  })
+
+  it('positive control: unchanged live state yields the minted title', () => {
+    live.managerId = 'agent-m'
+    const auth = authenticateFromRequest(req(managerToken))
+    expect(auth.governanceTitle).toBe('manager')
+    expect(authorize(auth, 'manage-team').allowed).toBe(true)
+  })
+})

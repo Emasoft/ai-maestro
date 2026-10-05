@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:53:59+0200
+updated: 2026-10-05T03:57:43+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -48,6 +48,8 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] 12 (DECIDE) fastedit cannot edit route-table entries in services/headless-router.ts or top-level imports. May workers use the line-level Edit tool for exactly those two shapes? Until answered, six shadowed headless routes and one test-fidelity fix stay undone (safe: the routes are unreachable)
 - [ ] 13 (DECIDE) Headless mode has no sudo layer. Cemetery purge (permanent) is now reachable there by the owner without sudo, like hard-delete. Your ruling says hard-kill needs a sudo confirmation: should headless REFUSE purge and hard-delete outright until it has one?
 - [ ] 14 (DECIDE) When you resurrect a soft-deleted agent, does it get back the portfolio tokens it held and its old session secret, or come back without them? In progress as an interpretation: tokens stay revoked
+- [x] 13 REWORDED (review): your ruling already says hard-kill needs sudo. Being fixed now without waiting: headless cemetery purge and revive will go through the full-mode handler, which requires sudo. Open part only: does permanently purging a cemetery archive count as hard-kill? I am treating it as yes
+- [x] 12 CORRECTION (review): the note 'safe: the routes are unreachable' was unverified when written; measured since only against today's registry (no agent carries either name). The question stands for removing dead table entries and for import lines
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:00:48+0200
+updated: 2026-10-05T05:03:01+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -79,6 +79,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 GATE ORDER READ BY THE ORCHESTRATOR for the creation skip: CreateAgent's sequence is G03, G04 (createAgent, the only assignment of c.agent), G05, G06, G07, G07b, G07c; the tmux session is created at G09, after the sequence. So no session exists at G06 or G07b and the flag is safe at all three ChangeTitle sites. Also from review of c1fdf417c, dispatched: its message says 'repair or remove it' on ANY throw from the load (a transient fault would get destructive advice), and its claim 'read once at each site' is false for POST, which pre-loads and then mints.
 - [x] 2026-10-05 LANDED 0cea6c6a7: agent creation no longer reaches the token store (option agentCreatedInThisRun, three CreateAgent sites only). This closes item (1) of the consequences box for CREATION; retitle and hard delete still fail closed on an unreadable store, by design. Open: the option is caller-asserted (a future caller could misuse it); the G07b site has no test of its own; no integration test drives a retitle against the real token store. RB72KQI2's line calling the 8162ae19e mock the fix is superseded: the mock is removed.
 - [x] 2026-10-05 READS that back or correct 0cea6c6a7 (review asked): (1) the token route requires an Ed25519 proof verified against the agent's registered key pair; CreateAgent generates a new agent's key pair at G10, which runs AFTER the gate sequence (runGateSequence) and after G09 session creation. So at G06/G07b the new id has neither session nor key — the stronger ground for 'no token can exist'. Not read: whether the route can mint a key on demand, and the ledger-recovery branch. (2) G14e (portfolio issuer revocation) runs only when the OLD title was manager or chief-of-staff, so it is skipped on creation and creation does not reach the portfolio store there. (3) G04's undo removes the new agent with the registry's deleteAgent, not the DeleteAgent pipeline, so a failed creation's rollback does not pass through the strict token or portfolio stores at that gate; the undos of later gates were not traced. (4) My 'gate order' evidence was a list of gate ids by line plus the position of the runner call (before G09/G10 in the text) — textual order, not a trace; G07's body (ChangeTeam) was not read for a wake. (5) Unpinned by any test: the flag at the requested-title G06 site and at G07b.
+- [x] 2026-10-05 KEY ADDRESSING READ (closes the review's name-reuse doubt on 0cea6c6a7): lib/amp-keys.ts stores a key pair under the state dir keyed by AGENT ID (getKeysDir(agentId)); the token route loads loadKeyPair(agent.id) and refuses when there is none; G10 saves under agent.id. A freshly minted uuid therefore has no key until G10, and a new agent adopting a soft-deleted agent's FOLDER by name does not inherit its keys (they live under the old id). The G10 'already has keypair' branch can only fire for an id that already has a keys directory. The flag stays at all three sites.
+- [x] 2026-10-05 169e7834f: the route calls a file unreadable only on the store's own fault, the advice no longer starts with deletion, and a file corrupted between POST's pre-check and the mint is answered the same way. Remaining on this card, all open: a typed fault in lib/portfolio-store (the route still re-reads to classify a throw); an owner-visible alert for a corrupt token or portfolio store; a non-owner issuer gets 403 over a corrupt file; the caller-asserted creation flag; no integration test of a retitle against the real token store.
 
 ## Approval log
 

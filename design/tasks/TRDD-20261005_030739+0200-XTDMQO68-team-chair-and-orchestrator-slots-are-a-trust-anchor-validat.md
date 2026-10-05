@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:00:48+0200
+updated: 2026-10-05T05:03:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93, ccf7d8475]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -67,6 +67,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [ ] 2026-10-05 a762cc46c sends the source host a rejection when an execution is refused here — but its EFFECT on the peer is NOT PROVEN. Read at HEAD: the peer's rejectGovernanceRequest does nothing if its copy already reads executed; each host keeps its own copy with its own approvals, and I did not trace which status the source copy holds when the target refuses ('pending until TTL' is the card's earlier claim, untraced). No test drives the receiving side with a realistic record. Also open from that commit: refusal reasons disclose local facts to the peer (reason codes would close it); the target is not told when the refusing host is the source; the peer is told refused even when the local record could not be updated; an unknown source host is skipped with no log line; the targetCOS fallback for the wire id has no test.
 - [x] 2026-10-05 CORRECTION (review): the detector box is UNTICKED. b86907f93 landed the MECHANISM (a report-only log line in the server log); the box asks for a lint or heartbeat FINDING, i.e. something a person is shown, and nobody reads that log. Surfacing is open. Also open on the mechanism: its production default (loadTeams + getAgent with deleted included) has no test because every test injects the finder; a persistent failure logs every tick; the reason (unknown vs soft-deleted) is computed but neither logged nor in the dedup key; a chair living on a peer host would be reported as unknown; loadTeams is a plain synchronous read with no lock (read at HEAD) but performs a one-time migration write and returns an empty list on a parse error, so a corrupt teams file reads as no findings. implementation-commits lists a762cc46c although its effect is unproven (see the box above).
 - [x] 2026-10-05 CORRECTION of my own line above: loadTeams does NOT return an empty list on a parse error. Read at HEAD (its catch): only a missing file (ENOENT) returns an empty list; every other error is rethrown. So over a corrupt teams file the detector logs 'team-slot check failed' — every tick until the failure dedup now in progress lands — and does not report 'no findings'.
+- [x] 2026-10-05 ccf7d8475: the detector's production path is tested against a temp HOME, a standing failure logs once, the reason is logged and keyed. The detector box stays open for surfacing only.
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T05:00:48+0200
+updated: 2026-10-05T05:02:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -62,6 +62,7 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [ ] 2026-10-05 found while wiring the team-slot detector (worker finding, confirmed by symptom only): tests of the fleet liveness tick reached this machine's LIVE teams file through a default dependency. That one default is now injected (b86907f93). Audit the tick's other default dependencies for the same reach into live state.
 - [x] 2026-10-05 the aid-token mock added by 8162ae19e is removed by 0cea6c6a7; the two createagent-g06-g07 tests pass because creation no longer reaches the token store, not because the store is mocked.
 - [x] 2026-10-05 WHOLE SUITE at the tree of 0cea6c6a7 (main tree, clean, no worker writing; a docs-only card commit landed during the run): governance, unit, security, services, api, lib, integration and tests/*.test.ts — 585 files, 581 passed, 4 failed; 7806 tests, 7796 passed, 8 failed, 2 skipped; tsc 0 lines. The 8 reds are all in the four files red before this session: createagent-g05c-gitignore x1, createagent-g08-cross-client x4, createagent-g11-r17-core x2, pillar-cli-e2e x1 (test 29, writes under the real state dir; it was x3 in the earlier baseline, so it varies with the live environment). None re-run alone. The boot test passed here (it needs the production build present). This is one run on a machine with a live server and janitor; it does not show the unpinned sites above work.
+- [x] 2026-10-05 CORRECTION: two card commits today state 'Corpus gate: 166 passed' where I had read only the exit code that turn (the count was read on earlier runs). And the whole-suite line above supports only this: at 0cea6c6a7 the red tests sit in four files that were also red at 1878fd0b6 — the failure MESSAGES were not compared with the baseline, so a test failing for a new reason would look the same; pillar-cli-e2e moves with the live environment.
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

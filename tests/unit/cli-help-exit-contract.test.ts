@@ -434,7 +434,9 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     // never reach the branch under test.
     writeFileSync(
       join(shimDir, 'curl'),
-      '#!/bin/bash\nout=""\nprev=""\nfor a in "$@"; do\n  if [ "$prev" = "-o" ]; then out="$a"; fi\n  prev="$a"\ndone\nfor a in "$@"; do\n  if [ "$a" = "-w" ]; then\n    [ -n "$out" ] && echo \'{"agents":[{"id":"pinfakeagent01","alias":"pin-fake-agent","name":"pin-fake-agent"}]}\' > "$out"\n    printf 200\n    exit 0\n  fi\n  if [ "$a" = "-o" ]; then\n    echo "{}" > "$2" 2>/dev/null\n  fi\ndone\necho "<html><body>502 Bad Gateway</body></html>"\nexit 0\n',
+      // TRDD-RB72KQI2: the -o branch must write to the argument FOLLOWING -o ($out). It used "$2", the shim's
+      // second positional, which is the literal "-o" for `curl -s -o <file>` and so created a file named -o in the cwd.
+      '#!/bin/bash\nout=""\nprev=""\nfor a in "$@"; do\n  if [ "$prev" = "-o" ]; then out="$a"; fi\n  prev="$a"\ndone\nfor a in "$@"; do\n  if [ "$a" = "-w" ]; then\n    [ -n "$out" ] && echo \'{"agents":[{"id":"pinfakeagent01","alias":"pin-fake-agent","name":"pin-fake-agent"}]}\' > "$out"\n    printf 200\n    exit 0\n  fi\n  if [ "$a" = "-o" ]; then\n    [ -n "$out" ] && echo "{}" > "$out"\n  fi\ndone\necho "<html><body>502 Bad Gateway</body></html>"\nexit 0\n',
     )
     chmodSync(join(shimDir, 'curl'), 0o755)
 
@@ -457,6 +459,7 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
         let stdout = ''
         let stderr = ''
         const child = spawn('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), ...args], {
+          cwd: tmp,
           env: {
             ...process.env,
             PATH: `${shimDir}:${process.env.PATH}`,
@@ -474,6 +477,7 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
         child.on('close', (code) => {
           fake.close(() => {
             try {
+              expect(existsSync(join(tmp, '-o')), 'the curl shim must not create a file literally named -o in the spawn cwd (TRDD-RB72KQI2)').toBe(false)
               expect(code, 'a garbage body must be a failure, not data').not.toBe(0)
               // The garbage itself must NOT be relayed to the caller as if it were the record —
               // the discriminating half: the old presence code echoed any non-empty body.

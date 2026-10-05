@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:56:07+0200
+updated: 2026-10-05T04:57:38+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -76,6 +76,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] FROM REVIEW of eabbe65c8, dispatched to a worker: the fault answer precedes the 403 (an authenticated non-owner can probe any agent id); POST (mint) still answers a bare 500; the check reads the file twice; the GET does not validate the id it reflects in the message; the code comment's 'findActiveTokens would have swallowed' is false for this route as it stood (loadPortfolio threw first) and the commit message repeated it.
 - [x] 2026-10-05 c1fdf417c closes the review findings on eabbe65c8 (fault answer after the permission check, POST covered, single read, no reflected unsafe id, comment corrected). Its stated costs: a non-owner issuer gets 403 over a corrupt file; DELETE still distinguishes corrupt from healthy for a non-owner probing a nonexistent token id (403 vs 404).
 - [ ] DECISION CHANGED 2026-10-05, IN PROGRESS (supersedes 'the user's call; not implemented' above): agent creation will skip token revocation for the id it minted in the same run. Fact read: lib/agent-registry.ts createAgent assigns the id with an unconditional uuidv4(), so no token can exist for it at creation. A worker is implementing it with an option set only by CreateAgent; the G07b re-title site gets the flag only if the gate order proves no session start or token issue can precede it. Every other ChangeTitle caller stays fail-closed. Not yet landed — until it is, the tree still blocks creation on an unreadable token store.
+- [x] 2026-10-05 GATE ORDER READ BY THE ORCHESTRATOR for the creation skip: CreateAgent's sequence is G03, G04 (createAgent, the only assignment of c.agent), G05, G06, G07, G07b, G07c; the tmux session is created at G09, after the sequence. So no session exists at G06 or G07b and the flag is safe at all three ChangeTitle sites. Also from review of c1fdf417c, dispatched: its message says 'repair or remove it' on ANY throw from the load (a transient fault would get destructive advice), and its claim 'read once at each site' is false for POST, which pre-loads and then mints.
 
 ## Approval log
 

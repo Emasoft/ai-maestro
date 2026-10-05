@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:56:06+0200
+updated: 2026-10-05T04:57:38+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -47,7 +47,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] Cross-host: a refused execution is recorded and returned as failed with its reason; test per refusal
 - [ ] orchestratorId: a new value must be a live agent listed in the team; cross-host covered
 - [x] No caller of createTeam/updateTeam skips the MANAGER check by omitting managerId
-- [x] Detector (lint or heartbeat finding) for a team whose chair or orchestrator is not a live agent
+- [ ] Detector (lint or heartbeat finding) for a team whose chair or orchestrator is not a live agent
 - [ ] DeleteTeam G03 undo traced: can the 404 fire inside a rollback? fixed or proven unreachable
 - [ ] The four other cross-host request types obey R4.1 / R4.7
 - [ ] Cross-host add-to-team and transfer-agent can place an id that is not a live agent into agentIds (per worker table; saveTeams, no validation). The COS grants and the mint guard read agentIds as membership; today each consumer is saved only by its own downstream getAgent check
@@ -65,6 +65,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] 2026-10-05 EVIDENCE for the managerId box: lib/team-registry.ts resolveSlotBarredId is used by both createTeam and updateTeam (read at HEAD), pinned by tests/team-chair-validation.test.ts 'refuses setting the MANAGER as chair with 409 when the caller OMITS managerId'. The orchestratorId box stays open: a new value must be a live agent IS enforced (assertNewSlotHolderIsLiveAgent, two 404 tests), 'listed in the team' is enforced only at the dedicated route, and no cross-host request type touches orchestratorId.
 - [x] 2026-10-05 detector box: b86907f93 (lib/team-slot-liveness.ts wired into the fleet liveness tick, report only, transition-only logging). It will report at first server start on this machine (two stale chair ids), and again on every start.
 - [ ] 2026-10-05 a762cc46c sends the source host a rejection when an execution is refused here — but its EFFECT on the peer is NOT PROVEN. Read at HEAD: the peer's rejectGovernanceRequest does nothing if its copy already reads executed; each host keeps its own copy with its own approvals, and I did not trace which status the source copy holds when the target refuses ('pending until TTL' is the card's earlier claim, untraced). No test drives the receiving side with a realistic record. Also open from that commit: refusal reasons disclose local facts to the peer (reason codes would close it); the target is not told when the refusing host is the source; the peer is told refused even when the local record could not be updated; an unknown source host is skipped with no log line; the targetCOS fallback for the wire id has no test.
+- [x] 2026-10-05 CORRECTION (review): the detector box is UNTICKED. b86907f93 landed the MECHANISM (a report-only log line in the server log); the box asks for a lint or heartbeat FINDING, i.e. something a person is shown, and nobody reads that log. Surfacing is open. Also open on the mechanism: its production default (loadTeams + getAgent with deleted included) has no test because every test injects the finder; a persistent failure logs every tick; the reason (unknown vs soft-deleted) is computed but neither logged nor in the dedup key; a chair living on a peer host would be reported as unknown; loadTeams is a plain synchronous read with no lock (read at HEAD) but performs a one-time migration write and returns an empty list on a parse error, so a corrupt teams file reads as no findings. implementation-commits lists a762cc46c although its effect is unproven (see the box above).
 
 ## Approval log
 

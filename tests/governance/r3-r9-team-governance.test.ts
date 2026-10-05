@@ -1397,6 +1397,61 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
     expect(team!.agentIds).toContain('agent-r')
     expect(agents[0].governanceTitle).toBe('member')
   })
+  it('INVALID-STATEs the rollback when the Chief-of-Staff slot holder was soft-deleted mid-pipeline — the undo names the slot label, not just the verdict', async () => {
+    /** TRDD-XTDMQO68 regression pin: a concurrent DeleteAgent soft-deleting the COS between G03's strip and the rollback makes G03's undo call updateTeam with the slot id, whose assertNewSlotHolderIsLiveAgent (lib/team-registry.ts:61) throws "Chief-of-Staff agent not found"; the runner then records the undo as unrevertable (lib/gate-transaction.ts:171) and reports INVALID STATE. */
+    seedTeams([{ id: 'team-cos-race', name: 'Cos Race Team', agentIds: ['agent-cos', 'agent-2'], chiefOfStaffId: 'agent-cos' }])
+    const agents = [
+      makeAgentRecord({ id: 'agent-cos', name: 'agent-cos', governanceTitle: 'chief-of-staff', team: 'Cos Race Team' }),
+      makeAgentRecord({ id: 'agent-2', name: 'agent-2', governanceTitle: 'member', team: 'Cos Race Team' }),
+    ]
+    seedAgents(agents)
+
+    // Refuse exactly ONE write — agent-2's title revert — and at that moment soft-delete the COS
+    // agent, which is what a concurrent DeleteAgent landing between G03's strip of agent-cos and
+    // the abort does. getAgent must also exclude the row: that is exactly what a soft delete is
+    // (lib/agent-registry.ts sets `deletedAt`; getAgent :389 drops it), and assertNewSlotHolderIsLiveAgent
+    // reads the registry through getAgent. This file's registry IS the mock, so "the real registry
+    // on the temp root" here is the mocked registry over FAKE_STATE — the same fixture every other
+    // test in this file uses.
+    const writeThrough = mockAgentRegistry.updateAgent.getMockImplementation()!
+    mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      if (id === 'agent-2' && patch.governanceTitle === 'autonomous') {
+        const cos = agents.find(a => a.id === 'agent-cos')!
+        cos.deletedAt = new Date().toISOString()
+        mockAgentRegistry.getAgent.mockImplementation(
+          (aid: string) => agents.filter(a => !a.deletedAt).find(a => a.id === aid) ?? null,
+        )
+        throw new Error('simulated persistence failure on agent-2')
+      }
+      return writeThrough(id, patch)
+    })
+
+    // G00b gates on the governance password; `verifyPassword` is a mock, so this is an arbitrary
+    // token the mock accepts — never the real governance secret, which no test may name.
+    mockGovernance.verifyPassword.mockResolvedValue(true)
+
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const result = await DeleteTeam('team-cos-race', { authContext: OWNER_CTX, password: 'mocked-ok' })
+
+    expect(result.success).toBe(false)
+    // NON-VACUITY: G03 must actually have run and stripped the COS — membership removed and the
+    // slot cleared — or the undo below had nothing to restore and the assertions would be about
+    // work that never happened (e.g. an early refusal at the password gate).
+    expect(
+      result.operations.some(o => o.startsWith('G03: Removed agent-co from team.agentIds')),
+      `G03 never stripped the COS. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+
+    // THE SPECIFIC FAILURE, not just the verdict: the undo tried to re-seat agent-cos into
+    // chiefOfStaffId and the registry answered that no live agent holds it. The stranded error
+    // names the slot label thrown by assertNewSlotHolderIsLiveAgent, and the runner embeds every
+    // unrevertable entry's error into the INVALID STATE message (lib/gate-transaction.ts:98-99),
+    // so result.error is where both facts surface.
+    expect(result.error).toContain('Chief-of-Staff agent not found')
+    // AND the verdict: with a compensation failing, the runner may NOT claim "no changes were made".
+    expect(result.error).toContain('INVALID STATE')
+  })
+
 })
 
 describe('DeleteTeam::G05 — deleting a team cancels the transfers that pointed at it (R8.3)', () => {

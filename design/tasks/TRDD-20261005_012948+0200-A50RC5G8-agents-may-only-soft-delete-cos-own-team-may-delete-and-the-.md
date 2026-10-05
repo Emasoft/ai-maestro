@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:32:24+0200
+updated: 2026-10-05T02:38:09+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -82,6 +82,12 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] The caller TITLE in authorize() is token-first (auth.governanceTitle || registry, lib/authorization.ts ~390) — verify ChangeTitle really revokes tokens (worker read: G14b) and that clearing chiefOfStaffId on a title change cannot fail silently (G11 logs a WARN on failure, element-management-service.ts ~3251)
 - [ ] The test allowing a COS to delete its team orchestratorId pins CURRENT behaviour only — it is not a ruling; the COS_DELETABLE_TITLES box above is still the user's to confirm
 - [ ] Live data 2026-10-05 (read-only): 3 teams, none has a COS-titled non-chair member (no live agent lost authority); 2 teams name a chiefOfStaffId absent from the registry — stale ids, likely scenario litter; clean through the UI pipelines
+- [ ] CORRECTIONS to the five boxes above (review, 2026-10-05): (1) the 'Landed d7381136e' box mixes a done fact with open work — the four sites ARE landed; only the ORCHESTRATOR edit rule is open. (2) The live-data box: 'clean through the UI pipelines' is NOT an instruction — report to the user, do not modify; and '2 teams name a chiefOfStaffId absent from the registry' is the output of one ad-hoc script that did not check soft-deleted rows. (3) 'Read as stripping the field' for teams-service.ts:691 was grep-level when written (since confirmed by the audit below). (4) The commit sentence 'the registry binding is what stops a retitled agent' holds only if the chair field was cleared on retitle, and that step can end in a WARN
+- [ ] AUDIT of chiefOfStaffId writers — STATIC TRACE BY A WORKER, nothing executed, not re-read by the orchestrator (report under reports/a50rc5g8/, cos-writers-and-token-revoke): full-mode chief-of-staff route gated by authorize manage-team (MANAGER) + self-assign ban; team create gated manage-team; team update strips the field twice; cross-host assign-cos needs both MANAGERs approval but validates nothing about the agent once executed and writes with saveTeams, bypassing updateTeam; lib/team-registry updateTeam accepts ANY uuid as chair (no exists / title / not-MANAGER / not-soft-deleted check)
+- [ ] HEADLESS chief-of-staff route (services/headless-router.ts ~3039/3093) has NO authorize and no self-assign ban — any authenticated agent that knows the governance password can set or clear a team chair (per worker static trace; listed in the no-per-handler-auth ledger). Mirror the full-mode route: authorize manage-team for agent callers + self-assign ban
+- [ ] Stale token team id still GRANTS at two readers (per worker static trace): lib/authorization.ts ~613 ORCHESTRATOR TRDD edit (token wins over registry) and lib/portfolio-issue-guard.ts:89,92 (COS mints mandate tokens for its token team). Bind both to the registry. app/api/agents/[id]/portfolio/route.ts:164 stamps issuer_team_id from the token (mis-scopes team revocation, no grant)
+- [ ] No target-title guard on the non-delete COS sites (per worker static trace, not executed): a chair can change the TITLE of a MANAGER or of another COS-titled agent listed in its team agentIds; can unblock / wake / hibernate a MANAGER in its team; can archive a failed TRDD assigned to itself. Self title change and soft-deleted targets are stopped. Seven policy-tail actions (modify-agent, manage-skills, view-agent, session and group actions) NOT ESTABLISHED
+- [ ] Token revocation on team change: ChangeTeam / DeleteTeam revoke only indirectly through ChangeTitle, skipped when the title is unchanged; cross-host add/remove/transfer never revoke; lifetime 3600s (per worker). Preferred fix is to stop trusting the token team id at its readers (box above), not an irreversible revoke inside pipelines that roll back — supersedes the earlier 'revoke on team change' box
 
 ## Approval log
 

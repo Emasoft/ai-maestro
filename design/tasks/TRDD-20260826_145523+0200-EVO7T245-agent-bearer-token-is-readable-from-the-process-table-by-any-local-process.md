@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-09-05T10:21:03+0200
+updated: 2026-10-05T06:10:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -695,6 +695,7 @@ removes the world-readable half; it is not a resolution.
       exposure filed here
 - [ ] If containers are chosen: build `ai-maestro-agent:latest` (absent today, so `docker run`
       fails at `agents-docker-service.ts:202`)
+- [x] MAIN-AGENT DECISION 2026-10-05, NOT A USER RULING (overrule in one line): stage 1 is NOT being dispatched now. A read-only worker confirmed it is implementable without the stage-2 ruling (the credential reaches curl's argument list through one shared helper, _build_auth_args in scripts/agent-helper.sh, plus separate lines in three amp scripts; 22 script files reference it). This card's own text says stage 1 is 'weakened to near-nothing' by exposure 3 and 'while it remains in the environment, stage 1 is cosmetic'. Changing every call site in scripts that ship to every agent carries a real regression risk for that gain, so it waits for the stage-2 ruling (the first box). The stage-1 box stays open.
 
 ## Approval log
 

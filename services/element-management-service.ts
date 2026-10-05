@@ -3255,7 +3255,11 @@ export async function ChangeTitle(
                 }
               }
             } catch (err) {
-              ops.push(`G11: WARN — Failed to clear chiefOfStaffId: ${err instanceof Error ? err.message : err}`)
+              // Fail closed (TRDD-XTDMQO68): a swallowed failure here let the title change SUCCEED while
+              // the team still named the ex-chair in chiefOfStaffId — and every chief-of-staff grant is
+              // decided by reading that slot from the registry. Throwing makes the runner roll the
+              // title change back, and the write-ahead ledger above restores the teams already cleared.
+              throw new Error(`G11: failed to clear chiefOfStaffId — ${err instanceof Error ? err.message : String(err)}`)
             }
             // Auto-reject pending configure-agent requests from this COS
             try {

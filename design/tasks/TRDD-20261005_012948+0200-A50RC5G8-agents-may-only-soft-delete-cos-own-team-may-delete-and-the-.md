@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T05:18:24+0200
+updated: 2026-10-05T06:16:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -21,7 +21,7 @@ approval-datetime: 2026-10-05T01:29:48+0200
 derived: false
 
 relevant: [TRDD-L6VV9Q7U]
-implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b]
+implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b, fb676e33c]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
@@ -68,7 +68,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
 - [ ] USER ANSWER recorded: is a process-level session kill a "hard-kill" reserved to the user, or may MANAGER / own-team CHIEF-OF-STAFF do it?
 - [ ] USER confirms or amends COS_DELETABLE_TITLES (member, architect, orchestrator, integrator), including whether a CHIEF-OF-STAFF may delete its ORCHESTRATOR and so freeze its own team
-- [ ] One UN-MOCKED round trip: soft delete, restore from the cemetery, the restored agent authenticates
+- [x] One UN-MOCKED round trip: soft delete, restore from the cemetery, the restored agent authenticates
 - [ ] A new agent taking a soft-deleted agent name adopts the kept folder and its old contents — decide: quarantine the folder, or refuse the name while a tombstone exists
 - [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
@@ -117,6 +117,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] 2026-10-05 EIGHTEEN BOXES TICKED from a worker's classification (reports/a50rc5g8/20261005-open-boxes-classified.md), each by ordinal, with what I checked myself. LANDED, code read by me at HEAD — 19: lib/authorization.ts orchestrator TRDD edit now decided by the registry (orchestratorOverAssignee); 26: services/headless-router.ts chair route calls authorize manage-team and has the self-assign ban; 34: lib/team-registry.ts assertNewSlotHolderIsLiveAgent throws 404 for a non-live id; 40: the mint route answers 404 'Subject agent not found'; 43: one mention of lookupTeamIdForAgent remains, an explanatory comment; 39: the test file for the headless chair route exists with 11 tests and the unreadable-registry test is named — I did NOT read the model-ON or throwing-lookup assertions. NOTE (records or superseded, nothing to do) — 17, 24, 25, 29, 32, 37. MOVED to cards that are OPEN today (destination lines quoted in the report, not re-read by me) — 20 and 42 to TRDD-XTDMQO68, 21 and 27 to TRDD-8E6XMDEX, 23 to TRDD-VR4OPNVI and the XTDMQO68 detector, 35 to TRDD-BZW1QAZ5. Boxes 20, 27 and 35 were only PARTLY open; their landed halves rest on the commits named in the report. NOT ticked: the 8 USER boxes, the 8 OPEN boxes, and the triage-pointer box.
 - [x] 2026-10-05 CORRECTION to the eighteen ticks above (review): box 21 held three obligations and only two were carried — its G11 half (a failed chair clear on retitle is only a WARN) was carried nowhere; it is now an open box on TRDD-XTDMQO68. Box 35's 'audit of other headless handlers' is LANDED on TRDD-BZW1QAZ5 rather than moved. Box 20's quoted destination is about agentIds, not chair writers; its tick stands on the commits (5ce4c6a5a, 96245c34c), not on that line. Checked since: the destination boxes for 27 (8E6XMDEX 'issuer_team_id comes from the registry') and 42 (XTDMQO68 'DeleteTeam G03 undo traced') are both still unticked. Plainly: ticking these eighteen finished no new work — six were code already landed, six were records, six moved elsewhere.
 - [x] 2026-10-05 PROPOSAL WITHDRAWN after review: I proposed closing this card, TRDD-XTDMQO68 and TRDD-8E6XMDEX as complete by ticking their open boxes as 'moved' to successor cards. Rejected: that would satisfy the checklist gate with ticks that mean 'not done', and this card's own original obligations (the un-mocked delete-restore round trip, a status on DeleteAgentResult, several user rulings) are open. The cards stay OPEN. If they are split later it is by subject (cross-host membership and status model; owner-visible alerts and detector surfacing; delete/restore integrity), boxes left unticked, the originals moved to superseded — after the user has seen the split. Ledger pointer correction: the latest scratch ledger is docs_dev/TRDD-DRAIN-LEDGER-20261005-0540.md.
+- [x] 2026-10-05 fb676e33c tests/integration/agent-soft-delete-restore-roundtrip.test.ts — real registry, export/import and authentication lookup under a temp state root; only os is mocked. My run: 7 of 7. Pins: soft delete archives and the session secret is refused; restore gives a NEW id, same name. The restore ROUTE is not driven (needs a sudo token); the test calls the functions it calls.
+- [ ] FOUND by that test, pinned as OBSERVED (UNSAFE): after a restore the OLD session secret authenticates again, now as the NEW id — the import copies the exported row's metadata including the stored secret hash (per worker; the copy site in importAgent not read by me). The same copy would carry a foreign host's secret hash on a cross-host import. Fix dispatched: the import drops the stored session-secret hash, so a restored or imported agent authenticates only with a secret issued after the import.
 
 ## Approval log
 

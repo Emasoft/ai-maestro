@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:14:38+0200
+updated: 2026-10-05T07:36:16+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -81,6 +81,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] 2026-10-05 e7c9f5f57: the cross-host one-team check now counts chair and orchestrator like the rest of the code, and a transfer always checks liveness. My run: 13 cross-host test files / 361 passed; neuters are the worker runs. Still open: add-to-team with an id the team already lists is a success no-op; the three other request types.
 - [x] DeleteTeam G03 undo TRACED 2026-10-05 (worker read, report reports/xtdmqo68/20261005_071357+0200-shuffle-flag-and-deleteteam-g03-undo.md; I read only the throw site): the 404 comes from assertNewSlotHolderIsLiveAgent in lib/team-registry.ts (label agent not found, 404), reached when the undo calls updateTeam with the chair or orchestrator slot. It is REACHABLE, not unreachable: it fires if that agent was soft-deleted or removed between the strip and the rollback (a concurrent agent delete). The runner then records the undo as unrevertable and reports INVALID STATE. Not fixed.
 - [ ] From the trace above: no test drives the G03 undo with a chair or orchestrator set (the two existing undo tests seed teams with members only), so the 404 branch in a rollback is unpinned. Add that test; then decide whether a rollback may restore a slot holder that is no longer live (restoring the pre-delete state exactly) instead of failing.
+- [x] WORDING CORRECTION (review): the G03-undo box above says REACHABLE; that is the worker trace of two paths, not confirmed by me (I read only the throw site in lib/team-registry.ts). Read the box above as worker-traced, unconfirmed.
 
 ## Approval log
 

@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:47:58+0200
+updated: 2026-10-05T04:00:37+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface

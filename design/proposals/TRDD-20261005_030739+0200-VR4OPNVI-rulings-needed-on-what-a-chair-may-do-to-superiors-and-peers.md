@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:57:43+0200
+updated: 2026-10-05T04:00:44+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -50,6 +50,8 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] 14 (DECIDE) When you resurrect a soft-deleted agent, does it get back the portfolio tokens it held and its old session secret, or come back without them? In progress as an interpretation: tokens stay revoked
 - [x] 13 REWORDED (review): your ruling already says hard-kill needs sudo. Being fixed now without waiting: headless cemetery purge and revive will go through the full-mode handler, which requires sudo. Open part only: does permanently purging a cemetery archive count as hard-kill? I am treating it as yes
 - [x] 12 CORRECTION (review): the note 'safe: the routes are unreachable' was unverified when written; measured since only against today's registry (no agent carries either name). The question stands for removing dead table entries and for import lines
+- [x] 13 CORRECTION: only PURGE is being put behind sudo in headless (my interpretation: permanently destroying an archive is a hard-kill). REVIVE stays as it is — owner only, no sudo — so you can still resurrect in headless. Full mode requires sudo for revive too; say if headless should match
+- [x] 14 REWRITTEN ON A FACT (read in the router): revive imports the archive with a NEW agent id. Tokens issued to the old id therefore cannot return to the resurrected agent whatever is decided; and the old session secret belongs to the old id. Remaining question is only: should a resurrected agent be RE-ISSUED equivalent tokens automatically? Default taken: no. Unread: the full-mode revive path and whether the dashboard has a second restore route that keeps the id
 
 ## Approval log
 

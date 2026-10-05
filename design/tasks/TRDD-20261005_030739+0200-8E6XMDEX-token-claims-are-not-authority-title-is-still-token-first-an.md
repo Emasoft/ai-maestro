@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:38:55+0200
+updated: 2026-10-05T04:44:01+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -68,6 +68,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] IN PROGRESS (uncommitted): G06b revokes held portfolio tokens on HARD delete only (soft leaves them dormant, so the user's answer on resurrected agents is not foreclosed); compensated; the rollback is reachable from every later in-sequence gate but not from the post-commit folder removal. Revive calls the registry delete directly, so G06b never runs there (per worker). Six tests/integration CreateAgent reds seen by the worker, baseline unknown
 - [x] LANDED 66a55c866: a HARD delete revokes the portfolio tokens the agent holds, compensated on rollback; soft delete leaves them dormant. Limits in the commit message (folder removal is past the rollback; revive bypasses the pipeline; tokens issued by the deleted agent untouched)
 - [ ] IN PROGRESS (uncommitted): the portfolio store reads a corrupt per-agent file as empty — the same defect fixed for the AID store in d9bbf1bb9 — so G06b (66a55c866) would report 0 revoked over a damaged file. Fix dispatched: missing = empty; corrupt = fault for every mutator; read paths refuse the token and log once per cache window; a way for the owner's listing route to tell empty from unreadable (route change is a follow-up). To record when it lands: whether teardown removes the per-agent file on hard delete, and that an agent able to corrupt its own portfolio file can block its own HARD delete (soft delete unaffected)
+- [x] 2026-10-05 LANDED ccd8c10d1: a per-agent portfolio file that exists but is corrupt or wrong-shape is a fault for every mutator; the two authorization read paths honour no token and log once per cache window. Evidence and neuter (9 of 13 red) in the commit message.
+- [ ] OPEN after ccd8c10d1 and d9bbf1bb9: (1) a corrupt AID token store or portfolio file now blocks agent CREATION (G06 calls ChangeTitle, whose G14b fails closed), retitle and hard delete — decide whether G14b may be skipped when the agent has no prior title; (2) no owner-visible alert names the corrupt file, only a log line; (3) the portfolio route answers a bare 500 over a corrupt file — use portfolioStoreFault for a usable message; (4) hard delete does not remove the per-agent portfolio file, so an agent able to write that file can block its own hard delete.
 
 ## Approval log
 

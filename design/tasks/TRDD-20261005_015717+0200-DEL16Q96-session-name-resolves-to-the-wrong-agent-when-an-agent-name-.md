@@ -4,7 +4,7 @@ title: Session name resolves to the wrong agent when an agent name ends in an in
 column: todo
 status: tasked
 created: 2026-10-05T01:57:17+0200
-updated: 2026-10-05T04:38:54+0200
+updated: 2026-10-05T04:44:00+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T01:57:17+0200
+implementation-commits: [fbfb841df]
 ---
 
 # Session name resolves to the wrong agent when an agent name ends in an index suffix
@@ -48,9 +49,10 @@ creation and rename (if none exist today), or resolve a session name by exact se
 
 - [x] READ FIRST: may an agent name end in `_<digits>`? cite the validation (or its absence) and count existing agents that do
 - [x] READ FIRST: where are indexed sessions created, and is the index recorded on the agent record
-- [ ] A session name resolves to the agent that owns that session, tested with `alpha` + `alpha_1` both present
+- [x] A session name resolves to the agent that owns that session, tested with `alpha` + `alpha_1` both present
 - [ ] The TRDD-TCDIVXPS indexed-session box can be ticked against this fix
 - [x] LANDED fbfb841df: getAgentBySession looks up the exact session name first. Evidence and neuter in the message. Remaining ambiguity stated there (agent alpha's second session shares its name with an agent named alpha_1); reserving <name>_<digits> at creation would remove it
+- [x] 2026-10-05 box 3 evidence: tests/unit/get-agent-by-session-full-name-first.test.ts case 'both exist: alpha_1 -> alpha_1 and alpha -> alpha' (plus the soft-deleted and other-host cases). Box 4 stays open: it needs a test of deleteSession target resolution itself, dispatched to a worker.
 
 ## Approval log
 - 2026-10-05 — READ-FIRST answers (worker report, not re-read by main): `alpha_1` IS a legal agent name and parseSessionName would split it into `alpha` + index 1; the live registry holds 0 names matching _<digits>$; no route or UI path allocates a second session (`addSessionToAgent` has no non-test caller). So the collision is not reachable today — this is HARDENING. Cheapest fix: reject _<digits>$ agent names at creation and rename.

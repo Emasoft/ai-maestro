@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T04:38:55+0200
+updated: 2026-10-05T04:44:01+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T02:08:27+0200
+implementation-commits: [4a65e9a81, 8162ae19e]
 ---
 
 # Tests write outside their fixtures and tests integration is red at baseline
@@ -56,7 +57,8 @@ server is detected — a guard that fails for an unrelated cause trains people t
 - [ ] Each of the 7 CreateAgent failures has a named cause and is fixed or filed
 - [ ] `tests/integration` is green on a machine with a live server
 - [x] 2026-10-05 box 1: the stray file named -o came from a fake curl in tests/unit/cli-help-exit-contract.test.ts writing to its second positional argument; fixed in 4a65e9a81 (writes to the argument after -o, spawn in a temp dir, one assertion). The old stray file was moved to reports_dev/stray/. Integration reds measured today at HEAD: 12 tests in 5 files, list in the BZW1QAZ5 card
-- [ ] REGRESSION FOUND 2026-10-05 by running tests/integration at 1878fd0b6 (10 failed in 4 files) and at 05f2d4bf0 (12 failed in 5 files): two tests in tests/integration/createagent-g06-g07-ordering.test.ts pass before this session and fail after it ('no title + no team → G06 defaults to AUTONOMOUS', 'G07 undo: a gate that aborts AFTER a successful team join'). One of the session's commits between those shas caused it; a bisect worker is finding which and whether the test's mock or production is wrong. The other reds (createagent-g05c, -g08, -g11, pillar-cli-e2e) pre-date the session. package.json and the lockfile did not change in that range
+- [x] REGRESSION FOUND 2026-10-05 by running tests/integration at 1878fd0b6 (10 failed in 4 files) and at 05f2d4bf0 (12 failed in 5 files): two tests in tests/integration/createagent-g06-g07-ordering.test.ts pass before this session and fail after it ('no title + no team → G06 defaults to AUTONOMOUS', 'G07 undo: a gate that aborts AFTER a successful team join'). One of the session's commits between those shas caused it; a bisect worker is finding which and whether the test's mock or production is wrong. The other reds (createagent-g05c, -g08, -g11, pillar-cli-e2e) pre-date the session. package.json and the lockfile did not change in that range
+- [x] 2026-10-05 the regression box is closed by 8162ae19e: bisected to 49f411162 (0f0e49400 = 10/10, 49f411162 = 2 failed); cause is this file's fs mock lacking a default export, which the real lib/aid-token import needs and which the old catch swallowed. Verdict: test mock gap, production right to fail closed. File is 10/10 at ccd8c10d1. Remaining known integration reds, all present at 1878fd0b6: createagent-g05c x1, -g08 x4, -g11 x2, pillar-cli-e2e x3.
 
 ## Approval log
 - 2026-10-05 — FOURTH INSTANCE: the suite-wide leak guard (tests/helpers/real-state-roots.ts) made a fully green run exit 1 (503 files / 6413 tests passed) over one new entry, statusline-state/<session id>.json, written by a live Claude Code session during the run. Same defect as item 2: the guard cannot tell a live process from a test.

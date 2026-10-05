@@ -1,10 +1,10 @@
 ---
 trdd-id: QSB64KKQ
 title: Errata and unpinned join for the RC33OAFQ NWTTU0AQ V2BLADSF closures
-column: todo
-status: tasked
+column: complete
+status: archived
 created: 2026-10-05T01:16:19+0200
-updated: 2026-10-05T04:38:53+0200
+updated: 2026-10-05T04:44:10+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,6 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T01:16:19+0200
 relevant: [TRDD-RC33OAFQ, TRDD-NWTTU0AQ, TRDD-V2BLADSF]
+implementation-commits: [4a65e9a81]
 ---
 
 # Errata and unpinned join for the RC33OAFQ NWTTU0AQ V2BLADSF closures
@@ -70,6 +71,7 @@ KNOWN PERMANENT DEFECT, not forgotten work: the three archived Approval logs sti
 - [x] EVIDENCE for the five boxes, read by the orchestrator in reports/triage/20261005_qsb64kkq-neuter-runs.md: all neuters were run by a worker in a scratch worktree on source files cmp-identical to the main tree, one at a time, each restored and cmp-confirmed; every expected red set matched the recorded one and no neuter reddened nothing. The two new tests (4a65e9a81) use the real route and real service; their neuters reddened only the 403 case. NOT independently re-run by the orchestrator
 
 ## Approval log
+- 2026-10-05T04:44:10+0200 — COMPLETE by main-agent@ai-maestro. All seven boxes ticked on recorded neuter runs and two landed tests (4a65e9a81).
 
 ## Approval log
 

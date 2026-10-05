@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:06:26+0200
+updated: 2026-10-05T07:09:17+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f, b555d389c, c8af19db2, 06814860d, d8dade818]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8, 6be2f982f, 9cb25b142, 05a35574f, b555d389c, c8af19db2, 06814860d, d8dade818, 19e15c337]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -113,6 +113,8 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] FIXED in d8dade818: metadata refusals answer 403 in both modes from a denied flag set at the ChangeMetadata authorization gate; the tests assert the reason text. Checked by me: 36 files, 983 tests, tsc 0 lines. The neuter (4 refusal tests go red without the flag) is the worker report, not rerun by me. The worker edited the two test files with a script against the write-tool rule; I read the whole diff. Accepted consequence: a fail-closed refusal such as an unreadable team registry now answers 403.
 - [ ] After d8dade818 two conventions coexist: only ChangeMetadata sets the denied flag. Other Change* pipelines and their routes were not audited for refusals answered with the wrong status.
 - [ ] DEFECT: tests/unit/teams-stats-verb.test.ts sends a request to the real running server (/api/teams/stats) and its outcome depends on that process. It timed out at 30 s in the whole-suite run. A unit test must not depend on or call the production server.
+- [x] 19e15c337 (review of d8dade818): the refusal is decided before the not-found wording at all four sites, and the API-only DELETE pre-check always answers 403, so the status cannot reveal whether a target exists. Neuter of the flag rerun by me in a scratch checkout: baseline 35 of 35 green, flag removed 4 red (PATCH member, PATCH non-owner user, both parity refusals). The two table tests that inject the flag into a double test only the route mapping and stay green without the flag line. The neuter of the ordering (2 new cases red) is the worker report only.
+- [ ] Left open after 19e15c337: (1) the full-mode metadata route has the same refusal-first order but no test with a denied result worded not found; (2) the API-only DELETE pre-check has no test with a refusal worded not found (the file uses the real authorize); (3) a failure from deeper in the pipeline worded forbidden now answers 400; (4) not checked whether any plugin script tells 404 from 403 on these routes (one grep of the plugin caches found no caller of the metadata routes); (5) root fix: a typed result from the shared gate so every Change pipeline carries the refusal.
 
 ## Approval log
 

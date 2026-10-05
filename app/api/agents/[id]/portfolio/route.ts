@@ -6,6 +6,7 @@ import type { PortfolioToken, PortfolioIssuerTitle } from '@/types/portfolio'
 import { SYSTEM_OWNER_ISSUER } from '@/types/portfolio'
 import { canIssue } from '@/lib/portfolio-issue-guard'
 import { getAgent } from '@/lib/agent-registry'
+import { getTeamsForAgent } from '@/lib/team-registry'
 import { signPortfolioToken } from '@/lib/portfolio-sign'
 import {
   issueToken,
@@ -200,6 +201,10 @@ export async function POST(
         ? 'chief-of-staff'
         : 'manager'
     const now = new Date()
+    // The issuer's team is read from the registry, never from ctx.teamId: a governance token's team claim
+    // is stamped at mint and stays valid for an hour, so an issuer moved out of a team would keep stamping
+    // its old team. The registry is the authority (first match, as agent-auth's resolveTeamId resolves it).
+    const issuerTeamId = ctx.agentId ? (getTeamsForAgent(ctx.agentId)[0]?.id ?? null) : null
 
     const ttlCeil = kind === 'approval' ? MAX_APPROVAL_TTL_SECONDS : MAX_MANDATE_TTL_SECONDS
     const ttlReq =
@@ -233,7 +238,7 @@ export async function POST(
       ...(targetTrddId ? { target_trdd_id: targetTrddId.toUpperCase() } : {}),
       issuer_agent_id: ctx.agentId ?? SYSTEM_OWNER_ISSUER,
       issuer_title: issuerTitle,
-      ...(ctx.teamId ? { issuer_team_id: ctx.teamId } : {}),
+      ...(issuerTeamId ? { issuer_team_id: issuerTeamId } : {}),
       uses_remaining: uses,
       issued_at: now.toISOString(),
       expires_at: expiresAt,

@@ -172,6 +172,14 @@ export function authenticateAgent(
         }
       }
 
+      // TRDD-8E6XMDEX: a soft-deleted holder does not authenticate (nothing is revoked).
+      if (isSoftDeletedAgent(aidRecord.agent_id)) {
+        return {
+          error: 'Invalid or expired governance token',
+          status: 401
+        }
+      }
+
       // R34.1 SPEND gate (no-op when enforceAidAssociation is OFF — default).
       if (!assertAidLedgerBacked(aidRecord.agent_id)) {
         return {
@@ -241,6 +249,15 @@ export function authenticateAgent(
       }
     }
 
+    // TRDD-8E6XMDEX: refuse a NEW request from a soft-deleted holder. Deliberately here and not in
+    // amp-auth: signature verification of already-delivered messages must still see the key.
+    if (isSoftDeletedAgent(result.agentId)) {
+      return {
+        error: 'Invalid or expired API key',
+        status: 401
+      }
+    }
+
     return { agentId: result.agentId }
   }
 
@@ -292,6 +309,11 @@ export async function authenticateFromRequestAsync(
         const agentId = claims.sub.startsWith('aip:key:ed25519:')
           ? claims.sub.slice('aip:key:ed25519:'.length)
           : claims.sub
+
+        // TRDD-8E6XMDEX: a soft-deleted holder does not authenticate (nothing is revoked).
+        if (isSoftDeletedAgent(agentId)) {
+          return { error: 'Invalid or expired AIP token', status: 401 }
+        }
 
         // R34.1 SPEND gate (no-op when enforceAidAssociation is OFF — default).
         if (!assertAidLedgerBacked(agentId)) {
@@ -482,6 +504,25 @@ function findAgentBySessionSecret(secret: string): { id: string; name: string } 
     // unreadable), but the WHY is now recorded.
     console.warn('[agent-auth] findAgentBySessionSecret failed, denying:', err)
     return null
+  }
+}
+
+
+/**
+ * TRDD-8E6XMDEX: a soft delete keeps the registry row (resurrection / rolled-back delete) but the
+ * agent must not authenticate a NEW request with an AID token, AMP key or IBCT it still holds.
+ * The check lives HERE, at authentication, not in aid-token/amp-auth: those stores are also read
+ * by the revocation gates and signature verification, which must keep seeing the credential.
+ * Nothing is revoked, so clearing deletedAt restores validity with no other step. A missing row
+ * is not refused here (hard-deleted agents had their credentials revoked by DeleteAgent).
+ * An unreadable registry fails closed, like findAgentBySessionSecret.
+ */
+function isSoftDeletedAgent(agentId: string): boolean {
+  try {
+    return Boolean(getAgentRecord(agentId, true)?.deletedAt)
+  } catch (err) {
+    console.warn("[agent-auth] soft-delete check failed, denying:", err)
+    return true
   }
 }
 

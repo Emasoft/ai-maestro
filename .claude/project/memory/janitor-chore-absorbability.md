@@ -2,7 +2,7 @@
 name: janitor-chore-absorbability
 description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all / is cache-prune absorbed now or does the table still say no / is there a per-chore handover now or does the daemon still exit wholesale / which chores does the janitor still run while the server is up / is the absorbability table out of date / is memory-guard absorbed or armed / why does the liveness beat not claim memory-guard / detect-only memory guard would kill / AIM_MEMORY_GUARD claim follows arming activeAbsorbedChores CONDITIONAL_CHORES / is rules-cleanup absorbed or does the row still say no / orphaned janitor rules never removed — fixed / AIM_RULES_CLEANUP dark-shipped lib rules-cleanup / is fleet-stop absorbed or does the row still say no / who delivers janitor-disarm on the kill-switch / AIM_FLEET_STOP AND: the janitor still runs a chore the server absorbed / a chore runs on both sides / which capability tokens does the janitor honour - a token it does not know claims nothing, publish the exact chore name / why are three chores deliberately not published / chore ownership flapped / server-liveness late beat warning / absence of a warn does not mean healthy."
 ocd: 2026-08-05
-lmd: 2026-10-04
+lmd: 2026-10-05
 metadata:
   node_type: memory
   type: project
@@ -14,7 +14,7 @@ split-lineage: 7381dedd309c4442890dc1bdf222dc3f
 
 # janitor-chore-absorbability
 
-^3V2Y42HN [desc: "A janitor chore is absorbable by the ai-maestro server IFF its population is DATA the server holds, or a host observation the server can make with the daemon's own instrument AND safety cutoff - never when the population is processes or sessions on the host. This page is the map; detail lives in four sub-pages.", keywords: can_the_server_take_over_this_chore chore_absorbability_test absorbable_iff_population_is_data janitor_chore_absorbed_by_server which_janitor_chores_server_runs chore_population_processes_sessions_not_absorbable absorb_chore_decision_rule janitor_chore_map hub page, type: project, ocd: 2026-08-05, lmd: 2026-10-04]
+^3V2Y42HN [desc: "A janitor chore is server-absorbable IFF its population is DATA the server holds or a host observation it can make with the daemon's own instrument and cutoff; never processes or sessions. Hub map.", keywords: can_the_server_take_over_this_chore chore_absorbability_test absorbable_iff_population_is_data janitor_chore_absorbed_by_server which_janitor_chores_server_runs chore_population_processes_sessions_not_absorbable absorb_chore_decision_rule janitor_chore_map hub page, type: project, ocd: 2026-08-05, lmd: 2026-10-05]
 Can the ai-maestro server take over a given janitor chore? **A chore is absorbable IFF its
 population is DATA the server holds, or a host observation the server can make with the
 daemon's own instrument AND safety cutoff** — never when the population is processes or

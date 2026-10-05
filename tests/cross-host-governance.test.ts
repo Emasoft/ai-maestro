@@ -847,6 +847,8 @@ describe('performRequestExecution (via approve flow)', () => {
       }
     ]
     mockLoadTeams.mockReturnValue(teams)
+    // TRDD-A50RC5G8: the chair must be a live agent
+    mockGetAgent.mockReturnValue({ id: 'new-cos-agent' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
@@ -858,6 +860,53 @@ describe('performRequestExecution (via approve flow)', () => {
     // R4.6: COS must be added to agentIds if not already present
     expect(gammaTeam.agentIds).toContain('new-cos-agent')
     consoleSpy.mockRestore()
+  })
+
+  // TRDD-A50RC5G8: the chair is the trust anchor; assign-cos must refuse the MANAGER and any non-live agent
+  describe('assign-cos chair validation (TRDD-A50RC5G8)', () => {
+    async function runAssignCos(agentId: string, liveAgent: unknown) {
+      const executedRequest = makeGovernanceRequest({
+        type: 'assign-cos',
+        status: 'executed',
+        payload: { agentId, teamId: 'team-gamma' },
+        approvals: { sourceManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' } } as any,
+      })
+      mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
+      mockApproveGovernanceRequest.mockResolvedValue(executedRequest)
+      const team = {
+        id: 'team-gamma', name: 'Gamma Team', type: 'closed', agentIds: ['agent-g1'],
+        chiefOfStaffId: null, createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-01T10:00:00Z',
+      }
+      mockLoadTeams.mockReturnValue([team])
+      mockGetAgent.mockReturnValue(liveAgent)
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+      logSpy.mockRestore()
+      errSpy.mockRestore()
+      return team
+    }
+
+    it('refuses the MANAGER as chair: chiefOfStaffId unchanged, nothing saved', async () => {
+      /** The MANAGER id must never become a team chair, even if it is a live agent */
+      const team = await runAssignCos('manager-agent', { id: 'manager-agent' })
+      expect(team.chiefOfStaffId).toBeNull()
+      expect(mockSaveTeams).not.toHaveBeenCalled()
+    })
+
+    it('refuses an unknown (or soft-deleted) agent id: chiefOfStaffId unchanged, nothing saved', async () => {
+      /** getAgent excludes soft-deleted agents, so unknown and soft-deleted both surface as a null lookup */
+      const team = await runAssignCos('ghost-agent', null)
+      expect(team.chiefOfStaffId).toBeNull()
+      expect(mockSaveTeams).not.toHaveBeenCalled()
+    })
+
+    it('positive control: a live non-manager agent becomes chair', async () => {
+      /** Proves the refusals above are caused by the new checks, not by a broken harness */
+      const team = await runAssignCos('live-agent', { id: 'live-agent' })
+      expect(team.chiefOfStaffId).toBe('live-agent')
+      expect(mockSaveTeams).toHaveBeenCalledTimes(1)
+    })
   })
 
   // SF-019: Coverage for remove-cos execution path

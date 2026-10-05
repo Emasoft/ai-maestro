@@ -512,6 +512,18 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
             console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is already COS of team '${alreadyCos.id}'`)
             return
           }
+          // TRDD-A50RC5G8: team.chiefOfStaffId is the trust anchor of every chief-of-staff grant, so the
+          // chair must be a live agent (getAgent excludes soft-deleted) and never the MANAGER. This path
+          // cannot call updateTeam (it already holds the non-reentrant 'teams' lock), so it repeats
+          // the checks lib/team-registry.ts applies to createTeam/updateTeam.
+          if (request.payload.agentId === getManagerId()) {
+            console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is the MANAGER`)
+            return
+          }
+          if (!getAgent(request.payload.agentId)) {
+            console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is not a live agent`)
+            return
+          }
           team.chiefOfStaffId = request.payload.agentId
           // Ensure the COS is also in agentIds (R4.6: COS must be a member)
           if (!team.agentIds.includes(request.payload.agentId)) {

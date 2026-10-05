@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'http'
  * createHeadlessRouter().handle(); only the identity seam (authenticateAgent and the sync request wrapper over it) is
  * replaced, and the state dir is redirected to a temp dir. Every refusal asserts the archive is still on disk.
  */
-const m = vi.hoisted(() => ({ authenticateAgent: vi.fn() as import('vitest').Mock<(...a: any[]) => any> }))
+const m = vi.hoisted(() => ({ authenticateAgent: vi.fn() as import('vitest').Mock<(...a: any[]) => any>, modelOn: vi.fn(() => false) }))
 const tmp = vi.hoisted(() => {
   const fs = require('node:fs'); const os = require('node:os'); const p = require('node:path')
   return { dir: fs.realpathSync(fs.mkdtempSync(p.join(os.tmpdir(), 'bzw-delegated-'))) as string }
@@ -42,10 +42,19 @@ vi.mock('../../lib/agent-auth', async (orig) => {
     authenticateFromRequest: (r: { headers: { get(n: string): string | null } }) =>
       m.authenticateAgent(r.headers.get('Authorization'), r.headers.get('X-Agent-Id'), r.headers.get('Cookie')),
     // the router's semantic credential gate runs before the handler; let it through so the TWIN answers
+    // lib/sudo-guard calls buildAuthContext, which reads the user-authority flag through a runtime require('./governance')
+    // that cannot see this file's governance mock (the flag silently reads OFF). Apply the model-ON owner rule here as
+    // lib/agent-auth.ts defines it: owner = no agentId AND userTitle in {maestro, maestro-delegate}.
+    buildAuthContext: (a: { agentId?: string; userTitle?: string; error?: string }) => {
+      const c = actual.buildAuthContext(a as never)
+      return m.modelOn() && !a.error
+        ? { ...c, isSystemOwner: !a.agentId && (a.userTitle === 'maestro' || a.userTitle === 'maestro-delegate') }
+        : c
+    },
     authenticateFromRequestAsync: vi.fn(async () => ({ agentId: undefined, error: undefined })),
   }
 })
-vi.mock('../../lib/governance', async (orig) => ({ ...(await orig<object>()), isUserAuthorityModelEnabled: () => false }))
+vi.mock('../../lib/governance', async (orig) => ({ ...(await orig<object>()), isUserAuthorityModelEnabled: () => m.modelOn() }))
 vi.mock('../../lib/ecosystem-constants', async (orig) => {
   const actual = await orig<typeof import('../../lib/ecosystem-constants')>()
   const { join } = await import('node:path')
@@ -57,6 +66,7 @@ const archive = () => tmp.dir + '/cemetery/' + FILE
 const OWNER = {}
 const MEMBER = { agentId: '22222222-2222-4222-8222-222222222222', governanceTitle: 'member' }
 const MANAGER = { agentId: '11111111-1111-4111-8111-111111111111', governanceTitle: 'manager' }
+const PLAIN_USER = { userId: 'user-plain', userTitle: 'user' }
 
 async function purge(headers: Record<string, string> = {}) {
   const chunks = [Buffer.from(JSON.stringify({ filename: FILE }))]
@@ -83,6 +93,7 @@ const archiveExists = async () => (await import('node:fs')).existsSync(archive()
 
 beforeEach(async () => {
   m.authenticateAgent.mockReset()
+  m.modelOn.mockReset(); m.modelOn.mockReturnValue(false)
   const { mkdirSync, writeFileSync } = await import('node:fs')
   mkdirSync(tmp.dir + '/cemetery', { recursive: true })
   writeFileSync(archive(), 'ZIPBYTES-MARKER')
@@ -127,6 +138,15 @@ describe('TRDD-BZW1QAZ5 — headless purge goes through the twin (sudo layer + o
     const out = await purge()
     expect(out.status).toBe(401)
     expect(out.json.error).toBe('Invalid token')
+    expect(await archiveExists()).toBe(true)
+  })
+  it('model ON: a signed-in NON-owner user with a VALID sudo token is refused 403 by the title gate and the archive survives', async () => {
+    /** Refused by lib/sudo-guard -> authorize (userId + title not maestro), not by the missing token: the token is accepted */
+    m.modelOn.mockReturnValue(true)
+    m.authenticateAgent.mockReturnValue(PLAIN_USER)
+    const out = await purge({ 'x-sudo-token': 'good-token' })
+    expect(out.status).toBe(403)
+    expect(out.json).toMatchObject({ error: 'aid_title_forbidden', message: 'User "user" is not authorized to delete-agent via the AI Maestro API', route: 'DELETE /api/agents/cemetery' })
     expect(await archiveExists()).toBe(true)
   })
 })

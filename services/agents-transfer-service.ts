@@ -413,8 +413,12 @@ export async function exportAgentZip(agentIdOrName: string): Promise<ServiceResu
   }
 
   // Create sanitized agent for export
+  // A session secret hash must not leave the host: the archive is the transfer artifact, and
+  // a secret issued to this identity must not authenticate the copy imported elsewhere.
+  const { sessionSecretHash: _omitSecret, ...safeMetadata } = (agent.metadata ?? {}) as Record<string, unknown>
   const exportableAgent = {
     ...agent,
+    metadata: safeMetadata,
     name: agentName,
     deployment: {
       type: 'local' as const
@@ -785,9 +789,14 @@ export async function importAgent(
 
     // Prepare agent for import
     const newAgentId = options.newId ? uuidv4() : importedAgent.id
+    // A session secret issued before the export must not authenticate the restored/imported
+    // identity (an archive from an older build or another host may still carry the hash); a
+    // fresh secret is minted at the next session start (buildAgentSessionEnv).
+    const { sessionSecretHash: _staleSecret, ...importedMetadata } = (importedAgent.metadata ?? {}) as Record<string, unknown>
 
     const agentToImport: Agent = {
       ...importedAgent,
+      metadata: importedMetadata,
       id: newAgentId,
       name: newAgentName,
       alias: newAgentName,

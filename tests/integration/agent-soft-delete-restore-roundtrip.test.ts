@@ -84,6 +84,42 @@ function authenticate(token: string) {
   return auth.authenticateAgent(`Bearer ${token}`, null)
 }
 
+
+// Rebuild an archive with its registry.json row rewritten by `mutate` (everything else copied as is).
+async function rewriteRegistry(buf: Buffer, mutate: (row: Record<string, unknown>) => void): Promise<Buffer> {
+  const yauzl = (await import("yauzl")).default
+  const archiver = (await import("archiver")).default
+  const zip = await new Promise<import("yauzl").ZipFile>((res, rej) =>
+    yauzl.fromBuffer(buf, { lazyEntries: true }, (e, z) => (e || !z ? rej(e) : res(z))))
+  const out = archiver("zip")
+  const chunks: Buffer[] = []
+  out.on("data", (c: Buffer) => chunks.push(c))
+  await new Promise<void>((res, rej) => {
+    zip.on("error", rej)
+    zip.on("end", res)
+    zip.on("entry", (entry: import("yauzl").Entry) => {
+      zip.openReadStream(entry, (e, s) => {
+        if (e || !s) return rej(e)
+        const parts: Buffer[] = []
+        s.on("data", (c: Buffer) => parts.push(c))
+        s.on("end", () => {
+          let data = Buffer.concat(parts)
+          if (entry.fileName === "registry.json") {
+            const row = JSON.parse(data.toString("utf-8"))
+            mutate(row)
+            data = Buffer.from(JSON.stringify(row))
+          }
+          out.append(data, { name: entry.fileName })
+          zip.readEntry()
+        })
+      })
+    })
+    zip.readEntry()
+  })
+  await out.finalize()
+  return Buffer.concat(chunks)
+}
+
 beforeAll(async () => {
   expect(TMP_HOME).not.toBe(REAL_HOME)
   registry = await import('@/lib/agent-registry')
@@ -159,18 +195,36 @@ describe('agent soft-delete -> cemetery -> restore round trip (real modules, tem
     expect(registry.getAgent(originalId, true)).toBeNull()
   })
 
-  it('OBSERVED (UNSAFE): the OLD session secret authenticates again, now under the NEW identity', () => {
-    // importAgent spreads the exported registry row (incl. metadata.sessionSecretHash) into the
-    // restored agent, so a secret issued to the deleted identity resolves to the new id.
-    const r = authenticate(secret)
-    expect(r.error).toBeUndefined()
-    expect(r.agentId).toBe(restoredId)
-    expect(r.agentId).not.toBe(originalId)
+  it('the OLD session secret is refused after a restore, even from an archive that still carries the hash', async () => {
+    // importAgent drops metadata.sessionSecretHash: a secret issued to the deleted identity must not
+    // authenticate the restored one. The tainted archive (older build / foreign host) pins the
+    // import-side strip independently of the export-side one.
+    const { generateSessionSecret } = await import('@/lib/session-secret')
+    const legacy = generateSessionSecret()
+    const exported = await transfer.exportAgentZip(restoredId)
+    expect(exported.data).toBeDefined()
+    let exportedHadHash = true
+    await rewriteRegistry(exported.data!.buffer, row => { exportedHadHash = 'sessionSecretHash' in ((row.metadata as object) ?? {}) })
+    expect(exportedHadHash).toBe(false)
+    const tainted = await rewriteRegistry(exported.data!.buffer, row => {
+      row.metadata = { ...(row.metadata as object), sessionSecretHash: legacy.secretHash }
+    })
+    await registry.deleteAgent(restoredId, true)
+    const res = await transfer.importAgent(tainted, { newId: true })
+    expect(res.error).toBeUndefined()
+    expect(registry.getAgent(res.data!.agent!.id)?.metadata?.sessionSecretHash).toBeUndefined()
+    for (const s of [secret, legacy.secret]) {
+      const r = authenticate(s)
+      expect(r.status).toBe(401)
+      expect(r.agentId).toBeUndefined()
+    }
   })
 
   it('containment: the developer real ~/.aimaestro agents and cemetery listings are unchanged', () => {
     expect(listing(REAL_AGENTS).length).toBe(realBefore.agents)
     expect(listing(REAL_CEMETERY).length).toBe(realBefore.cemetery)
+    // content, not counts: an existing file rewritten in place changes its sha256
+    expect(fingerprint()).toEqual(realFingerprintBefore)
     expect(fs.existsSync(path.join(TMP_HOME, '.aimaestro', 'agents', 'registry.json'))).toBe(true)
   })
 })

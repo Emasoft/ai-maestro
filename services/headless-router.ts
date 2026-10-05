@@ -1971,9 +1971,9 @@ const routes: Route[] = [
     const { ChangeMetadata } = await import('@/services/element-management-service')
     const result = await ChangeMetadata(params.id, metadata, buildAuthContext(auth), { mode: 'merge' })
     if (!result.success) {
-      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
-      const status = /not found/i.test(result.error || '') ? 404
-        : result.denied ? 403
+      // TRDD-BZW1QAZ5: a refusal (result.denied) is decided FIRST so the status never depends on the reason's wording and never reveals whether the target exists (403 = exists, 404 = absent); the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex
+      const status = result.denied ? 403
+        : /not found/i.test(result.error || '') ? 404
         : 400
       sendJson(res, status, { error: result.error || 'Failed to update metadata' })
       return
@@ -1994,18 +1994,17 @@ const routes: Route[] = [
       const authz = authorize({ agentId: ctx.agentId, governanceTitle: ctx.governanceTitle, teamId: ctx.teamId, userId: ctx.userId, userTitle: ctx.userTitle }, 'modify-agent', params.id)
       if (!authz.allowed) {
         const reason = authz.reason || 'Not authorized'
-        // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
-        // authorize() answers only allowed/denied: a non-not-found reason here is a refusal, so 403 (never 400)
-        sendJson(res, /not found/i.test(reason) ? 404 : 403, { error: reason })
+        // TRDD-BZW1QAZ5: authorize() answers only allowed/denied, so this is always a refusal: 403 whatever the reason says (a 404 here would reveal whether the target exists)
+        sendJson(res, 403, { error: reason })
         return
       }
     }
     const { ChangeMetadata } = await import('@/services/element-management-service')
     const result = await ChangeMetadata(params.id, {}, ctx, { mode: 'clear' })
     if (!result.success) {
-      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
-      const status = /not found/i.test(result.error || '') ? 404
-        : result.denied ? 403
+      // TRDD-BZW1QAZ5: a refusal (result.denied) is decided FIRST so the status never depends on the reason's wording and never reveals whether the target exists (403 = exists, 404 = absent); the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex
+      const status = result.denied ? 403
+        : /not found/i.test(result.error || '') ? 404
         : 400
       sendJson(res, status, { error: result.error || 'Failed to clear metadata' })
       return

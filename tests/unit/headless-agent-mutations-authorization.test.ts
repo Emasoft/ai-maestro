@@ -174,6 +174,13 @@ describe('TRDD-BZW1QAZ5 — PATCH agents/:id/metadata (twin: authenticate, then 
     expect(out.status).toBe(status)
     expect(out.json.error).toBe(error)
   })
+  it('a refusal whose reason contains "not found" is still 403 (PATCH), never 404 (does not reveal whether the target exists)', async () => {
+    /** TRDD-BZW1QAZ5: the denied flag is decided before the not-found wording, so an unauthorized caller cannot tell present ids from absent ones */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    m.changeMetadata.mockResolvedValue({ success: false, operations: [], error: 'target agent not found in the registry', denied: true })
+    const out = await run('PATCH', META, { k: 1 })
+    expect(out.status).toBe(403)
+  })
 })
 
 describe('TRDD-BZW1QAZ5 — a malformed JSON body is a client error, not a server error', () => {
@@ -289,5 +296,12 @@ describe('TRDD-BZW1QAZ5 — DELETE agents/:id/metadata (authenticate + the twin 
       expect(out.status).toBe(status)
       expect(out.json.error).toBe(error)
     }
+  })
+  it('a refusal whose reason contains "not found" is still 403 (DELETE), never 404 (does not reveal whether the target exists)', async () => {
+    /** TRDD-BZW1QAZ5: the denied flag is decided before the not-found wording, so an unauthorized caller cannot tell present ids from absent ones */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    m.changeMetadata.mockResolvedValue({ success: false, operations: [], error: 'target agent not found in the registry', denied: true })
+    const out = await run('DELETE', META)
+    expect(out.status).toBe(403)
   })
 })

@@ -59,9 +59,9 @@ export async function PATCH(
 
     const result = await ChangeMetadata(agentId, metadata, buildAuthContext(auth), { mode: 'merge' })
     if (!result.success) {
-      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
-      const status = /not found/i.test(result.error || '') ? 404
-        : result.denied ? 403
+      // TRDD-BZW1QAZ5: a refusal (result.denied) is decided FIRST so the status never depends on the reason's wording and never reveals whether the target exists (403 = exists, 404 = absent); the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex
+      const status = result.denied ? 403
+        : /not found/i.test(result.error || '') ? 404
         : 400
       return NextResponse.json({ error: result.error || 'Failed to update metadata' }, { status })
     }
@@ -96,9 +96,9 @@ export async function DELETE(
 
     const result = await ChangeMetadata(agentId, {}, buildAuthContext(auth), { mode: 'clear' })
     if (!result.success) {
-      // TRDD-BZW1QAZ5: 403 comes from the service flag, never from the error text (the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex)
-      const status = /not found/i.test(result.error || '') ? 404
-        : result.denied ? 403
+      // TRDD-BZW1QAZ5: a refusal (result.denied) is decided FIRST so the status never depends on the reason's wording and never reveals whether the target exists (403 = exists, 404 = absent); the real refusals "No agent can modify itself…" / "member cannot modify-agent other agents" match no regex
+      const status = result.denied ? 403
+        : /not found/i.test(result.error || '') ? 404
         : 400
       return NextResponse.json({ error: result.error || 'Failed to clear metadata' }, { status })
     }

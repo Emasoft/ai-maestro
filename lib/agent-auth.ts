@@ -21,7 +21,13 @@ import { isSessionSecret, validateSessionSecret } from './session-secret'
 import { verifyCompactIbct } from './ibct'
 import { loadSecurityConfig } from './security-config'
 import { isAidAssociated } from './aid-ledger-authority'
-import { getAgent as getAgentRecord } from './agent-registry'
+import { getAgent as getAgentRecord, loadAgents } from './agent-registry'
+// Static (not lazy require): a runtime `require('./governance')` does not resolve the .ts
+// under vitest and is not seen by vi.mock, so resolveGovernanceContext always fell into its
+// catch and returned 'autonomous' — untestable. Traced: governance / team-registry /
+// agent-registry have no load-time import path back to agent-auth or authorization (TRDD-8E6XMDEX).
+import { isManager, isChiefOfStaffAnywhere } from './governance'
+import { loadTeams } from './team-registry'
 import type { UserTitle } from '@/types/user'
 
 export interface AgentAuthResult {
@@ -456,10 +462,7 @@ export function buildSystemAuthContext(reason: string): AuthContext {
  */
 function findAgentBySessionSecret(secret: string): { id: string; name: string } | null {
   try {
-    // Dynamic import to avoid circular dependency with agent-registry
-
-    const agentRegistry = require('./agent-registry')
-    const agents: Array<{ id: string; name: string; metadata?: Record<string, unknown> }> = agentRegistry.loadAgents()
+    const agents = loadAgents()
     for (const agent of agents) {
       const storedHash = agent.metadata?.sessionSecretHash as string | undefined
       if (storedHash && validateSessionSecret(secret, storedHash)) {
@@ -485,15 +488,10 @@ function findAgentBySessionSecret(secret: string): { id: string; name: string } 
  */
 function resolveGovernanceContext(agentId: string): { title: string; teamId: string | null } {
   try {
-    // Dynamic imports to avoid circular dependencies
+    if (isManager(agentId)) return { title: 'manager', teamId: resolveTeamId(agentId) }
+    if (isChiefOfStaffAnywhere(agentId)) return { title: 'chief-of-staff', teamId: resolveTeamId(agentId) }
 
-    const governance = require('./governance')
-    if (governance.isManager(agentId)) return { title: 'manager', teamId: resolveTeamId(agentId) }
-    if (governance.isChiefOfStaffAnywhere(agentId)) return { title: 'chief-of-staff', teamId: resolveTeamId(agentId) }
-
-
-    const agentRegistry = require('./agent-registry')
-    const agent = agentRegistry.getAgent(agentId)
+    const agent = getAgentRecord(agentId)
     const title = (agent?.governanceTitle as string) || 'autonomous'
     return { title, teamId: resolveTeamId(agentId) }
   } catch (err) {
@@ -569,9 +567,7 @@ function assertAidLedgerBacked(agentId: string): boolean {
 
 function resolveTeamId(agentId: string): string | null {
   try {
-
-    const teamRegistry = require('./team-registry')
-    const teams = teamRegistry.loadTeams()
+    const teams = loadTeams()
     for (const team of teams) {
       if (
         team.agentIds?.includes(agentId) ||

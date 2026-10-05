@@ -5,6 +5,7 @@ import { isValidUuid } from '@/lib/validation'
 import type { PortfolioToken, PortfolioIssuerTitle } from '@/types/portfolio'
 import { SYSTEM_OWNER_ISSUER } from '@/types/portfolio'
 import { canIssue } from '@/lib/portfolio-issue-guard'
+import { getAgent } from '@/lib/agent-registry'
 import { signPortfolioToken } from '@/lib/portfolio-sign'
 import {
   issueToken,
@@ -109,6 +110,14 @@ export async function POST(
         { error: 'portfolio_mint_forbidden', message: decision.reason },
         { status: 403 },
       )
+    }
+
+    // TRDD-A50RC5G8: the subject must be a LIVE agent for every caller branch of canIssue (owner, manager,
+    // chief of staff). The CoS branch only checks team.agentIds, where a soft-deleted agent's id can linger,
+    // so without this a token could be minted for a dead id. getAgent excludes soft-deleted agents. Checked
+    // after canIssue so an unauthorized caller cannot use the 404 to probe which ids exist.
+    if (!getAgent(subjectAgentId)) {
+      return NextResponse.json({ error: 'Subject agent not found' }, { status: 404 })
     }
 
     // Build the token. The issuer title comes from the AID-derived context and is

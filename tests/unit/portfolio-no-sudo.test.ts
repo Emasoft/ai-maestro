@@ -58,6 +58,9 @@ vi.mock('@/lib/portfolio-ledger', () => mockLedger)
 vi.mock('@/lib/portfolio-sign', () => mockSign)
 vi.mock('@/lib/portfolio-issue-guard', () => mockGuard)
 vi.mock('@/lib/validation', () => ({ isValidUuid: () => true }))
+// TRDD-A50RC5G8: the route requires a live subject; getAgent (which excludes soft-deleted agents) is the seam.
+const { mockGetAgent } = vi.hoisted(() => ({ mockGetAgent: vi.fn() }))
+vi.mock('@/lib/agent-registry', () => ({ getAgent: (...a: unknown[]) => mockGetAgent(...a) }))
 
 import { POST } from '@/app/api/agents/[id]/portfolio/route'
 import { NextRequest } from 'next/server'
@@ -70,6 +73,7 @@ import { stripComments } from '../helpers/strip-comments'
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.authenticateFromRequest.mockReturnValue({ agentId: 'mgr-1', governanceTitle: 'manager', teamId: null })
+  mockGetAgent.mockReturnValue({ id: 'sub-1' })
 })
 
 function postRequest(body: unknown): NextRequest {
@@ -99,6 +103,32 @@ describe('R32 — agent portfolio mint requires NO sudo token (behavioral)', () 
     const json = await res.json()
     expect(json.error).not.toBe('sudo_required')
   })
+})
+
+describe('mint requires a live subject (TRDD-A50RC5G8)', () => {
+  const callers = [
+    ['system owner', { governanceTitle: undefined }, undefined],
+    ['manager', { governanceTitle: 'manager' }, 'mgr-1'],
+    ['chief-of-staff', { governanceTitle: 'chief-of-staff' }, 'cos-1'],
+  ] as const
+
+  it('a live subject is minted as before (positive control)', async () => {
+    /** Live subject, manager caller: 201 */
+    const res = await POST(postRequest({ kind: 'mandate', scope: 'agent:create' }), { params: Promise.resolve({ id: 'sub-1' }) })
+    expect(res.status).toBe(201)
+  })
+
+  for (const [label, auth, agentId] of callers) {
+    it(`${label}: an unknown or soft-deleted subject is refused 404 and nothing is stored`, async () => {
+      /** getAgent excludes soft-deleted agents, so unknown and soft-deleted both surface as a null lookup */
+      mockAuth.authenticateFromRequest.mockReturnValue({ agentId, ...auth, teamId: null } as any)
+      mockGetAgent.mockReturnValue(null)
+      const res = await POST(postRequest({ kind: 'mandate', scope: 'agent:create' }), { params: Promise.resolve({ id: 'ghost' }) })
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toBe('Subject agent not found')
+      expect(mockStore.issueToken).not.toHaveBeenCalled()
+    })
+  }
 })
 
 describe('R32 — static invariants', () => {

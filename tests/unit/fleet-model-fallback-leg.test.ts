@@ -65,6 +65,7 @@ const tick = (over: Record<string, unknown> = {}) =>
     scan: async () => SNAP,
     log: () => {},
     nudgeEnabled: false,
+    findTeamSlots: () => [], // never reach the live teams file
     now: () => 1_000_000,
     ...over,
   })

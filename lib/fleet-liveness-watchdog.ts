@@ -11,6 +11,8 @@
 
 import { getAgent, listAgents } from '@/lib/agent-registry'
 import { getAgentSessionStatus } from '@/services/agents-core-service'
+import { loadTeams } from '@/lib/team-registry'
+import { findDanglingTeamSlots, type TeamSlotFinding } from '@/lib/team-slot-liveness'
 import { readHookNotification } from '@/lib/session-safe-state'
 import { loadPersistedSessions } from '@/lib/session-persistence'
 import { scanFleetLiveness, type FleetScanDeps, type FleetLivenessSnapshot } from '@/lib/fleet-liveness'
@@ -131,6 +133,8 @@ export interface FleetLivenessWatchdogOptions {
     dead: { agentId: string; name?: string; class: 'dead' }[],
     debouncedIds: ReadonlySet<string>,
   ) => Promise<HardRecoveryPassResult>
+  /** Injectable team-slot finder for tests; defaults to the real teams over the registry. */
+  findTeamSlots?: () => TeamSlotFinding[]
 }
 
 /** Default 5 min, env-overridable, 0 disables (same knob shape as the invariants watchdog). */
@@ -185,6 +189,15 @@ export function resetContinuityStore(): void {
   continuityHeartbeat.ticksSinceLog = 0
 }
 
+
+/** Key of the last reported dangling team-slot set, so an UNCHANGED set is not re-logged every
+ *  tick forever (report on transition only). null = nothing reported / last pass was clean. */
+const teamSlotState: { lastKey: string | null } = { lastKey: null }
+
+/** Clear the team-slot dedup key — for tests only. */
+export function resetTeamSlotState(): void {
+  teamSlotState.lastKey = null
+}
 /** Heartbeat bookkeeping for the continuity leg (TRDD-7UWQ92WK).
  *
  *  WHY THIS EXISTS: the leg logs only `fired` and non-`no_event` skips, so a HEALTHY pass printed
@@ -449,6 +462,30 @@ export async function runFleetLivenessTick(
       } catch (err) {
         log(`[FleetInboxNudge] nudge pass failed (non-fatal): ${(err as Error)?.message || err}`)
       }
+    }
+
+    // Team-slot liveness leg (TRDD-XTDMQO68) — REPORT ONLY. A chief-of-staff / orchestrator id
+    // that is no longer a live agent never clears itself and is the trust anchor of every grant.
+    // This leg never repairs, clears or hibernates anything. It logs on a CHANGE of the finding
+    // set only (a standing finding must not print every tick forever); own try, so a throw here
+    // can never abort the legs after it.
+    try {
+      const findings = (
+        opts.findTeamSlots ?? (() => findDanglingTeamSlots(loadTeams(), (id) => getAgent(id, true)))
+      )()
+      const key = findings.map((f) => `${f.teamId}/${f.slot}/${f.danglingId}`).sort().join('|') || null
+      if (key !== teamSlotState.lastKey) {
+        const hadFindings = teamSlotState.lastKey !== null
+        teamSlotState.lastKey = key
+        if (findings.length)
+          log(
+            `[FleetTeamSlots] REPORT ONLY, nothing was modified: ${findings.length} team slot(s) name an id that is not a live agent: ` +
+              findings.map((f) => `team ${f.teamId} ${f.slot}=${f.danglingId}`).join(', '),
+          )
+        else if (hadFindings) log('[FleetTeamSlots] REPORT ONLY: no team slot names a non-live agent any more (previous finding(s) resolved)')
+      }
+    } catch (err) {
+      log(`[FleetTeamSlots] team-slot check failed (non-fatal): ${(err as Error)?.message || err}`)
     }
 
     // Terminal-continuity leg (TRDD-Y8VPE3NS E3 box 5) — THE poll site that drives the automaton.

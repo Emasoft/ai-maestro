@@ -22,6 +22,8 @@ import type { FleetLivenessSnapshot } from '@/lib/fleet-liveness'
  */
 const NO_CONTINUITY = {
   runContinuity: async () => ({ scanned: 0, fired: [], skipped: [] }),
+  // Same reason as the continuity stub: the default team-slot leg reads the real teams file.
+  findTeamSlots: () => [],
 }
 
 function snap(over: Partial<FleetLivenessSnapshot> = {}): FleetLivenessSnapshot {

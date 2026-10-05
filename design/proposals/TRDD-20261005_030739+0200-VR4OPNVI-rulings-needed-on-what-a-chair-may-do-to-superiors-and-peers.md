@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:35:06+0200
+updated: 2026-10-05T07:03:21+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -66,6 +66,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [ ] 21 (DECIDE) The sudo confirmation is asked only of you. An agent is judged by its title instead, and a MANAGER agent passes: it can transfer an agent to another host (move mode removes it here) and change another agent's program or program arguments with no human confirmation, in both modes. Your ruling reserves hard-kill to you with a sudo confirmation. NARROWED 2026-10-05: your rules R32.1-R32.3 already say agents never face sudo and are judged by title, so the general question is answered. What remains: a move-mode transfer deletes the local agent outright with no cemetery copy; As an interim measure (9cb25b142) every agent caller is refused move mode; copy mode stays. QUESTION: does your soft-kill ruling cover moving an agent off this host, so that move stays owner-only — or may a MANAGER move agents once move mode archives to the cemetery first? From TRDD-BZW1QAZ5.
 - [x] POINTER 2026-10-05: the plain-language list of these questions for the owner is reports/decisions/20261005_061520+0200-decisions-waiting-on-the-user.md (gitignored). It holds the 19 questions ranked earlier plus questions 20 and 21 appended unranked, one finding and one main-agent decision; its title line overstates this as '21 questions; first ranked'. An earlier file with the 050327 timestamp lost its title line in an in-place rewrite and was moved to reports_dev/decisions/.
 - [ ] 22 (DECIDE) The creation helper (the agent-creation wizard session, which runs with accept-edits permissions) could be started, stopped and inspected by any authenticated agent, and in full mode its captured output could be read with an unverified credential. Its chat and its raw materials were already yours alone. As an interim measure I am making start, stop, status and output yours alone too, in both server modes. Should any agent title (for example a MANAGER) be able to start or stop it? From TRDD-BZW1QAZ5.
+- [ ] Question 23 (2026-10-05): four test writes (seq 21412 to 21415, fixture agent id 33333333-3333-4333-8333-333333333333) reached the real signed agents ledger during a worker run of an undoubled test. The chain still verifies and replay tolerates them. Leave them as permanent noise, or have the owner repair the ledger? No agent may remove signed entries. Interim: left untouched. Detail on TRDD-RB72KQI2.
 
 ## Approval log
 

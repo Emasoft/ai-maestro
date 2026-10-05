@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:57:52+0200
+updated: 2026-10-05T07:03:22+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -107,6 +107,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [ ] CORRECTION 2026-10-05 to the ticked box that says of the wizard chat POST that the two modes agree: FALSE for the API-only server until c8af19db2. There the wizard chat entry was unreachable; the generic per-agent chat handler answered and sent the text into an agent pane under the id creation-helper, and the owner-only wizard chat was called zero times (the worker test before the move). STILL UNREAD, so this box stays open: what authorization the generic chat POST applies and what it did when no agent has that id; what linkAgentSession did with the id creation-helper. The reserved-names refusal blocks NEW agents with that name, not an existing registry row. The owner-only decision recorded in that ticked box is NOT settled by its tick — it stays with the owner as question 22.
 - [x] 2026-10-05 06814860d closes the two boxes ticked with it: a metadata clear keeps the session-secret hash and the amp block in BOTH modes and the API-only clear goes through ChangeMetadata (same status in both modes for owner, self, MANAGER-on-other, agent-on-other and unknown id — the worker test); GET and DELETE role-plugins are no longer caught by the generic by-id routes. My run: 121 test files / 2132 passed including all top-level, lib and api tests; tsc 0; protected-key neuter 5 red.
 - [ ] UNREAD after 06814860d (review): the parity test pins that an agent clearing its OWN metadata gets 400 in both modes. A refusal of authority should be 403; a 400 next to MANAGER-on-other 200 suggests a validation branch, not an authorization gate. Which branch produces it was not read (the router diff was checked by hunk position only), and the test asserts the code without its reason. Read the branch; assert the error text; if it is an authorization refusal answered 400, record it as a defect rather than leave the test reading as endorsement.
+- [x] READ 2026-10-05: the 400 for an agent clearing its own metadata IS an authorization refusal. Both modes answer 403 only when the reason text matches forbidden|authoris|authoriz; the real reasons (No agent can modify itself via the AI Maestro API; member cannot modify-agent other agents) do not match, so they fall to 400. Five sites map by that text: app/api/agents/[id]/metadata/route.ts two, services/headless-router.ts three. The parity test pins the wrong code.
+- [ ] Fix the above: the metadata pipeline marks an authorization refusal explicitly, both modes answer 403, and the test asserts the reason text as well as the code.
+- [x] Whole suite at 8367d2b36 (main tree, 2026-10-05): 599 files, 593 passed; 8013 tests, 8001 passed, 10 failed, 2 skipped; tsc 0 lines. Eight failures are the same known ones (createagent-g05c 1, g08 4, g11 2, pillar-cli-e2e 1). Two others were 30 s timeouts and both files pass when run alone (24 of 24): assistant-fs-containment (skips without writing for a non-ASSISTANT agent) and teams-stats-verb. Cause of the timeouts not established. Noted: teams-stats-verb sends a request to the real running server.
 
 ## Approval log
 

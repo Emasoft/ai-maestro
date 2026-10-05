@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:51:02+0200
+updated: 2026-10-05T02:59:44+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -94,6 +94,14 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] New titles a chair can ASSIGN (per worker static trace): manager and assistant stopped by the standalone-title gate (element-management-service.ts ~2811); chief-of-staff stopped by G8 unless the target sits in two teams (NOT ESTABLISHED whether that is possible); orchestrator REACHABLE when the team slot is empty — probably intended, needs a ruling
 - [ ] ROOT: lib/team-registry updateTeam accepts any uuid as chiefOfStaffId (no exists / not-soft-deleted / not-MANAGER check) — one validation there covers the headless route, cross-host assign-cos (which bypasses updateTeam via saveTeams — route it through) and auto-create
 - [ ] Owner path: whoever holds the governance password can obtain an owner session and set a chair (per worker read of lib/agent-auth.ts) — by design; depends on the password never reaching an agent. Untested branches: unreadable registry in the mint guard, throwing lookup in the title guard. Audit of other headless handlers writing membership/titles NOT done. Chair may unblock/wake/hibernate a MANAGER in its team — needs a ruling
+- [x] LANDED 96245c34c: a NEW chair must be a live agent (404) and must not be the MANAGER (409), checked in lib/team-registry createTeam/updateTeam. 541 files / 7292 tests green on the tree as committed (run just before the commit); live-agent neuter re-run by the orchestrator
+- [ ] CORRECTIONS (review, 2026-10-05, second set): 'Full suites green on the committed tree' in the LANDED 3a78439f6 box means run on the working tree immediately before the commits, same content. 'the token team id no longer grants anywhere' means NO KNOWN READER — the inventory grep did not cover dynamic access. Of the headless neuters only 'remove authorize' was re-run by the orchestrator; self-assign and ordering are worker-run. Overruling the title-guard interpretation also needs its two tests removed
+- [x] READ BY THE ORCHESTRATOR (lib/authorization.ts ~358-388): authorize denies a failed authentication, denies a userId-bearing non-maestro user, and allows any context with no agentId — so the plain web session and a maestro / maestro-delegate session both reach the headless password block; a non-owner user gets 403. Headless PUT /api/teams/:id/orchestrator read: agent callers must be the MANAGER or that team chief of staff (registry helpers isManager / isChiefOfStaff)
+- [ ] No test drives the headless chief-of-staff route with the user-authority-model-ON owner shape; the throwing-lookup branch of the title guard and the unreadable-registry branch of the mint guard are untested
+- [ ] Mint guard: a soft-deleted subject still listed in agentIds passes chairsTeamContaining; whether the mint route refuses a non-live subject elsewhere is NOT ESTABLISHED (not seen in app/api/agents/[id]/portfolio/route.ts lines 78-104)
+- [ ] Cross-host assign-cos still seats any id as chair (no live-agent / not-MANAGER check): its handlers write inside the non-reentrant teams lock so they cannot call updateTeam (per worker). Add the two checks inline there. Whether cross-host execution is reachable at all is NOT ESTABLISHED
+- [ ] Grandfathered chairs: the differs-only carve-out keeps an already-seated invalid chair forever and silently — add a detector (or a lint over teams.json) rather than re-validating on every update. A rollback restoring a since-soft-deleted chair now fails 404: trace whether DeleteAgent's own compensation can hit it
+- [ ] Stale references to the deleted lookupTeamIdForAgent: lib/authorization.ts comments (~22, ~479, ~1036) and comments in tests/authorization.test.ts, tests/unit/cos-soft-delete-leaves-archive.test.ts, tests/governance/r8-r10-r26-authorization-team-scope.test.ts, tests/governance/r42-8-unblock-prompt-authority.test.ts. An ORCHESTRATOR may edit a TRDD assigned to its own chief of staff (pre-existing; needs a ruling)
 
 ## Approval log
 

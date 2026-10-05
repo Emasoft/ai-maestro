@@ -954,6 +954,69 @@ describe('TRDD-A50RC5G8 — delete-agent: CHIEF-OF-STAFF must be the registry ch
     const d = authorize(auth, 'delete-agent', 'member-a2')
     expect(warn).toHaveBeenCalled() // positive control: the read really threw and was logged
     warn.mockRestore()
-    expect(d).toEqual({ allowed: false, reason: NOT_COS })
+    expect(d).toEqual({ allowed: false, reason: 'Team registry could not be read; refusing (soft delete only)' })
+  })
+})
+
+/**
+ * TRDD-A50RC5G8 — every other CHIEF-OF-STAFF own-team grant (change-title, archive of a failed TRDD,
+ * unblock-prompt, and the generic policy tail used by modify-agent) is decided by the REGISTRY like delete-agent:
+ * the caller must be the chiefOfStaffId of a team that contains the target. The token's teamId is never consulted
+ * and a COS-titled plain member has no authority.
+ */
+describe('TRDD-A50RC5G8 — sibling CHIEF-OF-STAFF grants require the registry chiefOfStaffId', () => {
+  const team = (id: string, chiefOfStaffId: string | null, agentIds: string[]) =>
+    ({ id, name: id, type: 'closed', chiefOfStaffId, orchestratorId: null, agentIds })
+  const setTeams = (...teams: unknown[]) => { fsStubFns.teamsState.json = JSON.stringify({ teams }) }
+  const authFor = async (agentId: string, teamId: string | null) =>
+    authenticateFromRequest(requestWith({ Authorization: `Bearer ${(await issueGovernanceToken(agentId, agentId, 'chief-of-staff', teamId)).access_token}` }))
+  beforeEach(() => { mockGetAgent.mockImplementation((id: string) => ({ id, governanceTitle: 'member' })) })
+
+  type Site = { name: string; deny: string; unreadable: string; run: (a: AgentAuthResult, target: string) => { allowed: boolean; reason?: string } }
+  const sites: Site[] = [
+    { name: 'change-title', unreadable: 'Team registry could not be read; refusing to change the title (TRDD-A50RC5G8)', deny: 'Chief-of-Staff can only change titles of agents in their own team',
+      run: (a, t) => authorize(a, 'change-title', t) },
+    { name: 'archive of a failed TRDD', unreadable: 'Team registry could not be read; refusing to archive a failed TRDD (TRDD-A50RC5G8)', deny: 'Archiving a failed TRDD makes it definitive — only MANAGER, or the CHIEF-OF-STAFF of its assignee\'s team, may decide that (owner rulings 2026-09-24)',
+      run: (a, t) => authorize(a, 'manage-trdd', undefined, { verb: 'archive', minApproval: 'manager', zone: 'tasks', column: 'failed', assigneeAgentId: t, createdByAgentId: 'someone-else' }) },
+    { name: 'unblock-prompt', unreadable: 'R42.8: team registry could not be read — refusing to unblock (TRDD-A50RC5G8)', deny: 'R42.8: a CHIEF-OF-STAFF may only unblock agents of its OWN team',
+      run: (a, t) => authorize(a, 'unblock-prompt', t) },
+    { name: 'generic policy tail (modify-agent)', unreadable: 'Team registry could not be read; refusing to modify-agent (TRDD-A50RC5G8)', deny: 'Chief-of-Staff can only modify-agent agents in their own team',
+      run: (a, t) => authorize(a, 'modify-agent', t) },
+  ]
+
+  describe.each(sites)('$name', ({ deny, unreadable, run }) => {
+    it('the registry chiefOfStaffId of the target\'s team is ALLOWED', async () => {
+      setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+      expect(run(await authFor('cos-a', 'team-a'), 'm1')).toEqual({ allowed: true })
+    })
+    it('a COS-titled agent that is only a MEMBER of the target\'s team is DENIED', async () => {
+      setTeams(team('team-b', 'cos-b', ['cos-b', 'cos-x', 'm2']))
+      expect(run(await authFor('cos-x', 'team-b'), 'm2')).toEqual({ allowed: false, reason: deny })
+    })
+    it('a stale token teamId naming the target\'s team cannot grant the chief of staff of another team', async () => {
+      setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+      expect(run(await authFor('cos-a', 'team-b'), 'm2')).toEqual({ allowed: false, reason: deny })
+    })
+    it('with that same stale token teamId, a target in the caller\'s registry team is ALLOWED', async () => {
+      setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-b', 'cos-b', ['cos-b', 'm2']))
+      expect(run(await authFor('cos-a', 'team-b'), 'm1')).toEqual({ allowed: true })
+    })
+    it('a chief of staff chairing TWO teams may act on a target of the second one', async () => {
+      setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']), team('team-c', 'cos-a', ['cos-a', 'm3']))
+      expect(run(await authFor('cos-a', 'team-a'), 'm3')).toEqual({ allowed: true })
+    })
+    it('a TEAMLESS target is DENIED', async () => {
+      setTeams(team('team-a', 'cos-a', ['cos-a', 'm1']))
+      expect(run(await authFor('cos-a', 'team-a'), 'loner')).toEqual({ allowed: false, reason: deny })
+    })
+    it('a team store read that throws is DENIED', async () => {
+      const auth = await authFor('cos-a', 'team-a')
+      fsStubFns.teamsState.throws = true
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const d = run(auth, 'member-a2')
+      expect(warn).toHaveBeenCalled() // positive control: the read really threw and was logged
+      warn.mockRestore()
+      expect(d).toEqual({ allowed: false, reason: unreadable })
+    })
   })
 })

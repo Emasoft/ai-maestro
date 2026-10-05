@@ -410,10 +410,14 @@ export function authorize(
       if (!targetAgentId) {
         return { allowed: false, reason: 'Chief-of-Staff must specify target agent for title change' }
       }
-      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
-      if (cosTeamId && cosTeamId === targetTeamId) {
+      // TRDD-A50RC5G8: registry decides — caller must be the chiefOfStaffId of a team containing the target. The
+      // token's team id can be stale and a chief-of-staff TITLE is not supervision.
+      const supervision = cosSupervision(auth.agentId, targetAgentId)
+      if (supervision === 'ok') {
         return { allowed: true }
+      }
+      if (supervision === 'unreadable') {
+        return { allowed: false, reason: 'Team registry could not be read; refusing to change the title (TRDD-A50RC5G8)' }
       }
       return { allowed: false, reason: 'Chief-of-Staff can only change titles of agents in their own team' }
     }
@@ -438,6 +442,10 @@ export function authorize(
       // that contains the target. auth.teamId is deliberately NOT consulted (a token's team id outlives a team
       // change), and the title alone is not supervision (a COS-titled member of a team passed the old team-equality test).
       const supervision = targetAgentId ? cosSupervision(auth.agentId, targetAgentId) : 'not-cos'
+      if (supervision === 'unreadable') {
+        // A throwing read says nothing about who chairs what — do not tell the caller it chairs no team.
+        return { allowed: false, reason: 'Team registry could not be read; refusing (soft delete only)' }
+      }
       if (supervision === 'not-cos') {
         return {
           allowed: false,
@@ -701,9 +709,13 @@ export function authorize(
           if (title === 'chief-of-staff' && trdd.assigneeAgentId) {
             // Same team scope as the ORCHESTRATOR edit rule: a COS is its own team's
             // entry point (R6 v3). An unresolvable assignee has no team → deny.
-            const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-            if (cosTeamId && cosTeamId === lookupTeamIdForAgent(trdd.assigneeAgentId)) {
+            // TRDD-A50RC5G8: registry chiefOfStaffId of the assignee's team, never the token's (stale) team id or the title.
+            const supervision = cosSupervision(auth.agentId, trdd.assigneeAgentId)
+            if (supervision === 'ok') {
               return { allowed: true }
+            }
+            if (supervision === 'unreadable') {
+              return { allowed: false, reason: 'Team registry could not be read; refusing to archive a failed TRDD (TRDD-A50RC5G8)' }
             }
           }
           return {
@@ -821,10 +833,13 @@ export function authorize(
     }
 
     if (title === 'chief-of-staff') {
-      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
-      if (cosTeamId && cosTeamId === targetTeamId) {
+      // TRDD-A50RC5G8: registry chiefOfStaffId of the target's team; stale token team id / title are not supervision.
+      const supervision = cosSupervision(auth.agentId, targetAgentId)
+      if (supervision === 'ok') {
         return { allowed: true }
+      }
+      if (supervision === 'unreadable') {
+        return { allowed: false, reason: 'R42.8: team registry could not be read — refusing to unblock (TRDD-A50RC5G8)' }
       }
       return {
         allowed: false,
@@ -924,10 +939,13 @@ export function decideFromPolicy(
     if (!policy.cosOwnTeam) {
       return { allowed: false, reason: `Chief-of-Staff may not ${action} another agent (${policy.rule})` }
     }
-    const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
-    const targetTeamId = lookupTeamIdForAgent(targetAgentId)
-    if (cosTeamId && cosTeamId === targetTeamId) {
+    // TRDD-A50RC5G8: registry chiefOfStaffId of the target's team; stale token team id / title are not supervision.
+    const supervision = cosSupervision(auth.agentId, targetAgentId)
+    if (supervision === 'ok') {
       return { allowed: true }
+    }
+    if (supervision === 'unreadable') {
+      return { allowed: false, reason: `Team registry could not be read; refusing to ${action} (TRDD-A50RC5G8)` }
     }
     return { allowed: false, reason: `Chief-of-Staff can only ${action} agents in their own team` }
   }
@@ -969,11 +987,11 @@ function lookupGovernanceTitle(agentId: string): string {
 /**
  * Registry verdict on a CHIEF-OF-STAFF delete: 'ok' when `cosId` is the chiefOfStaffId of some team that contains
  * `targetId` (member or orchestrator) — ALL teams searched, never the first match; 'other-team' when it chairs a
- * team but not the target's; 'not-cos' when it chairs no team (or the read threw → deny).
+ * team but not the target's; 'not-cos' when it chairs no team; 'unreadable' when the read threw (says nothing about who chairs what → deny).
  * TRDD-A50RC5G8: this must read the registry and require chiefOfStaffId — a token's teamId can be stale, and a
  * chief-of-staff TITLE alone (or mere membership of a team) is not supervision.
  */
-function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 'not-cos' {
+function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 'not-cos' | 'unreadable' {
   try {
     const chaired = loadTeams().filter((team) => team.chiefOfStaffId === cosId)
     if (chaired.length === 0) return 'not-cos'
@@ -981,8 +999,9 @@ function cosSupervision(cosId: string, targetId: string): 'ok' | 'other-team' | 
       ? 'ok'
       : 'other-team'
   } catch (err) {
+    // 'unreadable', not 'not-cos': a throw does not prove the caller chairs no team.
     console.warn('[authorization] cosSupervision failed, denying:', { cosId, targetId, err })
-    return 'not-cos'
+    return 'unreadable'
   }
 }
 

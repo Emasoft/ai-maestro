@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:36:21+0200
+updated: 2026-10-05T05:40:17+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54, 6e1b24aa0, d51a40385, e3eb988a5, 0f1baf0e5, 4e9fcf807, 3cd000f2d, 64f8ad754, 2533ff3d8]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -80,6 +80,10 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] 2026-10-05 64f8ad754: headless metadata PATCH is authenticated and goes through ChangeMetadata; headless agent PATCH passes buildAuthContext(auth) like full mode. 54 headless test files / 804 passed (my run).
 - [x] 2026-10-05 READS that correct the severity of the skills fix (3cd000f2d): the skills service refuses an identified caller unless it is the MANAGER or the chief-of-staff of the target's team, so an authenticated agent could not change another agent's skills before the fix either; removeSkill defaults its type to auto, so that part of the change is a no-op; authorize has an explicit branch so a signed-in non-owner user is not treated as the system owner (read from its guard lines and comments, not the whole function). The one real gap was a credential the router's gate accepts but the handler's own authentication rejects (the worker's inference, not executed). Unchecked on that commit: who calls the settings route in headless and with what body shape; whether any settings file on disk holds the old wrapper shape.
 - [ ] STILL WEAKER in headless, per a worker's handler-vs-twin table (reports/bzw1qaz5/20261005-headless-agent-mutations-authorization.md; NOT read by me): POST /api/agents/:id/transfer — no authentication or sudo in the handler (the worker says delegating to the full-mode handler would apply cleanly); DELETE /api/agents/:id/metadata — no authentication or authorization in the handler. Both sit behind the router's credential gates. Also: readJsonBody turns malformed JSON into a 500 where full mode answers 400.
+- [x] 2026-10-05 2533ff3d8: headless DELETE metadata authenticates and applies modify-agent; the deletion is unchanged.
+- [ ] READ BY ME 2026-10-05, the most serious item on this card: headless POST /api/agents/:id/transfer (services/headless-router.ts) reads the body and calls transferAgent(id, body) with NO check of its own; the service takes targetHostUrl and mode from the body and has no authorization. The full-mode route runs enforceAuth and then requireSudoToken ('agent transfer is destructive — the agent leaves this host'). So in headless any caller that passes the router's credential gates — any agent — can send any agent to a host URL of its choosing. Not executed. Fix dispatched: hand the route to the full-mode handler, as for purge and hard delete (headless cannot issue a sudo token, so transfer becomes unavailable there).
+- [ ] MAIN-AGENT DECISION, NOT A USER RULING (overrule in one line): in headless, changing an agent's program, program arguments or working directory through the agent update route will require the sudo confirmation full mode requires (so it is unavailable in headless until headless can ask for sudo); name, title, avatar and repo stay as they are. Reason: the full-mode route's own comment says program arguments can inject a permissions-bypass flag into the next launch and a working-directory change is a retargeting risk. Dispatched with the transfer fix. Question 20 on TRDD-VR4OPNVI still asks the owner about all seven fields.
+- [ ] OPEN FINDINGS from 2533ff3d8 (worker's reads, not re-read by me): (1) clearing an agent's metadata, in BOTH modes, also wipes system-owned keys — the AMP fingerprint and address and the session-secret hash — and ChangeMetadata's clear mode does not protect them; a caller allowed to modify the agent can therefore erase its identity metadata. (2) the metadata routes map a refusal to a status by words in the message, so an agent acting on itself or a MEMBER acting on another agent is answered 400, not 403 — same defect class as the status-by-substring box on TRDD-A50RC5G8.
 
 ## Approval log
 

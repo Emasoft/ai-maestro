@@ -2490,6 +2490,13 @@ export async function ChangeTitle(
     authContext: AuthContext,
     teamIds?: string[]
     skipPluginSync?: boolean
+    /**
+     * Set ONLY by CreateAgent, for the id it minted in the same pipeline run. An id that did not
+     * exist before this run cannot hold an AID token, so G14b has nothing to revoke and must not
+     * touch the token store (a locked/unreadable store would otherwise block agent creation).
+     * Every other caller leaves this unset and keeps G14b's fail-closed revocation.
+     */
+    agentCreatedInThisRun?: boolean
     skipRestart?: boolean
     /** R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a) */
     githubRepo?: string
@@ -3546,6 +3553,12 @@ export async function ChangeTitle(
         id: 'G14b',
         what: 'AID governance tokens revoked (old title invalidated)',
         run: async () => {
+          // Fresh id minted by CreateAgent in this very run: no token can exist, so skip the store
+          // entirely. Fail-closed revocation made an unreadable/busy token store block agent CREATION.
+          if (options.agentCreatedInThisRun) {
+            ops.push(`G14b: SKIPPED AID token revocation — agent ${agentId} was minted in this CreateAgent run and cannot hold any token (agentCreatedInThisRun)`)
+            return
+          }
           try {
             // The COMPENSABLE variant, not the count-only wrapper. Both do the identical
             // revocation; this one additionally hands back the removed records, so the undo
@@ -10880,6 +10893,9 @@ export async function CreateAgent(
           if (desired.governanceTitle && !titleNeedsTeamFirst) {
             const titleResult = await ChangeTitle(c.agent!.id, desired.governanceTitle, {
               authContext: desired.authContext,
+              // Why: the id was minted by G04 in this run, so G14b has no token to revoke and must
+              // not depend on the token store (fail-closed there would block creation).
+              agentCreatedInThisRun: true,
               githubRepo: desired.githubRepo,
             })
             if (!titleResult.success) throw new Error(`Title assignment failed: ${titleResult.error}`)
@@ -10896,6 +10912,7 @@ export async function CreateAgent(
             ops.push(`G06: No title requested — defaulting to AUTONOMOUS (R9.13 mandatory-plugin)`)
             const titleResult = await ChangeTitle(c.agent!.id, 'autonomous', {
               authContext: desired.authContext,
+            agentCreatedInThisRun: true,
             })
             if (!titleResult.success) throw new Error(`Default AUTONOMOUS assignment failed: ${titleResult.error}`)
             titleOps = titleResult.operations
@@ -10960,6 +10977,7 @@ export async function CreateAgent(
           if (!desired.teamId || !desired.governanceTitle || desired.governanceTitle === 'autonomous') return
           const retitleResult = await ChangeTitle(c.agent!.id, desired.governanceTitle, {
             authContext: desired.authContext,
+            agentCreatedInThisRun: true,
             githubRepo: desired.githubRepo,
           })
           if (!retitleResult.success) {

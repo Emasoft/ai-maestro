@@ -106,12 +106,6 @@ vi.mock('@/lib/agent-registry', () => ({
   saveAgents: vi.fn(),
 }))
 
-// G14b (ChangeTitle, reached via G06's default AUTONOMOUS) fails CLOSED since 49f411162: the real
-// `@/lib/aid-token` cannot load under this file's default-less `fs` mock. Revocation succeeds, 0 tokens. TRDD-RB72KQI2
-vi.mock('@/lib/aid-token', () => ({
-  revokeTokensForAgentCompensable: vi.fn(async () => ({ count: 0, restore: async () => 0 })),
-}))
-
 vi.mock('@/lib/security-config', () => ({
   loadSecurityConfig: mockLoadSecurityConfig,
 }))

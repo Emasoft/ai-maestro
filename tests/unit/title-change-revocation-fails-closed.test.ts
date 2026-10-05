@@ -21,7 +21,7 @@ const H = vi.hoisted(() => {
     registry: new Map<string, Record<string, unknown>>(),
     // Created once, reset in place (Object.assign) — mock factories capture the first object.
     // Fault the token revoke with a caller-chosen error; null = defer to the harness mock.
-    fault: { err: null as Error | null },
+    fault: { err: null as Error | null, revokeCalls: 0 },
     world: {} as unknown as import('@/tests/helpers/drive-change-title').ChangeTitleWorld,
   }
 })
@@ -52,6 +52,7 @@ vi.mock('@/lib/aid-token', async () => {
   return {
     ...base,
     revokeTokensForAgentCompensable: (...a: []) => {
+      H.fault.revokeCalls++
       if (H.fault.err) return Promise.reject(H.fault.err)
       return (real as (...x: []) => Promise<unknown>)(...a)
     },
@@ -88,6 +89,7 @@ beforeEach(async () => {
   const h = await import(HELPER)
   H.registry.clear()
   H.fault.err = null
+  H.fault.revokeCalls = 0
   Object.assign(H.world, h.newWorld({
     managerId: AGENT_ID,
     teams: [{ id: 'team-1', name: 'Team One', agentIds: [TEAMMATE], chiefOfStaffId: TEAMMATE, blocked: false }],
@@ -154,5 +156,26 @@ describe('ChangeTitle G14b fails closed', () => {
     expect(result.error ?? null).toBeNull()
     expect(result.success).toBe(true)
     expect(H.registry.get(AGENT_ID)?.governanceTitle).toBe('autonomous')
+  })
+
+  // CreateAgent passes agentCreatedInThisRun for the id it minted a moment earlier: that id cannot
+  // hold a token, so a broken token store must not block creation. Every other caller (option
+  // absent) is covered by the fail-closed tests above.
+  it('agentCreatedInThisRun: a faulting token store is never touched and the title change succeeds', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    H.fault.err = new Error("Lock 'governance-tokens' acquisition timed out after 5000ms")
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous', { agentCreatedInThisRun: true })
+    expect(result.error ?? null).toBeNull()
+    expect(result.success).toBe(true)
+    expect(H.fault.revokeCalls).toBe(0)
+    expect(H.world.aidTokens).toBe(3)
+    expect(result.operations.some((o: string) => /G14b: SKIPPED AID token revocation — agent the-manager/.test(o))).toBe(true)
+    expect(H.registry.get(AGENT_ID)?.governanceTitle).toBe('autonomous')
+  })
+
+  it('option absent with the same fault still fails closed (the skip is opt-in, not ambient)', async () => {
+    H.fault.err = new Error("Lock 'governance-tokens' acquisition timed out after 5000ms")
+    await expectFailedClosed()
+    expect(H.fault.revokeCalls).toBe(1)
   })
 })

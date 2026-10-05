@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:34:24+0200
+updated: 2026-10-05T04:38:55+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -67,6 +67,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] CORRECTION to the d9bbf1bb9 box and commit message: the fleet-wide rejection of governance tokens over a corrupt store is NOT new — before, a corrupt store read as empty and every validation already failed. New is: the file is no longer overwritten; revocation faults; a 0-byte or wrong-shape file is a fault; each validation re-reads and logs. Consequence not stated before: while the store is corrupt NO agent can be deleted (G06) and NO title changed (G14b). READ by the orchestrator: the live store is a valid empty array; loadTokens serves a warm cache until its TTL; the delete pipeline counts a throwing teardown probe as residue. OWED: owner-visible alert (top open item); a neuter for the shape-check throw; the grep that the owner path never imports the store
 - [ ] IN PROGRESS (uncommitted): G06b revokes held portfolio tokens on HARD delete only (soft leaves them dormant, so the user's answer on resurrected agents is not foreclosed); compensated; the rollback is reachable from every later in-sequence gate but not from the post-commit folder removal. Revive calls the registry delete directly, so G06b never runs there (per worker). Six tests/integration CreateAgent reds seen by the worker, baseline unknown
 - [x] LANDED 66a55c866: a HARD delete revokes the portfolio tokens the agent holds, compensated on rollback; soft delete leaves them dormant. Limits in the commit message (folder removal is past the rollback; revive bypasses the pipeline; tokens issued by the deleted agent untouched)
+- [ ] IN PROGRESS (uncommitted): the portfolio store reads a corrupt per-agent file as empty — the same defect fixed for the AID store in d9bbf1bb9 — so G06b (66a55c866) would report 0 revoked over a damaged file. Fix dispatched: missing = empty; corrupt = fault for every mutator; read paths refuse the token and log once per cache window; a way for the owner's listing route to tell empty from unreadable (route change is a follow-up). To record when it lands: whether teardown removes the per-agent file on hard delete, and that an agent able to corrupt its own portfolio file can block its own HARD delete (soft delete unaffected)
 
 ## Approval log
 

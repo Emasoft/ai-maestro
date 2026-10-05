@@ -4,7 +4,7 @@ title: Errata and unpinned join for the RC33OAFQ NWTTU0AQ V2BLADSF closures
 column: todo
 status: tasked
 created: 2026-10-05T01:16:19+0200
-updated: 2026-10-05T04:34:25+0200
+updated: 2026-10-05T04:38:53+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -59,14 +59,15 @@ delegates to the same route handler, and `forwardAuthHeaders` (same file) copies
 
 ## Acceptance
 
-- [ ] RC33OAFQ mutations 1 and 2 re-run at HEAD, red sets recorded
-- [ ] NWTTU0AQ mutations 1 and 2 re-run at HEAD, red sets recorded
-- [ ] V2BLADSF neuters A and B re-run at HEAD, red sets recorded
-- [ ] Un-mocked route-to-service 403 test added, with its own neuter
+- [x] RC33OAFQ mutations 1 and 2 re-run at HEAD, red sets recorded
+- [x] NWTTU0AQ mutations 1 and 2 re-run at HEAD, red sets recorded
+- [x] V2BLADSF neuters A and B re-run at HEAD, red sets recorded
+- [x] Un-mocked route-to-service 403 test added, with its own neuter
 The operator-only vs own-transcript DECISION is not this card's to make: it is filed as proposal TRDD-L1DWSSOZ (manager tier). This card is the errata record plus the Tier-0 verification chores below.
-- [ ] Headless: one test driving conversations/parse through the headless router with an agent credential, asserting the foreign-transcript refusal
+- [x] Headless: one test driving conversations/parse through the headless router with an agent credential, asserting the foreign-transcript refusal
 KNOWN PERMANENT DEFECT, not forgotten work: the three archived Approval logs still attribute the moves to the user. `trddgrep edit` refuses any change to an archived card ("nothing may change one, not even `updated:` or the Approval log"), so this erratum is the only correction there will be.
 - [x] 2026-10-05: boxes 1-3 neuter runs done by a worker in a scratch worktree — every neuter reddened the named tests (red names and counts in reports/triage/20261005_qsb64kkq-neuter-runs.md); boxes 4-5 landed as two new test files in 4a65e9a81 (route maps the refusal to 403 with the real service; headless refuses a cross-agent read with an agent credential). NOT done by the orchestrator: reading that report line by line and ticking the five boxes
+- [x] EVIDENCE for the five boxes, read by the orchestrator in reports/triage/20261005_qsb64kkq-neuter-runs.md: all neuters were run by a worker in a scratch worktree on source files cmp-identical to the main tree, one at a time, each restored and cmp-confirmed; every expected red set matched the recorded one and no neuter reddened nothing. The two new tests (4a65e9a81) use the real route and real service; their neuters reddened only the 403 case. NOT independently re-run by the orchestrator
 
 ## Approval log
 

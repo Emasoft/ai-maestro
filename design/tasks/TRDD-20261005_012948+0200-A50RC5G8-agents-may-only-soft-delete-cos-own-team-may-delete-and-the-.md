@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T04:27:44+0200
+updated: 2026-10-05T04:38:54+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -109,6 +109,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] The two PROJECT memory pages that taught 'only the MANAGER can delete agents' are corrected (memory commit after 40ca151fd): ruled / implemented / awaiting-the-user stated separately. Residue: an overstated first lesson stands beside its correction on each page because memgrep cannot rewrite a lesson by id — to be raised on the janitor repo
 - [x] Filed Emasoft/ai-maestro-janitor issue 331 for four memgrep gaps (a lesson cannot be corrected by its id; no verb for a page description; undocumented stdin contract; repair shrinks descriptions). The repair chore's eight shortened descriptions are committed; verified only desc and lmd changed on those lines; the dropped specifics are NOT restored (owed: add them to keywords). A follow-up comment is owed to separate gap 1 from closed issue 277 and gap 3 from open issue 322
 - [ ] TRIAGE 2026-10-05 (worker-classified, mostly unread by the orchestrator): this card 7 met, 4 small, 1 large, 5 for the user, 1 stale; report reports/triage/20261005_042403+0200-XTDMQO68-A50RC5G8-triage.md. Do not tick a box from the triage without reading its evidence
+- [x] LANDED 4e9fcf807: 'headless hard-delete has no sudo' is closed — a hard delete in headless now needs the sudo token (unavailable there unless the caller already holds one). Open: owner SOFT delete is sudo-free in headless while full mode requires sudo for it (TRDD-VR4OPNVI q18)
 
 ## Approval log
 

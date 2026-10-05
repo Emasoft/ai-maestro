@@ -195,7 +195,8 @@ export async function DELETE(
       // Specific permission failures should be detected explicitly.
       const status = errStr.includes('not found') ? 404
         : errStr.includes('already deleted') ? 410
-        : (errStr.includes('forbidden') || errStr.includes('permission') || errStr.includes('not authorized')) ? 403
+        // 'reserved to the user' = DeleteAgent's soft-only refusal for an agent caller (TRDD-A50RC5G8): a permission refusal.
+        : (errStr.includes('forbidden') || errStr.includes('permission') || errStr.includes('not authorized') || errStr.includes('reserved to the user')) ? 403
         : 500
       return NextResponse.json({ error: result.error }, { status })
     }

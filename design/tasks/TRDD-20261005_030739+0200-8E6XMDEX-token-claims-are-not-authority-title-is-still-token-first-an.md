@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:15:40+0200
+updated: 2026-10-05T04:17:29+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -63,6 +63,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] IN PROGRESS (uncommitted): lib/aid-token.ts — a store that exists but is unreadable/corrupt/wrong-shape is a fault, a missing one is empty. Worker returned before the amendments reached it and was resumed for: every reader listed with what a throw becomes; a corrupt store must REJECT a presented token (never 500, never accept); owner and session-secret paths must not read the store; boot/timer readers must not crash; fresh-install test. DISCLOSED: the worker applied its neuter with a python one-off on the project file and restored it byte-exact (rule breach; told not to repeat)
 - [ ] REVOCATION ON A COMPLETED DELETE IS STILL UNMET (review of 40ca151fd): the dormancy guard covers only a holder whose row exists and is soft-deleted. A hard delete — and a REVIVE, which removes the old soft-deleted row and imports under a new id — leaves the old id with no row, where the guard's 'no row → unchanged' makes its stored tokens count as active again. Whether anything can still present them is unread (the old id has no row to authenticate as). Fix dispatched: the delete pipeline revokes the tokens the agent HOLDS, with a compensation that restores exactly those on rollback
 - [ ] NOT PROVEN by the portfolio test (it doubles the whole registry): that the real registry and the real store load together and that callers pass an agent ID (the guard looks up by id only). Add one test with the REAL lib/agent-registry against a temp state dir. Call sites to read: lib/portfolio-check.ts, lib/sudo-guard.ts, the portfolio route
+- [x] LANDED d9bbf1bb9: a token store that exists but cannot be read/parsed (or is 0 bytes, or the wrong shape) is a fault; a missing one is empty; a presented token is rejected while the store is corrupt. Closes the hole left by 49f411162. Evidence and my neuter are in the commit message. CONSEQUENCE TO KNOW: a corrupt store locks out every agent using governance tokens until the file is repaired by hand; the only signal is one log line per request. OPEN: no owner-facing alert or repair path; lib/agent-teardown.ts post-condition throws on a corrupt store instead of reporting; module cache untouched on the throw path; older-format records not looked for
 
 ## Approval log
 

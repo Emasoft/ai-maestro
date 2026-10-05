@@ -58,8 +58,10 @@ const mockRejectGovernanceRequest = vi.fn()
 const mockLoadGovernanceRequests = vi.fn()
 const mockSaveGovernanceRequests = vi.fn()
 const mockWithLock = vi.fn()
+const mockMarkExecutionRefused = vi.fn()
 
 vi.mock('@/lib/governance-request-registry', () => ({
+  markExecutionRefused: (...args: unknown[]) => mockMarkExecutionRefused(...args),
   createGovernanceRequest: (...args: unknown[]) => mockCreateGovernanceRequest(...args),
   getGovernanceRequest: (...args: unknown[]) => mockGetGovernanceRequest(...args),
   listGovernanceRequests: (...args: unknown[]) => mockListGovernanceRequests(...args),
@@ -863,49 +865,172 @@ describe('performRequestExecution (via approve flow)', () => {
   })
 
   // TRDD-A50RC5G8: the chair is the trust anchor; assign-cos must refuse the MANAGER and any non-live agent
-  describe('assign-cos chair validation (TRDD-A50RC5G8)', () => {
-    async function runAssignCos(agentId: string, liveAgent: unknown) {
-      const executedRequest = makeGovernanceRequest({
-        type: 'assign-cos',
+  // TRDD-XTDMQO68 (R50/R51): a refused execution must surface -- a failure result carrying the reason, the
+  // request no longer 'executed', and the teams untouched. The registry is mocked, so the harness models the
+  // ONE write the service relies on (markExecutionRefused) against a stored request, so the final status is observable.
+  describe('refused execution surfaces as a failure (TRDD-XTDMQO68)', () => {
+    const baseTeam = (over: Record<string, unknown> = {}) => ({
+      id: 'team-gamma', name: 'Gamma Team', type: 'closed', agentIds: ['agent-g1'],
+      chiefOfStaffId: null, createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-01T10:00:00Z', ...over,
+    })
+
+    async function runExec(
+      type: GovernanceRequest['type'],
+      payload: GovernanceRequest['payload'],
+      teams: ReturnType<typeof baseTeam>[],
+      liveAgent: unknown = null,
+    ) {
+      const stored: GovernanceRequest = makeGovernanceRequest({
+        type,
         status: 'executed',
-        payload: { agentId, teamId: 'team-gamma' },
+        payload,
         approvals: { sourceManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' } } as any,
       })
       mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
-      mockApproveGovernanceRequest.mockResolvedValue(executedRequest)
-      const team = {
-        id: 'team-gamma', name: 'Gamma Team', type: 'closed', agentIds: ['agent-g1'],
-        chiefOfStaffId: null, createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-01T10:00:00Z',
-      }
-      mockLoadTeams.mockReturnValue([team])
-      mockGetAgent.mockReturnValue(liveAgent)
+      mockApproveGovernanceRequest.mockResolvedValue(stored)
+      mockMarkExecutionRefused.mockImplementation(async (_id: string, reason: string) => {
+        stored.status = 'rejected'
+        stored.rejectReason = `Execution refused: ${reason}`
+        return stored
+      })
+      const snapshot = JSON.stringify(teams)
+      mockLoadTeams.mockReturnValue(teams)
+      // undefined = the caller already installed its own getAgent implementation
+      if (liveAgent !== undefined) mockGetAgent.mockReturnValue(liveAgent)
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+      const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
       logSpy.mockRestore()
       errSpy.mockRestore()
-      return team
+      return { result, stored, teamsUnchanged: JSON.stringify(teams) === snapshot }
     }
 
-    it('refuses the MANAGER as chair: chiefOfStaffId unchanged, nothing saved', async () => {
-      /** The MANAGER id must never become a team chair, even if it is a live agent */
-      const team = await runAssignCos('manager-agent', { id: 'manager-agent' })
-      expect(team.chiefOfStaffId).toBeNull()
+    /** Asserts the three things a refusal must show: failure with the reason, not 'executed', teams untouched. */
+    function expectRefused(out: Awaited<ReturnType<typeof runExec>>, reason: string) {
+      expect(out.result.status).toBe(409)
+      expect(out.result.data).toBeUndefined()
+      expect(out.result.error).toContain(reason)
+      expect(out.stored.status).toBe('rejected')
+      expect(out.stored.rejectReason).toBe(`Execution refused: ${reason}`)
+      expect(out.teamsUnchanged).toBe(true)
       expect(mockSaveTeams).not.toHaveBeenCalled()
-    })
+      expect(mockBroadcastGovernanceSync).not.toHaveBeenCalled()
+    }
 
-    it('refuses an unknown (or soft-deleted) agent id: chiefOfStaffId unchanged, nothing saved', async () => {
-      /** getAgent excludes soft-deleted agents, so unknown and soft-deleted both surface as a null lookup */
-      const team = await runAssignCos('ghost-agent', null)
-      expect(team.chiefOfStaffId).toBeNull()
-      expect(mockSaveTeams).not.toHaveBeenCalled()
-    })
-
-    it('positive control: a live non-manager agent becomes chair', async () => {
-      /** Proves the refusals above are caused by the new checks, not by a broken harness */
-      const team = await runAssignCos('live-agent', { id: 'live-agent' })
+    it('assign-cos positive control: a live non-manager agent becomes chair, status stays executed', async () => {
+      /** Proves the refusals below are caused by the checks, not by a broken harness */
+      const team = baseTeam()
+      const out = await runExec('assign-cos', { agentId: 'live-agent', teamId: 'team-gamma' }, [team], { id: 'live-agent' })
+      expect(out.result.status).toBe(200)
+      expect(out.result.data?.status).toBe('executed')
       expect(team.chiefOfStaffId).toBe('live-agent')
       expect(mockSaveTeams).toHaveBeenCalledTimes(1)
+      expect(mockMarkExecutionRefused).not.toHaveBeenCalled()
+    })
+
+    it('assign-cos refuses a team that does not exist', async () => {
+      /** Unknown team id must be a reported refusal, not a silent no-op */
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'live-agent', teamId: 'team-missing' }, [baseTeam()], { id: 'live-agent' }),
+        "Cannot execute assign-cos: team 'team-missing' not found",
+      )
+    })
+
+    it('assign-cos refuses a team that is not closed', async () => {
+      /** R1.8: only closed teams take a chair */
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'live-agent', teamId: 'team-gamma' }, [baseTeam({ type: 'open' })], { id: 'live-agent' }),
+        "Cannot assign COS: team 'team-gamma' is not a closed team (type=open)",
+      )
+    })
+
+    it('assign-cos refuses an agent that is already chair of another team', async () => {
+      /** G3 (v2 Rule 7): one chair seat per agent */
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'live-agent', teamId: 'team-gamma' },
+          [baseTeam(), baseTeam({ id: 'team-other', chiefOfStaffId: 'live-agent' })], { id: 'live-agent' }),
+        "Cannot assign COS: agent 'live-agent' is already COS of team 'team-other'",
+      )
+    })
+
+    it('assign-cos refuses the MANAGER as chair', async () => {
+      /** The MANAGER id must never become a team chair, even if it is a live agent */
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'manager-agent', teamId: 'team-gamma' }, [baseTeam()], { id: 'manager-agent' }),
+        "Cannot assign COS: agent 'manager-agent' is the MANAGER",
+      )
+    })
+
+    it('assign-cos refuses an unknown agent id', async () => {
+      /** No registry entry at all: getAgent returns null */
+      mockGetAgent.mockImplementation(() => null)
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'ghost-agent', teamId: 'team-gamma' }, [baseTeam()], undefined),
+        "Cannot assign COS: agent 'ghost-agent' is not a live agent",
+      )
+    })
+
+    it('assign-cos refuses a soft-deleted agent (registry entry exists, deletedAt set)', async () => {
+      /** The entry EXISTS, so only the service not passing includeDeleted refuses it -- models lib/agent-registry getAgent's real filter */
+      const registry: Record<string, { id: string; deletedAt?: string }> = {
+        'gone-agent': { id: 'gone-agent', deletedAt: '2025-06-01T00:00:00Z' },
+      }
+      mockGetAgent.mockImplementation((id: string, includeDeleted = false) => {
+        const a = registry[id] ?? null
+        return a && a.deletedAt && !includeDeleted ? null : a
+      })
+      expectRefused(
+        await runExec('assign-cos', { agentId: 'gone-agent', teamId: 'team-gamma' }, [baseTeam()], undefined),
+        "Cannot assign COS: agent 'gone-agent' is not a live agent",
+      )
+    })
+
+    it('add-to-team refuses a team that does not exist', async () => {
+      /** Unknown team id must be a reported refusal */
+      expectRefused(
+        await runExec('add-to-team', { agentId: 'agent-x', teamId: 'team-missing' }, [baseTeam()]),
+        "Cannot execute add-to-team: team 'team-missing' not found",
+      )
+    })
+
+    it('remove-from-team refuses a team that does not exist', async () => {
+      /** Unknown team id must be a reported refusal */
+      expectRefused(
+        await runExec('remove-from-team', { agentId: 'agent-g1', teamId: 'team-missing' }, [baseTeam()]),
+        "Cannot execute remove-from-team: team 'team-missing' not found",
+      )
+    })
+
+    it('remove-from-team refuses to remove the team chair', async () => {
+      /** SF-005: removing the chair would leave chiefOfStaffId pointing at a non-member */
+      expectRefused(
+        await runExec('remove-from-team', { agentId: 'agent-g1', teamId: 'team-gamma' }, [baseTeam({ chiefOfStaffId: 'agent-g1' })]),
+        "Cannot execute remove-from-team: agent 'agent-g1' is the team COS; unassign COS first",
+      )
+    })
+
+    it('remove-cos refuses a team that does not exist', async () => {
+      /** Unknown team id must be a reported refusal */
+      expectRefused(
+        await runExec('remove-cos', { agentId: 'agent-g1', teamId: 'team-missing' }, [baseTeam({ chiefOfStaffId: 'agent-g1' })]),
+        "Cannot execute remove-cos: team 'team-missing' not found",
+      )
+    })
+
+    it('configure-agent refuses a request with no configuration payload', async () => {
+      /** A configure-agent request without a configuration cannot be executed */
+      expectRefused(
+        await runExec('configure-agent', { agentId: 'agent-g1' }, [baseTeam()]),
+        'configure-agent request req-001 missing configuration payload',
+      )
+    })
+
+    it('an unimplemented request type (create-agent) is a refusal, not a silent success', async () => {
+      /** The default branch used to warn and return, leaving the request executed */
+      expectRefused(
+        await runExec('create-agent', { agentId: 'agent-g1' }, [baseTeam()]),
+        "Request type 'create-agent' execution is not yet implemented",
+      )
     })
   })
 

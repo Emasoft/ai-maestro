@@ -110,6 +110,7 @@ import {
   approveGovernanceRequest,
   rejectGovernanceRequest,
   executeGovernanceRequest,
+  markExecutionRefused,
   purgeOldRequests,
   expirePendingRequests,
 } from '@/lib/governance-request-registry'
@@ -642,6 +643,25 @@ describe('rejectGovernanceRequest', () => {
 // ============================================================================
 // executeGovernanceRequest
 // ============================================================================
+
+describe('markExecutionRefused (TRDD-XTDMQO68)', () => {
+  it('turns an executed request into rejected with the reason, persisted', async () => {
+    /** A refused execution must not stay 'executed' on disk */
+    seedRequestsFile(makeRequestsFile([makeRequest({ id: 'req-refused', status: 'executed' })]))
+
+    const result = await markExecutionRefused('req-refused', "team 'x' not found")
+
+    expect(result!.status).toBe('rejected')
+    expect(result!.rejectReason).toBe("Execution refused: team 'x' not found")
+    expect(getGovernanceRequest('req-refused')!.status).toBe('rejected')
+  })
+
+  it('returns null for an unknown request ID', async () => {
+    /** Unknown id must not create or alter anything */
+    seedRequestsFile(makeRequestsFile([]))
+    expect(await markExecutionRefused('nonexistent', 'r')).toBeNull()
+  })
+})
 
 describe('executeGovernanceRequest', () => {
   it('sets status to executed', async () => {

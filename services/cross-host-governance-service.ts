@@ -25,6 +25,7 @@ import {
   rejectGovernanceRequest,
   loadGovernanceRequests,
   saveGovernanceRequests,
+  markExecutionRefused,
 } from '@/lib/governance-request-registry'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
 import { signHostAttestation } from '@/lib/host-keys'
@@ -259,10 +260,12 @@ export async function receiveCrossHostRequest(
     if (localManagerId) {
       const approvedRequest = await approveGovernanceRequest(request.id, localManagerId, 'targetManager')
       if (approvedRequest?.status === 'executed') {
-        await performRequestExecution(approvedRequest)
-        // Notify the requesting agent that their configure-agent request was auto-approved
+        // TRDD-XTDMQO68: a refused execution is recorded on the request ('rejected' + reason) and is never
+        // announced as approved. The 200 below only acknowledges RECEIPT of the request, not its execution.
+        const outcome = await performRequestExecution(approvedRequest)
+        // Notify the requesting agent of the real outcome of their configure-agent request
         if (approvedRequest.type === 'configure-agent') {
-          await safeNotifyConfigOutcome(approvedRequest, 'approved')
+          await safeNotifyConfigOutcome(approvedRequest, outcome.executed ? 'approved' : 'rejected')
         }
       }
     }
@@ -364,11 +367,18 @@ export async function approveCrossHostRequest(
   const weTriggeredExecution = weRecordedVote && updated.status === 'executed'
 
   if (weTriggeredExecution) {
-    await performRequestExecution(updated)
+    const outcome = await performRequestExecution(updated)
 
-    // Notify the requesting agent that their configure-agent request was approved
+    // Notify the requesting agent of the real outcome of their configure-agent request
     if (updated.type === 'configure-agent') {
-      await safeNotifyConfigOutcome(updated, 'approved')
+      await safeNotifyConfigOutcome(updated, outcome.executed ? 'approved' : 'rejected')
+    }
+
+    // TRDD-XTDMQO68: a refused execution must not answer 200 "executed" -- both managers would believe
+    // the change happened. 409 follows this function's existing convention for a request that cannot
+    // proceed ("already executed"); the reason is the refusal message.
+    if (!outcome.executed) {
+      return { error: `Request '${requestId}' was approved but its execution was refused: ${outcome.reason}`, status: 409 }
     }
   }
 
@@ -448,30 +458,39 @@ export async function rejectCrossHostRequest(
 // 5. performRequestExecution -- execute the actual team/agent mutation
 // ---------------------------------------------------------------------------
 
-// NOTE: Execution failures are logged but do not propagate to callers.
-// The request status is already 'executed' before this runs.
-// Phase 2: Add 'failed' terminal status to GovernanceRequestStatus
-async function performRequestExecution(request: GovernanceRequest): Promise<void> {
+// TRDD-XTDMQO68 (R50/R51): a refusal must never read as success. The request is already 'executed'
+// (approveGovernanceRequest sets it BEFORE this runs), so every refusal or failure here is REPORTED to the
+// caller as { executed: false, reason } AND the request is turned into 'rejected' with that reason via
+// markExecutionRefused. Before this, each refusal was `console.error(...); return` inside the lock callback,
+// so the request stayed 'executed' and the caller answered 200 "Successfully executed" with nothing written.
+type ExecutionOutcome = { executed: true } | { executed: false; reason: string }
+
+async function performRequestExecution(request: GovernanceRequest): Promise<ExecutionOutcome> {
   console.log(`${LOG_PREFIX} Executing request ${request.id} (type=${request.type})`)
+
+  // Logs the refusal (same message as before) and reports it instead of returning silently.
+  const refuse = (reason: string): ExecutionOutcome => {
+    console.error(`${LOG_PREFIX} ${reason}`)
+    return { executed: false, reason }
+  }
 
   try {
     // Acquire the teams lock for the entire mutation to prevent concurrent corruption
-    await withLock('teams', async () => {
+    const outcome = await withLock('teams', async (): Promise<ExecutionOutcome> => {
       switch (request.type) {
         case 'add-to-team': {
           // Add the agent to the target team
           const teams = loadTeams()
           const team = teams.find(t => t.id === request.payload.teamId)
           if (!team) {
-            console.error(`${LOG_PREFIX} Cannot execute add-to-team: team '${request.payload.teamId}' not found`)
-            return
+            return refuse(`Cannot execute add-to-team: team '${request.payload.teamId}' not found`)
           }
           if (!team.agentIds.includes(request.payload.agentId)) {
             team.agentIds.push(request.payload.agentId)
           }
           // All teams are closed (governance simplification) — no open team membership revocation needed
           saveTeams(teams)
-          break
+          return { executed: true }
         }
 
         case 'remove-from-team': {
@@ -479,18 +498,16 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
           const teams = loadTeams()
           const team = teams.find(t => t.id === request.payload.teamId)
           if (!team) {
-            console.error(`${LOG_PREFIX} Cannot execute remove-from-team: team '${request.payload.teamId}' not found`)
-            return
+            return refuse(`Cannot execute remove-from-team: team '${request.payload.teamId}' not found`)
           }
           // SF-005: Guard against removing the team's COS -- doing so would leave
           // chiefOfStaffId pointing at a non-member, creating an invalid team state.
           if (team.chiefOfStaffId === request.payload.agentId) {
-            console.error(`${LOG_PREFIX} Cannot execute remove-from-team: agent '${request.payload.agentId}' is the team COS; unassign COS first`)
-            return
+            return refuse(`Cannot execute remove-from-team: agent '${request.payload.agentId}' is the team COS; unassign COS first`)
           }
           team.agentIds = team.agentIds.filter(id => id !== request.payload.agentId)
           saveTeams(teams)
-          break
+          return { executed: true }
         }
 
         case 'assign-cos': {
@@ -498,31 +515,26 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
           const teams = loadTeams()
           const team = teams.find(t => t.id === request.payload.teamId)
           if (!team) {
-            console.error(`${LOG_PREFIX} Cannot execute assign-cos: team '${request.payload.teamId}' not found`)
-            return
+            return refuse(`Cannot execute assign-cos: team '${request.payload.teamId}' not found`)
           }
           // R1.8: COS can only be assigned to closed teams
           if (team.type !== 'closed') {
-            console.error(`${LOG_PREFIX} Cannot assign COS: team '${team.id}' is not a closed team (type=${team.type})`)
-            return
+            return refuse(`Cannot assign COS: team '${team.id}' is not a closed team (type=${team.type})`)
           }
           // G3 (v2 Rule 7): An agent can only be COS of one team at a time
           const alreadyCos = teams.find(t => t.id !== team.id && t.chiefOfStaffId === request.payload.agentId)
           if (alreadyCos) {
-            console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is already COS of team '${alreadyCos.id}'`)
-            return
+            return refuse(`Cannot assign COS: agent '${request.payload.agentId}' is already COS of team '${alreadyCos.id}'`)
           }
           // TRDD-A50RC5G8: team.chiefOfStaffId is the trust anchor of every chief-of-staff grant, so the
           // chair must be a live agent (getAgent excludes soft-deleted) and never the MANAGER. This path
           // cannot call updateTeam (it already holds the non-reentrant 'teams' lock), so it repeats
           // the checks lib/team-registry.ts applies to createTeam/updateTeam.
           if (request.payload.agentId === getManagerId()) {
-            console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is the MANAGER`)
-            return
+            return refuse(`Cannot assign COS: agent '${request.payload.agentId}' is the MANAGER`)
           }
           if (!getAgent(request.payload.agentId)) {
-            console.error(`${LOG_PREFIX} Cannot assign COS: agent '${request.payload.agentId}' is not a live agent`)
-            return
+            return refuse(`Cannot assign COS: agent '${request.payload.agentId}' is not a live agent`)
           }
           team.chiefOfStaffId = request.payload.agentId
           // Ensure the COS is also in agentIds (R4.6: COS must be a member)
@@ -530,7 +542,7 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
             team.agentIds.push(request.payload.agentId)
           }
           saveTeams(teams)
-          break
+          return { executed: true }
         }
 
         case 'remove-cos': {
@@ -538,12 +550,11 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
           const teams = loadTeams()
           const team = teams.find(t => t.id === request.payload.teamId)
           if (!team) {
-            console.error(`${LOG_PREFIX} Cannot execute remove-cos: team '${request.payload.teamId}' not found`)
-            return
+            return refuse(`Cannot execute remove-cos: team '${request.payload.teamId}' not found`)
           }
           team.chiefOfStaffId = null
           saveTeams(teams)
-          break
+          return { executed: true }
         }
 
         case 'transfer-agent': {
@@ -559,30 +570,24 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
             toTeam.agentIds.push(request.payload.agentId)
           }
           saveTeams(teams)
-          break
+          return { executed: true }
         }
 
         case 'configure-agent': {
           // Deploy configuration to the target agent
           const config = request.payload.configuration
           if (!config) {
-            console.warn(`${LOG_PREFIX} configure-agent request ${request.id} missing configuration payload`)
-            return
+            return refuse(`configure-agent request ${request.id} missing configuration payload`)
           }
           // Lazy import: agents-config-deploy-service imports getAgent which imports governance,
           // creating a potential circular dependency chain. Keep lazy to be safe.
           const { deployConfigToAgent } = await import('@/services/agents-config-deploy-service')
           const deployResult = await deployConfigToAgent(request.payload.agentId, config, request.requestedBy)
           if (deployResult.error) {
-            // The request status is already 'executed' at this point (set by approveGovernanceRequest
-            // before performRequestExecution is called). The 'executed' status means "execution was attempted,"
-            // not "succeeded." The deploy error is logged here; the executionError field is set in the
-            // catch block to allow admins to detect failures programmatically.
-            console.warn(`${LOG_PREFIX} configure-agent execution failed for request ${request.id}: ${deployResult.error}`)
-            return
+            return refuse(`configure-agent execution failed for request ${request.id}: ${deployResult.error}`)
           }
           console.log(`${LOG_PREFIX} configure-agent executed for agent ${request.payload.agentId}: ${config.operation}`)
-          break
+          return { executed: true }
         }
 
         case 'delete-agent': {
@@ -593,47 +598,35 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
             authContext: { isSystemOwner: true }, // Approved by MANAGER → system-level execution
           })
           if (!deleteResult.success) {
-            console.warn(`${LOG_PREFIX} delete-agent execution failed for request ${request.id}: ${deleteResult.error}`)
-            return
+            return refuse(`delete-agent execution failed for request ${request.id}: ${deleteResult.error}`)
           }
           console.log(`${LOG_PREFIX} delete-agent executed for agent ${request.payload.agentId}`)
-          break
+          return { executed: true }
         }
 
         default:
-          console.warn(`${LOG_PREFIX} Request type '${request.type}' execution is not yet implemented`)
-          return
+          return refuse(`Request type '${request.type}' execution is not yet implemented`)
       }
     })
 
-    // Caller already set status to 'executed' -- no redundant executeGovernanceRequest call needed
+    if (!outcome.executed) {
+      // The 'teams' lock is released here, so taking 'governance-requests' respects the lock order.
+      await markExecutionRefused(request.id, outcome.reason)
+      return outcome
+    }
 
-    // Broadcast the governance state change to all peers
+    // Broadcast the governance state change to all peers (only for an operation that really happened)
     broadcastGovernanceSync('team-updated', { requestId: request.id, type: request.type }).catch(() => {})
 
     console.log(`${LOG_PREFIX} Successfully executed request ${request.id} (type=${request.type})`)
+    return outcome
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Failed to execute request ${request.id}: ${msg}`)
-
-    // Record the execution error on the request so admins can detect silent failures.
-    // The request status remains 'executed' (meaning "execution was attempted") because adding
-    // a 'failed' status would require changes to GovernanceRequestStatus and all callers.
-    // The executionError field provides a programmatic way to detect failures.
-    try {
-      await withLock('governance-requests', async () => {
-        const file = loadGovernanceRequests()
-        const idx = file.requests.findIndex(r => r.id === request.id)
-        if (idx !== -1) {
-          ;(file.requests[idx] as any).executionError = msg
-          ;(file.requests[idx] as any).executionFailedAt = new Date().toISOString()
-          file.requests[idx].updatedAt = new Date().toISOString()
-          saveGovernanceRequests(file)
-        }
-      })
-    } catch (saveErr) {
-      console.error(`${LOG_PREFIX} Failed to record execution error for request ${request.id}:`, saveErr)
-    }
+    // A throw is a failed execution just like a refusal: same terminal status, same reported outcome.
+    // If even recording it fails, let that propagate -- a request left 'executed' would read as success.
+    await markExecutionRefused(request.id, msg)
+    return { executed: false, reason: msg }
   }
 }
 

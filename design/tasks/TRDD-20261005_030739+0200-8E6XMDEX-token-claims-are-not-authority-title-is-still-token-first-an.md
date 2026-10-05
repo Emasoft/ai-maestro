@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T03:11:07+0200
+updated: 2026-10-05T03:16:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -42,6 +42,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] issuer_team_id comes from the registry
 - [ ] Reader inventory repeated with a method that covers dynamic access
 - [ ] lib/portfolio-store.ts exports revokeTokensForSubject(agentId) and NOTHING in lib/ services/ app/ calls it (grep by the orchestrator, 2026-10-05): portfolio tokens issued TO an agent are apparently not revoked when that agent is soft-deleted or leaves its team. Verify by reading the verify path (does a token for a non-live subject still verify?) before fixing
+- [ ] Scope of the revokeTokensForSubject finding, widened: its only caller is its own unit test — searched lib services app components hooks scripts tests and server.mjs across .ts .tsx .mjs .js .cjs .sh
 
 ## Approval log
 

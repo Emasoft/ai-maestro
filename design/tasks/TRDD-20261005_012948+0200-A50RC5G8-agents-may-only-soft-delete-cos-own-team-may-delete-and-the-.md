@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T03:11:06+0200
+updated: 2026-10-05T03:16:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -105,6 +105,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] LANDED fbcdf7b2e (mint refuses a non-live subject, all caller branches), 5ce4c6a5a (cross-host assign-cos refuses the MANAGER and non-live ids), 529e9ea38 (three deny branches + model-ON owner path tested; stale lookupTeamIdForAgent comments fixed). 541 files / 7304 tests green on the tree as committed
 - [x] SPLIT 2026-10-05: this card outgrew one task. Open boxes above about slot writers, cross-host, grandfathered chairs and rollbacks now live in TRDD-XTDMQO68; token-first title and issuer team id in TRDD-8E6XMDEX; the headless handler audit in TRDD-BZW1QAZ5; every question for the user (title guard, MANAGER as chair, unblock/wake/hibernate a MANAGER, appoint ORCHESTRATOR, COS_DELETABLE_TITLES, session kill) in TRDD-VR4OPNVI. What stays HERE is the original subject only: soft-delete by agents, hard delete reserved to the user with sudo, cemetery purge/restore, the un-mocked delete-restore round trip, folder adoption on name reuse, the status code on DeleteAgentResult, the UI label
 - [ ] CLOSING THIS CARD: boxes above whose subject moved (slot writers, cross-host, token claims, headless audit, user questions) are to be ticked as 'moved to TRDD-…' one by one, each only after checking the destination card carries it. Boxes that stay: un-mocked delete-restore round trip, folder adoption on name reuse, status code on DeleteAgentResult, UI label, cemetery purge/restore gate, hard delete = user + sudo on three surfaces, neuters recorded
+- [ ] The relevant: field set on the four split cards is read by no tool I could find (grep of lib/trdd*.ts found nothing) — NOT ESTABLISHED that the split is machine-readable; implementation-commits: is still unfilled on all five cards
 
 ## Approval log
 

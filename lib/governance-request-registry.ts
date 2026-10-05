@@ -271,6 +271,32 @@ export async function executeGovernanceRequest(
 }
 
 /**
+ * Turn an 'executed' request into 'rejected' when its operation was refused or failed at execution time.
+ * approveGovernanceRequest marks a request 'executed' BEFORE the operation runs, so a refusal
+ * (team not found, agent not live, ...) would otherwise leave a request that reads as done while nothing
+ * was written -- a refusal must never read as success (R50/R51; TRDD-XTDMQO68). No dedicated 'failed'
+ * status exists: 'rejected' + rejectReason already means "this request did not take effect" to every
+ * reader (purge, TTL, list filter, status validator), so no enumerating site has to learn a new value.
+ */
+export async function markExecutionRefused(
+  requestId: string,
+  reason: string,
+): Promise<GovernanceRequest | null> {
+  return withLock('governance-requests', () => {
+    const file = loadGovernanceRequests()
+    const request = file.requests.find((r) => r.id === requestId)
+    if (!request) return null
+
+    request.status = 'rejected'
+    request.updatedAt = new Date().toISOString()
+    request.rejectReason = `Execution refused: ${reason}`
+
+    saveGovernanceRequests(file)
+    return request
+  })
+}
+
+/**
  * Lock-free TTL expiry helper: auto-reject pending requests older than ttlDays.
  * Operates on the requests array in-place. Caller must hold the governance-requests lock.
  * Returns the number of requests expired.

@@ -146,8 +146,10 @@ const mockRejectGovernanceRequest = vi.fn()
 const mockLoadGovernanceRequests = vi.fn()
 const mockSaveGovernanceRequests = vi.fn()
 const mockWithLock = vi.fn()
+const mockMarkExecutionRefused = vi.fn()
 
 vi.mock('@/lib/governance-request-registry', () => ({
+  markExecutionRefused: (...args: unknown[]) => mockMarkExecutionRefused(...args),
   createGovernanceRequest: (...args: unknown[]) => mockCreateGovernanceRequest(...args),
   getGovernanceRequest: (...args: unknown[]) => mockGetGovernanceRequest(...args),
   listGovernanceRequests: (...args: unknown[]) => mockListGovernanceRequests(...args),
@@ -366,6 +368,9 @@ beforeEach(() => {
 
   // Default: agent exists
   mockGetAgent.mockReturnValue(makeAgent())
+  // The agent's working directory must exist (mockFsAccess default below): the cross-host "executes
+  // configure-agent" tests need a deploy that really succeeds. Before TRDD-XTDMQO68 their deploy silently
+  // failed ("working directory does not exist") and they still asserted success -- the bug this card fixes.
   mockGetAgentSkills.mockReturnValue({ marketplace: [], custom: [], aiMaestro: { enabled: true, skills: [] } })
 
   // Default: skills operations succeed
@@ -382,7 +387,11 @@ beforeEach(() => {
   mockFsMkdir.mockResolvedValue(undefined)
   mockFsRm.mockResolvedValue(undefined)
   mockFsRename.mockResolvedValue(undefined)
-  mockFsAccess.mockRejectedValue(new Error('ENOENT')) // fileExists returns false by default
+  // fileExists returns false by default -- except the agent's own working directory (see the note above)
+  mockFsAccess.mockImplementation(async (p: string) => {
+    if (p === '/tmp/test-agent') return undefined
+    throw new Error('ENOENT')
+  })
 
   // Default: cross-host governance mocks
   mockGetSelfHostId.mockReturnValue('host-local')
@@ -1145,24 +1154,32 @@ describe('cross-host configure-agent', () => {
     )
   })
 
-  it('performRequestExecution handles deployment failure gracefully for configure-agent', async () => {
-    /** Verifies that a failed deployConfigToAgent logs a warning but does not throw */
+  it('a failed configure-agent deployment is a reported failure, not a success (TRDD-XTDMQO68)', async () => {
+    /** A refused deploy must answer 409 with the reason and mark the request refused; this test used to assert 200 + executed (it encoded the bug) */
     // Make the agent not found (so deployConfigToAgent returns 404)
     mockGetAgent.mockImplementation((id: string) => {
       if (id === 'manager-agent') return { id: 'manager-agent', name: 'Manager' }
       return null // Target agent not found
     })
 
-    const executedRequest = makeGovernanceRequest({ status: 'executed' })
+    // The approvals must record the approver, or the service's weRecordedVote check skips execution entirely
+    // (this test used to omit them, so it never reached the deploy it claimed to cover).
+    const executedRequest = makeGovernanceRequest({
+      status: 'executed',
+      approvals: { sourceManager: { approved: true, agentId: 'manager-agent', at: '2026-02-20T10:01:00Z' } },
+    })
     mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
     mockApproveGovernanceRequest.mockResolvedValue(executedRequest)
     mockWithLock.mockImplementation(async (_name: string, fn: () => unknown) => fn())
 
-    // This should NOT throw despite deployment failure
     const result = await approveCrossHostRequest('req-ext-001', 'manager-agent', 'correct')
 
-    expect(result.status).toBe(200)
-    expect(result.data?.status).toBe('executed')
+    expect(result.status).toBe(409)
+    expect(result.data).toBeUndefined()
+    expect(result.error).toContain('execution was refused')
+    expect(mockMarkExecutionRefused).toHaveBeenCalledTimes(1)
+    expect(mockMarkExecutionRefused).toHaveBeenCalledWith('req-ext-001', expect.stringContaining('configure-agent execution failed'))
+    expect(mockNotifyConfigRequestOutcome).toHaveBeenCalledWith(expect.objectContaining({ type: 'configure-agent' }), 'rejected')
   })
 
   it('listCrossHostRequests returns all requests when no filter is applied', () => {

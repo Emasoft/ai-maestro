@@ -191,12 +191,15 @@ export function resetContinuityStore(): void {
 
 
 /** Key of the last reported dangling team-slot set, so an UNCHANGED set is not re-logged every
- *  tick forever (report on transition only). null = nothing reported / last pass was clean. */
-const teamSlotState: { lastKey: string | null } = { lastKey: null }
+ *  tick forever (report on transition only). null = nothing reported / last pass was clean.
+ *  lastFailure: message of the last logged check failure, so a PERSISTENT failure prints once, not
+ *  every tick; cleared when a check succeeds so a later failure is reported again. */
+const teamSlotState: { lastKey: string | null; lastFailure: string | null } = { lastKey: null, lastFailure: null }
 
-/** Clear the team-slot dedup key — for tests only. */
+/** Clear the team-slot dedup state — for tests only. */
 export function resetTeamSlotState(): void {
   teamSlotState.lastKey = null
+  teamSlotState.lastFailure = null
 }
 /** Heartbeat bookkeeping for the continuity leg (TRDD-7UWQ92WK).
  *
@@ -473,19 +476,26 @@ export async function runFleetLivenessTick(
       const findings = (
         opts.findTeamSlots ?? (() => findDanglingTeamSlots(loadTeams(), (id) => getAgent(id, true)))
       )()
-      const key = findings.map((f) => `${f.teamId}/${f.slot}/${f.danglingId}`).sort().join('|') || null
+      teamSlotState.lastFailure = null
+      // reason is part of the key: unknown -> soft-deleted on the same slot is a change worth a line.
+      const key = findings.map((f) => `${f.teamId}/${f.slot}/${f.danglingId}/${f.reason}`).sort().join('|') || null
       if (key !== teamSlotState.lastKey) {
         const hadFindings = teamSlotState.lastKey !== null
         teamSlotState.lastKey = key
         if (findings.length)
           log(
             `[FleetTeamSlots] REPORT ONLY, nothing was modified: ${findings.length} team slot(s) name an id that is not a live agent: ` +
-              findings.map((f) => `team ${f.teamId} ${f.slot}=${f.danglingId}`).join(', '),
+              findings.map((f) => `team ${f.teamId} ${f.slot}=${f.danglingId} (${f.reason})`).join(', '),
           )
         else if (hadFindings) log('[FleetTeamSlots] REPORT ONLY: no team slot names a non-live agent any more (previous finding(s) resolved)')
       }
     } catch (err) {
-      log(`[FleetTeamSlots] team-slot check failed (non-fatal): ${(err as Error)?.message || err}`)
+      const msg = String((err as Error)?.message || err)
+      // Same message as the last logged failure = a standing fault; say it once, not every tick.
+      if (msg !== teamSlotState.lastFailure) {
+        teamSlotState.lastFailure = msg
+        log(`[FleetTeamSlots] team-slot check failed (non-fatal): ${msg}`)
+      }
     }
 
     // Terminal-continuity leg (TRDD-Y8VPE3NS E3 box 5) — THE poll site that drives the automaton.

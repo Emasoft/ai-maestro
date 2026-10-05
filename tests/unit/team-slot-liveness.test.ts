@@ -109,6 +109,33 @@ describe('watchdog team-slot leg', () => {
     expect(logs.some((m) => m.includes('[FleetInboxNudge] nudged'))).toBe(true)
     expect(logs.some((m) => m.includes('[FleetContinuity] alice'))).toBe(true)
   })
+  it('logs a persistent identical failure once, and logs it again after a successful check re-arms it', async () => {
+    const logs: string[] = []
+    const boom = () => {
+      throw new Error('boom')
+    }
+    await tick(boom, logs)
+    await tick(boom, logs)
+    expect(slotLogs(logs)).toHaveLength(1)
+    await tick(() => [], logs)
+    await tick(boom, logs)
+    expect(slotLogs(logs).filter((m) => m.includes('failed (non-fatal): boom'))).toHaveLength(2)
+  })
+  it('logs a different failure message even while the previous failure persists', async () => {
+    const logs: string[] = []
+    await tick(() => { throw new Error('one') }, logs)
+    await tick(() => { throw new Error('two') }, logs)
+    expect(slotLogs(logs)).toHaveLength(2)
+  })
+  it('puts reason in the log line and treats unknown -> soft-deleted on the same slot as a change', async () => {
+    const logs: string[] = []
+    await tick(() => [f1], logs)
+    await tick(() => [{ ...f1, reason: 'soft-deleted' }], logs)
+    const s = slotLogs(logs)
+    expect(s).toHaveLength(2)
+    expect(s[0]).toContain('chief-of-staff=ghost (unknown)')
+    expect(s[1]).toContain('chief-of-staff=ghost (soft-deleted)')
+  })
   it('does not mutate the teams data across a tick', async () => {
     const teams = [{ id: 't1', name: 'T1', chiefOfStaffId: 'ghost', orchestratorId: 'gone' }]
     const before = structuredClone(teams)

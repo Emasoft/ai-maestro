@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:41:11+0200
+updated: 2026-10-05T06:44:58+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -90,6 +90,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 42cae0be0: governance token, message API key and cross-host identity token of a soft-deleted agent are refused at authentication (lib/agent-auth.ts only; token store and key module untouched; nothing revoked, so clearing deletedAt restores them). My runs: 32 test files / 435 passed, tsc 0; check forced to false in a scratch worktree → 4 of 11 cases red, positive controls and 'revocation still finds the token' green. Whole suite owed. NOT covered: a HARD-deleted id (row missing) is deliberately not refused here — it relies on the delete pipeline having revoked its credentials; the 'tokens of a hard-deleted id' part of the carried box is therefore still open and is restated in the revive box above.
 - [ ] FOUND 2026-10-05 reviewing 42cae0be0 (read by me): the comment on isSoftDeletedAgent says an unreadable registry fails closed, but lib/agent-registry.ts loadAgents catches every read/parse error and returns an empty list — so the helper catch is unreachable and on a corrupt registry the check answers NOT soft-deleted (fails open for these three paths; the session-secret path finds no row and refuses). Getter semantics confirmed by reading: getAgent(id, true) returns a soft-deleted row. Second neuter run by me: helper forced to true → 6 of 11 red (three live controls and the three restored-after-clear assertions), so the restore half is pinned. To do: correct the comment; decide whether a registry read fault should answer 503 with its own message instead of an invalid-credential 401 — that needs loadAgents to distinguish missing from corrupt, the same repair already made for the token stores.
 - [x] 2026-10-05 dfabafef8: a minted portfolio token takes issuer_team_id from the team registry, not from the credential (item (a) of the OPEN-WORK box above; items (b) real-registry portfolio test, (c) demoted-MANAGER token test and (d) resolver fault-path test remain). My run: 12 portfolio test files / 139 passed. Neuter and the read that the mint authorization does not use the credential team are the worker reports, not mine.
+- [x] RECORD 2026-10-05 on dfabafef8, reads done after review: the owner auth result carries no team with the user model on or off (buildAuthContext copies teamId from the authentication result), so owner-minted tokens never had a team stamp — no behaviour change there; getTeamsForAgent matches the same three conditions in the same order as the authentication layer own team lookup; rule R4.1 limits an agent to one team, and the cross-host path that can break it is an open box on TRDD-XTDMQO68 (fix dispatched). The thirteenth portfolio test file (under tests/services) passes 5 of 5, so 13 files / 144 in all; that run was on a tree holding unrelated uncommitted work. CONSEQUENCE to keep in view: an issuer the registry places in no team mints a token with no team stamp, which team-scoped revocation cannot find.
 
 ## Approval log
 

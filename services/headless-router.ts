@@ -1903,15 +1903,25 @@ const routes: Route[] = [
     }
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/metadata$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BZW1QAZ5: mirror app/api/agents/[id]/metadata/route.ts PATCH. This used to call updateAgentById(id, { metadata })
+    // with no requester and no authentication, i.e. an ungoverned write. The twin authenticates (401 on error) and runs
+    // ChangeMetadata, whose gate 0 enforces 'modify-agent' (self / MANAGER / owning COS / system owner; a signed-in
+    // non-owner user is refused). The error -> status mapping below is the twin's, verbatim.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     // readJsonBody returns null for empty bodies; fall back to {} to avoid passing null as metadata,
     // which would violate the service contract (consistent with DELETE which clears to {}).
     const metadata = (await readJsonBody(req)) ?? {}
-    const result = await updateAgentById(params.id, { metadata })
-    if (result.error) {
-      sendServiceResult(res, result)
-    } else {
-      sendServiceResult(res, { status: 200, data: { metadata: result.data?.agent?.metadata } })
+    const { ChangeMetadata } = await import('@/services/element-management-service')
+    const result = await ChangeMetadata(params.id, metadata, buildAuthContext(auth), { mode: 'merge' })
+    if (!result.success) {
+      const status = /not found/i.test(result.error || '') ? 404
+        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : 400
+      sendJson(res, status, { error: result.error || 'Failed to update metadata' })
+      return
     }
+    sendServiceResult(res, { status: 200, data: { metadata: getAgentById(params.id).data?.agent?.metadata || {} } })
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/metadata$/, paramNames: ['id'], handler: async (_req, res, params) => {
     const result = await updateAgentById(params.id, { metadata: {} })
@@ -2100,7 +2110,12 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await updateAgentById(params.id, body, auth.agentId))
+    // TRDD-BZW1QAZ5: pass the AuthContext exactly as app/api/agents/[id]/route.ts PATCH does. Without it every Change*
+    // pipeline inside updateAgentById fell back to `{agentId, isSystemOwner: !requestingAgentId}`, which reads a signed-in
+    // NON-owner user (userId, no agentId; user-authority model on) as the system owner and drops the title/team the gates
+    // read. buildAuthContext(auth) carries the model-aware isSystemOwner, userId/userTitle, governanceTitle and teamId.
+    // The sudo confirmation the twin requires for Change*-owned fields is deliberately NOT added here (open question).
+    sendServiceResult(res, await updateAgentById(params.id, body, auth.agentId || null, buildAuthContext(auth)))
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
     // TRDD-A50RC5G8 — USER ruling 2026-10-05: "in general hard-kill is strictly reserved to the user maestro. it also

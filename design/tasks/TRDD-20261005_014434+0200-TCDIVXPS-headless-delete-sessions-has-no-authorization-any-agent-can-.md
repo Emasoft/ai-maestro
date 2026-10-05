@@ -4,7 +4,7 @@ title: Headless DELETE sessions has no authorization — any agent can kill any 
 column: dev
 status: tasked
 created: 2026-10-05T01:44:34+0200
-updated: 2026-10-05T04:50:40+0200
+updated: 2026-10-05T06:01:46+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -63,12 +63,13 @@ authContext refused. Neuter the check and record the red set. Run the headless r
 - [x] Headless and full-mode routes both pass the verified identity; neither can reach the service without one
 - [x] Refusal tests assert no kill, no unpersist, no registry write; neuter recorded
 - [x] Every other caller of `deleteSession` enumerated and updated
-- [ ] SCOPE OF THE CLAIM, stated honestly: PROVEN open is the headless handler (authenticates, then calls the service). NOT verified: whether anything authorizes before the headless router, and whether full mode is closed — `enforceAuth` admits agents and whether `requireSudoToken` also applies the delete-session authorization was not read. The service fix closes both either way; settle these two reads and record them here
+- [x] SCOPE OF THE CLAIM, stated honestly: PROVEN open is the headless handler (authenticates, then calls the service). NOT verified: whether anything authorizes before the headless router, and whether full mode is closed — `enforceAuth` admits agents and whether `requireSudoToken` also applies the delete-session authorization was not read. The service fix closes both either way; settle these two reads and record them here
 - [ ] `deleteSession` also soft-deletes the AGENT RECORD (`deleteAgentBySession`) with NO cemetery archive (per the TRDD-A50RC5G8 investigation; not re-read). Under the USER ruling of 2026-10-05 ("only soft-kill ... the agent corpse in the cemetery can always be resurrected") an agent deletion must leave a resurrectable archive. Authorizing as delete-session is not enough: route the record deletion through the archiving DeleteAgent pipeline, or stop deleting the record here. This card must not close on authorization alone
 - [x] Target resolution tested on an indexed multi-session name and on the cloud branch, not only on a mocked single session
 - [x] BEHAVIOUR CHANGE named: a session that resolves to no registry agent (an orphan tmux session) can afterwards be removed only by the system owner
 - [x] 2026-10-05 target resolution box: d24147c8e adds tests/unit/delete-session-target-resolution.test.ts (indexed name, both-exist, cloud branch, unauthorized caller) against the real registry resolver; own neuter 3 of 8 red, names in the commit message.
 - [x] 2026-10-05 LIMITS of d24147c8e (review): the indexed session is simulated by NAME only — no agent record carries a real second session; the target is observed indirectly through an authorization verdict; the unauthorized-caller cases have no neuter; whether the redirected HOME fully contains the registry read was not proven by a before/after count of the real registry.
+- [x] RECORD 2026-10-05 for the scope box, both reads settled (worker located, lines read by me): (1) headless — the DELETE /api/sessions/:id handler authenticates and calls deleteSession(id, buildAuthContext(auth)) with nothing between; the router's own gates only prove a credential is present (per the comment on the export handler in the same file). (2) full mode — lib/sudo-guard.ts maps 'DELETE /api/sessions/[id]' to { action: 'delete-session', session: true } and decideAidTitle resolves the session to its agent and calls authorize. The service itself calls authorize(…, 'delete-session', …) before deleting, so both modes are closed by the service. The remaining open box waits on question 16 of TRDD-VR4OPNVI.
 
 ## Approval log
 - 2026-10-05 — LANDED 6626cbe60 by main-agent@ai-maestro. Scope settled by reading (worker report, spot-checked): HEADLESS was open — the router authenticates only before dispatch; FULL mode was already closed for agents — requireSudoToken also runs the title check from the sudo-guard route map. Still OPEN: (1) deleteSession marks the record deleted with NO cemetery archive (lib/agent-registry.ts deleteAgent soft path sets deletedAt only); (2) target resolution on an indexed name is defective — getAgentBySession (lib/agent-registry.ts:487-491) strips the trailing index, so session "alpha_1" resolves to agent "alpha" even when an agent named "alpha_1" exists. The indexed-session box stays unticked for that reason.

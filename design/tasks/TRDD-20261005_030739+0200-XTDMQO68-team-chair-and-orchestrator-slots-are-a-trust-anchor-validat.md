@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:53:36+0200
+updated: 2026-10-05T07:14:38+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -79,6 +79,8 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] HYGIENE 2026-10-05: 6 boxes ticked from the read-only mapping (reports/trdd-drain/20261005_062907+0200-three-cards-open-boxes-mapped.md). Checked by me: commits a762cc46c, 1878fd0b6, 8f34f9cc2 exist; notifySourceOfExecutionRefusal is in services/cross-host-governance-service.ts; the box the transfer-agent note points at is ticked. Ticked: 2 landed (the source host is told of an execution refusal — its EFFECT on the peer stays open in its own box; a refused or mistyped transfer writes nothing), 3 records (correction, commit map, triage pointer), 1 note overtaken by its own correction. Open work that remains, per the mapping: the four other cross-host request types and live-agent membership on add-to-team / transfer-agent (one change; note the non-reentrant lock constraint recorded on TRDD-A50RC5G8); orchestrator must be listed in the team (deferred on evidence); detector is a server log line only; executed is written before the run.
 - [x] 2026-10-05 50b24a09c: an approved cross-host add-to-team or transfer-agent is refused before any mutation when the agent is not a live agent in this host registry or is already in another team (R4.1; MANAGER exempt; the transfer source team does not count). This closes the box ticked with it. An agent that lives only on the peer host is therefore refused — consistent with R43.2-R43.4 (a host governs only its own agents; the sanctioned cross-host channels are migration and groups). My runs: 13 cross-host test files / 355 passed; each check disabled in a scratch worktree fails its cases (4 and 2). The four-other-request-types box stays OPEN: remove-from-team, assign-cos and remove-cos were not changed or re-read.
 - [x] 2026-10-05 e7c9f5f57: the cross-host one-team check now counts chair and orchestrator like the rest of the code, and a transfer always checks liveness. My run: 13 cross-host test files / 361 passed; neuters are the worker runs. Still open: add-to-team with an id the team already lists is a success no-op; the three other request types.
+- [x] DeleteTeam G03 undo TRACED 2026-10-05 (worker read, report reports/xtdmqo68/20261005_071357+0200-shuffle-flag-and-deleteteam-g03-undo.md; I read only the throw site): the 404 comes from assertNewSlotHolderIsLiveAgent in lib/team-registry.ts (label agent not found, 404), reached when the undo calls updateTeam with the chair or orchestrator slot. It is REACHABLE, not unreachable: it fires if that agent was soft-deleted or removed between the strip and the rollback (a concurrent agent delete). The runner then records the undo as unrevertable and reports INVALID STATE. Not fixed.
+- [ ] From the trace above: no test drives the G03 undo with a chair or orchestrator set (the two existing undo tests seed teams with members only), so the 404 branch in a rollback is unpinned. Add that test; then decide whether a rollback may restore a slot holder that is no longer live (restoring the pre-delete state exactly) instead of failing.
 
 ## Approval log
 

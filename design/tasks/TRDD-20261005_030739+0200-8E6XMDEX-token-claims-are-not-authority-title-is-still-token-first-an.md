@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:53:36+0200
+updated: 2026-10-05T07:14:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -92,6 +92,9 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 dfabafef8: a minted portfolio token takes issuer_team_id from the team registry, not from the credential (item (a) of the OPEN-WORK box above; items (b) real-registry portfolio test, (c) demoted-MANAGER token test and (d) resolver fault-path test remain). My run: 12 portfolio test files / 139 passed. Neuter and the read that the mint authorization does not use the credential team are the worker reports, not mine.
 - [x] RECORD 2026-10-05 on dfabafef8, reads done after review: the owner auth result carries no team with the user model on or off (buildAuthContext copies teamId from the authentication result), so owner-minted tokens never had a team stamp — no behaviour change there; getTeamsForAgent matches the same three conditions in the same order as the authentication layer own team lookup; rule R4.1 limits an agent to one team, and the cross-host path that can break it is an open box on TRDD-XTDMQO68 (fix dispatched). The thirteenth portfolio test file (under tests/services) passes 5 of 5, so 13 files / 144 in all; that run was on a tree holding unrelated uncommitted work. CONSEQUENCE to keep in view: an issuer the registry places in no team mints a token with no team stamp, which team-scoped revocation cannot find.
 - [x] REGRESSION FOUND AND REPAIRED 2026-10-05: 42cae0be0 broke three cases in tests/authorization.test.ts (they assumed authentication never reads the registry); they stayed red for five commits because my subset run skipped test files at the top level of tests/. Found by the whole-suite run in a clean checkout at 50b24a09c; repaired in e1b19361f (148 of 148, my run; nine other auth-using test files 123 passed). Also landed 8c965ab81: three of the four bounded test gaps (demoted-MANAGER token refused; real-registry portfolio token — its neuter fails only at the precondition; governance-context fault path: a registry or governance-store read fault makes even a MANAGER resolve to autonomous while still authenticating). Items (b), (c), (d) of the OPEN-WORK box are thereby done; that box stays open only until this is re-read.
+- [x] CALLER ENUMERATION DONE 2026-10-05 (worker read, counts by grep only, report reports/8e6xmdex/20261005_071400+0200-loadagents-callers-on-corrupt-registry.md): loadAgents returns an empty list for a missing file, for corrupt JSON or any read error (logged), and for valid JSON that is not an array (not logged). Of the security callers read, only isSoftDeletedAgent fails OPEN (its catch is dead; used for governance token, API key and IBCT); the others deny or fall to the lowest title. A strict reader exists (loadAgentsLoud) but is async, so the synchronous auth code cannot use it.
+- [ ] Fix from the enumeration: a synchronous strict reader that throws on an unreadable or non-array registry and still returns empty for a missing file; isSoftDeletedAgent uses it so its fail-closed catch becomes reachable. Dispatched.
+- [ ] DATA LOSS found by the enumeration, separate card to be opened: createAgent and the transfer import read through loadAgents, push one row and save, so one bad read of an existing registry would overwrite it with a one-agent file; the G08 undo in the delete pipeline can write an empty snapshot the same way (inferred).
 
 ## Approval log
 

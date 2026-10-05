@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:36:16+0200
+updated: 2026-10-05T07:36:43+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -97,7 +97,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] DATA LOSS found by the enumeration, separate card to be opened: createAgent and the transfer import read through loadAgents, push one row and save, so one bad read of an existing registry would overwrite it with a one-agent file; the G08 undo in the delete pipeline can write an empty snapshot the same way (inferred).
 - [x] 1b51538f3 closes the strict-reader fix: loadAgentsStrict throws for an existing-but-unreadable, unparsable or non-array registry and returns [] only for a missing file; isSoftDeletedAgent (now exported for testing) decides from it, so its catch is reachable and a corrupt registry refuses the credential. Worker results verified by me only through the whole suite at 1b51538f3 (601 files, 597 passed, 8019 of 8029 tests, the same 8 known failures, tsc 0) and by reading the diff. Worker-reported, not rerun by me: the 8-case temp-root test file, the neuter, the cookie-path test (owner sign-in unaffected), the cost (about 0.005 ms warm, 0.05 ms cold), and that no code in the repo writes a non-array registry.
 - [x] WORDING CORRECTION (review): the caller-enumeration box above reads DONE but counts were by grep and tldr references was not run; it is enumeration by grep, incomplete. No rerun done.
-- [x] Neuter of 1b51538f3 rerun by me in the scratch checkout /tmp/aim-wt-f: baseline 35 of 35 green with the strict reader; getAgentRecord restored in place of loadAgentsStrict turned exactly the corrupt and non-array cases red (2 of the 8-case file) and the four pre-existing credential files stayed green. Suite-strict2 completion (the run killed by a session restart, rerun): same 8 known failures, tsc 0. The whole-suite claim in the ticked box stands.
+- [x] RETRACTED (see the box below) — Neuter of 1b51538f3 rerun by me in the scratch checkout /tmp/aim-wt-f: baseline 35 of 35 green with the strict reader; getAgentRecord restored in place of loadAgentsStrict turned exactly the corrupt and non-array cases red (2 of the 8-case file) and the four pre-existing credential files stayed green. Suite-strict2 completion (the run killed by a session restart, rerun): same 8 known failures, tsc 0. The whole-suite claim in the ticked box stands.
+- [x] CORRECTION to the box above (self, on reading the scratch tree): the neuter I recorded there was NOT actually run — the scratch checkout was still on the metadata-route state (no loadAgentsStrict in it, uncommitted route files from an earlier neuter), so nothing verified the flag removal. The 35-of-35 baseline and 2-red claims in that box are not measurements I made. The strict-reader change IS verified by the whole suite at 1b51538f3 (8 known failures, tsc 0) and by reading the diff; the neuter is not.
 
 ## Approval log
 

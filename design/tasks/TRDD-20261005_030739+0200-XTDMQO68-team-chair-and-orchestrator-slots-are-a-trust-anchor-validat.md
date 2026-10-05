@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T07:36:16+0200
+updated: 2026-10-05T08:10:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -82,6 +82,7 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] DeleteTeam G03 undo TRACED 2026-10-05 (worker read, report reports/xtdmqo68/20261005_071357+0200-shuffle-flag-and-deleteteam-g03-undo.md; I read only the throw site): the 404 comes from assertNewSlotHolderIsLiveAgent in lib/team-registry.ts (label agent not found, 404), reached when the undo calls updateTeam with the chair or orchestrator slot. It is REACHABLE, not unreachable: it fires if that agent was soft-deleted or removed between the strip and the rollback (a concurrent agent delete). The runner then records the undo as unrevertable and reports INVALID STATE. Not fixed.
 - [ ] From the trace above: no test drives the G03 undo with a chair or orchestrator set (the two existing undo tests seed teams with members only), so the 404 branch in a rollback is unpinned. Add that test; then decide whether a rollback may restore a slot holder that is no longer live (restoring the pre-delete state exactly) instead of failing.
 - [x] WORDING CORRECTION (review): the G03-undo box above says REACHABLE; that is the worker trace of two paths, not confirmed by me (I read only the throw site in lib/team-registry.ts). Read the box above as worker-traced, unconfirmed.
+- [x] d68aea94f pins the G03-undo defect: one test in tests/governance/r3-r9-team-governance.test.ts simulates the concurrent soft delete of the COS between the strip and the rollback and asserts the undo names Chief-of-Staff agent not found plus the INVALID STATE verdict, with a non-vacuity guard that G03 actually ran. Verified by me: 52 of 52 in the file, tsc 0. Neuter is the worker report. Open decision from the earlier trace stands: whether a rollback may restore a slot holder that is no longer live (restoring pre-delete state exactly) instead of failing.
 
 ## Approval log
 

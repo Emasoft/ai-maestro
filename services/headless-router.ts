@@ -21,6 +21,7 @@ import {
   searchAgentsByQuery,
   getAgentById,
   updateAgentById,
+  CHANGEABLE_FIELDS,
   registerAgent,
   lookupAgentByName,
   getUnifiedAgents,
@@ -78,7 +79,6 @@ import {
   exportAgentZip,
   createTranscriptExportJob,
   importAgent,
-  transferAgent,
 } from '@/services/agents-transfer-service'
 import { getAgentProbe } from '@/services/block-state-service'
 import {
@@ -346,6 +346,10 @@ import {
 // Utility helpers
 // ---------------------------------------------------------------------------
 
+// TRDD-BZW1QAZ5: raw text of every body readJsonBody consumed. A request stream can be read only once, so a handler that
+// parses first and then delegates (delegateNextRoute withBody) would otherwise forward an empty body or hang.
+const consumedBodies = new WeakMap<IncomingMessage, string>()
+
 async function readJsonBody(req: IncomingMessage): Promise<any> {
   // Enforce 1MB size limit to prevent memory exhaustion
   const MAX_BODY_SIZE = 1_048_576
@@ -368,6 +372,7 @@ async function readJsonBody(req: IncomingMessage): Promise<any> {
     req.on('end', () => {
       if (rejected) return
       const body = Buffer.concat(chunks).toString('utf-8')
+      consumedBodies.set(req, body)
       // Return null for empty bodies instead of {} to distinguish no-body from empty-object
       if (!body) return resolve(null)
       try {
@@ -647,7 +652,7 @@ async function delegateNextRoute<P extends Record<string, string> = { id: string
     headers: forwardAuthHeaders(req, opts.withBody ? { 'content-type': 'application/json' } : undefined),
   }
   // A GET/HEAD Request may not carry a body — constructing one throws.
-  if (opts.withBody) init.body = (await readRawBody(req)).toString('utf-8')
+  if (opts.withBody) init.body = consumedBodies.get(req) ?? (await readRawBody(req)).toString('utf-8')
 
   const fakeReq = new NextRequest(`http://localhost${pathname}${search}`, init as never)
   const response = opts.params
@@ -741,6 +746,20 @@ interface Route {
 // ---------------------------------------------------------------------------
 // Route table
 // ---------------------------------------------------------------------------
+
+// TRDD-BZW1QAZ5 — the PATCH /api/agents/:id body fields that decide what an agent EXECUTES or WHERE it runs. A body carrying
+// any of them is served by the full-mode handler (sudo required); every other body keeps the in-table path.
+// DELIBERATE SUBSET of CHANGEABLE_FIELDS (interim main-agent decision recorded on TRDD-BZW1QAZ5; the owner is asked about all
+// seven fields in question 20 of TRDD-VR4OPNVI). The names are filtered out of the exported CHANGEABLE_FIELDS so a rename there
+// breaks load instead of silently emptying the list. agents-core-service exports no alias for these three (its only alias,
+// CHANGEABLE_FIELD_ALIASES = ['alias'], maps to `name`), so none is listed. Detection is by own key PRESENCE, exactly as the
+// service's bodyHasChangeableField / `body.<field>` reads do: another casing or a wrapper object is never read by the service.
+const EXEC_AFFECTING_FIELDS: ReadonlySet<string> = new Set(['program', 'programArgs', 'workingDirectory'])
+const EXEC_FIELD_NAMES = CHANGEABLE_FIELDS.filter((f) => EXEC_AFFECTING_FIELDS.has(f))
+if (EXEC_FIELD_NAMES.length !== EXEC_AFFECTING_FIELDS.size) throw new Error('headless-router: execution-field list out of sync with CHANGEABLE_FIELDS')
+function bodyHasExecField(body: unknown): boolean {
+  return !!body && typeof body === 'object' && EXEC_FIELD_NAMES.some((f) => Object.prototype.hasOwnProperty.call(body, f))
+}
 
 const routes: Route[] = [
   // =========================================================================
@@ -1744,8 +1763,13 @@ const routes: Route[] = [
     sendServiceResult(res, createTranscriptExportJob(params.id, body))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/transfer$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await transferAgent(params.id, body))
+    // TRDD-BZW1QAZ5: transferAgent has no authorization of its own and takes the destination host URL from the body, while
+    // full mode runs enforceAuth + requireSudoToken + a UUID check + a JSON guard before it. The whole route is therefore
+    // served by that handler (credentials and X-Sudo-Token are carried by delegateNextRoute) and nothing is authenticated or
+    // parsed here first, so the decision cannot differ from full mode. Fail closed: headless mints no sudo token.
+    const mod = await import('@/app/api/agents/[id]/transfer/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      `/api/agents/${params.id}/transfer`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
 
   // TRDD-LT5N2JA4 — mirror of app/api/agents/[id]/probe/route.ts GET. Same authorization
@@ -2115,6 +2139,16 @@ const routes: Route[] = [
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
+    // TRDD-BZW1QAZ5: a body carrying an execution-affecting field is delegated AS A WHOLE to the full-mode handler (it requires
+    // sudo for these fields and authenticates itself) — before any authentication here, so the answer cannot differ. Plain
+    // fields in the same body are not applied separately. readJsonBody already consumed the stream; consumedBodies hands the
+    // raw text on.
+    if (bodyHasExecField(body)) {
+      const mod = await import('@/app/api/agents/[id]/route')
+      await delegateNextRoute(req, res, mod.PATCH as NextRouteHandler,
+        `/api/agents/${params.id}`, { method: 'PATCH', params: { id: params.id }, withBody: true })
+      return
+    }
     // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),

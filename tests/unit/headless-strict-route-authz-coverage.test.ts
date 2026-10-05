@@ -320,9 +320,9 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
       'DELETE_/api/sessions/[id]',
       'DELETE_/api/teams/[id]',
       'DELETE_/api/teams/[id]/orchestrator',
-      'PATCH_/api/agents/[id]',
+      // TRDD-BZW1QAZ5: 'PATCH_/api/agents/[id]' (execution-affecting bodies) and 'POST_/api/agents/[id]/transfer' (whole route)
+      // left this list — both are now delegated (needs a sudo token for the owner); see the delegated breakdown below.
       'PATCH_/api/agents/[id]/session',
-      'POST_/api/agents/[id]/transfer',
       'POST_/api/agents/cemetery',
       'POST_/api/agents/import',
       'POST_/api/teams',
@@ -356,7 +356,10 @@ describe('headless strict-route authorization coverage (TRDD-HGE9T6VT box 188, d
     expect(breakdown).toEqual([
       // Hard delete only is delegated (requireSudoToken); soft delete stays in-table (TRDD-BZW1QAZ5 / TRDD-A50RC5G8).
       'DELETE_/api/agents/[id] -> app/api/agents/[id]/route [requireSudoToken]',
+      // PATCH is delegated only for a body carrying program, programArgs or workingDirectory; other bodies stay in-table.
+      'PATCH_/api/agents/[id] -> app/api/agents/[id]/route [requireSudoToken]',
       'PATCH_/api/trdd/[id] -> app/api/trdd/[id]/route [requireSudoToken]',
+      'POST_/api/agents/[id]/transfer -> app/api/agents/[id]/transfer/route [requireSudoToken]',
       'POST_/api/governance/password -> app/api/governance/password/route [requireSudoToken,enforceSystemOwner]',
       'POST_/api/trdd/[id]/approve -> app/api/trdd/[id]/approve/route [requireSudoToken]',
       'POST_/api/trdd/[id]/archive -> app/api/trdd/[id]/archive/route [requireSudoToken]',

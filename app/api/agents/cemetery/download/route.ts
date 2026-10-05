@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import fs from 'fs'
 import path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
   // CC-GOV-017: Only system owner can download cemetery archives
-  if (auth.agentId) {
+  if (!buildAuthContext(auth).isSystemOwner) { // not `auth.agentId`: model-ON non-owner user has no agentId (TRDD-BZW1QAZ5); not sudo-strict, so the only gate
     return NextResponse.json({ error: 'Only the system owner can access cemetery archives' }, { status: 403 })
   }
 

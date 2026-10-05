@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
   // CC-GOV-017: Only system owner can list cemetery archives
-  if (auth.agentId) {
+  if (!buildAuthContext(auth).isSystemOwner) { // not `auth.agentId`: a model-ON signed-in non-owner user has no agentId (TRDD-BZW1QAZ5); GET is not sudo-strict, so this is its only gate
     return NextResponse.json({ error: 'Only the system owner can access cemetery archives' }, { status: 403 })
   }
 
@@ -157,8 +157,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  // Only system-owner can revive agents
-  if (auth.agentId) {
+  // Only system-owner can revive agents. buildAuthContext, not a bare `auth.agentId`
+  // test: with the user-authority model ON a signed-in non-owner user has no agentId
+  // yet is not the owner (TRDD-BZW1QAZ5). Model OFF: identical to `!agentId`.
+  if (!buildAuthContext(auth).isSystemOwner) {
     return NextResponse.json({ error: 'Only the system owner can revive agents' }, { status: 403 })
   }
 
@@ -280,7 +282,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  if (auth.agentId) {
+  if (!buildAuthContext(auth).isSystemOwner) { // not `auth.agentId`: see POST (TRDD-BZW1QAZ5)
     return NextResponse.json({ error: 'Only the system owner can purge cemetery archives' }, { status: 403 })
   }
 

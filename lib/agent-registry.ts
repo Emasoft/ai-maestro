@@ -502,8 +502,16 @@ export function getAgentByPartialName(partialName: string): Agent | null {
  * @param hostId - Optional host ID for per-host lookup
  */
 export function getAgentBySession(sessionName: string, hostId?: string): Agent | null {
+  // TRDD-DEL16Q96: this result is the TARGET of authorization decisions (sudo-guard, session routes),
+  // so an exact name must win. parseSessionName strips a trailing _<digits> as a session index, which
+  // would resolve an agent legitimately named "alpha_1" to agent "alpha" — the wrong agent. Look up
+  // the full session name first (getAgentByName already skips soft-deleted agents), and only fall
+  // back to the parsed base name when no agent carries that exact name.
+  const byFullName = getAgentByName(sessionName, hostId)
+  if (byFullName) return byFullName
+
   const { agentName } = parseSessionName(sessionName)
-  // First try matching by agent name (the common case)
+  // Then the common indexed case ("website_1" → "website")
   const byName = getAgentByName(agentName, hostId)
   if (byName) return byName
 

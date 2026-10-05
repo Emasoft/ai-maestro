@@ -34,11 +34,28 @@ export const registryLedger = new SignedLedger(REGISTRY_FILE)
 // System helper names that must never be registered as agents, assigned to teams,
 // or receive/send AMP messages.  These are ephemeral UI-only helpers (e.g. the
 // agent creation wizard persona).
+//
+// ALSO holds the fixed /api/agents/<segment> routes that the headless router
+// answers with the generic by-id/by-name `/api/agents/:id` handlers (a fixed route
+// registered AFTER the generic one, or a method with no fixed handler): an agent
+// NAMED `role-plugins` would be the target of DELETE /api/agents/role-plugins (a
+// plugin-uninstall request). Refused at create and when a rename CHANGES the name;
+// existing rows are never re-validated (TRDD-BZW1QAZ5).
 export const SYSTEM_HELPER_NAMES: ReadonlySet<string> = new Set([
   'haephestos',
   'haephestos-creation-helper',
   'creation-helper',
+  'role-plugins',
+  'cemetery',
 ])
+
+
+/** Throws if `name` (already lowercased) is reserved. */
+function assertAgentNameAllowed(name: string): void {
+  if (SYSTEM_HELPER_NAMES.has(name)) {
+    throw new Error(`"${name}" is a reserved system helper name and cannot be registered as an agent`)
+  }
+}
 
 // Real names containing "IA" (feminine) or "AI" (masculine) to match avatar gender
 const FEMALE_NAMES = [
@@ -518,10 +535,8 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
   if (!agentName) {
     throw new Error('Agent name is required')
   }
-  // Block system helper names from being registered as real agents
-  if (SYSTEM_HELPER_NAMES.has(agentName)) {
-    throw new Error(`"${agentName}" is a reserved system helper name and cannot be registered as an agent`)
-  }
+  // Block system-helper and API-route-segment names (TRDD-BZW1QAZ5)
+  assertAgentNameAllowed(agentName)
 
   // Determine deployment type
   const deploymentType: DeploymentType = request.deploymentType || 'local'
@@ -707,6 +722,8 @@ export async function updateAgent(id: string, updates: UpdateAgentRequest): Prom
 
   // Check name uniqueness ON THIS HOST if being updated
   if (newName && newName.toLowerCase() !== currentName?.toLowerCase()) {
+    // A rename must not reach a reserved name either, or it is a two-call bypass of the create check
+    assertAgentNameAllowed(newName)
     const existing = getAgentByName(newName, agentHostId)
     if (existing && existing.id !== id) {
       throw new Error(`Agent "${newName}" already exists on host "${agentHostId}"`)

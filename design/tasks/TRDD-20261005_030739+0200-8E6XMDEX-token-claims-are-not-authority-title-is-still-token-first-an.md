@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:06:00+0200
+updated: 2026-10-05T05:13:24+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f]
+implementation-commits: [eadc2c9ff, 0f0e49400, 49f411162, 40ca151fd, d9bbf1bb9, 66a55c866, ccd8c10d1, eabbe65c8, c1fdf417c, 0cea6c6a7, 169e7834f, 7ea22acca]
 ---
 
 # Token claims are not authority — title is still token-first and issuer team id is stamped from the token
@@ -82,6 +82,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [x] 2026-10-05 KEY ADDRESSING READ (closes the review's name-reuse doubt on 0cea6c6a7): lib/amp-keys.ts stores a key pair under the state dir keyed by AGENT ID (getKeysDir(agentId)); the token route loads loadKeyPair(agent.id) and refuses when there is none; G10 saves under agent.id. A freshly minted uuid therefore has no key until G10, and a new agent adopting a soft-deleted agent's FOLDER by name does not inherit its keys (they live under the old id). The G10 'already has keypair' branch can only fire for an id that already has a keys directory. The flag stays at all three sites.
 - [x] 2026-10-05 169e7834f: the route calls a file unreadable only on the store's own fault, the advice no longer starts with deletion, and a file corrupted between POST's pre-check and the mint is answered the same way. Remaining on this card, all open: a typed fault in lib/portfolio-store (the route still re-reads to classify a throw); an owner-visible alert for a corrupt token or portfolio store; a non-owner issuer gets 403 over a corrupt file; the caller-asserted creation flag; no integration test of a retitle against the real token store.
 - [x] 2026-10-05 TWO READS behind today's commits: portfolioStoreFault returns null when the file is readable and the fault message otherwise, so the route's '=== null means rethrow' has the right polarity — limit: it reports ANY failed re-read as a fault, so a persistent non-corruption error (permissions) is still answered 'could not be parsed'. The token route answers 401 no_keypair when loadKeyPair(agent.id) is null and provisions nothing, so no token can be issued for a new id before G10. Live data: the one per-agent portfolio file parses under the strict shape (structure only); the live token store file was NOT checked.
+- [x] 2026-10-05 7ea22acca: the store's fault is typed (unreadable / unparseable / wrong-shape) and the route answers the error it caught, with no second read; an unreadable file no longer gets advice to remove it. This supersedes the limit recorded above (any failed re-read counted as a fault). Still open on this card: owner-visible alert for a corrupt token or portfolio store; a non-owner issuer gets 403 over a corrupt file; the caller-asserted creation flag; no integration test of a retitle against the real token store; where in the mint the load sits relative to its writes (not reported to me yet — in the worker's report, unread).
 
 ## Approval log
 

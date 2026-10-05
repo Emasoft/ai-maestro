@@ -4,7 +4,7 @@ title: Team chair and orchestrator slots are a trust anchor — validate every w
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T05:09:06+0200
+updated: 2026-10-05T05:13:23+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93, ccf7d8475]
+implementation-commits: [96245c34c, 5ce4c6a5a, 0f00a70c0, 8f34f9cc2, 1878fd0b6, a762cc46c, b86907f93, ccf7d8475, 5e143620d]
 ---
 
 # Team chair and orchestrator slots are a trust anchor — validate every writer and make refusals surface
@@ -68,7 +68,9 @@ Make a cross-host refusal surface (a failed status with a reason) instead of ret
 - [x] 2026-10-05 CORRECTION (review): the detector box is UNTICKED. b86907f93 landed the MECHANISM (a report-only log line in the server log); the box asks for a lint or heartbeat FINDING, i.e. something a person is shown, and nobody reads that log. Surfacing is open. Also open on the mechanism: its production default (loadTeams + getAgent with deleted included) has no test because every test injects the finder; a persistent failure logs every tick; the reason (unknown vs soft-deleted) is computed but neither logged nor in the dedup key; a chair living on a peer host would be reported as unknown; loadTeams is a plain synchronous read with no lock (read at HEAD) but performs a one-time migration write and returns an empty list on a parse error, so a corrupt teams file reads as no findings. implementation-commits lists a762cc46c although its effect is unproven (see the box above).
 - [x] 2026-10-05 CORRECTION of my own line above: loadTeams does NOT return an empty list on a parse error. Read at HEAD (its catch): only a missing file (ENOENT) returns an empty list; every other error is rethrown. So over a corrupt teams file the detector logs 'team-slot check failed' — every tick until the failure dedup now in progress lands — and does not report 'no findings'.
 - [x] 2026-10-05 ccf7d8475: the detector's production path is tested against a temp HOME, a standing failure logs once, the reason is logged and keyed. The detector box stays open for surfacing only.
-- [ ] FOUND 2026-10-05 (review of my own ticks; read at HEAD): ChangeTitle gate G11 clears chiefOfStaffId on every team a demoted chief-of-staff chairs, and its catch only logs 'G11: WARN — Failed to clear chiefOfStaffId'. A failed clear therefore lets the title change succeed while the team still names the ex-chair — on the slot that, since 3a78439f6, every chair grant reads from the registry. Same swallowed-fault shape as G14b before 49f411162. This was the third obligation inside TRDD-A50RC5G8 box 21, which I ticked as moved although nothing carried it. A worker is making the clear fail closed; whether a reader also checks the holder's current title (which would limit the damage) is being read.
+- [x] FOUND 2026-10-05 (review of my own ticks; read at HEAD): ChangeTitle gate G11 clears chiefOfStaffId on every team a demoted chief-of-staff chairs, and its catch only logs 'G11: WARN — Failed to clear chiefOfStaffId'. A failed clear therefore lets the title change succeed while the team still names the ex-chair — on the slot that, since 3a78439f6, every chair grant reads from the registry. Same swallowed-fault shape as G14b before 49f411162. This was the third obligation inside TRDD-A50RC5G8 box 21, which I ticked as moved although nothing carried it. A worker is making the clear fail closed; whether a reader also checks the holder's current title (which would limit the damage) is being read.
+- [x] 2026-10-05 5e143620d closes the G11 box above: a failed chair clear now fails the retitle and rolls back. Checked before landing: with no manager the clear succeeds (real team registry over a temp HOME), no rule refuses a chairless team, the teams lock is not held at G11 for call sites inside the service file. Open remainder: G11's second half still swallows a failed auto-reject of the ex-chair's pending requests; outside callers of ChangeTitle not all traced for the lock.
+- [ ] orchestratorId 'must be listed in the team' — DEFERRED 2026-10-05 after a caller enumeration (worker's read, report reports/xtdmqo68/20261005-orchestrator-must-be-member.md; no file changed): services/teams-service.ts createNewTeam (the create-with-project flow) sets orchestratorId on a team whose agentIds holds only the chair, and the ChangeTitle G13b undo can restore a previous orchestrator who has left the team. Enforcing membership in updateTeam would break both. Needs: that create flow adding the orchestrator to agentIds first, and the undo carve-out.
 
 ## Approval log
 

@@ -3558,8 +3558,11 @@ export async function ChangeTitle(
             } else {
               ops.push(`G14b: No active AID tokens to revoke`)
             }
-          } catch {
-            ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
+          } catch (err) {
+            // Fail closed (TRDD-8E6XMDEX): a swallowed revocation fault left a credential carrying the
+            // OLD title valid while the pipeline reported success. Throwing makes the runner roll the
+            // title change back. A missing token file is not a fault (aid-token reads it as empty).
+            throw new Error(`G14b: AID token revocation failed — ${err instanceof Error ? err.message : String(err)}`)
           }
         },
         // Nothing recorded ⇒ the import or the revocation threw and nothing was removed. A handle

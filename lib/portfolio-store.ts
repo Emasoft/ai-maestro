@@ -25,6 +25,7 @@ import path from 'path'
 import { withLock } from '@/lib/file-lock'
 import { statePath } from '@/lib/ecosystem-constants'
 import type { PortfolioToken } from '@/types/portfolio'
+import { getAgent } from '@/lib/agent-registry'
 
 const PORTFOLIOS_DIR = statePath('agents', 'portfolios')
 
@@ -189,6 +190,13 @@ export async function setLedgerSeq(tokenId: string, seq: number): Promise<void> 
  * approval tokens, uses_remaining > 0). Pure read.
  */
 export function findActiveTokens(subjectAgentId: string): PortfolioToken[] {
+  // Containment, not revocation (TRDD-8E6XMDEX): while the holder's registry row
+  // is soft-deleted its tokens are dormant, and valid again if a rolled-back
+  // delete clears deletedAt. getAgent(id, true) is the variant that returns
+  // tombstones (agent-registry.ts getAgent: default filters deleted rows). No row
+  // at all (user, service identity, remote-host agent) behaves as before. NOT
+  // covered: hard-deleted holders (row gone) and tokens issued BY a deleted agent.
+  if (getAgent(subjectAgentId, true)?.deletedAt) return []
   const now = Date.now()
   return loadPortfolio(subjectAgentId).filter(
     t =>

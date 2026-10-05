@@ -1025,6 +1025,70 @@ describe('performRequestExecution (via approve flow)', () => {
       )
     })
 
+    it('transfer-agent positive control: both teams are updated and the request stays executed', async () => {
+      /** Proves the transfer refusals below are caused by the checks, and a valid transfer still writes both teams */
+      const src = baseTeam({ id: 'team-src', agentIds: ['agent-g1', 'agent-s1'] })
+      const dest = baseTeam({ id: 'team-dest', agentIds: ['agent-d1'] })
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-dest' }, [src, dest])
+      expect(out.result.status).toBe(200)
+      expect(out.result.data?.status).toBe('executed')
+      expect(src.agentIds).toEqual(['agent-s1'])
+      expect(dest.agentIds).toEqual(['agent-d1', 'agent-g1'])
+      expect(mockSaveTeams).toHaveBeenCalledTimes(1)
+      expect(mockMarkExecutionRefused).not.toHaveBeenCalled()
+    })
+
+    it('transfer-agent refuses a destination team that does not exist', async () => {
+      /** Removing the agent from the source and adding it nowhere must not read as a completed transfer */
+      expectRefused(
+        await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src', toTeamId: 'team-missing' },
+          [baseTeam({ id: 'team-src' })]),
+        "Cannot execute transfer-agent: destination team 'team-missing' not found",
+      )
+    })
+
+    it('transfer-agent refuses a request with no destination team', async () => {
+      /** No toTeamId means there is nowhere to move the agent */
+      expectRefused(
+        await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-src' }, [baseTeam({ id: 'team-src' })]),
+        'Cannot execute transfer-agent: no destination team (toTeamId) in the request',
+      )
+    })
+
+    it('transfer-agent with an unknown source team still adds the agent to the destination', async () => {
+      /** Left as-is deliberately: the source team may live on the peer host, so a missing source is a no-op, not a refusal */
+      const dest = baseTeam({ id: 'team-dest', agentIds: [] })
+      const out = await runExec('transfer-agent', { agentId: 'agent-g1', fromTeamId: 'team-elsewhere', toTeamId: 'team-dest' }, [dest])
+      expect(out.result.status).toBe(200)
+      expect(dest.agentIds).toEqual(['agent-g1'])
+      expect(mockMarkExecutionRefused).not.toHaveBeenCalled()
+    })
+
+    it('a failure to record the refusal still answers 409 with the ORIGINAL reason and is logged', async () => {
+      /** Recording the refusal throws (lock timeout): the requester must still see the real refusal, nothing throws out */
+      mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
+      mockApproveGovernanceRequest.mockResolvedValue(makeGovernanceRequest({
+        type: 'add-to-team',
+        status: 'executed',
+        payload: { agentId: 'agent-x', teamId: 'team-missing' },
+        approvals: { sourceManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' } } as any,
+      }))
+      mockMarkExecutionRefused.mockRejectedValue(new Error('lock timeout'))
+      mockLoadTeams.mockReturnValue([baseTeam()])
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+
+      expect(result.status).toBe(409)
+      expect(result.error).toContain("Cannot execute add-to-team: team 'team-missing' not found")
+      expect(result.error).not.toContain('lock timeout')
+      expect(mockMarkExecutionRefused).toHaveBeenCalledTimes(1)
+      const logged = errSpy.mock.calls.map(c => String(c[0])).join('\n')
+      expect(logged).toContain('req-001')
+      expect(logged).toContain('lock timeout')
+    })
+
     it('an unimplemented request type (create-agent) is a refusal, not a silent success', async () => {
       /** The default branch used to warn and return, leaving the request executed */
       expectRefused(

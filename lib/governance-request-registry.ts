@@ -277,6 +277,9 @@ export async function executeGovernanceRequest(
  * was written -- a refusal must never read as success (R50/R51; TRDD-XTDMQO68). No dedicated 'failed'
  * status exists: 'rejected' + rejectReason already means "this request did not take effect" to every
  * reader (purge, TTL, list filter, status validator), so no enumerating site has to learn a new value.
+ *
+ * Returns the updated request, or null when nothing was marked (unknown id, or the request is not
+ * 'executed').
  */
 export async function markExecutionRefused(
   requestId: string,
@@ -286,6 +289,11 @@ export async function markExecutionRefused(
     const file = loadGovernanceRequests()
     const request = file.requests.find((r) => r.id === requestId)
     if (!request) return null
+
+    // TRDD-XTDMQO68: act ONLY on the 'executed' state approveGovernanceRequest left behind. Without this
+    // guard the function would be a way to flip ANY request (pending, or one a manager already rejected
+    // with their own reason) to 'rejected' and overwrite its rejectReason.
+    if (request.status !== 'executed') return null
 
     request.status = 'rejected'
     request.updatedAt = new Date().toISOString()

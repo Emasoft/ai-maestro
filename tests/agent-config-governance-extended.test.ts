@@ -1182,6 +1182,27 @@ describe('cross-host configure-agent', () => {
     expect(mockNotifyConfigRequestOutcome).toHaveBeenCalledWith(expect.objectContaining({ type: 'configure-agent' }), 'rejected')
   })
 
+  it('a deploy refused because the agent working directory is missing is a reported failure (TRDD-XTDMQO68)', async () => {
+    /** The shared beforeEach makes '/tmp/test-agent' exist so deploys succeed; here it is missing and the refusal must surface */
+    mockFsAccess.mockImplementation(async () => { throw new Error('ENOENT') })
+
+    const executedRequest = makeGovernanceRequest({
+      status: 'executed',
+      approvals: { sourceManager: { approved: true, agentId: 'manager-agent', at: '2026-02-20T10:01:00Z' } },
+    })
+    mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest())
+    mockApproveGovernanceRequest.mockResolvedValue(executedRequest)
+
+    const result = await approveCrossHostRequest('req-ext-001', 'manager-agent', 'correct')
+
+    expect(result.status).toBe(409)
+    expect(result.data).toBeUndefined()
+    expect(result.error).toContain("Agent working directory '/tmp/test-agent' does not exist")
+    expect(mockMarkExecutionRefused).toHaveBeenCalledTimes(1)
+    expect(mockMarkExecutionRefused).toHaveBeenCalledWith('req-ext-001', expect.stringContaining("working directory '/tmp/test-agent' does not exist"))
+    expect(mockNotifyConfigRequestOutcome).toHaveBeenCalledWith(expect.objectContaining({ type: 'configure-agent' }), 'rejected')
+  })
+
   it('listCrossHostRequests returns all requests when no filter is applied', () => {
     /** Verifies that listCrossHostRequests delegates to registry with no filter */
     const requests = [makeGovernanceRequest(), makeGovernanceRequest({ id: 'req-ext-002', type: 'add-to-team' })]

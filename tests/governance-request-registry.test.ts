@@ -661,6 +661,31 @@ describe('markExecutionRefused (TRDD-XTDMQO68)', () => {
     seedRequestsFile(makeRequestsFile([]))
     expect(await markExecutionRefused('nonexistent', 'r')).toBeNull()
   })
+
+  it('does not touch a pending request', async () => {
+    /** The function must only act on the 'executed' state, never flip an arbitrary request to rejected */
+    seedRequestsFile(makeRequestsFile([makeRequest({ id: 'req-pending', status: 'pending' })]))
+
+    expect(await markExecutionRefused('req-pending', 'r')).toBeNull()
+
+    const stored = getGovernanceRequest('req-pending')!
+    expect(stored.status).toBe('pending')
+    expect(stored.rejectReason).toBeUndefined()
+  })
+
+  it('does not overwrite the reason of a request a manager already rejected', async () => {
+    /** A manager's own rejection reason must survive a later refusal record */
+    seedRequestsFile(makeRequestsFile([
+      makeRequest({ id: 'req-mgr-rejected', status: 'rejected', rejectReason: 'Not qualified', updatedAt: '2026-02-21T00:00:00.000Z' }),
+    ]))
+
+    expect(await markExecutionRefused('req-mgr-rejected', 'r')).toBeNull()
+
+    const stored = getGovernanceRequest('req-mgr-rejected')!
+    expect(stored.status).toBe('rejected')
+    expect(stored.rejectReason).toBe('Not qualified')
+    expect(stored.updatedAt).toBe('2026-02-21T00:00:00.000Z')
+  })
 })
 
 describe('executeGovernanceRequest', () => {

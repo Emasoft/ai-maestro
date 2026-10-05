@@ -465,6 +465,23 @@ export async function rejectCrossHostRequest(
 // so the request stayed 'executed' and the caller answered 200 "Successfully executed" with nothing written.
 type ExecutionOutcome = { executed: true } | { executed: false; reason: string }
 
+// Records a refusal on the stored request and NEVER throws. Why it must not throw: the requester has to
+// get the 409 for the ORIGINAL refusal. A throw here (lock timeout, write failure) used to land in
+// performRequestExecution's catch, which re-recorded with the recording error as the reason (hiding the
+// original one) and could throw out of the function. A failed or no-op record (null: unknown id or not
+// 'executed') is logged and the request may stay 'executed' on disk -- that is reported, never silent.
+async function recordExecutionRefusal(requestId: string, reason: string): Promise<void> {
+  try {
+    const marked = await markExecutionRefused(requestId, reason)
+    if (!marked) {
+      console.error(`${LOG_PREFIX} Could not record execution refusal for request ${requestId}: request not found or not in 'executed' status (refusal: ${reason})`)
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`${LOG_PREFIX} Failed to record execution refusal for request ${requestId}: ${msg} (refusal: ${reason})`)
+  }
+}
+
 async function performRequestExecution(request: GovernanceRequest): Promise<ExecutionOutcome> {
   console.log(`${LOG_PREFIX} Executing request ${request.id} (type=${request.type})`)
 
@@ -563,10 +580,19 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
           const fromTeam = request.payload.fromTeamId ? teams.find(t => t.id === request.payload.fromTeamId) : null
           const toTeam = request.payload.toTeamId ? teams.find(t => t.id === request.payload.toTeamId) : null
 
+          // TRDD-XTDMQO68: without a destination the agent would be removed from the source and added
+          // nowhere. A missing source team is NOT refused: on a cross-host transfer the source team may
+          // live on the peer host, so "nothing to remove here" is a legitimate no-op.
+          if (!request.payload.toTeamId) {
+            return refuse(`Cannot execute transfer-agent: no destination team (toTeamId) in the request`)
+          }
+          if (!toTeam) {
+            return refuse(`Cannot execute transfer-agent: destination team '${request.payload.toTeamId}' not found`)
+          }
           if (fromTeam) {
             fromTeam.agentIds = fromTeam.agentIds.filter(id => id !== request.payload.agentId)
           }
-          if (toTeam && !toTeam.agentIds.includes(request.payload.agentId)) {
+          if (!toTeam.agentIds.includes(request.payload.agentId)) {
             toTeam.agentIds.push(request.payload.agentId)
           }
           saveTeams(teams)
@@ -611,7 +637,7 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
 
     if (!outcome.executed) {
       // The 'teams' lock is released here, so taking 'governance-requests' respects the lock order.
-      await markExecutionRefused(request.id, outcome.reason)
+      await recordExecutionRefusal(request.id, outcome.reason)
       return outcome
     }
 
@@ -624,8 +650,7 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Failed to execute request ${request.id}: ${msg}`)
     // A throw is a failed execution just like a refusal: same terminal status, same reported outcome.
-    // If even recording it fails, let that propagate -- a request left 'executed' would read as success.
-    await markExecutionRefused(request.id, msg)
+    await recordExecutionRefusal(request.id, msg)
     return { executed: false, reason: msg }
   }
 }

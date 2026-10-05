@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:00:44+0200
+updated: 2026-10-05T04:02:27+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -52,6 +52,9 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [x] 12 CORRECTION (review): the note 'safe: the routes are unreachable' was unverified when written; measured since only against today's registry (no agent carries either name). The question stands for removing dead table entries and for import lines
 - [x] 13 CORRECTION: only PURGE is being put behind sudo in headless (my interpretation: permanently destroying an archive is a hard-kill). REVIVE stays as it is — owner only, no sudo — so you can still resurrect in headless. Full mode requires sudo for revive too; say if headless should match
 - [x] 14 REWRITTEN ON A FACT (read in the router): revive imports the archive with a NEW agent id. Tokens issued to the old id therefore cannot return to the resurrected agent whatever is decided; and the old session secret belongs to the old id. Remaining question is only: should a resurrected agent be RE-ISSUED equivalent tokens automatically? Default taken: no. Unread: the full-mode revive path and whether the dashboard has a second restore route that keeps the id
+- [x] 14 CORRECTION (review): the new-id fact is read from the HEADLESS revive handler and, per a worker's read, the full-mode one too (app/api/agents/cemetery/route.ts) — I have not read the latter myself. NOT covered by it: the old soft-deleted row keeps its id and is removed only best-effort during revive; if that removal fails the old row survives. Being fixed regardless of your answer: a soft-deleted row will no longer authenticate or hold valid tokens
+- [x] 13 CORRECTION (review): 'revive stays owner-only in headless' is CONDITIONAL — if the purge worker reports headless can obtain a sudo token, revive should be put behind sudo too (full-mode parity); only if it cannot does your 'can always be resurrected' ruling decide it. Download route's prior reachability was not checked
+- [x] 12 WIDENED: the same tool limit blocks every edit inside the two largest pipeline functions (title change, agent delete). One confirmed defect stays open only because of it: a failed token revocation after a title change is reported as success
 
 ## Approval log
 

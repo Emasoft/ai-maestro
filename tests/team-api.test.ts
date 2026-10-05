@@ -115,6 +115,7 @@ import { GET as listTeamsRoute, POST as createTeamRoute } from '@/app/api/teams/
 import { getManagerId, isManager } from '@/lib/governance'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { isValidUuid } from '@/lib/validation'
+import { getAgent } from '@/lib/agent-registry'
 import { NextRequest } from 'next/server'
 
 // ============================================================================
@@ -462,6 +463,8 @@ describe('DELETE /api/teams/[id]', () => {
 
   // CC-006: Closed team deletion guard - non-authorized agent gets 403
   it('returns 403 when non-authorized agent deletes closed team', async () => {
+    // createTeam now refuses a chair no live agent holds (TRDD-A50RC5G8): seed 'cos-agent'
+    vi.mocked(getAgent).mockReturnValueOnce({ id: 'cos-agent' } as any)
     const team = await createTeam({ name: 'Closed Team', agentIds: ['cos-agent'], type: 'closed', chiefOfStaffId: 'cos-agent' })
     vi.mocked(isManager).mockReturnValue(false)
 
@@ -478,6 +481,8 @@ describe('DELETE /api/teams/[id]', () => {
 
   // CC-006: Closed team deletion guard - COS is allowed
   it('denies COS from deleting team — only MANAGER can manage teams', async () => {
+    // createTeam now refuses a chair no live agent holds (TRDD-A50RC5G8): seed 'cos-agent'
+    vi.mocked(getAgent).mockReturnValueOnce({ id: 'cos-agent' } as any)
     const team = await createTeam({ name: 'COS Delete', agentIds: ['cos-agent'], type: 'closed', chiefOfStaffId: 'cos-agent' })
     vi.mocked(isManager).mockReturnValue(false)
 

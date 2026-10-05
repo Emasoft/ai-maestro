@@ -46,6 +46,22 @@ export function sanitizeTeamName(raw: string): string {
 }
 
 /**
+ * Refuse a NEW chair that no live agent holds. Kept out of the pure validateTeamMutation because
+ * team-registry must not statically depend on agent-registry (import cycle / large graph), so the
+ * lookup is a dynamic import done by createTeam/updateTeam inside the teams lock.
+ * Why: team.chiefOfStaffId is the trust anchor for every COS grant (TRDD-A50RC5G8); an id no agent
+ * holds, or a soft-deleted one, must never become it. `getAgent` excludes soft-deleted agents.
+ * An unchanged chair (or null) is never re-validated.
+ */
+async function assertNewChairIsLiveAgent(newChairId: string | null | undefined, currentChairId: string | null | undefined): Promise<void> {
+  if (!newChairId || newChairId === (currentChairId ?? null)) return
+  const { getAgent } = await import('@/lib/agent-registry')
+  if (!getAgent(newChairId)) {
+    throw new TeamValidationException('Chief-of-Staff agent not found', 404)
+  }
+}
+
+/**
  * Validate a team mutation (create or update) against all governance business rules.
  *
  * Rules enforced (post-simplification — all teams are closed):
@@ -128,6 +144,16 @@ export function validateTeamMutation(
   const existingTeam = teamId ? teams.find(t => t.id === teamId) : null
   const effectiveCOS = data.chiefOfStaffId !== undefined ? data.chiefOfStaffId : (existingTeam?.chiefOfStaffId ?? null)
   const effectiveAgentIds = data.agentIds ?? existingTeam?.agentIds ?? []
+
+  // --- MANAGER cannot be a Chief-of-Staff (GOVERNANCE R4.3 + R3.1: MANAGER is a host-level
+  // singleton in no team) ---
+  // Why: team.chiefOfStaffId is the trust anchor for every COS authorization grant in
+  // lib/authorization.ts (TRDD-A50RC5G8); a MANAGER seated there would hold team-scoped COS grants.
+  // Only a NEW, DIFFERENT chair is checked — never re-validate an unchanged chair, or every
+  // unrelated update of a team with a stale chair would start failing.
+  if (data.chiefOfStaffId && data.chiefOfStaffId !== (existingTeam?.chiefOfStaffId ?? null) && data.chiefOfStaffId === managerId) {
+    return { valid: false, error: 'The MANAGER cannot be a team\'s Chief-of-Staff', code: 409 }
+  }
 
   // --- COS Already-Assigned-Elsewhere Check (G3, v2 Rule 7) ---
   // An agent already serving as COS of another team cannot be assigned as COS of this team
@@ -304,7 +330,7 @@ export async function createTeam(
   managerId?: string | null,
   reservedNames?: string[]
 ): Promise<Team> {
-  const team = await withLock('teams', () => {
+  const team = await withLock('teams', async () => {
     const teams = loadTeams()
 
     // Validate all business rules before creation (name, single-team membership, COS)
@@ -312,6 +338,7 @@ export async function createTeam(
     if (!result.valid) {
       throw new TeamValidationException(result.error, result.code)
     }
+    await assertNewChairIsLiveAgent(data.chiefOfStaffId, null)
 
     const now = new Date().toISOString()
     const newTeam: Team = {
@@ -350,7 +377,7 @@ export async function updateTeam(
   managerId?: string | null,
   reservedNames?: string[]
 ): Promise<Team | null> {
-  const updatedTeam = await withLock('teams', () => {
+  const updatedTeam = await withLock('teams', async () => {
     const teams = loadTeams()
     const index = teams.findIndex(t => t.id === id)
     if (index === -1) return null
@@ -366,6 +393,7 @@ export async function updateTeam(
     if (!result.valid) {
       throw new TeamValidationException(result.error, result.code)
     }
+    await assertNewChairIsLiveAgent(updates.chiefOfStaffId, teams[index].chiefOfStaffId)
 
     // Apply sanitized corrections (e.g., trimmed name, COS auto-added to agentIds)
     // Force type to 'closed' — all teams are closed after governance simplification

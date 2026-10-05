@@ -475,10 +475,10 @@ export function authorize(
       if (supervision === 'other-team') {
         return { allowed: false, reason: 'Chief-of-Staff can only delete agents in their own team (soft delete only)' }
       }
-      // Team equality is not enough: a MANAGER may sit in a team's agentIds (team-registry exempts it) and
-      // the chair itself sits in its own agentIds (R4.6), as can another COS-titled agent, so without a TARGET-title test a subordinate could
-      // soft-delete its superior or a peer. Fail CLOSED like the unblock-prompt branch: unknown target or a
-      // throwing registry read → denied.
+      // Supervision is not enough: a MANAGER (team-registry exempts it from single-team membership), an
+      // ASSISTANT or any other non-working title can be listed in agentIds, so the target's title is tested
+      // against an allow-list. Fail CLOSED like the unblock-prompt branch: unknown target or a throwing
+      // registry read → denied.
       let rawTitle: unknown
       try {
         const targetAgent = getAgent(targetAgentId as string)

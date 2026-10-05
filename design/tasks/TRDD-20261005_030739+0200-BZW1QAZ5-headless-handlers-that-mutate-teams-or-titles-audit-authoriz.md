@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T06:55:46+0200
+updated: 2026-10-05T06:57:52+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -106,6 +106,7 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] DEFERRED 2026-10-05 (worker stopped correctly; report reports/bzw1qaz5/20261005_063247+0200-metadata-clear-system-keys.md; read by the worker, no test): clearing an agent metadata removes EVERY key in both modes, including the stored session-secret hash and the message-signing identity block — and the two modes do it through different code: full mode via ChangeMetadata in clear mode, the API-only server via a raw registry update that bypasses that pipeline. Fix to dispatch now that the router file is free: a small protected-key set beside ChangeMetadata (only keys with a cited system writer: the session-secret hash, the amp block), skipped in clear mode, and the API-only clear routed through ChangeMetadata like its PATCH sibling. An explicit way to cut a session credential remains (per-key PATCH; hibernation nulls the hash on purpose).
 - [ ] CORRECTION 2026-10-05 to the ticked box that says of the wizard chat POST that the two modes agree: FALSE for the API-only server until c8af19db2. There the wizard chat entry was unreachable; the generic per-agent chat handler answered and sent the text into an agent pane under the id creation-helper, and the owner-only wizard chat was called zero times (the worker test before the move). STILL UNREAD, so this box stays open: what authorization the generic chat POST applies and what it did when no agent has that id; what linkAgentSession did with the id creation-helper. The reserved-names refusal blocks NEW agents with that name, not an existing registry row. The owner-only decision recorded in that ticked box is NOT settled by its tick — it stays with the owner as question 22.
 - [x] 2026-10-05 06814860d closes the two boxes ticked with it: a metadata clear keeps the session-secret hash and the amp block in BOTH modes and the API-only clear goes through ChangeMetadata (same status in both modes for owner, self, MANAGER-on-other, agent-on-other and unknown id — the worker test); GET and DELETE role-plugins are no longer caught by the generic by-id routes. My run: 121 test files / 2132 passed including all top-level, lib and api tests; tsc 0; protected-key neuter 5 red.
+- [ ] UNREAD after 06814860d (review): the parity test pins that an agent clearing its OWN metadata gets 400 in both modes. A refusal of authority should be 403; a 400 next to MANAGER-on-other 200 suggests a validation branch, not an authorization gate. Which branch produces it was not read (the router diff was checked by hunk position only), and the test asserts the code without its reason. Read the branch; assert the error text; if it is an authorization refusal answered 400, record it as a defect rather than leave the test reading as endorsement.
 
 ## Approval log
 

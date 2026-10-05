@@ -489,6 +489,35 @@ async function recordExecutionRefusal(requestId: string, reason: string): Promis
 // assume the record agrees with the 409.
 const REFUSAL_NOT_RECORDED_NOTE = '; the stored request could not be updated and may still read executed'
 
+// TRDD-XTDMQO68: when the execution of a request that came from ANOTHER host is refused here, tell that host.
+// Why: the request is rejected locally (markExecutionRefused) but the source host's copy stayed 'pending'
+// until TTL, so its manager kept believing the change was in flight. Same fire-and-forget contract as
+// rejectCrossHostRequest: a notification failure is logged (no token/secret is ever in the message) and never
+// changes the outcome returned to the caller. A same-host request has nobody to tell.
+// Rejector id: this host is the target, so the agent whose approval triggered the refused execution is the
+// local target-side approver recorded on the request (targetManager, else targetCOS). The remote route requires
+// a UUID rejectorAgentId and only stores it with the reason; no local approver recorded = nothing honest to
+// send, so that case is logged and skipped rather than invented.
+function notifySourceOfExecutionRefusal(request: GovernanceRequest, reason: string): void {
+  try {
+    if (request.sourceHostId === getSelfHostId()) return
+    const sourceHost = getHostById(request.sourceHostId)
+    if (!sourceHost) return
+    const approverId = request.approvals.targetManager?.agentId ?? request.approvals.targetCOS?.agentId
+    if (!approverId) {
+      console.error(`${LOG_PREFIX} Not notifying source host ${request.sourceHostId} of refused execution of ${request.id}: no local approver recorded`)
+      return
+    }
+    notifyRemoteHostOfRejection(sourceHost.url, request.id, approverId, `Execution refused: ${reason}`).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`${LOG_PREFIX} Failed to notify source host ${request.sourceHostId} of refused execution: ${msg}`)
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`${LOG_PREFIX} Failed to notify source host ${request.sourceHostId} of refused execution: ${msg}`)
+  }
+}
+
 async function performRequestExecution(request: GovernanceRequest): Promise<ExecutionOutcome> {
   console.log(`${LOG_PREFIX} Executing request ${request.id} (type=${request.type})`)
 
@@ -650,6 +679,7 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
     if (!outcome.executed) {
       // The 'teams' lock is released here, so taking 'governance-requests' respects the lock order.
       const recorded = await recordExecutionRefusal(request.id, outcome.reason)
+      notifySourceOfExecutionRefusal(request, outcome.reason)
       return recorded ? outcome : { executed: false, reason: outcome.reason + REFUSAL_NOT_RECORDED_NOTE }
     }
 
@@ -663,6 +693,9 @@ async function performRequestExecution(request: GovernanceRequest): Promise<Exec
     console.error(`${LOG_PREFIX} Failed to execute request ${request.id}: ${msg}`)
     // A throw is a failed execution just like a refusal: same terminal status, same reported outcome.
     const recorded = await recordExecutionRefusal(request.id, msg)
+    // The peer gets a FIXED reason, never msg: a raw exception message can carry a local file path or other
+    // host-private detail, and this text leaves the host. The local log above and the locally recorded reason keep msg.
+    notifySourceOfExecutionRefusal(request, 'execution failed on the target host')
     return { executed: false, reason: recorded ? msg : msg + REFUSAL_NOT_RECORDED_NOTE }
   }
 }

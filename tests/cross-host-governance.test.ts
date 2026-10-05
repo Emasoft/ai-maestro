@@ -1362,3 +1362,125 @@ describe('approveCrossHostRequest source/target validation', () => {
     expect(result.error).toContain('neither source nor target')
   })
 })
+
+// ============================================================================
+// Source-host notification when an execution is refused here (TRDD-XTDMQO68)
+// ============================================================================
+
+describe('refused execution notifies the source host (TRDD-XTDMQO68)', () => {
+  const approvals = {
+    sourceManager: { agentId: 'remote-manager', approvedAt: '2025-06-01T10:00:00.000Z' },
+    targetManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' },
+  } as any
+
+  /** Approves a 'delete-agent'-free, always-refused type ('add-to-team' into a missing team) or a good one. */
+  async function approveAndExecute(sourceHostId: string, refuse: boolean) {
+    // The approving local manager is recorded on the side this host plays (source for a same-host request).
+    const sideApprovals = sourceHostId === 'host-local'
+      // targetManager too, so the ONLY thing stopping a notification for a same-host request is the early return
+      ? { sourceManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' }, targetManager: { agentId: 'manager-agent', approvedAt: '2025-06-01T10:00:00.000Z' } } as any
+      : approvals
+    const stored = makeGovernanceRequest({
+      sourceHostId,
+      targetHostId: sourceHostId === 'host-local' ? 'host-remote' : 'host-local',
+      type: 'add-to-team',
+      status: 'executed',
+      payload: { agentId: 'agent-x', teamId: 'team-nope' },
+      approvals: sideApprovals,
+    })
+    mockGetGovernanceRequest.mockReturnValue(
+      makeGovernanceRequest({ sourceHostId, targetHostId: stored.targetHostId }),
+    )
+    mockApproveGovernanceRequest.mockResolvedValue(stored)
+    mockMarkExecutionRefused.mockResolvedValue({ ...stored, status: 'rejected' })
+    mockLoadTeams.mockReturnValue(
+      refuse ? [] : [{ id: 'team-nope', name: 'T', type: 'closed', agentIds: [], chiefOfStaffId: null, createdAt: 'x', updatedAt: 'x' }],
+    )
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+    return result
+  }
+
+  it('a refused execution of a request from another host notifies that host once with the refusal reason', async () => {
+    /** The source host must learn the request was refused, with the same reason the local record carries */
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = fetchSpy
+
+    const result = await approveAndExecute('host-remote', true)
+
+    expect(result.status).toBe(409)
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    const [url, opts] = fetchSpy.mock.calls[0]
+    expect(url).toBe('http://10.0.0.5:23000/api/v1/governance/requests/req-001/reject')
+    const body = JSON.parse(opts.body)
+    expect(body.rejectorAgentId).toBe('manager-agent')
+    expect(body.reason).toContain("team 'team-nope' not found")
+  })
+
+  it('a refused execution of a same-host request does not notify anyone', async () => {
+    /** Nothing to tell a remote host when the request originated here */
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = fetchSpy
+
+    const result = await approveAndExecute('host-local', true)
+
+    expect(result.status).toBe(409)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('a successful execution of a request from another host does not notify the source as rejected', async () => {
+    /** Only refusals send the rejection notice */
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = fetchSpy
+
+    const result = await approveAndExecute('host-remote', false)
+
+    expect(result.status).toBe(200)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('a notification that fails does not change the outcome returned to the caller', async () => {
+    /** Fire-and-forget: a network failure is logged, the 409 for the original refusal still comes back */
+    const fetchSpy = vi.fn().mockRejectedValue(new Error('network down'))
+    globalThis.fetch = fetchSpy
+
+    const result = await approveAndExecute('host-remote', true)
+
+    expect(result.status).toBe(409)
+    expect(result.error).toContain("team 'team-nope' not found")
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+  })
+
+  it('an execution that throws sends the peer a generic reason, not the exception message', async () => {
+    /** The exception text may hold a local path; only the local record may keep it */
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = fetchSpy
+    const stored = makeGovernanceRequest({
+      sourceHostId: 'host-remote', targetHostId: 'host-local', status: 'executed', approvals,
+      payload: { agentId: 'agent-x', teamId: 'team-nope' },
+    })
+    mockGetGovernanceRequest.mockReturnValue(makeGovernanceRequest({ sourceHostId: 'host-remote', targetHostId: 'host-local' }))
+    mockApproveGovernanceRequest.mockResolvedValue(stored)
+    mockMarkExecutionRefused.mockResolvedValue({ ...stored, status: 'rejected' })
+    mockLoadTeams.mockImplementation(() => { throw new Error('boom /Users/private/PATH_MARKER_7Q') })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+
+    expect(result.status).toBe(409)
+    expect(result.error).toContain('PATH_MARKER_7Q') // the local caller keeps the real message
+    expect(mockMarkExecutionRefused.mock.calls[0][1]).toContain('PATH_MARKER_7Q')
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body)
+    expect(body.reason).toContain('execution failed on the target host')
+    expect(body.reason).not.toContain('PATH_MARKER_7Q')
+  })
+})

@@ -4,7 +4,7 @@ title: Tests write outside their fixtures and tests integration is red at baseli
 column: todo
 status: tasked
 created: 2026-10-05T02:08:27+0200
-updated: 2026-10-05T02:19:32+0200
+updated: 2026-10-05T02:26:03+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -40,6 +40,7 @@ TRDD-A50RC5G8 on 2026-10-05:
 
 `tests/integration` is therefore red on this machine (4 files, 8 tests) and has been since at
 least b9d97a308, which means it gates nothing.
+MEASURED 2026-10-05: the one suite run that exited 1 on the real-state leak guard was environmental — the new entry was a status-line state file whose id matches a LIVE Claude session of another project, mtime inside the run window; no test wrote it. The guard cannot tell a concurrent live session from a leaking test: a rerun on the same tree exited 0 (539 files).
 
 ## Proposed fix
 

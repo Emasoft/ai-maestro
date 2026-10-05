@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T02:19:32+0200
+updated: 2026-10-05T02:26:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -62,7 +62,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] READ FIRST: does `DeleteAgent` already refuse an agent's `hard: true`? Record the file and line either way
 - [x] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
 - [x] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
-- [x] Agent hard delete and agent folder delete refused in the service, cemetery archive intact
+- [x] Agent hard delete and agent folder delete refused in the service; the archive WRITE is reached (the export is mocked in that test, so archive CONTENT is unproven — covered by the un-mocked round-trip box below)
 - [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
 - [ ] Each guard neutered, red set recorded; headless path exercised
 - [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
@@ -73,6 +73,10 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
 - [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
+- [x] COS grant bound to the registry: caller must be chiefOfStaffId of a team containing the target; token teamId not consulted; all teams searched (77a02304d)
+- [ ] The same team-equality shape (token teamId first, first-match team, no chiefOfStaffId check) decides the COS own-team grant for change-title, failed-TRDD archiving, unblock-prompt and the generic policy tail in lib/authorization.ts (per worker read, ~lines 413/704/824/927) — verify each by reading, then bind to the registry the same way
+- [ ] ChangeTeam does not revoke the moved agent's tokens (per worker read; ChangeTitle does at G14b) — verify, then revoke on team change so a token cannot carry the old teamId for its lifetime
+- [ ] Two PROJECT memory pages still state the old rule 'Only MANAGER can delete agents' (an-unenforced-rule-produces-a-success-not-an-error, team-creation) — correct through memgrep verbs
 
 ## Approval log
 

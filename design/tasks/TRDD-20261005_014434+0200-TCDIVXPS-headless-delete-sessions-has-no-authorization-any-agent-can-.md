@@ -4,7 +4,7 @@ title: Headless DELETE sessions has no authorization — any agent can kill any 
 column: dev
 status: tasked
 created: 2026-10-05T01:44:34+0200
-updated: 2026-10-05T04:47:47+0200
+updated: 2026-10-05T04:50:40+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -68,6 +68,7 @@ authContext refused. Neuter the check and record the red set. Run the headless r
 - [x] Target resolution tested on an indexed multi-session name and on the cloud branch, not only on a mocked single session
 - [x] BEHAVIOUR CHANGE named: a session that resolves to no registry agent (an orphan tmux session) can afterwards be removed only by the system owner
 - [x] 2026-10-05 target resolution box: d24147c8e adds tests/unit/delete-session-target-resolution.test.ts (indexed name, both-exist, cloud branch, unauthorized caller) against the real registry resolver; own neuter 3 of 8 red, names in the commit message.
+- [x] 2026-10-05 LIMITS of d24147c8e (review): the indexed session is simulated by NAME only — no agent record carries a real second session; the target is observed indirectly through an authorization verdict; the unauthorized-caller cases have no neuter; whether the redirected HOME fully contains the registry read was not proven by a before/after count of the real registry.
 
 ## Approval log
 - 2026-10-05 — LANDED 6626cbe60 by main-agent@ai-maestro. Scope settled by reading (worker report, spot-checked): HEADLESS was open — the router authenticates only before dispatch; FULL mode was already closed for agents — requireSudoToken also runs the title check from the sudo-guard route map. Still OPEN: (1) deleteSession marks the record deleted with NO cemetery archive (lib/agent-registry.ts deleteAgent soft path sets deletedAt only); (2) target resolution on an indexed name is defective — getAgentBySession (lib/agent-registry.ts:487-491) strips the trailing index, so session "alpha_1" resolves to agent "alpha" even when an agent named "alpha_1" exists. The indexed-session box stays unticked for that reason.

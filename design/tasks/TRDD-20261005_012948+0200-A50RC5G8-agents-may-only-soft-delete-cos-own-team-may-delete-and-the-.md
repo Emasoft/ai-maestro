@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T04:46:17+0200
+updated: 2026-10-05T04:50:39+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -63,7 +63,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] READ FIRST: what `POST /api/agents/cemetery` does, and who may call both cemetery verbs today
 - [x] COS own-team soft delete allowed; COS other-team denied; MEMBER denied; self-delete still denied
 - [x] Agent hard delete and agent folder delete refused in the service; the archive WRITE is reached (the export is mocked in that test, so archive CONTENT is unproven — covered by the un-mocked round-trip box below)
-- [x] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
+- [ ] Cemetery PURGE is user-only (entailed: a purged corpse cannot be resurrected). Cemetery RESTORE: gate NOT ruled — ask before restricting it
 - [ ] Each guard neutered, red set recorded; headless path exercised
 - [ ] Hard delete requires BOTH the MAESTRO user (the system owner when the user-authority model is off; test both flag states) AND a sudo token a human obtained by re-entering the password. Verify the token check on three surfaces, not just the Next route that already has it: the headless path, cemetery purge, and whichever verb the user confirms as "hard-kill"
 - [ ] USER ANSWER recorded: is a process-level session kill a "hard-kill" reserved to the user, or may MANAGER / own-team CHIEF-OF-STAFF do it?
@@ -72,7 +72,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] A new agent taking a soft-deleted agent name adopts the kept folder and its old contents — decide: quarantine the folder, or refuse the name while a tombstone exists
 - [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
-- [x] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
+- [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
 - [x] COS grant bound to the registry: caller must be chiefOfStaffId of a team containing the target; token teamId not consulted; all teams searched (77a02304d)
 - [x] The same team-equality shape (token teamId first, first-match team, no chiefOfStaffId check) decides the COS own-team grant for change-title, failed-TRDD archiving, unblock-prompt and the generic policy tail in lib/authorization.ts (per worker read, ~lines 413/704/824/927) — verify each by reading, then bind to the registry the same way
 - [ ] ChangeTeam does not revoke the moved agent's tokens (per worker read; ChangeTitle does at G14b) — verify, then revoke on team change so a token cannot carry the old teamId for its lifetime
@@ -112,6 +112,8 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] LANDED 4e9fcf807: 'headless hard-delete has no sudo' is closed — a hard delete in headless now needs the sudo token (unavailable there unless the caller already holds one). Open: owner SOFT delete is sudo-free in headless while full mode requires sudo for it (TRDD-VR4OPNVI q18)
 - [x] 2026-10-05 EVIDENCE for four boxes ticked today, each read by the orchestrator at HEAD: (purge user-only) app/api/agents/cemetery/route.ts DELETE has requireSudoToken then the isSystemOwner check, and headless delegates to it (d437e8a54); restore in full mode is sudo + owner, headless restore is owner-only with no sudo — that half is carried by TRDD-VR4OPNVI question 13. (UI label) components/sidebar/TeamListView.tsx text 'Permanently removes each member agent plus its folder' is true for the only caller of that dialog, the dashboard owner; agent callers never see it — no change made. (memory pages) both pages carry correcting lessons, committed earlier today. (cross-host assign-cos) services/cross-host-governance-service.ts refuses the MANAGER and a non-live agent before seating a chair (5ce4c6a5a).
 - [x] 2026-10-05 the headless half of the hard-delete box is landed: 4e9fcf807 forwards a hard DELETE /api/agents/:id to the full-mode handler (sudo), d437e8a54 does the same for cemetery purge. The box itself stays open until its third named surface is identified and checked.
+- [x] 2026-10-05 CORRECTION (review): two boxes ticked earlier today are UNTICKED again. (1) The purge/restore box: purge user-only IS met (requireSudoToken then the owner check, read at HEAD), but the box also holds an unanswered user question on RESTORE (TRDD-VR4OPNVI question 13), so it stays open. (2) The UI-label box: 'the dialog is only seen by the owner' was NOT established — components/sidebar/TeamListView.tsx has no owner gating around the checkbox, and with the user-authority model on a signed-in non-owner user may see it and get a soft cascade. Also overstated in commit 67c7067f2: the memory pages were verified earlier in the session, not re-read; the managerId box on TRDD-XTDMQO68 covers createTeam/updateTeam callers only, not the cross-host handlers that write teams directly.
+- [x] 2026-10-05 LEDGER POINTER: the session ledger continues in docs_dev/TRDD-DRAIN-LEDGER-20261005-1600.md (gitignored scratch; the older docs_dev/TRDD-DRAIN-LEDGER.md does not point at it).
 
 ## Approval log
 

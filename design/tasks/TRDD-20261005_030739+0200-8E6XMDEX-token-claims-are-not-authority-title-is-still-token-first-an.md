@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:47:48+0200
+updated: 2026-10-05T04:50:40+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -72,6 +72,8 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] OPEN after ccd8c10d1 and d9bbf1bb9: (1) a corrupt AID token store or portfolio file now blocks agent CREATION (G06 calls ChangeTitle, whose G14b fails closed), retitle and hard delete — decide whether G14b may be skipped when the agent has no prior title; (2) no owner-visible alert names the corrupt file, only a log line; (3) the portfolio route answers a bare 500 over a corrupt file — use portfolioStoreFault for a usable message; (4) hard delete does not remove the per-agent portfolio file, so an agent able to write that file can block its own hard delete.
 - [x] 2026-10-05 eabbe65c8: the portfolio route names the unreadable file (item 3 of the open box above). Accepted disclosure stated in the commit message.
 - [ ] DECISION BY THE MAIN AGENT, NOT A USER RULING (overrule in one line): agent creation keeps failing closed when the AID token store is unreadable. Review called this an availability regression (a new agent has nothing to revoke). Kept because (a) tokens are keyed by agent id and issued for any title, and I could not establish that an untitled agent can never hold one, so a skip keyed on 'no prior title' would be a bypass resting on an inference; (b) with that store unreadable, token validation already fails for every agent — the fleet is degraded and the fault should be loud; (c) the standing preference is fail fast, no fallbacks. Cost: a corrupt or lock-busy store blocks create, retitle and hard delete until the file is repaired. To overrule: skip G14b when oldTitle is null. Also from review: tests/integration/createagent-g06-g07-ordering.test.ts now mocks lib/aid-token, so no integration test runs creation against the real module; the mechanism in its comment is the bisect worker's finding.
+- [ ] CORRECTION 2026-10-05 to the main-agent decision above (review + one read): reason (a) is now VERIFIED — app/api/v1/auth/token/route.ts issues a token to an agent with no title, stamped autonomous, so an untitled agent CAN hold a token and 'skip when oldTitle is null' would be a real bypass on a later retitle. Reason (b) is WRONG and is withdrawn: an unreadable token store fails agents' token-authenticated calls only; the owner session is unaffected, so the owner — the one who can repair — is exactly who is blocked from creating agents. The narrower safe condition is 'the agent was created in this same pipeline run' (a new id cannot hold a token). Still the user's call; not implemented.
+- [ ] FROM REVIEW of eabbe65c8, dispatched to a worker: the fault answer precedes the 403 (an authenticated non-owner can probe any agent id); POST (mint) still answers a bare 500; the check reads the file twice; the GET does not validate the id it reflects in the message; the code comment's 'findActiveTokens would have swallowed' is false for this route as it stood (loadPortfolio threw first) and the commit message repeated it.
 
 ## Approval log
 

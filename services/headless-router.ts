@@ -1964,6 +1964,100 @@ const routes: Route[] = [
       `/api/agents/${params.id}/portfolio`, { method: 'DELETE', params: { id: params.id } })
   }},
 
+  // Agent Cemetery (list/revive/purge/download). TRDD-BZW1QAZ5: these MUST stay above the generic /api/agents/:id
+  // entries below — routes match first-wins and `([^/]+)` matches the segment 'cemetery', so registered after them the
+  // list (GET) and purge (DELETE) were answered by the agent-by-id handler and never reached.
+  { method: 'GET', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/route.ts GET (system owner only, CC-GOV-017). buildAuthContext's
+    // isSystemOwner (not `!auth.agentId`) so a signed-in non-owner user is refused when the user-authority model is on.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
+    const fs = await import('fs')
+    const path = await import('path')
+    const cemeteryDir = statePath('cemetery')
+    if (!fs.existsSync(cemeteryDir)) { sendJson(res, 200, { archives: [], count: 0 }); return }
+    const files = fs.readdirSync(cemeteryDir).filter((f: string) => f.endsWith('.zip')).sort().reverse()
+    const archives = files.map((filename: string) => {
+      const stat = fs.statSync(path.join(cemeteryDir, filename))
+      const match = filename.match(/^(.+?)-export-/)
+      return {
+        filename,
+        agentName: match ? match[1] : filename.replace('.zip', ''),
+        archivedAt: stat.mtime.toISOString(),
+        sizeBytes: stat.size,
+        sizeHuman: stat.size < 1024 * 1024 ? `${Math.round(stat.size / 1024)}KB` : `${(stat.size / (1024 * 1024)).toFixed(1)}MB`
+      }
+    })
+    sendJson(res, 200, { archives, count: archives.length })
+  }},
+  { method: 'POST', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: isSystemOwner, not `auth.agentId` — a bare agentId test lets a signed-in non-owner user through when
+    // the user-authority model is on (stricter than the twin's `if (auth.agentId)`).
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only system owner can revive agents' }); return }
+    const body = await readJsonBody(req)
+    if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
+    const fs = await import('fs')
+    const path = await import('path')
+    const sanitized = path.basename(body.filename)
+    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
+    const archivePath = statePath('cemetery', sanitized)
+    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
+    const zipBuffer = fs.readFileSync(archivePath)
+    const nameMatch = sanitized.match(/^(.+?)-export-/)
+    if (nameMatch) {
+      try {
+        const { loadAgents, deleteAgent: regDel } = await import('@/lib/agent-registry')
+        const old = loadAgents().find((a: { name: string; deletedAt?: string }) => a.name === nameMatch[1] && a.deletedAt)
+        if (old) await regDel(old.id, true)
+      } catch { /* best effort */ }
+    }
+    const { importAgent } = await import('@/services/agents-transfer-service')
+    const result = await importAgent(zipBuffer, { newName: body.targetName, newId: true })
+    if (result.error) { sendJson(res, result.status, { error: result.error }); return }
+    if (result.data?.agent?.id) fs.unlinkSync(archivePath)
+    sendJson(res, 200, { success: true, agent: result.data })
+  }},
+  { method: 'DELETE', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: isSystemOwner, not `auth.agentId` (see the POST above).
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only system owner can purge archives' }); return }
+    const body = await readJsonBody(req)
+    if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
+    const fs = await import('fs')
+    const path = await import('path')
+    const sanitized = path.basename(body.filename)
+    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
+    const archivePath = statePath('cemetery', sanitized)
+    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
+    fs.unlinkSync(archivePath)
+    sendJson(res, 200, { success: true, purged: sanitized })
+  }},
+  { method: 'GET', pattern: /^\/api\/agents\/cemetery\/download$/, paramNames: [], handler: async (req, res, _params, query) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/download/route.ts (system owner only, CC-GOV-017); the archive
+    // holds the deleted agent's keys/. isSystemOwner covers the model-on non-owner user as well as any agent.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
+    const filename = query.file
+    if (!filename) { sendJson(res, 400, { error: 'file parameter required' }); return }
+    const fs = await import('fs')
+    const path = await import('path')
+    const sanitized = path.basename(filename)
+    if (sanitized !== filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
+    const cemeteryDir = statePath('cemetery')
+    const archivePath = path.join(cemeteryDir, sanitized)
+    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
+    const realPath = fs.realpathSync(archivePath)
+    if (!realPath.startsWith(cemeteryDir + path.sep)) { sendJson(res, 403, { error: 'Path resolves outside cemetery' }); return }
+    const buffer = fs.readFileSync(realPath)
+    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${sanitized}"`, 'Content-Length': String(buffer.length) })
+    res.end(buffer)
+  }},
+
   // Agent CRUD (must be LAST among /api/agents/[id]/* routes)
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, getAgentById(params.id))
@@ -4153,97 +4247,6 @@ const routes: Route[] = [
     } else {
       sendJson(res, 401, { authenticated: false })
     }
-  }},
-
-  // =========================================================================
-  // Agent Cemetery (list/revive/purge/download)
-  // =========================================================================
-  { method: 'GET', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/route.ts GET (system owner only, CC-GOV-017). buildAuthContext's
-    // isSystemOwner (not `!auth.agentId`) so a signed-in non-owner user is refused when the user-authority model is on.
-    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
-    const fs = await import('fs')
-    const path = await import('path')
-    const cemeteryDir = statePath('cemetery')
-    if (!fs.existsSync(cemeteryDir)) { sendJson(res, 200, { archives: [], count: 0 }); return }
-    const files = fs.readdirSync(cemeteryDir).filter((f: string) => f.endsWith('.zip')).sort().reverse()
-    const archives = files.map((filename: string) => {
-      const stat = fs.statSync(path.join(cemeteryDir, filename))
-      const match = filename.match(/^(.+?)-export-/)
-      return {
-        filename,
-        agentName: match ? match[1] : filename.replace('.zip', ''),
-        archivedAt: stat.mtime.toISOString(),
-        sizeBytes: stat.size,
-        sizeHuman: stat.size < 1024 * 1024 ? `${Math.round(stat.size / 1024)}KB` : `${(stat.size / (1024 * 1024)).toFixed(1)}MB`
-      }
-    })
-    sendJson(res, 200, { archives, count: archives.length })
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    if (auth.agentId) { sendJson(res, 403, { error: 'Only system owner can revive agents' }); return }
-    const body = await readJsonBody(req)
-    if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
-    const fs = await import('fs')
-    const path = await import('path')
-    const sanitized = path.basename(body.filename)
-    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const archivePath = statePath('cemetery', sanitized)
-    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
-    const zipBuffer = fs.readFileSync(archivePath)
-    const nameMatch = sanitized.match(/^(.+?)-export-/)
-    if (nameMatch) {
-      try {
-        const { loadAgents, deleteAgent: regDel } = await import('@/lib/agent-registry')
-        const old = loadAgents().find((a: { name: string; deletedAt?: string }) => a.name === nameMatch[1] && a.deletedAt)
-        if (old) await regDel(old.id, true)
-      } catch { /* best effort */ }
-    }
-    const { importAgent } = await import('@/services/agents-transfer-service')
-    const result = await importAgent(zipBuffer, { newName: body.targetName, newId: true })
-    if (result.error) { sendJson(res, result.status, { error: result.error }); return }
-    if (result.data?.agent?.id) fs.unlinkSync(archivePath)
-    sendJson(res, 200, { success: true, agent: result.data })
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/cemetery$/, paramNames: [], handler: async (req, res) => {
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    if (auth.agentId) { sendJson(res, 403, { error: 'Only system owner can purge archives' }); return }
-    const body = await readJsonBody(req)
-    if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
-    const fs = await import('fs')
-    const path = await import('path')
-    const sanitized = path.basename(body.filename)
-    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const archivePath = statePath('cemetery', sanitized)
-    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
-    fs.unlinkSync(archivePath)
-    sendJson(res, 200, { success: true, purged: sanitized })
-  }},
-  { method: 'GET', pattern: /^\/api\/agents\/cemetery\/download$/, paramNames: [], handler: async (req, res, _params, query) => {
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
-    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    // TRDD-BZW1QAZ5: mirror app/api/agents/cemetery/download/route.ts (system owner only, CC-GOV-017); the archive
-    // holds the deleted agent's keys/. isSystemOwner covers the model-on non-owner user as well as any agent.
-    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Only the system owner can access cemetery archives' }); return }
-    const filename = query.file
-    if (!filename) { sendJson(res, 400, { error: 'file parameter required' }); return }
-    const fs = await import('fs')
-    const path = await import('path')
-    const sanitized = path.basename(filename)
-    if (sanitized !== filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const cemeteryDir = statePath('cemetery')
-    const archivePath = path.join(cemeteryDir, sanitized)
-    if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
-    const realPath = fs.realpathSync(archivePath)
-    if (!realPath.startsWith(cemeteryDir + path.sep)) { sendJson(res, 403, { error: 'Path resolves outside cemetery' }); return }
-    const buffer = fs.readFileSync(realPath)
-    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${sanitized}"`, 'Content-Length': String(buffer.length) })
-    res.end(buffer)
   }},
 
   // =========================================================================

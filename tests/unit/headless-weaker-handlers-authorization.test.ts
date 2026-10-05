@@ -112,6 +112,8 @@ vi.mock('../../services/agents-directory-service', async (orig) => ({ ...(await 
 vi.mock('../../services/webhooks-service', async (orig) => ({ ...(await orig<object>()), testWebhookById: (...a: unknown[]) => m.testWebhookById(...a) }))
 vi.mock('../../services/domains-service', async (orig) => ({ ...(await orig<object>()), updateDomainById: (...a: unknown[]) => m.updateDomainById(...a), deleteDomainById: (...a: unknown[]) => m.deleteDomainById(...a) }))
 vi.mock('../../services/role-plugin-service', async (orig) => ({ ...(await orig<object>()), createPersona: (...a: unknown[]) => m.createPersona(...a) }))
+// the revive handler looks up a soft-deleted registry entry by name; read an empty registry, never the real one
+vi.mock('../../lib/agent-registry', async (orig) => ({ ...(await orig<object>()), loadAgents: () => [] }))
 vi.mock('../../services/agents-docker-service', async (orig) => ({ ...(await orig<object>()), createDockerAgent: (...a: unknown[]) => m.createDockerAgent(...a) }))
 
 const MANAGER = '11111111-1111-4111-8111-111111111111'
@@ -193,13 +195,15 @@ const OWNER_ONLY: Array<Row & { reason: string }> = [
   { name: 'W7 PATCH domains/:id', method: 'PATCH', url: '/api/domains/d1', body: {}, spy: () => m.updateDomainById, reason: OWNER_REASON },
   { name: 'W7 DELETE domains/:id', method: 'DELETE', url: '/api/domains/d1', spy: () => m.deleteDomainById, reason: OWNER_REASON },
   { name: 'W7 POST agents/creation-helper/raw-materials', method: 'POST', url: '/api/agents/creation-helper/raw-materials', body: { materials: [] }, spy: () => m.writeFile, reason: OWNER_REASON },
+  { name: 'W4 POST agents/cemetery (revive)', method: 'POST', url: '/api/agents/cemetery', body: { filename: 'ghost-export-2026-01-01T00-00-00.zip' }, spy: () => m.importAgent, reason: 'Only system owner can revive agents' },
 ]
 
 const CEMETERY_FILE = 'ghost-export-2026-01-01T00-00-00.zip'
 const CEMETERY: Array<{ name: string; url: string; leak: string }> = [
-  // NOT driven: GET agents/cemetery (the list) is registered at L4161, AFTER GET agents/:id (L1968), whose pattern
-  // matches 'cemetery' first — the list handler is unreachable through the router (pre-existing shadowing, reported in
-  // the TRDD-BZW1QAZ5 report). Its gate is in the source but no router test can reach it.
+  // The list is reachable only because the cemetery routes are registered ABOVE GET agents/:id (whose pattern matches
+  // 'cemetery'); the owner POSITIVE CONTROL below fails if they are moved back. The refusal bodies never contain the
+  // filename, so `leak` = the archive filename proves nothing was listed.
+  { name: 'W4 GET agents/cemetery (list)', url: '/api/agents/cemetery', leak: CEMETERY_FILE },
   { name: 'W4 GET agents/cemetery/download', url: `/api/agents/cemetery/download?file=${CEMETERY_FILE}`, leak: 'ZIPBYTES-MARKER' },
 ]
 
@@ -317,6 +321,45 @@ describe('TRDD-BZW1QAZ5 — system-owner-only headless handlers (twin: enforceSy
       expect(text(out)).toContain(c.leak)
     })
   }
+})
+
+describe('TRDD-BZW1QAZ5 W4 — DELETE agents/cemetery (purge) is system-owner only (twin: if (auth.agentId); headless is stricter)', () => {
+  const PURGE_REASON = 'Only system owner can purge archives'
+  const purge = () => run('DELETE', '/api/agents/cemetery', { filename: CEMETERY_FILE })
+  const archiveExists = async () => (await import('node:fs')).existsSync((tmp.dir + '/cemetery/' + CEMETERY_FILE))
+  it('a MEMBER agent is refused 403 and the archive is not removed', async () => {
+    /** Any agent identity is refused */
+    m.authenticateAgent.mockReturnValue(MEMBER_AUTH)
+    const out = await purge()
+    expect(out.status).toBe(403)
+    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
+    expect(await archiveExists()).toBe(true)
+  })
+  it('a MANAGER agent is refused 403 and the archive is not removed', async () => {
+    /** Owner only, whatever the title */
+    m.authenticateAgent.mockReturnValue(MANAGER_AUTH)
+    const out = await purge()
+    expect(out.status).toBe(403)
+    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
+    expect(await archiveExists()).toBe(true)
+  })
+  it('model ON, a signed-in non-owner user is refused 403 and the archive is not removed', async () => {
+    /** Stricter than a bare `!auth.agentId`: this case reaches the unlink if the check regresses to it */
+    m.modelOn.mockReturnValue(true)
+    m.authenticateAgent.mockReturnValue(PLAIN_USER)
+    const out = await purge()
+    expect(out.status).toBe(403)
+    expect(JSON.parse(text(out)).error).toBe(PURGE_REASON)
+    expect(await archiveExists()).toBe(true)
+  })
+  it('POSITIVE CONTROL — the system owner purges the archive', async () => {
+    /** The gate can say yes */
+    m.authenticateAgent.mockReturnValue(OWNER)
+    const out = await purge()
+    expect(out.status).toBe(200)
+    expect(JSON.parse(text(out)).purged).toBe(CEMETERY_FILE)
+    expect(await archiveExists()).toBe(false)
+  })
 })
 
 describe('TRDD-BZW1QAZ5 W9 — GET agents/:id/messages passes the caller context (twin: requireAuth + auth.context)', () => {

@@ -4,7 +4,7 @@ title: Rulings needed on what a chair may do to superiors and peers
 column: proposal
 status: proposed
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:02:27+0200
+updated: 2026-10-05T04:08:34+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -55,6 +55,7 @@ Record each answer verbatim here, then implement it under the card that owns the
 - [x] 14 CORRECTION (review): the new-id fact is read from the HEADLESS revive handler and, per a worker's read, the full-mode one too (app/api/agents/cemetery/route.ts) — I have not read the latter myself. NOT covered by it: the old soft-deleted row keeps its id and is removed only best-effort during revive; if that removal fails the old row survives. Being fixed regardless of your answer: a soft-deleted row will no longer authenticate or hold valid tokens
 - [x] 13 CORRECTION (review): 'revive stays owner-only in headless' is CONDITIONAL — if the purge worker reports headless can obtain a sudo token, revive should be put behind sudo too (full-mode parity); only if it cannot does your 'can always be resurrected' ruling decide it. Download route's prior reachability was not checked
 - [x] 12 WIDENED: the same tool limit blocks every edit inside the two largest pipeline functions (title change, agent delete). One confirmed defect stays open only because of it: a failed token revocation after a title change is reported as success
+- [x] 12 NO LONGER BLOCKING: a fastedit-only method for line-range edits was found and used. No answer needed unless you want the Edit tool allowed anyway
 
 ## Approval log
 

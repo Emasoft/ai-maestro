@@ -4,7 +4,7 @@ title: Token claims are not authority — title is still token-first and issuer 
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:02:26+0200
+updated: 2026-10-05T04:08:34+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -53,6 +53,7 @@ Resolve the title from the registry at decision time (or prove revocation is com
 - [ ] Still unloadable under vitest in lib/agent-auth.ts: the lazy requires for the user-authority-model check and user-registry — so the owner-versus-non-owner-user branch cannot be tested through this file (a headless test had to simulate it in a wrapper). Add a test for the fault path (teams unreadable → every caller autonomous)
 - [x] VERIFIED BY A WORKER'S READ (file:line in reports/8e6xmdex/*token-revocation-deferred.md; not yet re-read by the orchestrator): (1) the title-change revocation gate swallows any revocation fault in a catch and reports success (element-management-service.ts ~3550-3563); a missing token file is already treated as empty; (2) revokeTokensForSubject has no production caller and DeleteAgent has no portfolio gate; (3) the session-secret lookup (lib/agent-auth.ts ~463-470) scans rows INCLUDING soft-deleted ones with no deletedAt check, so a soft-deleted agent's secret still authenticates. Secrets are re-minted at every session start. NO SOURCE CHANGED: the mandated write tool cannot edit inside the 2235-line ChangeTitle or the 930-line DeleteAgent (refusals and an exit 137 recorded; the worker filed Emasoft/fastedit issue 12 on its own initiative — not briefed to, disclosed here)
 - [ ] REDESIGN TO THE ROOT CAUSE, WITHIN THE TOOL'S REACH (dispatched): fix (3) and (2) at the place every caller routes through instead of inside the pipelines — the session-secret lookup refuses a soft-deleted row; portfolio-token verification refuses a token whose holder is missing or soft-deleted. No revocation gate and no compensation are then needed: a rolled-back delete restores validity by itself, and a completed delete invalidates without a write. (1) fail-closed title-change revocation stays BLOCKED on the tool (TRDD-VR4OPNVI q12). ALSO FLAGGED by the worker, unread: lib/aid-token.ts ~147-162 reads a corrupt active-tokens file as empty and the next revoke overwrites it
+- [ ] IN VERIFICATION (uncommitted): the session-secret lookup skips rows with deletedAt (lib/agent-auth.ts, diff read by the orchestrator: one condition + comment; 3 tests incl. restore-after-rollback). This is CONTAINMENT, not revocation: the stored hash stays and works again if deletedAt is ever cleared. NOT DONE: the portfolio-token half (needs one import line in lib/portfolio-store.ts; guard only when the holder's row EXISTS and is soft-deleted). OPEN per worker's read, unverified: AID-token path, legacy AMP API-key path (lib/amp-auth.ts) and the IBCT path do not check deletedAt; tokens of a HARD-deleted agent and tokens ISSUED BY a deleted agent are untouched; other portfolio readers bypass the single lookup (lib/trdd-approval-token.ts, the portfolio route)
 
 ## Approval log
 

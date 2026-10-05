@@ -4,7 +4,7 @@ title: Headless handlers that mutate teams or titles — audit authorization aga
 column: todo
 status: tasked
 created: 2026-10-05T03:07:39+0200
-updated: 2026-10-05T04:00:40+0200
+updated: 2026-10-05T04:08:33+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -18,7 +18,7 @@ approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-05T03:07:39+0200
 relevant: [TRDD-A50RC5G8]
-implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963]
+implementation-commits: [f53b8a1f6, 90b7ef8f5, e5988b911, 154251963, d437e8a54]
 ---
 
 # Headless handlers that mutate teams or titles — audit authorization against their full-mode twins
@@ -59,6 +59,9 @@ For each mutating headless handler, quote its gate and compare it with the full-
 - [x] CORRECTION to 'SAFE today' (review): that sentence was the worker's read, stated as fact. MEASURED by the orchestrator against the live registry: no agent, live or deleted, is named creation-helper or role-plugins (one soft-deleted row is named _aim-creation-helper), so today the generic by-id handlers have nothing to act on for those ids. NOT measured: what each generic handler returns, and nothing stops an agent being CREATED with one of those names. INFERRED, not read from reports: since the mandated tool cannot address route entries or imports, e5988b911 (30 handlers) and eadc2c9ff (imports) were also written with another tool — the breach is three commits, not one
 - [ ] CLOSE PURGE-WITHOUT-SUDO AND THE SIX SHADOWS IN ONE PLACE (dispatched): the file already has delegateNextRoute — 'do not fork the gate', forward the request with its credentials and sudo token to the hardened full-mode handler. matchRoute is a named function the mandated tool CAN edit: have it resolve cemetery revive/purge and the six shadowed routes to a delegation to their full-mode twins BEFORE the table scan. Result: same gate as full mode including sudo, no re-ordering, no second copy of the gate. The now-dead table entries stay as dead code until a line-level tool is allowed
 - [x] SCOPE NARROWED (review): the delegation is for PURGE ONLY. MEASURED on the tree before 154251963: there was no generic POST /api/agents/:id entry, so revive was already reachable — that commit only tightened revive (owner check), and only purge and list became newly reachable. Revive stays owner-gated in headless, not sudo-gated: the ruling says the user can always resurrect, and headless may have no way to mint a sudo token. The six shadowed routes are NOT being delegated (four drive agent sessions; nobody characterised what answers them today); they stay shadowed
+- [x] LANDED d437e8a54: headless cemetery purge is forwarded to the full-mode handler (sudo + owner). Verified alone in a detached worktree (tsc clean; 545/546 files — the one red is the real-server boot test, which needs a production build the worktree lacks; not rerun in the main tree). Orchestrator's own neuters: table ignored → 4 purge tests red; cemetery block moved back to the table's end → 4 list tests red (pays the neuter owed on 154251963). Revive unchanged
+- [ ] COVERAGE DROPPED by d437e8a54: purge by a signed-in non-owner user with the user-authority model ON is no longer tested (the new file pins the model off). Add that case to tests/unit/headless-delegated-strict-routes.test.ts
+- [x] TOOL LIMIT WORKED AROUND WITHIN THE RULE: fastedit split/create/join replaces a line range with every write made by fastedit (parts proven byte-exact with cmp before joining; full git diff read after). First used for the superseded purge tests in d437e8a54. The six shadowed routes and edits inside the large pipeline functions are therefore no longer blocked on TRDD-VR4OPNVI q12
 
 ## Approval log
 

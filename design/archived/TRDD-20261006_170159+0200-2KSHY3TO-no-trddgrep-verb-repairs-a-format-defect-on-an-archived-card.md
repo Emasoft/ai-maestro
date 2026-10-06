@@ -1,22 +1,23 @@
 ---
 trdd-id: 2KSHY3TO
 title: no trddgrep verb repairs a format defect on an archived card — blocks a strict lint gate
-column: backburner
-status: tasked
+column: superseded
+status: archived
 created: 2026-10-06T17:01:59+0200
-updated: 2026-10-06T17:01:59+0200
+updated: 2026-10-06T21:07:04+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
-min-approval-requirement: none
+min-approval-requirement: manager
 scope: project
 project-id: ai-maestro
 assignee: main-agent@ai-maestro
 mandate: true
 mandated-by: none
-approved: true
+approved: false
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-06T17:01:59+0200
+superseded-by: [TRDD-OYWFHTKU]
 ---
 
 # no trddgrep verb repairs a format defect on an archived card — blocks a strict lint gate
@@ -36,3 +37,5 @@ external-refs: Emasoft/ai-maestro issue #170 (https://github.com/Emasoft/ai-maes
 ## Approval log
 
 - 2026-10-06T17:01:59+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-10-06 — CORRECTION by main-agent@ai-maestro: the mint wrote a self-issued mandate at min-approval-requirement none; the objective floor for this card is manager (adversarial review of c7555c0bb). Mandate withdrawn; the card is a proposal awaiting the owner's approval. The USER directive was to open a TRDD per issue, which authorizes filing, not execution.
+- 2026-10-06T21:07:04+0200 — SUPERSEDED by main-agent@ai-maestro. minted with a self-issued mandate at the wrong approval floor; replaced by a correctly-floored proposal.

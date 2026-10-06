@@ -4,7 +4,7 @@ status: tasked
 title: A card's wait condition is never re-evaluated after the thing it waits on completes
 column: planned
 created: 2026-08-20T19:41:31+0200
-updated: 2026-09-06T02:55:12+0200
+updated: 2026-10-06T21:07:30+0200
 current-owner: ai-maestro-hub-session
 created-by: architect
 assignee: ai-maestro-hub-session
@@ -16,7 +16,7 @@ approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:00:37+0200
 release-via: none
 npt: []
-eht: []
+eht: [TRDD-9KPN1FOJ]
 blocked-by: []
 impacts: [config-schema]
 labels: [kanban-hygiene, trdd-schema, drift-detection]

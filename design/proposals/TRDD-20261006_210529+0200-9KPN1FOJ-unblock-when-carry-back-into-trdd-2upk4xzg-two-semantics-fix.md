@@ -1,22 +1,20 @@
 ---
-trdd-id: W029KGVC
+trdd-id: 9KPN1FOJ
 title: unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
-column: backburner
-status: tasked
-created: 2026-10-06T17:07:50+0200
-updated: 2026-10-06T17:07:50+0200
+column: proposal
+status: proposed
+created: 2026-10-06T21:05:29+0200
+updated: 2026-10-06T21:06:35+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
-min-approval-requirement: none
+min-approval-requirement: manager
 scope: project
 project-id: ai-maestro
-assignee: main-agent@ai-maestro
-mandate: true
-mandated-by: none
-approved: true
-approval-judge: main-agent@ai-maestro
-approval-datetime: 2026-10-06T17:07:50+0200
+approved: false
+derived: true
+derived-kind: eht
+parent-trdd: TRDD-2UPK4XZG
 ---
 
 # unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
@@ -35,6 +33,6 @@ Parent: TRDD-2UPK4XZG carries the original unblock-when design — this card lin
 
 external-refs: Emasoft/ai-maestro issue #158 (https://github.com/Emasoft/ai-maestro/issues/158)
 
-## Approval log
+Supersedes TRDD-W029KGVC, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
-- 2026-10-06T17:07:50+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+## Approval log

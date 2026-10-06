@@ -1,22 +1,17 @@
 ---
-trdd-id: JATF9GE4
+trdd-id: NPAEP3QJ
 title: populate plugin and CLI directories via staging dir plus atomic rename
-column: backburner
-status: tasked
-created: 2026-10-06T17:08:06+0200
-updated: 2026-10-06T17:08:06+0200
+column: proposal
+status: proposed
+created: 2026-10-06T21:05:25+0200
+updated: 2026-10-06T21:05:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
-min-approval-requirement: none
+min-approval-requirement: manager
 scope: project
 project-id: ai-maestro
-assignee: main-agent@ai-maestro
-mandate: true
-mandated-by: none
-approved: true
-approval-judge: main-agent@ai-maestro
-approval-datetime: 2026-10-06T17:08:06+0200
+approved: false
 ---
 
 # populate plugin and CLI directories via staging dir plus atomic rename
@@ -33,6 +28,6 @@ Acceptance: a version directory under the server's control is never observable i
 
 external-refs: Emasoft/ai-maestro issue #150 (https://github.com/Emasoft/ai-maestro/issues/150)
 
-## Approval log
+Supersedes TRDD-JATF9GE4, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
-- 2026-10-06T17:08:06+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+## Approval log

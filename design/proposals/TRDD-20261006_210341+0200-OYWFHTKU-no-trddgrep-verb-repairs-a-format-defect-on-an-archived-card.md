@@ -4,7 +4,7 @@ title: no trddgrep verb repairs a format defect on an archived card — blocks a
 column: proposal
 status: proposed
 created: 2026-10-06T21:03:41+0200
-updated: 2026-10-06T21:17:55+0200
+updated: 2026-10-06T21:23:32+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -39,3 +39,5 @@ The archived original's Approval-log line says the mandate was withdrawn and the
 ## Acceptance
 
 - [ ] OPTION for the owner: the linter treats approval invariants (MANDATE-FORGED etc.) on superseded cards in archived/ as history, not errors — a frozen card cannot be repaired, so a permanent ERROR there carries no actionable signal (see the four superseded cards of 2026-10-06)
+- [ ] trddgrep cannot UNSET a frontmatter field (set writes an empty scalar): 9KPN1FOJ carries empty derived-kind: and parent-trdd: lines that YAML reads as null, a presence-testing consumer would treat it as derived-shaped
+- [ ] 2026-10-06 record: superseding the four mis-mandated cards (3e75100d8) was a misjudgment — the minting commit was unpushed and same-session, so git revert was available and would have left no frozen card; the four superseded originals hold trddgrep validate at exit 1 and fail two unit tests (tests/unit/trdd-doctor.test.ts, one tests/unit/pillar-grep-cli.test.ts case) until the owner rules

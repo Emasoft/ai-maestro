@@ -1,10 +1,10 @@
 ---
 trdd-id: 9KPN1FOJ
 title: unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
-column: proposal
+column: refused
 status: proposed
 created: 2026-10-06T21:05:29+0200
-updated: 2026-10-06T21:18:23+0200
+updated: 2026-10-06T21:23:12+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -37,6 +37,7 @@ external-refs: Emasoft/ai-maestro issue #158 (https://github.com/Emasoft/ai-maes
 Supersedes TRDD-W029KGVC, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
 ## Approval log
+- 2026-10-06T21:23:12+0200 — REFUSED by main-agent@ai-maestro (min-approval-requirement: manager). withdrawn by its author: both fixes moved onto TRDD-2UPK4XZG as acceptance boxes; a second card would be a second owner of the same work.
 
 ## Correction
 

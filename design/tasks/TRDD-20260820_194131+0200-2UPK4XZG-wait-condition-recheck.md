@@ -4,7 +4,7 @@ status: tasked
 title: A card's wait condition is never re-evaluated after the thing it waits on completes
 column: planned
 created: 2026-08-20T19:41:31+0200
-updated: 2026-10-06T21:07:30+0200
+updated: 2026-10-06T21:18:39+0200
 current-owner: ai-maestro-hub-session
 created-by: architect
 assignee: ai-maestro-hub-session
@@ -16,7 +16,7 @@ approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:00:37+0200
 release-via: none
 npt: []
-eht: [TRDD-9KPN1FOJ]
+eht: []
 blocked-by: []
 impacts: [config-schema]
 labels: [kanban-hygiene, trdd-schema, drift-detection]
@@ -131,6 +131,8 @@ run on the normal heartbeat rather than a special schedule.
 Not a mass re-triage, not a scripted board repair, and not a replacement for reading the STATE block.
 It answers exactly one question — *is this card still waiting for what it says it is waiting for?* —
 and it answers it by re-running a check instead of trusting a sentence.
+- [ ] blocked-by hold releases only on a SHIPPED blocker column (complete/completed/published/live); failed/refused/cancelled/superseded are terminal but unsatisfied (Emasoft/ai-maestro issue #158)
+- [ ] the blocker index spans tasks/, archived/, proposals/, refused/ — a shipped-then-archived blocker must stay visible (issue #158)
 
 ## Approval log
 

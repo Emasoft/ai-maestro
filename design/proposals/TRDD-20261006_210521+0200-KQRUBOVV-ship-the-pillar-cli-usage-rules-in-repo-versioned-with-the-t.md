@@ -4,7 +4,7 @@ title: ship the pillar-CLI usage rules in-repo, versioned with the tools
 column: proposal
 status: proposed
 created: 2026-10-06T21:05:21+0200
-updated: 2026-10-06T21:05:21+0200
+updated: 2026-10-06T21:17:51+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: docs
@@ -29,3 +29,7 @@ external-refs: Emasoft/ai-maestro issue #162 (https://github.com/Emasoft/ai-maes
 Supersedes TRDD-Z96M8H7D, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
 ## Approval log
+
+## Correction
+
+The archived original's Approval-log line says the mandate was withdrawn and the card became a proposal. Neither happened: trddgrep refused the mandate rewrite and the move back to proposal. This card is the correction.

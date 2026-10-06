@@ -4,7 +4,7 @@ title: unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
 column: proposal
 status: proposed
 created: 2026-10-06T21:05:29+0200
-updated: 2026-10-06T21:06:35+0200
+updated: 2026-10-06T21:18:23+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -12,9 +12,10 @@ min-approval-requirement: manager
 scope: project
 project-id: ai-maestro
 approved: false
-derived: true
-derived-kind: eht
-parent-trdd: TRDD-2UPK4XZG
+derived: false
+derived-kind: 
+parent-trdd: 
+relevant: [TRDD-2UPK4XZG]
 ---
 
 # unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
@@ -36,3 +37,7 @@ external-refs: Emasoft/ai-maestro issue #158 (https://github.com/Emasoft/ai-maes
 Supersedes TRDD-W029KGVC, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
 ## Approval log
+
+## Correction
+
+The archived original's Approval-log line says the mandate was withdrawn and the card became a proposal. Neither happened: trddgrep refused the mandate rewrite and the move back to proposal. This card is the correction.

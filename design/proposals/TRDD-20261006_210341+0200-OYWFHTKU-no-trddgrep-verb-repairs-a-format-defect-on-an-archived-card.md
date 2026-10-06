@@ -4,7 +4,7 @@ title: no trddgrep verb repairs a format defect on an archived card — blocks a
 column: proposal
 status: proposed
 created: 2026-10-06T21:03:41+0200
-updated: 2026-10-06T21:03:41+0200
+updated: 2026-10-06T21:17:55+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -31,3 +31,11 @@ external-refs: Emasoft/ai-maestro issue #170 (https://github.com/Emasoft/ai-maes
 Supersedes TRDD-2KSHY3TO, which was minted with a self-issued mandate at the wrong approval floor (adversarial review of commit c7555c0bb).
 
 ## Approval log
+
+## Correction
+
+The archived original's Approval-log line says the mandate was withdrawn and the card became a proposal. Neither happened: trddgrep refused the mandate rewrite and the move back to proposal. This card is the correction.
+
+## Acceptance
+
+- [ ] OPTION for the owner: the linter treats approval invariants (MANDATE-FORGED etc.) on superseded cards in archived/ as history, not errors — a frozen card cannot be repaired, so a permanent ERROR there carries no actionable signal (see the four superseded cards of 2026-10-06)

@@ -4,7 +4,7 @@ status: tasked
 title: approval provenance has a blind spot where a review verdict is the authority
 column: todo
 created: 2026-08-22T17:42:47+0200
-updated: 2026-10-07T07:52:47+0200
+updated: 2026-10-07T08:06:06+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -15,7 +15,7 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-08-22T17:42:47+0200
 assignee: ai-maestro-hub-session
-implementation-commits: [f422333da]
+implementation-commits: [f422333da, 1cf9216ee, b3e67be46, 42a6cf27d]
 ---
 
 # approval provenance has a blind spot where a review verdict is the authority

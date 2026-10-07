@@ -34,7 +34,7 @@ import {
   statusForZone,
 } from './trdd-vocabulary'
 import type { TrddZone } from './pillar/kinds'
-import { archivedWriteRefusal, WRITE_ONCE_FIELDS, RECORD_ONLY_FIELDS } from './pillar/trdd-candidate'
+import { archivedWriteRefusal, WRITE_ONCE_FIELDS, RECORD_ONLY_FIELDS, recordOnlyRefusal } from './pillar/trdd-candidate'
 
 export type EditGuardResult = { ok: true } | { ok: false; error: string }
 
@@ -135,7 +135,7 @@ export function validateTrddFieldEdits(
   }
   for (const field of RECORD_ONLY_FIELDS) {
     if (field in fields) {
-      return { ok: false, error: `"${field}" is written only by the create/approve code paths, never by a field edit` }
+      return { ok: false, error: recordOnlyRefusal(field) }
     }
   }
 

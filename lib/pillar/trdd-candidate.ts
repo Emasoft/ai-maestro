@@ -50,6 +50,15 @@ export const WRITE_ONCE_FIELDS = ['created-by', 'created'] as const
  */
 export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by'] as const
 
+/**
+ * The ONE sentence both write paths (`trddgrep set` via `protectedFieldViolations`, and the API's
+ * `editTrdd` via `validateTrddFieldEdits`) give for a record-only field. It lives here, beside the
+ * list, so the two gates cannot drift apart again in wording or in which fields they cover (TRDD-2G1AR7BB).
+ */
+export function recordOnlyRefusal(field: string): string {
+  return `${field}: is written only by the create/approve code paths, never by a generic field write`
+}
+
 export interface FieldWriteOpts {
   /**
    * #168 SEAM — the future owner-approved identity-migration verb (legacy session labels and
@@ -77,7 +86,7 @@ export function protectedFieldViolations(
   }
   for (const field of RECORD_ONLY_FIELDS) {
     if ((after[field] ?? '') !== (before[field] ?? '')) {
-      bad.push(`${field}: is written only by the create/approve code paths, never by a generic field write`)
+      bad.push(recordOnlyRefusal(field))
     }
   }
   return bad

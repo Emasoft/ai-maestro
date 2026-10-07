@@ -540,6 +540,31 @@ describe('checkTrddBox / setTrddField refuse an ARCHIVED card (D8, step 5 G1/G3)
     if (!r.ok) expect(r.error).toMatch(/approval-judge: is written only/)
   })
 
+  // TRDD-2G1AR7BB: the CLI (`setTrddField`) and the API (`editTrdd`) must agree that `mandated-by`
+  // is record-only — same reason text, file untouched — while an ordinary field still writes.
+  it.each(['self', 'none', 'manager', 'nonsense-rank'])(
+    'setTrddField refuses mandated-by=%s with the record-only reason, file byte-identical',
+    async (value) => {
+      const file = writeTask('LIVESET5', 'mandated', 'dev')
+      const before = fs.readFileSync(file, 'utf-8')
+      const r = await setTrddField(designDir, 'LIVESET5', 'mandated-by', value, { iso: isoLocal().iso })
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toMatch(/mandated-by: is written only by the create\/approve code paths/)
+      expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    },
+  )
+
+  it('editTrdd refuses mandated-by with the SAME record-only reason, file byte-identical; severity still writes', async () => {
+    const file = writeTask('EDITMB01', 'mandated', 'dev')
+    const before = fs.readFileSync(file, 'utf-8')
+    const r = await editTrdd(designDir, 'EDITMB01', { 'mandated-by': 'manager' }, ISO)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/mandated-by: is written only by the create\/approve code paths/)
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before)
+    const ok = await editTrdd(designDir, 'EDITMB01', { severity: 'HIGH' }, ISO)
+    expect(ok.ok).toBe(true)
+  })
+
   it('setTrddField refuses a status that disagrees with the folder', async () => {
     writeTask('LIVESET4', 'staged', 'dev')
     const r = await setTrddField(designDir, 'LIVESET4', 'status', 'proposed', { iso: isoLocal().iso })

@@ -4,7 +4,7 @@ title: Unit tests that spawn a CLI reach whatever server listens on port 23000
 column: backburner
 status: tasked
 created: 2026-10-07T10:17:56+0200
-updated: 2026-10-07T10:17:56+0200
+updated: 2026-10-07T10:19:20+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -26,3 +26,7 @@ tests/unit/teams-stats-verb.test.ts spawns the real teams CLI with no API overri
 ## Approval log
 
 - 2026-10-07T10:17:56+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T10:19:20+0200 — separate observation, same day: a zero-byte .git/index.lock was left behind twice, each time shortly after a shell command that piped a git status into head. No git process was alive; it was removed. Likely cause, inferred and not reproduced: the pipe closing early killed git while it held the lock. No test was found that runs git add or git commit in the real repository (grep of tests/, heuristic). The two files pre-commit-pii-gate and dev-absent-prover were in the same grep output as the leads above and were left off without being read.

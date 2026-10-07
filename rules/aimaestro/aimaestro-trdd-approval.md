@@ -326,9 +326,12 @@ consequence. The tool writes it: `aimaestro-trdd.sh approve|refuse <id>` sets th
 fields, appends the `## Approval log` line, and (on `approve`) adds an `approval-token:`
 minted by the host — the one part that cannot be forged. If the host's audit ledger is
 unavailable the approval still stands but carries no token, and `verify` reports it as
-unverifiable. Check a card you were handed
-with `aimaestro-trdd.sh verify <id>` (non-zero exit = unverified, do not proceed);
-never hand-edit these fields:
+unverifiable. Check a PROPOSAL you were handed as approved with
+`aimaestro-trdd.sh verify <id>` (non-zero exit = unverified, do not proceed). A MANDATE
+is different today: `create` writes no `mandate-token:`, so `verify` reports every mandate
+above `none` as unverified even when the server issued it — treat that result as "not yet
+provable", not as forgery, and confirm the issuer through the comm graph instead. Never
+hand-edit these fields:
 
 ```yaml
 approved: true                      # true | false | rejected

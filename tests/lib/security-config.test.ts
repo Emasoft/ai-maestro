@@ -154,4 +154,27 @@ describe('clampConfig — non-finite-number values fall back to the default', ()
       expect(cfg.sessionAuth.sudoTokenTtlSeconds).toBe(60)
     })
   }
+
+  it('every object-valued section is covered, and the warning names the section, not its value', () => {
+    const defaults = getSecurityDefaults() as unknown as Record<string, unknown>
+    const names = Object.keys(defaults).filter(k => defaults[k] && typeof defaults[k] === 'object')
+    expect(names).toEqual(expect.arrayContaining(['keyRotation', 'argon2', 'ibct', 'killSwitch', 'sessionAuth']))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (const name of names) {
+        const cfg = reload(c => { (c as Record<string, unknown>)[name] = 'SECRET-VALUE' }) as unknown as Record<string, unknown>
+        expect(cfg[name], name).toEqual(defaults[name])
+      }
+      const msgs = warn.mock.calls.map(a => a.join(' ')).join('\n')
+      for (const name of names) expect(msgs).toContain(`"${name}"`)
+      expect(msgs).not.toContain('SECRET-VALUE')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('an empty-object section keeps every default field (deep merge)', () => {
+    const cfg = reload(c => { (c as Record<string, unknown>).sessionAuth = {} })
+    expect(cfg.sessionAuth).toEqual(getSecurityDefaults().sessionAuth)
+  })
 })

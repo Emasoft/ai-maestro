@@ -170,7 +170,12 @@ function clampConfig(config: Record<string, unknown>): void {
   // clamp below and then replaced the whole default section in deepMerge, so its fields read as
   // undefined (a NaN session lifetime) or threw on access. Drop it so DEFAULTS apply
   // (TRDD-ADM0CHTJ). Field name only in the warning.
-  for (const section of ['killSwitch', 'agentCreation', 'rateLimiting', 'passwordPolicy', 'sessionAuth', 'ledger']) {
+  // Derived from DEFAULTS so a section added later is covered without editing a second list.
+  const sections = Object.keys(DEFAULTS).filter(k => {
+    const d = (DEFAULTS as unknown as Record<string, unknown>)[k]
+    return d !== null && typeof d === 'object' && !Array.isArray(d)
+  })
+  for (const section of sections) {
     if (!Object.hasOwn(config, section)) continue
     const v = config[section]
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {

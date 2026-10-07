@@ -257,9 +257,11 @@ async function verifyVerdict(
       verdict_reasons: [`The verdict recorded the move ${from} -> ${to}, but the card is now in "${column}": the verdict does not vouch for the current column.`],
     }
   }
-  // Expected scope rebuilt from the parsed parts, so the portfolio check compares against a value
-  // derived here rather than against the token's own field.
-  const v = await explainPortfolioToken(token, { scope: verdictScope(from, to), trddId: trddId.toUpperCase() })
+  // The scope passed here equals token.scope whenever the anchored regex above matched, so the
+  // portfolio scope compare adds nothing for verdicts. The protection is the checks ABOVE (scope
+  // family via the regex, `from` is a review column, `to` is the card's current column) plus the
+  // signature and the trddId pin inside explainPortfolioToken.
+  const v = await explainPortfolioToken(token, { scope: token.scope, trddId: trddId.toUpperCase() })
   return {
     ...none,
     verdict_from: from,

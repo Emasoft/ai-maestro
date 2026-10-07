@@ -109,6 +109,11 @@ export interface AgentRuntime {
   // rather than force every implementer to fake one.
   getForegroundCommand?(name: string): Promise<string>
 
+  // Command basenames of the live children of the pane's own shell process. The agent client runs
+  // as a child of the pane shell, so "foreground is a shell AND no client-named child" means the
+  // client is gone. null = the probe could not answer. OPTIONAL like getForegroundCommand.
+  paneChildCommands?(name: string): Promise<string[] | null>
+
   // Lifecycle
   //
   // env (optional): key/value pairs passed to `tmux new-session -e KEY=VAL ...`
@@ -234,6 +239,22 @@ export class TmuxRuntime implements AgentRuntime {
       return stdout.trim()
     } catch {
       return ''
+    }
+  }
+
+  async paneChildCommands(name: string): Promise<string[] | null> {
+    try {
+      const { stdout: panePid } = await execFileAsync(
+        'tmux', ['display-message', '-t', name, '-p', '#{pane_pid}'],
+        { encoding: 'utf8', timeout: 3000 }
+      )
+      const pid = Number(panePid.trim())
+      if (!Number.isInteger(pid) || pid <= 0) return null
+      // `ps --ppid` and `pgrep -P` differ across macOS/Linux; `ps -A -o pid=,ppid=,comm=` is portable.
+      const { stdout } = await execFileAsync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8', timeout: 3000 })
+      return psChildCommands(stdout, pid)
+    } catch {
+      return null
     }
   }
 
@@ -447,6 +468,27 @@ export function getRuntime(): AgentRuntime {
 // better than refusing to start the agent at all. So an exotic prompt this
 // regex does not recognise costs SHELL_READY_TIMEOUT_MS of patience — by which
 // point the shell is certainly ready — and never a lost keystroke.
+// Pure parser for `ps -A -o pid=,ppid=,comm=` output: command basenames of the direct children of
+// `pid`. comm may be a full path (macOS) and may contain spaces, so take the rest of the line.
+export function psChildCommands(psOutput: string, pid: number): string[] {
+  const out: string[] = []
+  for (const line of psOutput.split('\n')) {
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/)
+    if (m && Number(m[2]) === pid) out.push(m[3].split('/').pop() ?? '')
+  }
+  return out
+}
+
+// Is this child command the agent's client? Its binary name, or a pure version string (Claude Code
+// renames its process to its version, e.g. "2.1.285"), or `node` (codex/gemini run under node).
+// A stray background job (caffeinate, a watcher) must NOT match: typing into a bare shell runs it.
+// `node` counts only for clients that run under node: accepting it for every client would let a
+// stray background `node` job make a dead claude pane read as alive.
+const NODE_HOSTED_CLIENTS: ReadonlySet<string> = new Set(['codex', 'gemini'])
+export function isClientCommand(comm: string, binary: string): boolean {
+  return comm === binary || (comm === 'node' && NODE_HOSTED_CLIENTS.has(binary)) || /^\d+(\.\d+)+$/.test(comm)
+}
+
 export const SHELL_FOREGROUND_COMMANDS = new Set([
   'zsh', 'bash', 'sh', 'fish', 'dash', 'ksh', 'tcsh', 'csh',
   '-zsh', '-bash', '-sh', '-fish',

@@ -7,7 +7,8 @@
 
 import { getAgent } from '@/lib/agent-registry'
 import type { AuthContext } from '@/lib/agent-auth'
-import { getRuntime, SHELL_FOREGROUND_COMMANDS } from '@/lib/agent-runtime'
+import { getRuntime, SHELL_FOREGROUND_COMMANDS, isClientCommand } from '@/lib/agent-runtime'
+import { getClientCapabilities } from '@/lib/client-capabilities'
 import { injectedPrompts } from '@/services/shared-state'
 import * as fs from 'fs'
 import * as fsp from 'fs/promises'
@@ -444,7 +445,21 @@ export async function sendChatMessage(
   // message were delivered. Same notion of "bare shell" as the listing's idle status (P5RB1L01).
   // An empty answer (probe failed / runtime without the probe) is NOT proof of a shell: deliver.
   const foreground = runtime.getForegroundCommand ? await runtime.getForegroundCommand(sessionName) : ''
-  if (SHELL_FOREGROUND_COMMANDS.has(foreground)) {
+  // WHY the child probe (TRDD-TJRFVZRC, owner ruling): a tmux foreground snapshot is a race, so a
+  // shell foreground alone must not refuse. The client runs as a CHILD of the pane shell; refuse
+  // only when the pane shell has no child that IS the client (a leftover background job such as
+  // `caffeinate &` is a child too, and would wrongly read as a live client, so the child must match
+  // the agent's client binary). Probe null/absent => keep foreground-only behaviour, never a
+  // silent change in delivery.
+  let clientGone = SHELL_FOREGROUND_COMMANDS.has(foreground)
+  if (clientGone && runtime.paneChildCommands) {
+    const children = await runtime.paneChildCommands(sessionName)
+    if (children) {
+      const binary = getClientCapabilities(agent.program).cli.binary
+      clientGone = !children.some(c => isClientCommand(c, binary))
+    }
+  }
+  if (clientGone) {
     return {
       error: 'agent_not_ready: the agent\'s client is not running (its terminal is at a shell prompt). Start or restart the agent, then send again.',
       status: 409,

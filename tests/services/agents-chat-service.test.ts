@@ -63,6 +63,7 @@ vi.mock('fs', async (importOriginal) => {
 const TEST_AGENT = {
   id: 'agent-uuid-1',
   name: 'tui-bot',
+  program: 'claude',
   workingDirectory: '/Users/test/agents/tui-bot',
   sessions: [{ status: 'online' as const }],
 }
@@ -300,6 +301,56 @@ describe('sendChatMessage — client not running (TJRFVZRC)', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockRuntime.capturePane.mockResolvedValue('')
     mockExistsSync.mockReturnValue(false)
+    delete (mockRuntime as Record<string, unknown>).paneChildCommands
+  })
+
+  const withProbe = (answer: string[] | null) => {
+    const probe = vi.fn().mockResolvedValue(answer)
+    ;(mockRuntime as Record<string, unknown>).paneChildCommands = probe
+    return probe
+  }
+
+  it('refuses when foreground is a shell and the pane shell has NO child', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('zsh')
+    withProbe([])
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/^agent_not_ready/)
+  })
+
+  it('delivers when foreground reads as a shell but the pane shell HAS a child (race)', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('zsh')
+    withProbe(['claude'])
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(200)
+    expect(mockRuntime.sendKeys).toHaveBeenCalled()
+  })
+
+  it('refuses when the only child is a non-client background job (caffeinate)', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('zsh')
+    withProbe(['caffeinate'])
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(409)
+  })
+
+  it('keeps the foreground-only refusal when the probe cannot answer (null)', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('zsh')
+    withProbe(null)
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(409)
+  })
+
+  it('does not probe when the foreground is not a shell', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('claude')
+    const probe = withProbe([])
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(200)
+    expect(probe).not.toHaveBeenCalled()
   })
 
   it('refuses with agent_not_ready when the pane foreground is a bare shell', async () => {

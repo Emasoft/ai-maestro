@@ -25,6 +25,8 @@ implementations:
 
 Written because no spec in `design/specs/` covered authentication, and the contract was being re-derived from CODE COMMENTS, which describe the line they sit on and nothing more (TRDD-LS1UNUP1: two false premises, one of which parked real work for 20 days). Every statement here is derived from code and carries a `file:line`. Comments are corroboration only. Anything this document could NOT verify in code is in the CRED-UNV family and is marked UNVERIFIED; it is not asserted anywhere else.
 
+**Review status (2026-10-07):** written by a worker agent. The main session read only Sections 11-13 and confirmed two gaps by grep (CRED-GAP-03, CRED-GAP-04, both since fixed in 5add9f527). The citations in Sections 1-10 have not been independently checked. Do not cite a `CRED-*` clause as normative until this note is removed by a review of the whole document.
+
 ## CRED-GREP — how to grep this spec
 
 ```text
@@ -212,9 +214,9 @@ Recorded because that gap misled callers twice. Each entry states the comment, t
 
 `CRED-GAP-02` **session secret: "dies when session is killed/restarted"** — `lib/session-secret.ts:15` says the secret's scope is per-session and dies with the session. The validator has no expiry (`:53-63`); the hash is cleared on hibernate (`services/agents-core-service.ts:2759`) and replaced on the next session build (`lib/session-env.ts:131-141`). A kill that bypasses both leaves the hash valid (CRED-UNV-06).
 
-`CRED-GAP-03` **`invalidateAllSessions` "when governance password changes"** — the doc comment at `lib/session-auth.ts:214-216` names that use; the function has no caller (CRED-SES-04) and `setPassword` (`lib/governance.ts:197-212`) does not touch sessions. A password change therefore does not end existing cookies.
+`CRED-GAP-03` **`invalidateAllSessions` "when governance password changes"** — **FIXED in 5add9f527** (setPassword and invalidatePassword now call invalidateAllSessions; the text below describes the state at `derived-at`) — the doc comment at `lib/session-auth.ts:214-216` names that use; the function has no caller (CRED-SES-04) and `setPassword` (`lib/governance.ts:197-212`) does not touch sessions. A password change therefore does not end existing cookies.
 
-`CRED-GAP-04` **configurable session TTL is not read** — `sessionAuth.sessionTtlDays` is stored, clamped 1-90 on load (`lib/security-config.ts:57`, `:103`, `:188`), validated by `PATCH /api/settings/security` (`app/api/settings/security/route.ts:45`) and shown in the UI (`components/settings/SecuritySection.tsx:597`). `lib/session-auth.ts` imports nothing from the security config and fixes the lifetime at `7 * 24 * 60 * 60 * 1000` (`:34`). No file under `app/`, `lib/`, `services/`, `components/` or `server.mjs` outside those four reads the setting.
+`CRED-GAP-04` **configurable session TTL is not read** — **FIXED in 5add9f527** (lib/session-auth.ts now reads sessionTtlDays at mint time; the text below describes the state at `derived-at`) — `sessionAuth.sessionTtlDays` is stored, clamped 1-90 on load (`lib/security-config.ts:57`, `:103`, `:188`), validated by `PATCH /api/settings/security` (`app/api/settings/security/route.ts:45`) and shown in the UI (`components/settings/SecuritySection.tsx:597`). `lib/session-auth.ts` imports nothing from the security config and fixes the lifetime at `7 * 24 * 60 * 60 * 1000` (`:34`). No file under `app/`, `lib/`, `services/`, `components/` or `server.mjs` outside those four reads the setting.
 
 `CRED-GAP-05` **portfolio gate "populated" versus empty** — a comment at `lib/sudo-guard.ts:626-632` states that `OPERATIONS_REQUIRING_TOKEN` is populated with `CreateAgent` and `CreateTeam` and that the portfolio requirement is ON for delegated callers. `lib/portfolio-check.ts:34-45` has the map empty and says enabling it is a deliberate governance decision. The code is the empty state (CRED-PRT-05).
 

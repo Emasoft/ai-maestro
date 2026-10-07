@@ -4,7 +4,7 @@ title: The configurable session lifetime is stored and shown but never applied
 column: backburner
 status: tasked
 created: 2026-10-07T08:31:27+0200
-updated: 2026-10-07T08:31:27+0200
+updated: 2026-10-07T08:38:16+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-07T08:31:27+0200
+implementation-commits: [5add9f527]
 ---
 
 # The configurable session lifetime is stored and shown but never applied

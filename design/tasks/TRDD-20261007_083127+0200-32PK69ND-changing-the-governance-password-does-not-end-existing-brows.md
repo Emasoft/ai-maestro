@@ -4,7 +4,7 @@ title: Changing the governance password does not end existing browser sessions
 column: backburner
 status: tasked
 created: 2026-10-07T08:31:27+0200
-updated: 2026-10-07T08:31:27+0200
+updated: 2026-10-07T08:38:16+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-07T08:31:27+0200
+implementation-commits: [5add9f527]
 ---
 
 # Changing the governance password does not end existing browser sessions
@@ -26,3 +27,7 @@ setPassword (lib/governance.ts:197-212) does not touch sessions, and invalidateA
 ## Approval log
 
 - 2026-10-07T08:31:27+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T08:38:15+0200 — main-agent@ai-maestro: correction to the body — sessions are an in-memory Map (lib/session-auth.ts), so before the fix an old cookie stayed valid until its 7-day lifetime OR the next server restart, not for the full lifetime unconditionally. Fixed in 5add9f527. Open for the owner: a change from Settings now logs out the changer too.

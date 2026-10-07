@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/route-auth'
 import { resolveDesignDir } from '@/lib/trdd-design-dir'
 import { createTrdd } from '@/lib/trdd-create'
-import { recordMandateToken } from '@/lib/trdd-approval-token'
+import { recordMandateToken, registryTitleOf } from '@/lib/trdd-approval-token'
 import { AUTHORITY_RANK } from '@/lib/trdd-vocabulary'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,15 @@ export async function POST(request: NextRequest) {
   // an agent's title maps onto the ladder, and any title without approval
   // authority (member, architect, integrator, …) is 'none'.
   const title = typeof ctx.governanceTitle === 'string' ? ctx.governanceTitle : ''
-  const authorAuthority = ctx.isSystemOwner ? 'user' : (title in AUTHORITY_RANK ? title : 'none')
+  // The mandate decision needs the title on the request AND the registry to agree: the token is
+  // signed from the registry (what verify checks), so deciding from the request alone could write
+  // `mandate: true` on a card the server then refuses to sign. Taking the LOWER of the two never
+  // widens anyone's authority: a caller with no title on the request (an AMP key) stays 'none'.
+  const requestAuthority = title in AUTHORITY_RANK ? title : 'none'
+  const registryTitle = ctx.agentId ? (registryTitleOf(ctx.agentId) ?? '') : ''
+  const registryAuthority = registryTitle in AUTHORITY_RANK ? registryTitle : 'none'
+  const agentAuthority = AUTHORITY_RANK[registryAuthority] < AUTHORITY_RANK[requestAuthority] ? registryAuthority : requestAuthority
+  const authorAuthority = ctx.isSystemOwner ? 'user' : agentAuthority
   // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner. This
   // route used to write the bare NAME while approve/refuse/archive wrote the bare UUID.
   const { trddActorIdentity } = await import('@/lib/trdd-authz')

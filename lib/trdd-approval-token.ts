@@ -113,6 +113,24 @@ export const MANDATE_TOKEN_FIELD = 'mandate-token'
 const TRDD_TOKEN_TTL_SECONDS = 30 * 24 * 3600
 
 /**
+ * An agent's CURRENT governance title from the registry, lowercased ('' when it has none or the
+ * agent is unknown or soft-deleted), or null when the registry cannot be read. The same lookup
+ * shape as issuerStillValid in lib/portfolio-check.ts (lazy require: agent-registry imports back
+ * into this graph), so what the mint signs is what the verifier will compare against.
+ */
+export function registryTitleOf(agentId: string): string | null {
+  try {
+    const reg = require('@/lib/agent-registry') as {
+      loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
+    }
+    return (reg.loadAgents().find(a => a.id === agentId && !a.deletedAt)?.governanceTitle || '').toLowerCase()
+  } catch (err) {
+    console.error('[trdd-approval-token] registry title lookup failed:', err)
+    return null
+  }
+}
+
+/**
  * Mint the token that makes a TRDD decision verifiable, into the APPROVER's own
  * enclave, pinned to `trddId`.
  *
@@ -137,25 +155,14 @@ export async function mintTrddDecisionToken(
   // (lib/portfolio-check.ts issuerStillValid). ctx.governanceTitle is empty for an agent that
   // authenticated with an AMP key, so reading it would mint nothing for a real MANAGER whose
   // approval authorize() had just accepted on its registry title.
-  // Lazy require, exactly as issuerStillValid does it: one lookup shape for mint and verify.
   let callerTitle = ''
   if (ctx.agentId) {
-    // Guarded like issuerStillValid: an unreadable registry must leave the decision standing and
-    // unverifiable (null), never throw out of a mint whose callers await it with no catch.
-    try {
-      const reg = require('@/lib/agent-registry') as {
-        loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
-      }
-      callerTitle = (reg.loadAgents().find(a => a.id === ctx.agentId && !a.deletedAt)?.governanceTitle || '').toLowerCase()
-    } catch (err) {
-      console.error('[trdd-approval-token] issuer title lookup failed; minting nothing:', err)
-      return null
-    }
+    const t = registryTitleOf(ctx.agentId)
+    // An unreadable registry must leave the decision standing and unverifiable (null), never
+    // throw out of a mint whose callers await it with no catch.
+    if (t === null) return null
+    callerTitle = t
   }
-  // The SIGNED title must be the issuer's real one. Every non-COS agent used to be signed as
-  // 'manager', and the verifier's issuer check compares the signed title to the issuer's current
-  // registry title — so an orchestrator's token could never verify (TRDD-ADYYHLIC). A title with
-  // no rung on the approval ladder mints nothing: there is no honest title to sign.
   const AGENT_ISSUER_TITLES: readonly PortfolioIssuerTitle[] = ['manager', 'chief-of-staff', 'orchestrator']
   const agentTitle = AGENT_ISSUER_TITLES.find(t => t === callerTitle)
   if (ctx.agentId && !agentTitle) return null

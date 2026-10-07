@@ -54,6 +54,38 @@ import { randomUUID } from 'crypto'
 /** The scope every TRDD approval/mandate token carries. */
 export const TRDD_APPROVE_SCOPE = 'trdd:approve'
 
+/**
+ * A REVIEW VERDICT is a different fact from a proposal approval (TRDD-06G43RK2): `approve`
+ * says "this work is authorized", a verdict says "this work was reviewed and the card may
+ * move on / close". Until this scope existed `promote` and `archive` anchored nothing, so a
+ * card closed on a `human_review -> complete` verdict was indistinguishable from one whose
+ * `## Approval log` was typed by hand. The scope is deliberately NOT `trdd:approve`: the
+ * portfolio scope check is exact-match, so a verdict token can never satisfy the approval
+ * verifier (nor the reverse) even if its id is pasted into the wrong frontmatter field.
+ */
+export const TRDD_VERDICT_SCOPE = 'trdd:verdict'
+
+/** Frontmatter field holding the LATEST review-verdict token id (a later verdict overwrites). */
+export const VERDICT_TOKEN_FIELD = 'verdict-token'
+
+const REVIEW_COLUMNS: ReadonlySet<string> = new Set([
+  'design_ai_review',
+  'design_human_review',
+  'ai_review',
+  'human_review',
+])
+const CLOSING_COLUMNS: ReadonlySet<string> = new Set(['complete', 'published', 'live'])
+
+/**
+ * Is moving a card `from` -> `to` a review VERDICT? Leaving a review column (pass or
+ * reject) is the reviewer's decision; entering one is only a submission and entering
+ * `complete`/`published`/`live` is the closing verdict itself. Everything else is plain
+ * pipeline movement and must not mint (it would flood the ledger and bury real verdicts).
+ */
+export function isReviewVerdictMove(from: string | undefined, to: string): boolean {
+  return (!!from && REVIEW_COLUMNS.has(from)) || CLOSING_COLUMNS.has(to)
+}
+
 /** Frontmatter field holding the token id, per kind. */
 export const APPROVAL_TOKEN_FIELD = 'approval-token'
 export const MANDATE_TOKEN_FIELD = 'mandate-token'
@@ -83,6 +115,7 @@ export async function mintTrddDecisionToken(
   ctx: AuthContext,
   trddId: string,
   kind: PortfolioTokenKind,
+  scope: string = TRDD_APPROVE_SCOPE,
 ): Promise<string | null> {
   // The issuer IS the approver. A human owner has no agent record — see
   // SYSTEM_OWNER_ISSUER for why that needs a sentinel rather than a lookup.
@@ -100,7 +133,7 @@ export async function mintTrddDecisionToken(
     kind,
     // The approver holds its own receipt.
     subject_agent_id: issuerAgentId,
-    scope: TRDD_APPROVE_SCOPE,
+    scope,
     target_trdd_id: trddId.toUpperCase(),
     issuer_agent_id: issuerAgentId,
     issuer_title: issuerTitle,
@@ -151,6 +184,48 @@ export interface TrddApprovalVerdict {
   /** The underlying portfolio verdict (signature, ledger anchor, expiry, pin…). */
   token_verdict: PortfolioVerdict | null
   reasons: string[]
+  /**
+   * The REVIEW-VERDICT half (TRDD-06G43RK2), kept apart from `verified` on purpose:
+   * `verified` answers "was this card's approval real?" (the proposal gate); a verdict
+   * token answers "did a reviewer close it?". Merging them would let a closing verdict
+   * stand in for an authorization nobody gave.
+   */
+  verdict_token_present: boolean
+  verdict_token_id: string | null
+  verdict_verified: boolean
+  verdict_issuer_agent_id: string | null
+  verdict_issuer_title: PortfolioIssuerTitle | null
+  verdict_reasons: string[]
+}
+
+/** Verify the `verdict-token:` on a card: signature, ledger anchor, expiry, pin, `trdd:verdict` scope. */
+async function verifyVerdict(
+  fm: Record<string, unknown>,
+  trddId: string,
+): Promise<Pick<TrddApprovalVerdict, 'verdict_token_present' | 'verdict_token_id' | 'verdict_verified' | 'verdict_issuer_agent_id' | 'verdict_issuer_title' | 'verdict_reasons'>> {
+  const raw = fm[VERDICT_TOKEN_FIELD]
+  const tokenId = typeof raw === 'string' && raw.trim() ? raw.trim() : null
+  const none = {
+    verdict_token_present: !!tokenId,
+    verdict_token_id: tokenId,
+    verdict_verified: false,
+    verdict_issuer_agent_id: null,
+    verdict_issuer_title: null,
+    verdict_reasons: [] as string[],
+  }
+  if (!tokenId) return none
+  const token = findTokenAnywhere(tokenId)
+  if (!token) {
+    return { ...none, verdict_reasons: [`No such verdict token (${tokenId}) exists in any enclave.`] }
+  }
+  const v = await explainPortfolioToken(token, { scope: TRDD_VERDICT_SCOPE, trddId: trddId.toUpperCase() })
+  return {
+    ...none,
+    verdict_verified: v.valid,
+    verdict_issuer_agent_id: token.issuer_agent_id,
+    verdict_issuer_title: token.issuer_title,
+    verdict_reasons: v.reasons,
+  }
 }
 
 /**
@@ -181,6 +256,7 @@ export async function verifyTrddDecision(
     authority_sufficient: null,
     token_verdict: null,
     reasons: [],
+    ...(await verifyVerdict(fm, trddId)),
   }
 
   // A card requiring NO approval has nothing to prove. Demanding a token here

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
-import { advanceColumn, isoLocal } from '@/lib/trdd-store'
+import { advanceColumn, isoLocal, readTrdd } from '@/lib/trdd-store'
 import { withAuthorizedTrdd, trddActorIdentity } from '@/lib/trdd-authz'
+import { mintTrddDecisionToken, isReviewVerdictMove, TRDD_VERDICT_SCOPE } from '@/lib/trdd-approval-token'
 
 /**
  * POST /api/trdd/[id]/promote — advance an OPEN (design/tasks/) TRDD's `column`
@@ -48,14 +49,24 @@ export async function POST(
   // same tier, same self-approval ban. Letting them diverge would make `promote`
   // a way to launder an approval the caller could not grant.
   // TRDD-6D6SQNI6: decision and write share one hold on the card.
-  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'promote', () =>
-    advanceColumn(designDir, id, column, {
+  // TRDD-06G43RK2: leaving a review column, or closing, is a review VERDICT, and `verify`
+  // could not tell it from a hand-typed log line because nothing was anchored. Mint inside
+  // the authorized section (a token minted before authority is established would sit in the
+  // audit ledger for a verdict nobody was entitled to give), exactly as /approve does. A null
+  // token (ledger unavailable) must not fail the move: the verdict was authorized, it just
+  // reports as unverifiable — a logging outage must not become a governance outage.
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'promote', async () => {
+    const verdictToken = isReviewVerdictMove(readTrdd(designDir, id)?.column, column)
+      ? await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval', TRDD_VERDICT_SCOPE)
+      : null
+    return advanceColumn(designDir, id, column, {
       iso: isoLocal().iso,
       note: typeof body.note === 'string' ? body.note : undefined,
       // #168: the ONE identity helper for an agent; the owner's advance stays unattributed, as before.
       approver: auth.agentId ? trddActorIdentity(auth.agentId) : undefined,
-    }),
-  )
+      verdictToken,
+    })
+  })
   if (outcome.denied) return outcome.denied
 
   const result = outcome.value

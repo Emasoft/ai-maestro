@@ -346,7 +346,14 @@ cmd_verify() {
           else
             "UNVERIFIED  TRDD-\(.trdd_id)",
             (.reasons[] | "  ✗ \(.)")
-          end'
+          end,
+          (if .verdict_token_present then
+             (if .verdict_verified then
+                "  review verdict: VERIFIED — closed/moved by \(.verdict_issuer_agent_id) (\(.verdict_issuer_title)), token \(.verdict_token_id)"
+              else
+                (.verdict_reasons[] | "  review verdict: ✗ \(.)")
+              end)
+           else empty end)'
     fi
 
     if [ "$(printf '%s' "$out" | jq -r '.verified // false')" = "true" ]; then

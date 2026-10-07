@@ -300,3 +300,44 @@ describe('not everything needs a token', () => {
     expect(await tok.verifyTrddDecision(designDir, 'NOSUCHID')).toBeNull()
   })
 })
+
+describe('REVIEW VERDICT tokens (TRDD-06G43RK2)', () => {
+  it('a promote through human_review leaves a verdict token that verify names the reviewer from', async () => {
+    writeCard('VERDICT1', { minApproval: 'manager' })
+    const store = await import('@/lib/trdd-store')
+    // Same shape the /promote route builds: mint with the verdict scope, hand it to the store.
+    const verdictToken = await tok.mintTrddDecisionToken(MANAGER_CTX, 'VERDICT1', 'approval', tok.TRDD_VERDICT_SCOPE)
+    expect(verdictToken).toBeTruthy()
+    const r = await store.advanceColumn(designDir, 'VERDICT1', 'dev', { iso: '2026-07-14T11:00:00+0200', verdictToken })
+    expect(r.ok).toBe(true)
+
+    const v = await tok.verifyTrddDecision(designDir, 'VERDICT1')
+    expect(v!.verdict_token_present).toBe(true)
+    expect(v!.verdict_verified).toBe(true)
+    expect(v!.verdict_issuer_agent_id).toBe('mgr-1')
+    // The proposal gate is a separate question and stays unanswered by a verdict.
+    expect(v!.verified).toBe(false)
+  })
+
+  it('REFUSES an approval token pasted into verdict-token (scope is exact-match)', async () => {
+    const approval = await tok.mintTrddDecisionToken(MANAGER_CTX, 'VERDICT2', 'approval')
+    writeCard('VERDICT2', { extra: `verdict-token: ${approval}\n` })
+    const v = await tok.verifyTrddDecision(designDir, 'VERDICT2')
+    expect(v!.verdict_verified).toBe(false)
+    expect(v!.verdict_reasons.join(' ')).toMatch(/scope/i)
+  })
+
+  it('REFUSES a verdict token minted for a different card', async () => {
+    const other = await tok.mintTrddDecisionToken(MANAGER_CTX, 'OTHERCARD', 'approval', tok.TRDD_VERDICT_SCOPE)
+    writeCard('VERDICT3', { extra: `verdict-token: ${other}\n` })
+    const v = await tok.verifyTrddDecision(designDir, 'VERDICT3')
+    expect(v!.verdict_verified).toBe(false)
+  })
+
+  it('classifies which moves are verdicts', () => {
+    expect(tok.isReviewVerdictMove('human_review', 'complete')).toBe(true)
+    expect(tok.isReviewVerdictMove('ai_review', 'dev')).toBe(true)
+    expect(tok.isReviewVerdictMove('dev', 'testing')).toBe(false)
+    expect(tok.isReviewVerdictMove('testing', 'ai_review')).toBe(false)
+  })
+})

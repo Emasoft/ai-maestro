@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd, isoLocal } from '@/lib/trdd-store'
+import { mintTrddDecisionToken, TRDD_VERDICT_SCOPE } from '@/lib/trdd-approval-token'
 import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist, trddActorIdentity } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
@@ -74,16 +75,22 @@ export async function POST(
   //  2. AUTHORIZATION — the owner or MANAGER. The sudo-guard deferred this route.
   //     TRDD-6D6SQNI6: decided and written under ONE hold on the card, so a peer cannot
   //     change the fields the decision reads between the two.
-  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', () =>
-    archiveTrdd(designDir, id, {
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', async () => {
+    // TRDD-06G43RK2: archiving AS `completed` is the closing review verdict; mint it inside
+    // the authorized section (see /promote). cancelled/superseded/as-is assert no review.
+    const verdictToken = state === 'completed'
+      ? await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval', TRDD_VERDICT_SCOPE)
+      : null
+    return archiveTrdd(designDir, id, {
+      verdictToken,
       // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner.
       approver: trddActorIdentity(auth.agentId),
       state: state as (typeof ARCHIVE_STATES)[number] | undefined,
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,
       iso: isoLocal().iso,
-    }),
-  )
+    })
+  })
   if (outcome.denied) return outcome.denied
 
   const result = outcome.value

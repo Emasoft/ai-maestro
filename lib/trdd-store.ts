@@ -853,7 +853,7 @@ export function advanceColumn(
   designDir: string,
   id: string,
   column: string,
-  opts: { iso: string; note?: string; approver?: string; clearBlocker?: boolean },
+  opts: { iso: string; note?: string; approver?: string; clearBlocker?: boolean; verdictToken?: string | null },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
@@ -975,11 +975,19 @@ export function advanceColumn(
       ? ' Cleared blocked-by (--clear-blocker override).'
       : ' Cleared blocked-by (all blockers terminal).'
   }
+  // TRDD-06G43RK2: a review verdict carries its own host-signed token, written in the SAME
+  // edit as the column so the card can never show the move without its proof (or the reverse).
+  if (opts.verdictToken) {
+    content = setFrontmatterField(content, 'verdict-token', opts.verdictToken)
+  }
   if (opts.note || opts.approver) {
     const who = opts.approver ? ` by ${opts.approver}` : ''
     content = appendApprovalLog(
       content,
-      `- ${opts.iso} — column → ${column}${who}. ${opts.note ?? ''}${clearNote}`.trimEnd(),
+      (
+        `- ${opts.iso} — column → ${column}${who}. ${opts.note ?? ''}${clearNote}`.trimEnd() +
+        (opts.verdictToken ? ` Verifiable: verdict-token ${opts.verdictToken} (aimaestro-trdd.sh verify ${trdd.id}).` : '')
+      ),
     )
   }
   atomicWriteSync(trdd.filePath, content)
@@ -1230,6 +1238,7 @@ export function archiveTrdd(
     supersededBy?: string
     iso: string
     clearBlocker?: boolean
+    verdictToken?: string | null
   },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, async () => {
@@ -1329,6 +1338,8 @@ const stillOpen = refs.filter((ref) => {
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }
+  // TRDD-06G43RK2: the closing verdict's token goes in the SAME edit that freezes the card.
+  if (opts.verdictToken) edits.push(['verdict-token', opts.verdictToken])
   let clearNote = ''
   if (clearBlockedBy) {
     edits.push(['blocked-by', '[]'])

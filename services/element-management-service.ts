@@ -9268,6 +9268,12 @@ export interface DeleteAgentResult {
   operations: string[]
   error?: string
   /**
+   * TRDD-A50RC5G8: an HTTP status for a refusal, set alongside `error` by a guard that knows why it
+   * refused — today only the soft-only refusal (403). Routes prefer it to message substrings; every
+   * other error still falls through the routes' substring chains.
+   */
+  status?: number
+  /**
    * TRDD-KERM18NX. `success` means "the pipeline ran"; `incomplete` means "and a store STILL claims
    * this agent". They are different questions, and conflating them is what let a stale
    * PersistedSession row survive every delete until 2026-07-25 while every caller saw success.
@@ -9333,6 +9339,7 @@ export async function DeleteAgent(
     // in the service, so the Next route and the headless router both get it.
     if (!options.authContext.isSystemOwner && (hard || options.deleteFolder)) {
       result.error = 'hard delete and folder deletion are reserved to the user (TRDD-A50RC5G8); an agent may only soft-delete'
+      result.status = 403
       ops.push('G00: DENIED — agent caller requested hard/deleteFolder (TRDD-A50RC5G8)')
       return result
     }

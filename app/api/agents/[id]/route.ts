@@ -193,11 +193,10 @@ export async function DELETE(
       // permission, but most uncategorised failures are infrastructure errors
       // (filesystem failure, registry corruption, unexpected service exception).
       // Specific permission failures should be detected explicitly.
-      const status = errStr.includes('not found') ? 404
-        : errStr.includes('already deleted') ? 410
-        // 'reserved to the user' = DeleteAgent's soft-only refusal for an agent caller (TRDD-A50RC5G8): a permission refusal.
-        : (errStr.includes('forbidden') || errStr.includes('permission') || errStr.includes('not authorized') || errStr.includes('reserved to the user')) ? 403
-        : 500
+      // TRDD-A50RC5G8: the explicit result.status field set by the service's soft-only refusal
+      // guard carries that status (403); the substring arms are legacy fallbacks for errors
+      // that predate the field.
+      const status = result.status ?? (errStr.includes('not found') ? 404 : errStr.includes('already deleted') ? 410 : (errStr.includes('forbidden') || errStr.includes('permission') || errStr.includes('not authorized')) ? 403 : 500)
       return NextResponse.json({ error: result.error }, { status })
     }
     return NextResponse.json({ success: true, hard: result.hard })

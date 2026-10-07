@@ -865,6 +865,8 @@ const routes: Route[] = [
     // SVC2-MAJ-12 (2026-05-06): authenticate before re-spawning persisted tmux sessions.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-SHGIKNLN: system owner only, as in the Next route — authentication alone let any agent in.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     try {
       const body = await readJsonBody(req)
       sendServiceResult(res, await restoreSessions(body))
@@ -876,6 +878,8 @@ const routes: Route[] = [
     // SVC2-MAJ-12 (2026-05-06): authenticate before deleting persisted session metadata.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // TRDD-SHGIKNLN: system owner only, as in the Next route — authentication alone let any agent in.
+    if (!buildAuthContext(auth).isSystemOwner) { sendJson(res, 403, { error: 'Forbidden — system owner only' }); return }
     if (!query.sessionId) { sendJson(res, 400, { error: 'sessionId query param required' }); return }
     sendServiceResult(res, await deletePersistedSession(query.sessionId))
   }},

@@ -137,6 +137,8 @@ const ANY_HANDLER = /export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\
  */
 const UNAUTHORIZED_DANGEROUS = [
   'sessions/[id]/rename/route.ts',
+  // Still listed: this scan counts only an authorize() call. POST and DELETE are system-owner
+  // only since 2026-10-07 (enforceSystemOwner, TRDD-SHGIKNLN), which is stricter, not absent.
   'sessions/restore/route.ts',
 ]
 

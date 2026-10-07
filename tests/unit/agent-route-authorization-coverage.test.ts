@@ -450,7 +450,8 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   // calls the service directly. The route's job is the identity HANDOFF; verify
   // the receiver, not this file. Pinned in BOTH modes: the service-level test in
   // tests/services/sessions-service.test.ts and the headless listener.
-  'sessions/restore/route.ts',
+  // REMOVED 2026-10-07: 'sessions/restore/route.ts'. POST and DELETE were raised to
+  // enforceSystemOwner (TRDD-SHGIKNLN); GET stays authentication-only, it only reads.
   // REMOVED 2026-10-04: 'settings/mcp-discover/route.ts'. The inline `serverConfig` branch was
   // raised to enforceSystemOwner (so STRONG_AUTHZ matches the FILE and the needle no longer
   // returns it) plus a `.strict()` two-key schema (TRDD-NWTTU0AQ): `mcp_discovery.py` does

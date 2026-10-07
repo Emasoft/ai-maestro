@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceAuth, enforceSystemOwner } from '@/lib/route-auth'
 import { listRestorableSessions, restoreSessions, deletePersistedSession } from '@/services/sessions-service'
 
 /**
@@ -46,8 +46,11 @@ export async function GET(request: NextRequest) {
  * Restores one or all persisted sessions
  */
 export async function POST(request: NextRequest) {
-  // #114: Authenticate before any side effect.
-  const authErr = enforceAuth(request)
+  // System owner only (TRDD-SHGIKNLN). This authenticated and nothing more, so ANY agent
+  // credential could re-spawn every persisted tmux session or delete persisted-session records.
+  // No UI, script or plugin calls it (boot-restore runs in-process), so the owner is the only
+  // caller with a reason to. Mirrored in services/headless-router.ts.
+  const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
 
   try {
@@ -84,8 +87,11 @@ export async function POST(request: NextRequest) {
  * Permanently deletes a persisted session from storage
  */
 export async function DELETE(request: NextRequest) {
-  // #114: Authenticate before any side effect.
-  const authErr = enforceAuth(request)
+  // System owner only (TRDD-SHGIKNLN). This authenticated and nothing more, so ANY agent
+  // credential could re-spawn every persisted tmux session or delete persisted-session records.
+  // No UI, script or plugin calls it (boot-restore runs in-process), so the owner is the only
+  // caller with a reason to. Mirrored in services/headless-router.ts.
+  const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
 
   try {

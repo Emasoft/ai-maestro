@@ -1,10 +1,10 @@
 ---
 trdd-id: 9KPN1FOJ
 title: unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
-column: refused
-status: proposed
+column: superseded
+status: archived
 created: 2026-10-06T21:05:29+0200
-updated: 2026-10-06T21:23:12+0200
+updated: 2026-10-07T05:17:14+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -16,6 +16,7 @@ derived: false
 derived-kind: 
 parent-trdd: 
 relevant: [TRDD-2UPK4XZG]
+superseded-by: [2UPK4XZG]
 ---
 
 # unblock-when carry-back into TRDD-2UPK4XZG — two semantics fixes
@@ -38,6 +39,8 @@ Supersedes TRDD-W029KGVC, which was minted with a self-issued mandate at the wro
 
 ## Approval log
 - 2026-10-06T21:23:12+0200 — REFUSED by main-agent@ai-maestro (min-approval-requirement: manager). withdrawn by its author: both fixes moved onto TRDD-2UPK4XZG as acceptance boxes; a second card would be a second owner of the same work.
+- 2026-10-07T05:17:05+0200 — REFUSED by main-agent@ai-maestro (min-approval-requirement: manager). withdrawn by its author; both fixes moved onto TRDD-2UPK4XZG.
+- 2026-10-07T05:17:14+0200 — SUPERSEDED by main-agent@ai-maestro. withdrawn by its author; both fixes live on TRDD-2UPK4XZG as acceptance boxes.
 
 ## Correction
 

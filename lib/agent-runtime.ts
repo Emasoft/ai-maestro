@@ -485,8 +485,12 @@ export function psChildCommands(psOutput: string, pid: number): string[] {
 // `node` counts only for clients that run under node: accepting it for every client would let a
 // stray background `node` job make a dead claude pane read as alive.
 const NODE_HOSTED_CLIENTS: ReadonlySet<string> = new Set(['codex', 'gemini'])
+// The version-string form is Claude Code's process title (seen in tmux; ps on macOS reports `claude`),
+// so it counts only for claude — for any other client a child named like `3.12` is not proof of life.
 export function isClientCommand(comm: string, binary: string): boolean {
-  return comm === binary || (comm === 'node' && NODE_HOSTED_CLIENTS.has(binary)) || /^\d+(\.\d+)+$/.test(comm)
+  return comm === binary ||
+    (comm === 'node' && NODE_HOSTED_CLIENTS.has(binary)) ||
+    (binary === 'claude' && /^\d+(\.\d+)+$/.test(comm))
 }
 
 export const SHELL_FOREGROUND_COMMANDS = new Set([

@@ -30,6 +30,8 @@ describe('isClientCommand', () => {
     expect(isClientCommand('2.1.285', 'claude')).toBe(true)
     expect(isClientCommand('node', 'codex')).toBe(true)
     expect(isClientCommand('node', 'claude')).toBe(false)
+    expect(isClientCommand('3.12', 'codex')).toBe(false)
+    expect(isClientCommand('3.12', '')).toBe(false)
     expect(isClientCommand('caffeinate', 'claude')).toBe(false)
     expect(isClientCommand('-zsh', 'claude')).toBe(false)
   })

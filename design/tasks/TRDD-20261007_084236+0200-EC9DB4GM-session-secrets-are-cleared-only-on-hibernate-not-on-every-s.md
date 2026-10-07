@@ -4,7 +4,7 @@ title: Session secrets are known to be cleared only on hibernate, other stop pat
 column: backburner
 status: tasked
 created: 2026-10-07T08:42:36+0200
-updated: 2026-10-07T08:43:53+0200
+updated: 2026-10-07T09:39:54+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -17,6 +17,7 @@ mandated-by: none
 approved: true
 approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-07T08:42:36+0200
+implementation-commits: [be05c396b]
 ---
 
 # Session secrets are known to be cleared only on hibernate, other stop paths unread
@@ -26,3 +27,8 @@ From the credential spec (CRED-GAP-02, CRED-UNV-06): the mst_ session secret has
 ## Approval log
 
 - 2026-10-07T08:42:36+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T09:39:52+0200 — landed in be05c396b. Full suite 617 files / 8174 passed / 2 skipped, eslint 0, HEAD recorded at both ends. Five neuters each redden named cases: no revoke in killSession (3), revoke writes nothing (8), killAgentSessions keeps the hash (2), removeSessionFromAgent keeps the hash (2), revoke hits every agent (4, incl. the no-over-revocation case). The test checks refusal through the real authenticateAgent against a registry under a fake HOME.
+- LIMITS, still open: (1) six callers wrap the kill in a catch that ignores errors (wake and session-create launch refusals, creation helper), so a failed revocation there is silent; (2) team freeze logs a failed revocation instead of failing; (3) tests/helpers/drive-delete-agent.ts stubs revokeSessionSecret, so DeleteAgent pipeline tests driven through it cannot see whether the pipeline revokes; (4) no test makes the registry write fail, so 'a failed revocation throws' is unpinned; (5) the secret is one per agent: ending any one of an agent's sessions revokes it; (6) only the tmux runtime revokes; (7) whether a caller holds the agents lock while calling runtime.killSession was checked at the call sites only, not up their call chains; (8) not live until the server is rebuilt and restarted.

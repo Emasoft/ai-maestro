@@ -234,7 +234,7 @@ describe('validateTrddFieldEdits — identity and approval-record fields (#168)'
     expect(r.ok).toBe(true)
   })
 
-  it.each(['approval-judge', 'approval-datetime', 'verdict-token'])('refuses writing %s through a field edit (record-only)', (field) => {
+  it.each(['approval-judge', 'approval-datetime', 'verdict-token', 'approval-token'])('refuses writing %s through a field edit (record-only)', (field) => {
     const r = validateTrddFieldEdits(
       { [field]: field === 'approval-datetime' ? '2026-01-02T00:00:00+0100' : 'manager', updated: ISO },
       baseFm(),

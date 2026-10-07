@@ -49,7 +49,7 @@ export const WRITE_ONCE_FIELDS = ['created-by', 'created'] as const
  * approval the D4 watchdog then trusts. `verdict-token` is minted by `advanceColumn`'s callers
  * (TRDD-06G43RK2); a hand-written id is only caught by the verifier, so the tools refuse it too.
  */
-export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by', 'verdict-token'] as const
+export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by', 'verdict-token', 'approval-token'] as const
 
 /**
  * The ONE sentence both write paths (`trddgrep set` via `protectedFieldViolations`, and the API's

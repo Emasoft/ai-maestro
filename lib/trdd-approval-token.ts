@@ -243,6 +243,11 @@ async function verifyVerdict(
     return { ...none, verdict_reasons: [`Token scope "${token.scope}" is not a review-verdict scope (${TRDD_VERDICT_SCOPE}:<from>:<to>).`] }
   }
   const [, from, to] = m
+  // Re-check the minter's classification instead of trusting it: only a move OUT of a review
+  // column is a verdict, whatever path minted the token.
+  if (!REVIEW_COLUMNS.has(from)) {
+    return { ...none, verdict_from: from, verdict_to: to, verdict_reasons: [`The token records ${from} -> ${to}, which does not leave a review column, so it is not a review verdict.`] }
+  }
   const norm = (c: string | undefined) => (c === 'completed' ? 'complete' : c)
   if (norm(to) !== norm(column)) {
     return {
@@ -252,7 +257,9 @@ async function verifyVerdict(
       verdict_reasons: [`The verdict recorded the move ${from} -> ${to}, but the card is now in "${column}": the verdict does not vouch for the current column.`],
     }
   }
-  const v = await explainPortfolioToken(token, { scope: token.scope, trddId: trddId.toUpperCase() })
+  // Expected scope rebuilt from the parsed parts, so the portfolio check compares against a value
+  // derived here rather than against the token's own field.
+  const v = await explainPortfolioToken(token, { scope: verdictScope(from, to), trddId: trddId.toUpperCase() })
   return {
     ...none,
     verdict_from: from,

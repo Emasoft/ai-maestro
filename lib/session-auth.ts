@@ -7,12 +7,13 @@
  *
  * Sessions are in-memory (Map). `pm2 restart` invalidates all sessions (security measure).
  * `pm2 start` after `pm2 stop` also starts fresh — this is by design.
- * Sessions expire on explicit logout or after 7 days (safety measure).
+ * Sessions expire on explicit logout or after sessionAuth.sessionTtlDays (default 7).
  *
  * Cookie: aim_session=<token>, HttpOnly, SameSite=Strict, Path=/
  */
 
 import { createHash, randomBytes } from 'crypto'
+import { loadSecurityConfig } from '@/lib/security-config'
 
 // ============================================================================
 // Types
@@ -31,7 +32,14 @@ interface SessionRecord {
 
 export const SESSION_COOKIE_NAME = 'aim_session'
 const SESSION_TOKEN_BYTES = 32
-const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — expires on logout or after this
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// WHY read per call: Settings → Security stores sessionAuth.sessionTtlDays but the lifetime was a
+// fixed 7-day constant, so shortening it had no effect while the UI said it applied
+// (TRDD-PN9LCNNG). Read at mint time so a settings change applies to NEW sessions.
+function sessionLifetimeMs(): number {
+  return loadSecurityConfig().sessionAuth.sessionTtlDays * DAY_MS
+}
 const MAX_SESSIONS = 50 // Prevent memory leak — oldest evicted
 
 // ============================================================================
@@ -117,7 +125,7 @@ export async function createSession(ip?: string): Promise<string> {
         sessions.set(tokenHash, {
           token_hash: tokenHash,
           created_at: now,
-          expires_at: now + SESSION_LIFETIME_MS,
+          expires_at: now + sessionLifetimeMs(),
           ip,
         })
 
@@ -238,7 +246,7 @@ export function activeSessionCount(): number {
  * Build Set-Cookie header value for a session token.
  */
 export function buildSessionCookie(token: string, secure: boolean = false): string {
-  const maxAge = Math.floor(SESSION_LIFETIME_MS / 1000)
+  const maxAge = Math.floor(sessionLifetimeMs() / 1000)
   const parts = [
     `${SESSION_COOKIE_NAME}=${token}`,
     'HttpOnly',

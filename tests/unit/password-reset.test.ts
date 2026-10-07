@@ -52,6 +52,8 @@ function stubChannelAndSession() {
   }))
   vi.doMock('@/lib/session-auth', () => ({
     createSession: vi.fn(async () => 'test-session-token'),
+    // lib/governance.setPassword now revokes all sessions (TRDD-32PK69ND).
+    invalidateAllSessions: vi.fn(),
     buildSessionCookie: vi.fn((t: string) => `aim_session=${t}; HttpOnly; Path=/`),
   }))
   vi.doMock('@/lib/webauthn-server', () => ({

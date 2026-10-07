@@ -18,6 +18,7 @@ import type { JsonPatch } from '@/types/json-patch'
 import { getAgent } from '@/lib/agent-registry'
 import { getStateDir } from '@/lib/ecosystem-constants'
 import { SignedLedger } from '@/lib/signed-ledger'
+import { invalidateAllSessions } from '@/lib/session-auth'
 
 const AIMAESTRO_DIR = getStateDir()
 const GOVERNANCE_FILE = path.join(AIMAESTRO_DIR, 'governance.json')
@@ -209,6 +210,11 @@ export async function setPassword(plaintext: string): Promise<void> {
     if (isUnlocked()) {
       reEncryptWithNewPassword(plaintext)
     }
+    // WHY here: every password change (change route, reset, setup) funnels through setPassword,
+    // and sessions are an in-memory Map that outlives the credential. Without this a user rotating
+    // a leaked password left every old aim_session cookie live for its full lifetime
+    // (TRDD-32PK69ND). Callers that want the caller logged in mint a session AFTER this returns.
+    invalidateAllSessions()
   })
 }
 
@@ -231,6 +237,9 @@ export async function invalidatePassword(): Promise<void> {
     config.passwordSetAt = null
     config.passwordInvalidatedAt = new Date().toISOString()
     saveGovernance(config)
+    // WHY: invalidation is a revocation of the credential; sessions it authenticated must die too
+    // (TRDD-32PK69ND), or a leaked-password response leaves live cookies.
+    invalidateAllSessions()
   })
 }
 

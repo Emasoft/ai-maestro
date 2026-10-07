@@ -9,7 +9,7 @@ severity: low
 effort: medium
 task-type: infra
 created: 2026-07-14T20:39:44+0200
-updated: 2026-08-21T22:36:05+0200
+updated: 2026-10-07T07:52:47+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
@@ -18,6 +18,7 @@ labels: [scenario-improvement, scen-030]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]
 created-by: scenario-runner
 assignee: ai-maestro-hub-session
+implementation-commits: [ee6e7c7ec]
 ---
 
 ## Problem

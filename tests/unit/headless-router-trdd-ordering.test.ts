@@ -28,9 +28,27 @@
  * first assertion turns into that same 400.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterAll } from 'vitest'
 import { EventEmitter } from 'events'
 import { Readable } from 'stream'
+import { rmSync } from 'fs'
+
+// HOME is redirected BEFORE any module loads: `GET /api/trdd/kanban` really builds the kanban
+// index, and lib/kanban-index.ts writes it to statePath('kanban-index', <hash of the design
+// dir>) — i.e. the developer's REAL ~/.aimaestro. The leak guard only noticed in a fresh
+// checkout (a new path is a new hash); on the usual path the file already existed, so the
+// write recurred silently on every run. statePath resolves homedir() per call, which honours HOME.
+const TEMP_HOME = vi.hoisted(() => {
+  const dir = `/tmp/aim-trdd-ordering-home-${process.pid}`
+  const realHome = process.env.HOME
+  process.env.HOME = dir
+  return { dir, realHome }
+})
+
+afterAll(() => {
+  process.env.HOME = TEMP_HOME.realHome
+  rmSync(TEMP_HOME.dir, { recursive: true, force: true })
+})
 
 // Hoisted by vitest above the router import, so the dynamically-imported Next.js
 // route modules resolve to this stub. Only the auth verdict is faked; every other

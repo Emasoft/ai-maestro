@@ -166,6 +166,18 @@ function clampConfig(config: Record<string, unknown>): void {
     }
     obj[key] = Math.max(min, Math.min(max, obj[key] as number))
   }
+  // WHY: a SECTION that is present but not a plain object (a string, null, an array) skipped every
+  // clamp below and then replaced the whole default section in deepMerge, so its fields read as
+  // undefined (a NaN session lifetime) or threw on access. Drop it so DEFAULTS apply
+  // (TRDD-ADM0CHTJ). Field name only in the warning.
+  for (const section of ['killSwitch', 'agentCreation', 'rateLimiting', 'passwordPolicy', 'sessionAuth', 'ledger']) {
+    if (!Object.hasOwn(config, section)) continue
+    const v = config[section]
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+      console.warn(`[security-config] ignoring malformed "${section}" section in stored config; using the defaults`)
+      delete config[section]
+    }
+  }
   const ks = config.killSwitch as Record<string, unknown> | undefined
   if (ks) {
     clamp(ks, 'maxConsecutiveAuthFailures', 3, 100)

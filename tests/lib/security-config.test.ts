@@ -144,4 +144,14 @@ describe('clampConfig — non-finite-number values fall back to the default', ()
   it('a valid number still clamps', () => {
     expect(reload(c => { c.sessionAuth.sessionTtlDays = 500 }).sessionAuth.sessionTtlDays).toBe(90)
   })
+
+  // A whole SECTION that is not a plain object used to skip every clamp and replace the default
+  // section, leaving its fields undefined (NaN lifetime) or unreadable.
+  for (const bad of ['x', null, [], 42]) {
+    it(`sessionAuth=${JSON.stringify(bad)} loads the default section`, () => {
+      const cfg = reload(c => { (c as Record<string, unknown>).sessionAuth = bad })
+      expect(cfg.sessionAuth.sessionTtlDays).toBe(7)
+      expect(cfg.sessionAuth.sudoTokenTtlSeconds).toBe(60)
+    })
+  }
 })

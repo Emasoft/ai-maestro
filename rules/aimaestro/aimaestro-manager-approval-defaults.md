@@ -296,7 +296,11 @@ escalates to USER directly per the AUTONOMOUS fallback rules.
 
 Every non-exempt transition's outcome MUST be recorded in the TRDD
 body in a section called `## Approval log` (creating it on first
-write):
+write). Where a tool owns the decision — `aimaestro-trdd.sh
+approve|refuse` on a proposal, `create` on a mandate — the tool writes
+the log line and the approval fields; never hand-write those. The
+narrative entries below, for transition requests and replies, are the
+ones an agent writes:
 
 ```markdown
 ## Approval log

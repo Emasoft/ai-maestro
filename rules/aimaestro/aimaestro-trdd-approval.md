@@ -151,9 +151,9 @@ refused proposal stays in `design/proposals/`, open and editable. This
 overlay ADDS the multi-agent specifics:
 
 - The approver named in those protocols is the authority Part B
-  requires — T1 COS · T2 MANAGER · T3 USER — and approval-log lines
-  name it: `- <ISO> — APPROVED by <approver> (min-approval-requirement:
-  <title>). …`.
+  requires — T1 COS · T2 MANAGER · T3 USER — and the approval-log lines
+  the `approve` verb writes name it: `- <ISO> — APPROVED by <approver>
+  (min-approval-requirement: <title>). …`.
 - Proposals carry **`min-approval-requirement: <title>`** in frontmatter
   (`orchestrator`/`chief-of-staff`/`manager`/`user` by definition — a
   `none` task is authored directly in `design/tasks/`).
@@ -266,9 +266,13 @@ MEMBER · ARCHITECT · INTEGRATOR   (no approval authority)
 \* ORCHESTRATOR may mandate only the dispatch subset of Tier 1 (assignment,
 priority, sequencing inside its own team). Anything else Tier-1 is the COS's.
 
-**A mandate is born approved.** It is authored directly in `design/tasks/` with
-`column: planned` (or straight to `dispatch`/`dev` when assigned) — never in
-`design/proposals/`. It carries:
+**A mandate is born approved — and the TOOL writes that approval, never you.** Issue
+it with `aimaestro-trdd.sh create --min-approval <title> …`: the server compares your
+verified AID title to the floor, lands the card in `design/tasks/` (never in
+`design/proposals/`) when you outrank it, and writes the fields below and the log line
+itself. Do not type `mandate:`, `approved:`, `approval-judge:` or an `## Approval log`
+line into a card by hand: anyone with repo write can type them, so a card whose approval
+was typed is, by construction, unverifiable. A card the tool wrote carries:
 
 ```yaml
 min-approval-requirement: manager   # the TITLE that must approve (the objective floor, §D3)
@@ -278,7 +282,8 @@ derived: true                       # this TRDD is an NPT or EHT of another
 derived-kind: eht                   # npt | eht — which kind, without reading the parent
 ```
 
-and an `## Approval log` line recording that no round-trip occurred:
+plus an `## Approval log` line, also written by the tool, recording that no round-trip
+occurred:
 
 ```
 - <ISO> — MANDATE issued by MANAGER <agent-name> (min-approval-requirement: manager).
@@ -317,7 +322,13 @@ uses for v1 `status:` → v2 `column:`), never in a mass rewrite: `0 → none`,
 #### The approval record — who judged it, and when (USER, 2026-07-10)
 
 A TRDD that has been **approved or refused** carries the judgment, not just its
-consequence:
+consequence. The tool writes it: `aimaestro-trdd.sh approve|refuse <id>` sets these
+fields, appends the `## Approval log` line, and (on `approve`) adds an `approval-token:`
+minted by the host — the one part that cannot be forged. If the host's audit ledger is
+unavailable the approval still stands but carries no token, and `verify` reports it as
+unverifiable. Check a card you were handed
+with `aimaestro-trdd.sh verify <id>` (non-zero exit = unverified, do not proceed);
+never hand-edit these fields:
 
 ```yaml
 approved: true                      # true | false | rejected
@@ -501,9 +512,9 @@ neither works without the other.
   NPTs/EHTs), the receiver may still report a missing D-TRDD, and its tier is
   still subject to the objective floor. Pre-approved means "no approval request
   was needed", not "unreviewable".
-- **No agent may mandate above its own rank.** An agent that sets `mandate: true`
-  on a TRDD whose floor exceeds its authority has not approved anything; it has
-  forged an approval. §D4 detects and reverses this.
+- **No agent may mandate above its own rank.** An agent that hand-writes `mandate: true`
+  on a TRDD whose floor exceeds its authority (the server never will: `create` derives
+  it from your verified title) has not approved anything; it has forged an approval. §D4 detects and reverses this.
 
 #### A mandate usually arrives with a flock (USER, 2026-07-10)
 

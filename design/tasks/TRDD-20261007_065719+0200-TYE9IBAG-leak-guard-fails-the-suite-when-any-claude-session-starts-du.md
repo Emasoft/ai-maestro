@@ -4,7 +4,7 @@ title: Leak guard fails the suite when any Claude session starts during a test r
 column: backburner
 status: tasked
 created: 2026-10-07T06:57:19+0200
-updated: 2026-10-07T06:58:54+0200
+updated: 2026-10-07T08:53:51+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -34,3 +34,7 @@ tests/helpers/real-state-roots.ts flags every NEW entry in the real ~/.aimaestro
 - [ ] The ordering race is handled: the session's transcript may appear after its statusline file, or in a project dir created after teardown's scan.
 - [ ] A test that names a fixture after a REAL session id is not silently exempted (e.g. exempt only transcripts created after suite start, and only when the suite itself wrote none).
 - [ ] Neuter run recorded: removing the new exemption reddens the mid-run-session case, and loosening it reddens the positive control.
+
+## Notes
+
+- 2026-10-07T08:53:45+0200 — OWNER RULING (verbatim) on the project name and session id left in 21ab73ea9's history: "fork history : no need for me. but if github makes trouble, you have to do it." No history rewrite unless GitHub raises it.

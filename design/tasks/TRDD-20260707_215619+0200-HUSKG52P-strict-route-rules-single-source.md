@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-07T21:56:19+0200
-updated: 2026-10-07T06:26:36+0200
+updated: 2026-10-07T08:53:45+0200
 current-owner: code-review
 assignee: ai-maestro-hub-session
 priority: 1
@@ -102,3 +102,7 @@ change).
 - [x] Every strict route keeps its classification, agent rule and portfolio op, pinned by an explicit expected table taken from the code before the change
 - [ ] The headless router's own copy (DELEGATED_STRICT_ROUTES in services/headless-router.ts) is also derived or checked against the same source
 - [ ] Owner decision: the load-time check THROWS on a mismatch, so a security-registry.json edit without the matching declaration in lib/sudo-guard.ts stops the server from loading the guard (fail closed). Confirm that is wanted rather than a logged refusal of only the affected route
+
+## Notes
+
+- 2026-10-07T08:53:40+0200 — OWNER RULING (verbatim): "passord route - on first request". The strict-route cross-check against security-registry.json moves from module load to the first request.

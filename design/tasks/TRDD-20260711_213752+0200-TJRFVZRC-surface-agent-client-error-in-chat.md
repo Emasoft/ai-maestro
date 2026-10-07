@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-10-07T07:30:38+0200
+updated: 2026-10-07T08:47:21+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 1
@@ -71,3 +71,4 @@ must be additive (never suppress a real delivery on a false negative).
 ## Notes
 
 - 2026-10-07T07:30:38+0200 — busy-agent false-refusal check (main-agent@ai-maestro, read-only): on a live agent pane, #{pane_current_command} = 2.1.285 (the claude process); the tty foreground group (tpgid) is claude's own pgid; its running child (a bash status-line script) sits in its OWN process group with no controlling tty. So Claude Code children do not become the pane's foreground, and a bash child does not make the pane read as a shell. Not directly observed DURING a Bash tool call — confirm on the next busy agent before closing.
+- 2026-10-07T08:47:20+0200 — OWNER RULING (verbatim): "chat refusal - yes, unless you have a smarter solution" (on: refuse only after two bare-shell readings a second apart). main-agent@ai-maestro chose the structural alternative: refuse only when the pane foreground is a shell AND that pane shell has no live child process (the client runs as the shell's child — measured on frank: -zsh pid 13892 -> claude pid 72728; tool calls are children of the client). Race-free instead of narrowing the race with a second read.

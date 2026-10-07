@@ -4,7 +4,7 @@ title: Server-created mandates carry no mandate-token so verify cannot confirm t
 column: backburner
 status: tasked
 created: 2026-10-07T07:27:51+0200
-updated: 2026-10-07T07:27:51+0200
+updated: 2026-10-07T08:53:55+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -26,3 +26,7 @@ lib/trdd-create.ts writes mandate: true / approved: true / approval-judge for a 
 ## Approval log
 
 - 2026-10-07T07:27:51+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T08:53:51+0200 — owner delegated ("decide yourself on the others"); main-agent@ai-maestro chose option 3: mint the mandate token so verify can prove a mandate, then drop the interim stop-and-confirm wording in rules/aimaestro/aimaestro-trdd-approval.md, which deadlocks team agents (confirmation must route through the chief-of-staff).

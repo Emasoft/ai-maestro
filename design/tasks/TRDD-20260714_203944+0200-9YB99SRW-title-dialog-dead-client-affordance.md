@@ -9,7 +9,7 @@ severity: low
 effort: small
 task-type: bugfix
 created: 2026-07-14T20:39:44+0200
-updated: 2026-08-21T22:36:05+0200
+updated: 2026-10-07T08:23:39+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
@@ -72,3 +72,7 @@ about making that state legible, not about forcing the dialog open.
 ## Approval log
 
 - 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: still unresolved. `components/AgentProfile.tsx:827` renders `TitleBadge` with `onClick={() => setShowRoleDialog(true)}`, unconditionally, no guard on session/transition/locked state; `components/governance/TitleBadge.tsx` has no disabled/tooltip variant. Premise still holds; small, low-risk investigation task remains valid.
+
+## Notes
+
+- 2026-10-07T08:23:38+0200 — main-agent@ai-maestro, code read (no change): the identity-section control (components/AgentProfile.tsx:827-830) opens the title dialog unconditionally — no liveness gate, so there is no hidden reason to surface. The profile HEADER also shows the title (AgentProfile.tsx:647) as a deliberately read-only TitleBadge (span, cursor-default, no onClick). Leading hypothesis, unverified: the 'inert control' was the header pill. Needs a live repro on a disposable dead-client agent before any change. Worker report: reports/workers/20261007_082252+0200-9YB99SRW.md

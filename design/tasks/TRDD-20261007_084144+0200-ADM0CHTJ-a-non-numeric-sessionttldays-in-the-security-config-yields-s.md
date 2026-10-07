@@ -4,7 +4,7 @@ title: A non-numeric sessionTtlDays in the security config yields sessions that 
 column: backburner
 status: tasked
 created: 2026-10-07T08:41:44+0200
-updated: 2026-10-07T08:41:44+0200
+updated: 2026-10-07T08:42:37+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -26,3 +26,7 @@ lib/security-config.ts deepMerges the stored config over DEFAULTS (sessionTtlDay
 ## Approval log
 
 - 2026-10-07T08:41:44+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T08:42:37+0200 — also check an explicit null/undefined value: how deepMerge treats it was not read; a null overriding the default would give 0 ms, a session that expires immediately (fails closed, but blocks login).

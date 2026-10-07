@@ -445,3 +445,22 @@ describe('createTrdd cross-checks a main-agent@X author/assignee against the PRR
     expect(fs.readFileSync(r.file, 'utf8')).toMatch(/^assignee: main-agent@something-else$/m)
   })
 })
+
+describe('createTrdd Approval log heading (TRDD-GLFSHTBH)', () => {
+  const base = { title: 'log card', taskType: 'bugfix' as const, authorAuthority: 'none' as const, author: 'user' }
+  const count = (f: string) => (fs.readFileSync(f, 'utf8').match(/^## Approval log$/gm) ?? []).length
+
+  it('a body WITHOUT the heading gets exactly one, with the MANDATE line under it', () => {
+    const r = createTrdd(design, { ...base, body: '## Problem\n\nx' })
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(count(r.file)).toBe(1)
+    expect(text).toMatch(/## Approval log\n\n- .* MANDATE issued by user/)
+  })
+
+  it('a body that ALREADY has the heading is reused: one heading, MANDATE line under it', () => {
+    const r = createTrdd(design, { ...base, body: '## Problem\n\nx\n\n## Approval log\n' })
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(count(r.file)).toBe(1)
+    expect(text).toMatch(/## Approval log\n\n- .* MANDATE issued by user/)
+  })
+})

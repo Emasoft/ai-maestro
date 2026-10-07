@@ -364,11 +364,21 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   if (opts.npt?.length) lines.push(`npt: [${opts.npt.join(', ')}]`)
   if (opts.eht?.length) lines.push(`eht: [${opts.eht.join(', ')}]`)
   lines.push('---', '', `# ${title}`, '')
-  if (opts.body) lines.push(opts.body.trim(), '')
-  lines.push('## Approval log', '')
-  if (isMandate) {
-    lines.push(`- ${iso} — MANDATE issued by ${author} (min-approval-requirement: ${minApproval}). ` +
-      'Pre-approved: issuer authority >= required approver. No approval request was sent.', '')
+  const mandateLine = isMandate
+    ? `- ${iso} — MANDATE issued by ${author} (min-approval-requirement: ${minApproval}). ` +
+      'Pre-approved: issuer authority >= required approver. No approval request was sent.'
+    : null
+  // A body that already carries `## Approval log` (the authoring rule tells callers to
+  // end with one) owns that section: emitting a second heading strands the MANDATE line
+  // under it and `trddgrep append` then writes under the first only (TRDD-GLFSHTBH).
+  const logHeading = /^## Approval log[ \t]*$/m
+  const body = opts.body?.trim()
+  if (body && logHeading.test(body)) {
+    lines.push(body.replace(logHeading, (h) => (mandateLine ? `${h}\n\n${mandateLine}` : h)), '')
+  } else {
+    if (body) lines.push(body, '')
+    lines.push('## Approval log', '')
+    if (mandateLine) lines.push(mandateLine, '')
   }
 
   // Atomic: temp + rename, so a crash mid-write cannot leave a half-card the board parses.

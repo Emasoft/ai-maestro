@@ -4,7 +4,7 @@ status: tasked
 title: create library appends a second Approval log heading when the body already has one
 column: todo
 created: 2026-09-05T20:58:58+0200
-updated: 2026-09-05T20:59:05+0200
+updated: 2026-10-07T05:27:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -42,8 +42,8 @@ In lib/trdd-create.ts: before emitting `## Approval log`, scan the caller-suppli
 
 ## Acceptance
 
-- [ ] createTrdd() dedupes: MANDATE line lands under an existing `## Approval log` heading when the caller's body already has one
-- [ ] tests/unit/trdd-create.test.ts covers both shapes (body with heading, body without heading)
+- [x] createTrdd() dedupes: MANDATE line lands under an existing `## Approval log` heading when the caller's body already has one
+- [x] tests/unit/trdd-create.test.ts covers both shapes (body with heading, body without heading)
 - [ ] corpus grep `grep -c '^## Approval log' <file>' per open card in design/tasks/ finds no card with 2 headings (TRDD-66KNYSXY in design/tasks/ and TRDD-10J18FZX in design/archived/ are grandfathered/frozen pre-existing duplicates and are excluded from this box)
 
 ## Approval log

@@ -24,6 +24,7 @@ const {
       sessionExists: vi.fn().mockResolvedValue(true),
       sendKeys: vi.fn().mockResolvedValue(undefined),
       capturePane: vi.fn().mockResolvedValue(''),
+      getForegroundCommand: vi.fn().mockResolvedValue('claude'),
     },
     mockGetAgent: vi.fn(),
     mockExistsSync: vi.fn(),
@@ -32,7 +33,8 @@ const {
   }
 })
 
-vi.mock('@/lib/agent-runtime', () => ({
+vi.mock('@/lib/agent-runtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/agent-runtime')>()),
   getRuntime: () => mockRuntime,
 }))
 
@@ -288,5 +290,39 @@ describe('sendChatMessage — the injected-prompt mark (#117)', () => {
     expect(result.status).toBe(409)
     expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
     expect(injectedPrompts.has(TEST_AGENT.name)).toBe(false)
+  })
+})
+
+describe('sendChatMessage — client not running (TJRFVZRC)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetAgent.mockReturnValue(TEST_AGENT)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockRuntime.capturePane.mockResolvedValue('')
+    mockExistsSync.mockReturnValue(false)
+  })
+
+  it('refuses with agent_not_ready when the pane foreground is a bare shell', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('zsh')
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/^agent_not_ready/)
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+  })
+
+  it('delivers when the foreground is the client', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('claude')
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(200)
+    expect(mockRuntime.sendKeys).toHaveBeenCalled()
+  })
+
+  it('delivers when the foreground probe answers empty (not proof of a shell)', async () => {
+    mockRuntime.getForegroundCommand.mockResolvedValue('')
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello')
+    expect(result.status).toBe(200)
   })
 })

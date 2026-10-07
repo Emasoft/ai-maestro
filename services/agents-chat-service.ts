@@ -7,7 +7,7 @@
 
 import { getAgent } from '@/lib/agent-registry'
 import type { AuthContext } from '@/lib/agent-auth'
-import { getRuntime } from '@/lib/agent-runtime'
+import { getRuntime, SHELL_FOREGROUND_COMMANDS } from '@/lib/agent-runtime'
 import { injectedPrompts } from '@/services/shared-state'
 import * as fs from 'fs'
 import * as fsp from 'fs/promises'
@@ -437,6 +437,18 @@ export async function sendChatMessage(
   const sessionIsLive = await runtime.sessionExists(sessionName)
   if (!sessionIsLive) {
     return { error: 'Agent session is not online', status: 400 }
+  }
+
+  // TJRFVZRC: a live tmux session whose foreground is a bare shell means the client exited or never
+  // launched. The keystrokes would be typed into the shell and the chat box would clear as if the
+  // message were delivered. Same notion of "bare shell" as the listing's idle status (P5RB1L01).
+  // An empty answer (probe failed / runtime without the probe) is NOT proof of a shell: deliver.
+  const foreground = runtime.getForegroundCommand ? await runtime.getForegroundCommand(sessionName) : ''
+  if (SHELL_FOREGROUND_COMMANDS.has(foreground)) {
+    return {
+      error: 'agent_not_ready: the agent\'s client is not running (its terminal is at a shell prompt). Start or restart the agent, then send again.',
+      status: 409,
+    }
   }
 
   // SCEN-014 P0-003: refuse to send when the agent is in a TUI menu.

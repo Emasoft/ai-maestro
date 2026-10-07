@@ -447,7 +447,7 @@ export function getRuntime(): AgentRuntime {
 // better than refusing to start the agent at all. So an exotic prompt this
 // regex does not recognise costs SHELL_READY_TIMEOUT_MS of patience — by which
 // point the shell is certainly ready — and never a lost keystroke.
-const SHELL_FOREGROUND_COMMANDS = new Set([
+export const SHELL_FOREGROUND_COMMANDS = new Set([
   'zsh', 'bash', 'sh', 'fish', 'dash', 'ksh', 'tcsh', 'csh',
   '-zsh', '-bash', '-sh', '-fish',
 ])

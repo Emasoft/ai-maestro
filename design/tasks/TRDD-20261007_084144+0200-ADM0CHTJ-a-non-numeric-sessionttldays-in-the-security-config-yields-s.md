@@ -1,10 +1,10 @@
 ---
 trdd-id: ADM0CHTJ
 title: A non-numeric sessionTtlDays in the security config yields sessions that never expire
-column: dev
+column: todo
 status: tasked
 created: 2026-10-07T08:41:44+0200
-updated: 2026-10-07T09:27:28+0200
+updated: 2026-10-07T09:28:23+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -28,6 +28,7 @@ lib/security-config.ts deepMerges the stored config over DEFAULTS (sessionTtlDay
 
 - 2026-10-07T08:41:44+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
 - 2026-10-07T09:27:28+0200 — column → dev by main-agent@ai-maestro.
+- 2026-10-07T09:28:23+0200 — column → todo by main-agent@ai-maestro.
 
 ## Notes
 
@@ -36,3 +37,4 @@ lib/security-config.ts deepMerges the stored config over DEFAULTS (sessionTtlDay
 - 2026-10-07: falling back to defaults instead of refusing to unlock is deliberate: an unloadable config locks the owner out. The config file key is HKDF over the password and never reads the argon2 section; lib/argon2.ts already falls back to the same defaults per field.
 - 2026-10-07: STILL OPEN (do not close this card on the commits above): (1) the fallback is a console warning only, not a security-ledger entry; (2) a wrong-typed NON-numeric field inside a valid section still passes through; (3) whether the PATCH Zod schema rejects a non-object section was not read; (4) only the keyRotation case of the every-section test was shown red under a neuter, the warning assertions and the empty-object test were not.
 - 2026-10-07 (follow-up, measured): lib/security-config.ts mentions argon2 only in the type and in DEFAULTS (4 lines, full grep), so the config key derivation does not use it; DEFAULTS.argon2 is 65536 / 3 / 4, equal to the clampInt fallbacks in lib/argon2.ts. PATCH /api/settings/security is enforceSystemOwner + requireSudoToken and validates with a Zod schema that is z.object per section with typed, range-checked fields, so open item (3) is closed and item (2) is unreachable through the API; a malformed section or field can only come from a hand-edited or corrupted stored file. Items (1) and (4) remain.
+- 2026-10-07 (final): all nine schema sections were read (the note above generalised from five); every one is z.object with integer min/max or boolean fields and the outer object is .strict(). saveSecurityConfig has three callers: the PATCH route (schema-validated merge), the password reset (writes getSecurityDefaults()), and lib/security-config.ts line 270 (re-saves the loaded config). So no code path in this tree writes a malformed section; the sentence 'can only come from a hand-edited or corrupted file' should read: from outside these three writers, e.g. a file written by another version, a restore, or corruption. Column todo: the fix landed, items (1) ledger entry and (4) neuter coverage are unstarted.

@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-21T21:59:38+0200
+updated: 2026-10-07T06:26:13+0200
 current-owner: code-review
 assignee: ai-maestro-hub-session
 priority: 1
@@ -22,6 +22,7 @@ eht: []
 relevant-rules: []
 external-refs: ["reports/code-review/20260707_175225+0200-finder-CLEAN.json"]
 created-by: code-review
+implementation-commits: []
 ---
 
 # TRDD-HUSKG52P — Derive strict-route rules from one source instead of 4-way string duplication
@@ -92,3 +93,12 @@ change).
 
 - 2026-08-20T22:20:37+0200 — classified min-approval-requirement: manager (was UNSET, which made this proposal unroutable — nobody could know who to send it to). Floor computed from content: the card rewires the SINGLE SOURCE OF TRUTH for which routes are sudo-gated, currently spelled out in four hand-synced places. No literal D3 signal fires (it touches only this project's own source), but a mistake here UN-GATES a strict route, so it is taken as architectural / high-blast-radius and escalated one tier under the conservative principle — better safe than sorry. No approval is granted by this edit; the card is now merely routable.
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured the premise: security-registry.json, lib/sudo-guard.ts's STRICT_AGENT_RULES and STRICT_ROUTE_TO_PORTFOLIO_OP, and each handler's pathTemplate literal are still four independently hand-synced sources (no canonical table exists); the 4-way duplication this card targets is unchanged since filing.
+
+## Acceptance
+
+- [x] The duplication is measured and every disagreement between the strict-route lists is reported
+- [x] The portfolio-op map no longer repeats route strings; it is derived from the rule table
+- [x] A disagreement between security-registry.json and the code tables is a throw at module load, not a silent default
+- [x] Every strict route keeps its classification, agent rule and portfolio op, pinned by an explicit expected table taken from the code before the change
+- [ ] The headless router's own copy (DELEGATED_STRICT_ROUTES in services/headless-router.ts) is also derived or checked against the same source
+- [ ] Owner decision: the load-time check THROWS on a mismatch, so a security-registry.json edit without the matching declaration in lib/sudo-guard.ts stops the server from loading the guard (fail closed). Confirm that is wanted rather than a logged refusal of only the affected route

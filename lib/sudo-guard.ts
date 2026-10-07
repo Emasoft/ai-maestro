@@ -43,6 +43,8 @@
  *   }
  */
 
+import { existsSync, readFileSync } from 'fs'
+import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAndConsumeSudoToken } from './sudo-auth'
 import { requiresSudo } from './security-registry'
@@ -361,9 +363,15 @@ interface StrictAgentRule {
    * `edit` a TRDD it is assigned: no TITLE can be excluded up front.
    */
   deferToRoute?: boolean
+  /**
+   * TRDD-HUSKG52P. The portfolio OPERATION name (`OPERATIONS_REQUIRING_TOKEN` key)
+   * this route is gated by at the guard layer. Lives on the rule so the route key
+   * is spelled once; STRICT_ROUTE_TO_PORTFOLIO_OP is projected from it.
+   */
+  portfolioOp?: string
 }
 
-const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
+export const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // ── TRDD-K2WJH7RF Part 1: the 3-pillars TRDD lifecycle write verbs ────────
   // `[id]` here is a TRDD id, NOT an agent id — so `targetFromPathId` must stay
   // OFF. Resolving it as an agent UUID would silently look up a nonexistent
@@ -383,7 +391,7 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // TRDD-F1SL03CK: route classified strict by the security-registry.json flip.
   // 'create-agent' (lib/authorization.ts:67) already encodes R30.1/R30.2
   // (MANAGER + COS); no targetFromPathId — the path carries no agent id.
-  'POST /api/agents': { action: 'create-agent' },
+  'POST /api/agents': { action: 'create-agent', portfolioOp: 'CreateAgent' },
   // TRDD-I75EMTK0: the "New Session" R17 self-heal route. Same shape as the
   // agent-UUID-targeted routes above — [id] is the agent, not a session name.
   //
@@ -412,13 +420,14 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // app/api/teams/route.ts) in favor of the same dual-path gate: USER gets a
   // sudo-token modal, AGENT gets the authorize('manage-team') MANAGER-only
   // check — identical rules to DELETE/PUT/orchestrator below.
-  'POST /api/teams': { action: 'manage-team' },
+  'POST /api/teams': { action: 'manage-team', portfolioOp: 'CreateTeam' },
   // code-review F2: create-with-project is the same createNewTeam operation
   // as POST /api/teams (with an optional GitHub Project link bolted on) --
   // it was gated ONLY by an in-body password (verifyPassword), missing this
   // entry entirely, which let ANY non-MANAGER agent create a team merely by
-  // knowing the governance password string. Gated identically to POST /api/teams.
-  'POST /api/teams/create-with-project': { action: 'manage-team' },
+  // knowing the governance password string. Gated identically to POST /api/teams
+  // (including the same portfolio op: it delegates to the same createNewTeam call).
+  'POST /api/teams/create-with-project': { action: 'manage-team', portfolioOp: 'CreateTeam' },
   'DELETE /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]/orchestrator': { action: 'manage-team' },
@@ -518,6 +527,67 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
 }
 
 /**
+ * TRDD-HUSKG52P — the strict set (security-registry.json) and the per-route agent
+ * policy (the three declaration tables above) are one fact in two files. This
+ * makes a disagreement a THROW at module load instead of a silent runtime default:
+ *   - a strict route with no declaration → every agent would get a misleading 403;
+ *   - a declaration for a route that is not strict → a dead policy that reads as live;
+ *   - a route declared in two tables → decideAidTitle's first-match order silently
+ *     picks one (owner-only beats the rule), so which policy applies would depend
+ *     on code order nobody reviews.
+ * Fail CLOSED: refuse to load the guard at all rather than guess a classification.
+ */
+export function assertStrictRoutesDeclared(
+  strictKeys: Iterable<string>,
+  tables: { ownerOnly: Iterable<string>; pending: Iterable<string>; rules: Iterable<string> },
+): void {
+  const strict = new Set(strictKeys)
+  const count = new Map<string, number>()
+  for (const t of [tables.ownerOnly, tables.pending, tables.rules]) {
+    for (const k of t) count.set(k, (count.get(k) ?? 0) + 1)
+  }
+  const undeclared = [...strict].filter((k) => !count.has(k))
+  const notStrict = [...count.keys()].filter((k) => !strict.has(k))
+  const multi = [...count].filter(([, n]) => n > 1).map(([k]) => k)
+  if (undeclared.length || notStrict.length || multi.length) {
+    throw new Error(
+      '[sudo-guard] strict-route tables disagree with security-registry.json — refusing to load.' +
+        (undeclared.length ? `\n  strict but declared nowhere: ${undeclared.join(', ')}` : '') +
+        (notStrict.length ? `\n  declared but not strict: ${notStrict.join(', ')}` : '') +
+        (multi.length ? `\n  declared in more than one table: ${multi.join(', ')}` : ''),
+    )
+  }
+}
+
+/** The strict routes of security-registry.json as `METHOD /path` keys (read straight
+ * from the JSON: the loader in security-registry.ts is lazy, fail-open on a missing
+ * file, and mocked by several guard tests, so it cannot carry a load-time check). */
+function readStrictRouteKeys(): string[] | null {
+  const registryPath = path.join(process.cwd(), 'security-registry.json')
+  // An ABSENT file is skipped, not thrown on: security-registry.ts already treats it as
+  // "nothing strict" (with the same warning), and a test that chdirs into a tmp fixture
+  // before importing this module has no registry to compare. Anything else wrong with
+  // the file (unreadable, bad JSON, no `entries`) throws below — that is a fault.
+  if (!existsSync(registryPath)) {
+    console.warn('[sudo-guard] security-registry.json not found at', registryPath, '— strict-route tables not cross-checked.')
+    return null
+  }
+  const file = JSON.parse(readFileSync(registryPath, 'utf8')) as { entries: Record<string, string> }
+  return Object.entries(file.entries)
+    .filter(([, level]) => level === 'strict')
+    .map(([key]) => key.replace(/^([A-Z]+)_/, '$1 '))
+}
+
+const strictRouteKeys = readStrictRouteKeys()
+if (strictRouteKeys) {
+  assertStrictRoutesDeclared(strictRouteKeys, {
+    ownerOnly: SYSTEM_OWNER_ONLY_STRICT,
+    pending: AGENT_POLICY_PENDING,
+    rules: Object.keys(STRICT_AGENT_RULES),
+  })
+}
+
+/**
  * Extract the path `[id]` segment value from a pathname given its template.
  * Compares segment-by-segment; the value under a `[...]` template segment is
  * the id. Returns undefined if no `[...]` segment exists or the shapes don't
@@ -557,13 +627,14 @@ function extractPathId(pathname: string, pathTemplate: string): string | undefin
  * PORTFOLIO token requirement is now ON for delegated (COS-and-below)
  * callers of both routes.
  */
-const STRICT_ROUTE_TO_PORTFOLIO_OP: Record<string, string> = {
-  'POST /api/teams': 'CreateTeam',
-  // code-review F2: create-with-project delegates to the same createNewTeam
-  // service call as POST /api/teams -- mirror its portfolio-op mapping.
-  'POST /api/teams/create-with-project': 'CreateTeam',
-  'POST /api/agents': 'CreateAgent',
-}
+// TRDD-HUSKG52P: DERIVED from the `portfolioOp` field on STRICT_AGENT_RULES — the
+// route key is written once, there, so this map can never name a route the rule
+// table does not (it used to repeat three route strings by hand).
+export const STRICT_ROUTE_TO_PORTFOLIO_OP: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(STRICT_AGENT_RULES).flatMap(([route, rule]) =>
+    rule.portfolioOp ? [[route, rule.portfolioOp]] : [],
+  ),
+)
 
 /**
  * Coarse scope match for the GUARD-layer pre-check — exact match or a held

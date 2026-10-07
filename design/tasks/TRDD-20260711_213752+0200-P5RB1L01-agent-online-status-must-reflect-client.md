@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-10-07T06:24:20+0200
+updated: 2026-10-07T06:25:12+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 1
@@ -88,3 +88,4 @@ adds no per-render tmux cost. Depends on `getForegroundCommand` (landed this run
 - [x] Both server modes get the same status: the headless router has no separate derivation
 - [ ] The mobile dashboard still shows such an agent green — left for the owner (UI change)
 - [x] RECORD 2026-10-07 (main session): evidence for the five ticked boxes — the one-line change in services/agents-core-service.ts derives status from the paneInfo the listing already computes; that file imports no saveAgents, so the stored field is untouched; services/headless-router.ts has no own active/online derivation (grep); worker neuter reddens the new bare-shell case; main session after applying: 21 listing and reconcile test files, 466 tests green, tsc clean.
+- [ ] The listing's stats.online counter (services/agents-core-service.ts:601) counts agents whose SESSION is online, so an agent listed as idle (bare-shell pane) is still counted online. Decide whether the counter should follow the agent status; until then the count and the list disagree for that case (found by review 2026-10-07).

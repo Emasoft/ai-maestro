@@ -1,10 +1,10 @@
 ---
 trdd-id: EC9DB4GM
 title: Session secrets are known to be cleared only on hibernate, other stop paths unread
-column: backburner
+column: todo
 status: tasked
 created: 2026-10-07T08:42:36+0200
-updated: 2026-10-07T09:39:54+0200
+updated: 2026-10-07T09:40:13+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -27,6 +27,7 @@ From the credential spec (CRED-GAP-02, CRED-UNV-06): the mst_ session secret has
 ## Approval log
 
 - 2026-10-07T08:42:36+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-10-07T09:40:13+0200 — column → todo by main-agent@ai-maestro.
 
 ## Notes
 

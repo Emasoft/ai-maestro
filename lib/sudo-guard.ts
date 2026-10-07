@@ -371,9 +371,10 @@ interface StrictAgentRule {
   portfolioOp?: string
 }
 
-// Frozen (TRDD-HUSKG52P): exported so the load-time registry check and the pinning test can
-// read it, and nothing may change it after that check ran — a rule added at runtime would
-// bypass the cross-check against security-registry.json.
+// Frozen at the TOP LEVEL (TRDD-HUSKG52P): exported so the load-time registry check and the
+// pinning test can read it, and no route may be added or removed after that check ran — a rule
+// added at runtime would bypass the cross-check against security-registry.json. The rule VALUES
+// and the two sets above are readonly by TYPE only; that stops TypeScript callers, not a cast.
 export const STRICT_AGENT_RULES: Readonly<Record<string, Readonly<StrictAgentRule>>> = Object.freeze({
   // ── TRDD-K2WJH7RF Part 1: the 3-pillars TRDD lifecycle write verbs ────────
   // `[id]` here is a TRDD id, NOT an agent id — so `targetFromPathId` must stay

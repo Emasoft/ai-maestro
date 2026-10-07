@@ -35,9 +35,9 @@ import { rmSync } from 'fs'
 
 // HOME is redirected BEFORE any module loads: `GET /api/trdd/kanban` really builds the kanban
 // index, and lib/kanban-index.ts writes it to statePath('kanban-index', <hash of the design
-// dir>) — i.e. the developer's REAL ~/.aimaestro. The leak guard only noticed in a fresh
-// checkout (a new path is a new hash); on the usual path the file already existed, so the
-// write recurred silently on every run. statePath resolves homedir() per call, which honours HOME.
+// dir>) — i.e. the developer's REAL ~/.aimaestro. The leak guard notices only when that file
+// is absent (e.g. a fresh checkout: a new path is a new hash); otherwise the index was silently
+// rewritten whenever it was stale. statePath resolves homedir() per call, which honours HOME.
 const TEMP_HOME = vi.hoisted(() => {
   const dir = `/tmp/aim-trdd-ordering-home-${process.pid}`
   const realHome = process.env.HOME

@@ -9,7 +9,7 @@ severity: low
 effort: small
 task-type: bugfix
 created: 2026-07-14T20:39:44+0200
-updated: 2026-10-07T08:23:39+0200
+updated: 2026-10-07T08:26:09+0200
 approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T22:36:05+0200
@@ -76,3 +76,4 @@ about making that state legible, not about forcing the dialog open.
 ## Notes
 
 - 2026-10-07T08:23:38+0200 — main-agent@ai-maestro, code read (no change): the identity-section control (components/AgentProfile.tsx:827-830) opens the title dialog unconditionally — no liveness gate, so there is no hidden reason to surface. The profile HEADER also shows the title (AgentProfile.tsx:647) as a deliberately read-only TitleBadge (span, cursor-default, no onClick). Leading hypothesis, unverified: the 'inert control' was the header pill. Needs a live repro on a disposable dead-client agent before any change. Worker report: reports/workers/20261007_082252+0200-9YB99SRW.md
+- 2026-10-07T08:26:06+0200 — second way to look inert, not checked live: the dialog (components/governance/TitleAssignmentDialog.impl.tsx) disables individual titles on team membership, COS status and the single-manager rule, so it can open with every option greyed out. A repro must tell these apart from the header-pill hypothesis.

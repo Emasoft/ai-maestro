@@ -3,7 +3,7 @@ import { loadAgents } from '@/lib/agent-registry'
 import { loadPersistedSessions, savePersistedSessions, type PersistedSession } from '@/lib/session-persistence'
 import { computeSessionName } from '@/types/agent'
 import { getRuntime } from '@/lib/agent-runtime'
-import { getPaneCommand } from '@/services/agents-core-service'
+import { getPaneCommand, wakeAgent } from '@/services/agents-core-service'
 
 /**
  * Bootstrap `~/.aimaestro/sessions.json` from the registry IF it is missing/empty.
@@ -79,11 +79,23 @@ export function ensureSessionsJsonBootstrapped(): { bootstrapped: boolean; writt
  * running its program, so the next wake creates a fresh, R17-gated session.
  * Killing is preferred over reusing here specifically because a fresh
  * session is the only way to force the gate to re-run.
+ *
+ * TRDD-FM2ERCE6: after the kill, an agent the registry still lists as `active`
+ * is relaunched through `wakeAgent` (the one launch path -- it re-applies the
+ * manager / roleMissing / frozen-team / R17 gates, so a hibernated, quarantined
+ * or precondition-less agent is refused there, not relaunched here).
  */
-export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; killed: number }> {
+// ponytail: relaunch at most ONCE per agent per server process -- a second orphan of the same
+// agent means the client crash-loops on start, so we only kill it (old behaviour) rather than
+// loop. Upgrade path: a persisted attempt counter + `client-failed` status if a per-boot cap
+// proves too loose.
+const relaunchedOnce = new Set<string>()
+
+export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; killed: number; relaunched: number }> {
   const runtime = getRuntime()
   let checked = 0
   let killed = 0
+  let relaunched = 0
 
   for (const agent of loadAgents()) {
     if (agent.deletedAt) continue // skip soft-deleted (tombstone) agents
@@ -114,11 +126,29 @@ export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; k
         `[SessionReconcile] Failed to kill orphan pane for "${sessionName}":`,
         err instanceof Error ? err.message : err,
       )
+      continue // pane still there -- wakeAgent would only report alreadyRunning
+    }
+
+    if (agent.status !== 'active' || relaunchedOnce.has(agent.id)) continue
+    relaunchedOnce.add(agent.id)
+    try {
+      const res = await wakeAgent(agent.id, { authContext: { isSystemOwner: true } })
+      if ('error' in res) {
+        console.log(`[SessionReconcile] Not relaunching "${sessionName}": ${res.error}`)
+      } else {
+        relaunched++
+        console.log(`[SessionReconcile] Relaunched client for "${sessionName}" via wakeAgent`)
+      }
+    } catch (err) {
+      console.error(
+        `[SessionReconcile] Relaunch of "${sessionName}" threw:`,
+        err instanceof Error ? err.message : err,
+      )
     }
   }
 
   if (checked > 0) {
-    console.log(`[SessionReconcile] Orphan pane sweep: checked ${checked} live session(s), killed ${killed} shell-only orphan(s)`)
+    console.log(`[SessionReconcile] Orphan pane sweep: checked ${checked} live session(s), killed ${killed} shell-only orphan(s), relaunched ${relaunched}`)
   }
-  return { checked, killed }
+  return { checked, killed, relaunched }
 }

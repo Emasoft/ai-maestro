@@ -1,10 +1,10 @@
 ---
 trdd-id: 4S5D6BOF
-title: Two tests time out under full-suite load
+title: Tests time out or fail timing assertions under full-suite load
 column: backburner
 status: tasked
 created: 2026-10-07T06:59:56+0200
-updated: 2026-10-07T07:01:18+0200
+updated: 2026-10-07T07:02:12+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -19,9 +19,9 @@ approval-judge: main-agent@ai-maestro
 approval-datetime: 2026-10-07T06:59:56+0200
 ---
 
-# Two tests time out under full-suite load
+# Tests time out or fail timing assertions under full-suite load
 
-Under full-suite load (load average up to about 83 on 14 cores) the suite goes red on timeouts and timing assertions that pass alone. Named here: tests/unit/teams-stats-verb.test.ts (red in at least 2 full runs on 2026-10-07; passes alone; per its own failure text its request to /api/teams/stats timed out at 30 s, which suggests it reaches the real running server through the real CLI — not traced) and tests/unit/statusline-cli.test.ts (red in 1 run: the no-hosts.json base-resolution case exceeded the 30 s test timeout; alone: 12/12 in 1.32 s). Also seen red under load the same day and NOT yet explained: tests/unit/server-liveness (a timing assertion) and a 60-second ratchet case (about 6 s of CPU in a Python script). assistant-fs-containment's slow case was fixed by 7a15273d8 (it ran a real claude plugin install). Each needs its own cause found and fixed; raising timeouts alone is not a fix.
+Under full-suite load (load average up to about 83 on 14 cores) the suite goes red on timeouts and timing assertions. teams-stats-verb and statusline-cli pass alone; the other two below have not been run alone. Named here: tests/unit/teams-stats-verb.test.ts (red in at least 2 full runs on 2026-10-07; passes alone; per its own failure text its request to /api/teams/stats timed out at 30 s, which suggests it reaches the real running server through the real CLI — not traced) and tests/unit/statusline-cli.test.ts (red in 1 run: the no-hosts.json base-resolution case exceeded the 30 s test timeout; alone: 12/12 in 1.32 s). Also seen red under load the same day and NOT yet explained: tests/unit/server-liveness.test.ts (a timing assertion) and a 60-second ratchet case (about 6 s of CPU in a Python script, per an earlier session report, not re-measured; its file is not identified). assistant-fs-containment's slow case was fixed by 7a15273d8 (it ran a real claude plugin install). Each needs its own cause found and fixed; raising timeouts alone is not a fix.
 
 ## Approval log
 

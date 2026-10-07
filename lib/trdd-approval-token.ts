@@ -65,6 +65,19 @@ export const TRDD_APPROVE_SCOPE = 'trdd:approve'
  */
 export const TRDD_VERDICT_SCOPE = 'trdd:verdict'
 
+/**
+ * The scope a verdict token actually carries: `trdd:verdict:<from>:<to>`. WHY the transition is
+ * in the scope: a token pinned only to the card id verified against ANY later state of the
+ * card, so a hand-edited `column: complete` still read "review verdict VERIFIED" off a real
+ * token minted for a reject. The scope is a signed field the portfolio check already compares
+ * exactly, so binding the transition there needs no new token field and no signature change.
+ * The token KIND stays 'approval' (PortfolioTokenKind has no verdict kind; the scope, not the
+ * kind, is what the verifiers compare).
+ */
+export function verdictScope(from: string, to: string): string {
+  return `${TRDD_VERDICT_SCOPE}:${from}:${to}`
+}
+
 /** Frontmatter field holding the LATEST review-verdict token id (a later verdict overwrites). */
 export const VERDICT_TOKEN_FIELD = 'verdict-token'
 
@@ -74,16 +87,15 @@ const REVIEW_COLUMNS: ReadonlySet<string> = new Set([
   'ai_review',
   'human_review',
 ])
-const CLOSING_COLUMNS: ReadonlySet<string> = new Set(['complete', 'published', 'live'])
 
 /**
- * Is moving a card `from` -> `to` a review VERDICT? Leaving a review column (pass or
- * reject) is the reviewer's decision; entering one is only a submission and entering
- * `complete`/`published`/`live` is the closing verdict itself. Everything else is plain
- * pipeline movement and must not mint (it would flood the ledger and bury real verdicts).
+ * Is moving a card `from` -> `to` a review VERDICT? Only LEAVING a review column (pass or
+ * reject) is a reviewer's decision; entering one is a submission. `testing -> complete`
+ * skips review, and `publish -> published` / `deploy -> live` are release confirmations, so
+ * none of those is a review verdict and claiming one would make the token lie.
  */
-export function isReviewVerdictMove(from: string | undefined, to: string): boolean {
-  return (!!from && REVIEW_COLUMNS.has(from)) || CLOSING_COLUMNS.has(to)
+export function isReviewVerdictMove(from: string | undefined, _to: string): boolean {
+  return !!from && REVIEW_COLUMNS.has(from)
 }
 
 /** Frontmatter field holding the token id, per kind. */
@@ -195,6 +207,9 @@ export interface TrddApprovalVerdict {
   verdict_verified: boolean
   verdict_issuer_agent_id: string | null
   verdict_issuer_title: PortfolioIssuerTitle | null
+  /** The `<from>` and `<to>` bound into the token's signed scope, when it is a verdict scope. */
+  verdict_from: string | null
+  verdict_to: string | null
   verdict_reasons: string[]
 }
 
@@ -202,7 +217,8 @@ export interface TrddApprovalVerdict {
 async function verifyVerdict(
   fm: Record<string, unknown>,
   trddId: string,
-): Promise<Pick<TrddApprovalVerdict, 'verdict_token_present' | 'verdict_token_id' | 'verdict_verified' | 'verdict_issuer_agent_id' | 'verdict_issuer_title' | 'verdict_reasons'>> {
+  column: string | undefined,
+): Promise<Pick<TrddApprovalVerdict, 'verdict_token_present' | 'verdict_token_id' | 'verdict_verified' | 'verdict_issuer_agent_id' | 'verdict_issuer_title' | 'verdict_from' | 'verdict_to' | 'verdict_reasons'>> {
   const raw = fm[VERDICT_TOKEN_FIELD]
   const tokenId = typeof raw === 'string' && raw.trim() ? raw.trim() : null
   const none = {
@@ -211,6 +227,8 @@ async function verifyVerdict(
     verdict_verified: false,
     verdict_issuer_agent_id: null,
     verdict_issuer_title: null,
+    verdict_from: null as string | null,
+    verdict_to: null as string | null,
     verdict_reasons: [] as string[],
   }
   if (!tokenId) return none
@@ -218,9 +236,27 @@ async function verifyVerdict(
   if (!token) {
     return { ...none, verdict_reasons: [`No such verdict token (${tokenId}) exists in any enclave.`] }
   }
-  const v = await explainPortfolioToken(token, { scope: TRDD_VERDICT_SCOPE, trddId: trddId.toUpperCase() })
+  // The verdict is bound to the move it recorded. Archiving as `completed` is the filing of a
+  // card already `complete`, so the two spellings name the same state here.
+  const m = /^trdd:verdict:([^:]+):([^:]+)$/.exec(token.scope)
+  if (!m) {
+    return { ...none, verdict_reasons: [`Token scope "${token.scope}" is not a review-verdict scope (${TRDD_VERDICT_SCOPE}:<from>:<to>).`] }
+  }
+  const [, from, to] = m
+  const norm = (c: string | undefined) => (c === 'completed' ? 'complete' : c)
+  if (norm(to) !== norm(column)) {
+    return {
+      ...none,
+      verdict_from: from,
+      verdict_to: to,
+      verdict_reasons: [`The verdict recorded the move ${from} -> ${to}, but the card is now in "${column}": the verdict does not vouch for the current column.`],
+    }
+  }
+  const v = await explainPortfolioToken(token, { scope: token.scope, trddId: trddId.toUpperCase() })
   return {
     ...none,
+    verdict_from: from,
+    verdict_to: to,
     verdict_verified: v.valid,
     verdict_issuer_agent_id: token.issuer_agent_id,
     verdict_issuer_title: token.issuer_title,
@@ -256,7 +292,7 @@ export async function verifyTrddDecision(
     authority_sufficient: null,
     token_verdict: null,
     reasons: [],
-    ...(await verifyVerdict(fm, trddId)),
+    ...(await verifyVerdict(fm, trddId, trdd.column)),
   }
 
   // A card requiring NO approval has nothing to prove. Demanding a token here

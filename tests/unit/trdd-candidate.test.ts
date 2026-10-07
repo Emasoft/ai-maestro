@@ -57,7 +57,7 @@ describe('protectedFieldViolations (#168)', () => {
   })
 
   it('refuses adding, changing or removing a record-only field', () => {
-    for (const field of ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by']) {
+    for (const field of ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by', 'verdict-token']) {
       expect(protectedFieldViolations(fm(), fm({ [field]: 'x' })).join(' ')).toMatch(new RegExp(`${field}: is written only`))
       expect(protectedFieldViolations(fm({ [field]: 'x' }), fm()).join(' ')).toMatch(new RegExp(`${field}: is written only`))
     }

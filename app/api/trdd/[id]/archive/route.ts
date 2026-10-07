@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd, isoLocal } from '@/lib/trdd-store'
-import { mintTrddDecisionToken, TRDD_VERDICT_SCOPE } from '@/lib/trdd-approval-token'
 import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist, trddActorIdentity } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
@@ -76,13 +75,11 @@ export async function POST(
   //     TRDD-6D6SQNI6: decided and written under ONE hold on the card, so a peer cannot
   //     change the fields the decision reads between the two.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', async () => {
-    // TRDD-06G43RK2: archiving AS `completed` is the closing review verdict; mint it inside
-    // the authorized section (see /promote). cancelled/superseded/as-is assert no review.
-    const verdictToken = state === 'completed'
-      ? await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval', TRDD_VERDICT_SCOPE)
-      : null
+    // TRDD-06G43RK2: archive mints NO verdict token. Filing a card is not a review decision;
+    // the verdict, if any, was the move that reached `complete` (see /promote), and its token
+    // stays on the card untouched (verify treats `completed` as `complete`). Minting here would
+    // overwrite that real verdict with one for a move nobody reviewed.
     return archiveTrdd(designDir, id, {
-      verdictToken,
       // #168: the ONE identity helper — `name#uuid` for an agent, `user` for the owner.
       approver: trddActorIdentity(auth.agentId),
       state: state as (typeof ARCHIVE_STATES)[number] | undefined,

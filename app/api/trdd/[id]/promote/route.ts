@@ -4,7 +4,7 @@ import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { advanceColumn, isoLocal, readTrdd } from '@/lib/trdd-store'
 import { withAuthorizedTrdd, trddActorIdentity } from '@/lib/trdd-authz'
-import { mintTrddDecisionToken, isReviewVerdictMove, TRDD_VERDICT_SCOPE } from '@/lib/trdd-approval-token'
+import { mintTrddDecisionToken, isReviewVerdictMove, verdictScope } from '@/lib/trdd-approval-token'
 
 /**
  * POST /api/trdd/[id]/promote — advance an OPEN (design/tasks/) TRDD's `column`
@@ -56,8 +56,9 @@ export async function POST(
   // token (ledger unavailable) must not fail the move: the verdict was authorized, it just
   // reports as unverifiable — a logging outage must not become a governance outage.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'promote', async () => {
-    const verdictToken = isReviewVerdictMove(readTrdd(designDir, id)?.column, column)
-      ? await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval', TRDD_VERDICT_SCOPE)
+    const from = readTrdd(designDir, id)?.column
+    const verdictToken = from && isReviewVerdictMove(from, column)
+      ? await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval', verdictScope(from, column))
       : null
     return advanceColumn(designDir, id, column, {
       iso: isoLocal().iso,

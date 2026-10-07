@@ -329,6 +329,21 @@ export function setFrontmatterField(content: string, field: string, value: strin
   return lines.join('\n')
 }
 
+/** Remove a `field:` line from the frontmatter, if present (no-op otherwise). */
+export function removeFrontmatterField(content: string, field: string): string {
+  const lines = content.split('\n')
+  const isFence = (l: string | undefined): boolean => l !== undefined && l.trimEnd() === '---'
+  if (!isFence(lines[0])) return content
+  const re = new RegExp(`^${escapeRe(field)}:`)
+  for (let i = 1; i < lines.length && !isFence(lines[i]); i++) {
+    if (re.test(lines[i])) {
+      lines.splice(i, 1)
+      break
+    }
+  }
+  return lines.join('\n')
+}
+
 /**
  * Append one entry to the `## Approval log` section, creating the section at EOF
  * when it does not exist.
@@ -977,9 +992,11 @@ export function advanceColumn(
   }
   // TRDD-06G43RK2: a review verdict carries its own host-signed token, written in the SAME
   // edit as the column so the card can never show the move without its proof (or the reverse).
-  if (opts.verdictToken) {
-    content = setFrontmatterField(content, 'verdict-token', opts.verdictToken)
-  }
+  // WHY it is removed otherwise: a token vouches for the ONE move it recorded; left on the card
+  // after a later non-verdict move it would outlive that move and read as a stale proof.
+  content = opts.verdictToken
+    ? setFrontmatterField(content, 'verdict-token', opts.verdictToken)
+    : removeFrontmatterField(content, 'verdict-token')
   if (opts.note || opts.approver) {
     const who = opts.approver ? ` by ${opts.approver}` : ''
     content = appendApprovalLog(
@@ -1238,7 +1255,6 @@ export function archiveTrdd(
     supersededBy?: string
     iso: string
     clearBlocker?: boolean
-    verdictToken?: string | null
   },
 ): Promise<TrddResult> {
   return withTrddLock(designDir, id, async () => {
@@ -1338,8 +1354,6 @@ const stillOpen = refs.filter((ref) => {
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }
-  // TRDD-06G43RK2: the closing verdict's token goes in the SAME edit that freezes the card.
-  if (opts.verdictToken) edits.push(['verdict-token', opts.verdictToken])
   let clearNote = ''
   if (clearBlockedBy) {
     edits.push(['blocked-by', '[]'])

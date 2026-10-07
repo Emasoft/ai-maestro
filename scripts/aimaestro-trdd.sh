@@ -349,7 +349,7 @@ cmd_verify() {
           end,
           (if .verdict_token_present then
              (if .verdict_verified then
-                "  review verdict: VERIFIED — closed/moved by \(.verdict_issuer_agent_id) (\(.verdict_issuer_title)), token \(.verdict_token_id)"
+                "  review verdict: \(.verdict_from) -> \(.verdict_to) VERIFIED, by \(.verdict_issuer_agent_id) (\(.verdict_issuer_title)), token \(.verdict_token_id)"
               else
                 (.verdict_reasons[] | "  review verdict: ✗ \(.)")
               end)

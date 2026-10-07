@@ -302,24 +302,65 @@ describe('not everything needs a token', () => {
 })
 
 describe('REVIEW VERDICT tokens (TRDD-06G43RK2)', () => {
-  it('a promote through human_review leaves a verdict token that verify names the reviewer from', async () => {
-    writeCard('VERDICT1', { minApproval: 'manager' })
+  /** Same sequence the /promote route runs: classify, mint bound to the transition, advance. */
+  async function promote(id: string, from: string, to: string): Promise<void> {
     const store = await import('@/lib/trdd-store')
-    // Same shape the /promote route builds: mint with the verdict scope, hand it to the store.
-    const verdictToken = await tok.mintTrddDecisionToken(MANAGER_CTX, 'VERDICT1', 'approval', tok.TRDD_VERDICT_SCOPE)
-    expect(verdictToken).toBeTruthy()
-    const r = await store.advanceColumn(designDir, 'VERDICT1', 'dev', { iso: '2026-07-14T11:00:00+0200', verdictToken })
+    const verdictToken = tok.isReviewVerdictMove(from, to)
+      ? await tok.mintTrddDecisionToken(MANAGER_CTX, id, 'approval', tok.verdictScope(from, to))
+      : null
+    const r = await store.advanceColumn(designDir, id, to, { iso: '2026-07-14T11:00:00+0200', verdictToken })
     expect(r.ok).toBe(true)
+  }
+  const cardFile = (id: string) =>
+    path.join(designDir, 'tasks', fs.readdirSync(path.join(designDir, 'tasks')).find(f => f.includes(id))!)
+  const cardText = (id: string) => fs.readFileSync(cardFile(id), 'utf-8')
+
+  it('(a) a promote out of a review column writes verdict-token, and verify reports it verified with the move', async () => {
+    writeCard('VERDICT1')
+    await promote('VERDICT1', 'human_review', 'dev')
+    expect(cardText('VERDICT1')).toMatch(/^verdict-token: \S+/m)
 
     const v = await tok.verifyTrddDecision(designDir, 'VERDICT1')
     expect(v!.verdict_token_present).toBe(true)
     expect(v!.verdict_verified).toBe(true)
     expect(v!.verdict_issuer_agent_id).toBe('mgr-1')
+    expect([v!.verdict_from, v!.verdict_to]).toEqual(['human_review', 'dev'])
     // The proposal gate is a separate question and stays unanswered by a verdict.
     expect(v!.verified).toBe(false)
   })
 
-  it('REFUSES an approval token pasted into verdict-token (scope is exact-match)', async () => {
+  it('(b) after a hand edit of column: to another value, the verdict is NOT verified', async () => {
+    writeCard('VERDICT4')
+    await promote('VERDICT4', 'human_review', 'dev')
+    fs.writeFileSync(cardFile('VERDICT4'), cardText('VERDICT4').replace(/^column: dev$/m, 'column: complete'))
+
+    const v = await tok.verifyTrddDecision(designDir, 'VERDICT4')
+    expect(v!.verdict_verified).toBe(false)
+    expect(v!.verdict_reasons.join(' ')).toMatch(/does not vouch for the current column/)
+  })
+
+  it('(c) a non-verdict move clears a stale verdict-token', async () => {
+    writeCard('VERDICT5')
+    await promote('VERDICT5', 'human_review', 'dev')
+    expect(cardText('VERDICT5')).toMatch(/^verdict-token:/m)
+    await promote('VERDICT5', 'dev', 'testing')
+    expect(cardText('VERDICT5')).not.toMatch(/^verdict-token:/m)
+  })
+
+  it('(d) testing -> complete, publish -> published and deploy -> live are not review verdicts', () => {
+    expect(tok.isReviewVerdictMove('testing', 'complete')).toBe(false)
+    expect(tok.isReviewVerdictMove('publish', 'published')).toBe(false)
+    expect(tok.isReviewVerdictMove('deploy', 'live')).toBe(false)
+  })
+
+  it('classifies leaving a review column as a verdict, entering one as not', () => {
+    expect(tok.isReviewVerdictMove('human_review', 'complete')).toBe(true)
+    expect(tok.isReviewVerdictMove('ai_review', 'dev')).toBe(true)
+    expect(tok.isReviewVerdictMove('dev', 'testing')).toBe(false)
+    expect(tok.isReviewVerdictMove('testing', 'ai_review')).toBe(false)
+  })
+
+  it('REFUSES an approval token pasted into verdict-token (not a verdict scope)', async () => {
     const approval = await tok.mintTrddDecisionToken(MANAGER_CTX, 'VERDICT2', 'approval')
     writeCard('VERDICT2', { extra: `verdict-token: ${approval}\n` })
     const v = await tok.verifyTrddDecision(designDir, 'VERDICT2')
@@ -328,16 +369,9 @@ describe('REVIEW VERDICT tokens (TRDD-06G43RK2)', () => {
   })
 
   it('REFUSES a verdict token minted for a different card', async () => {
-    const other = await tok.mintTrddDecisionToken(MANAGER_CTX, 'OTHERCARD', 'approval', tok.TRDD_VERDICT_SCOPE)
+    const other = await tok.mintTrddDecisionToken(MANAGER_CTX, 'OTHERCARD', 'approval', tok.verdictScope('human_review', 'planned'))
     writeCard('VERDICT3', { extra: `verdict-token: ${other}\n` })
     const v = await tok.verifyTrddDecision(designDir, 'VERDICT3')
     expect(v!.verdict_verified).toBe(false)
-  })
-
-  it('classifies which moves are verdicts', () => {
-    expect(tok.isReviewVerdictMove('human_review', 'complete')).toBe(true)
-    expect(tok.isReviewVerdictMove('ai_review', 'dev')).toBe(true)
-    expect(tok.isReviewVerdictMove('dev', 'testing')).toBe(false)
-    expect(tok.isReviewVerdictMove('testing', 'ai_review')).toBe(false)
   })
 })

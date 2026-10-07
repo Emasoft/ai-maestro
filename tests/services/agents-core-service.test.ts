@@ -24,6 +24,7 @@ const {
   mockMessageQueue,
   mockFs,
   mockUuid,
+  mockExecFileSync,
   mockAuthorization,
   mockGovernance,
   mockTeamRegistry,
@@ -134,6 +135,8 @@ const {
       }
       return { default: fns, ...fns }
     })(),
+    // P5RB1L01: the tmux pane boundary (getPaneCommand) — the only thing doubled for the status cases.
+    mockExecFileSync: vi.fn(),
     mockUuid: {
       v4: vi.fn(() => `uuid-${++uuidCounter}`),
     },
@@ -155,6 +158,7 @@ vi.mock('uuid', () => mockUuid)
 vi.mock('child_process', () => ({
   exec: vi.fn((_cmd: string, cb: Function) => cb(null, { stdout: '', stderr: '' })),
   execSync: vi.fn().mockReturnValue(''),
+  execFileSync: (...a: unknown[]) => mockExecFileSync(...a),
 }))
 vi.mock('@/lib/authorization', () => mockAuthorization)
 // R17.24 (TRDD-C455WHV3): wakeAgent runs the user-scope plugin whitelist gate beside the R17
@@ -268,6 +272,8 @@ beforeEach(() => {
   mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
   // Default: agent is not in any team
   mockTeamRegistry.isAgentInAnyTeam.mockReturnValue(false)
+  // Default pane: a client program is the foreground command (not a bare shell)
+  mockExecFileSync.mockReset().mockReturnValue('claude|/home\n')
 })
 
 // ============================================================================
@@ -344,6 +350,20 @@ describe('listAgents', () => {
 
     expect(result.data?.agents[0].status).toBe('active')
     expect(result.data?.agents[0].session?.status).toBe('online')
+  })
+
+  it('marks an agent idle (not active) when its tmux pane is a bare shell — client not running (P5RB1L01)', async () => {
+    mockAgentRegistry.loadAgents.mockReturnValue([makeAgent({ name: 'dead-client' })])
+    mockRuntime.listSessions.mockResolvedValue([
+      { name: 'dead-client', workingDirectory: '/home', createdAt: '2025-01-01T00:00:00Z', windows: 1 },
+    ])
+    mockExecFileSync.mockReturnValue('zsh|/home\n')
+
+    const result = await listAgents()
+
+    expect(result.data?.agents[0].status).toBe('idle')
+    expect(result.data?.agents[0].session?.status).toBe('online')
+    expect(result.data?.agents[0].session?.programRunning).toBe(false)
   })
 
   it('sorts online agents before offline', async () => {

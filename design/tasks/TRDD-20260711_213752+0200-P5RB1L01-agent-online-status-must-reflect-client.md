@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-08-21T21:59:38+0200
+updated: 2026-10-07T06:24:02+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 1
@@ -19,6 +19,7 @@ relevant-rules: []
 min-approval-requirement: manager
 external-refs: ["reports/scenarios-runner/SCEN-015_2026-07-11T18-33-14Z.report.md"]
 created-by: scenario-runner
+implementation-commits: []
 ---
 
 ## Problem
@@ -77,3 +78,13 @@ adds no per-render tmux cost. Depends on `getForegroundCommand` (landed this run
 ## Approval log
 
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: `client-not-running`/`client-failed` status values do not exist anywhere in lib/services/hooks/components (0 hits); the dependency `AgentRuntime.getForegroundCommand` has landed (lib/agent-runtime.ts:227) and is already consumed elsewhere, so the fix is buildable now.
+
+## Acceptance
+
+- [x] A tmux session whose pane is a bare shell (client exited) is not reported as a live agent by the agents listing: session + program running = active, session + bare shell = idle, no session = offline
+- [x] No new status value or field: the existing AgentStatus value idle is used, matching the UI's Exited state
+- [x] No extra tmux call per agent per poll: the listing reuses the pane inspection it already performs
+- [x] The stored registry status is not changed by the listing, so boot-restore and the reconcile sweep (which read the stored field) behave as before
+- [x] Both server modes get the same status: the headless router has no separate derivation
+- [ ] The mobile dashboard still shows such an agent green — left for the owner (UI change)
+- [x] RECORD 2026-10-07 (main session): evidence for the five ticked boxes — the one-line change in services/agents-core-service.ts derives status from the paneInfo the listing already computes; that file imports no saveAgents, so the stored field is untouched; services/headless-router.ts has no own active/online derivation (grep); worker neuter reddens the new bare-shell case; main session after applying: 21 listing and reconcile test files, 466 tests green, tsc clean.

@@ -534,7 +534,11 @@ export async function listAgents(): Promise<ServiceResult<{
         name: agent.name,
         alias: agent.alias,
         sessions: updatedSessions,
-        status: hasOnlineSession ? 'active' : 'offline',
+        // P5RB1L01: a tmux session whose pane is a bare shell (client exited/never launched) is
+        // NOT a live agent. 'idle' is the existing AgentStatus value for "session exists, client
+        // not running" (the UI's 'Exited' state keys on the same paneInfo.programRunning). Reuses
+        // the getPaneCommand result above, so no extra tmux call per agent per poll.
+        status: !hasOnlineSession ? 'offline' : paneInfo.programRunning ? 'active' : 'idle',
         // Use the actual lastActive from the online session rather than the current timestamp
         // so the field reflects true last activity, not the polling time
         lastActive: (onlineSession?.lastActive ?? agent.lastActive) || new Date().toISOString(),

@@ -1,10 +1,10 @@
 ---
 trdd-id: TCDIVXPS
 title: Headless DELETE sessions has no authorization — any agent can kill any session
-column: dev
+column: human_review
 status: tasked
 created: 2026-10-05T01:44:34+0200
-updated: 2026-10-07T05:28:53+0200
+updated: 2026-10-07T05:43:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -74,6 +74,7 @@ authContext refused. Neuter the check and record the red set. Run the headless r
 
 ## Approval log
 - 2026-10-05 — LANDED 6626cbe60 by main-agent@ai-maestro. Scope settled by reading (worker report, spot-checked): HEADLESS was open — the router authenticates only before dispatch; FULL mode was already closed for agents — requireSudoToken also runs the title check from the sudo-guard route map. Still OPEN: (1) deleteSession marks the record deleted with NO cemetery archive (lib/agent-registry.ts deleteAgent soft path sets deletedAt only); (2) target resolution on an indexed name is defective — getAgentBySession (lib/agent-registry.ts:487-491) strips the trailing index, so session "alpha_1" resolves to agent "alpha" even when an agent named "alpha_1" exists. The indexed-session box stays unticked for that reason.
+- 2026-10-07T05:43:25+0200 — column → human_review by main-agent@ai-maestro. code landed in 536732858 on the main session's reading of the 2026-10-05 ruling; the owner has not answered question 16 on TRDD-VR4OPNVI, so the owner confirms or overrules before this closes
 
 ## Approval log
 

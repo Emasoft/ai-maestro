@@ -1,10 +1,10 @@
 ---
 trdd-id: SOPULLUB
 title: A failed read of the agent registry must not be followed by a write that replaces it
-column: todo
-status: tasked
+column: complete
+status: archived
 created: 2026-10-05T07:14:55+0200
-updated: 2026-10-07T05:28:57+0200
+updated: 2026-10-07T05:43:25+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -41,6 +41,7 @@ A writer that built its new content from a read which FAILED must refuse to writ
 ## Approval log
 
 - 2026-10-05 — self-mandate by main-agent (min-approval-requirement none): a data-loss guard inside this project, reversible, no governance change.
+- 2026-10-07T05:43:25+0200 — COMPLETE by main-agent@ai-maestro. all acceptance boxes ticked; tests re-run alone by the main session 2026-10-07; full suite green before push 2a09df2cf.
 
 ## Approval log
 

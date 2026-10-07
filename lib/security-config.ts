@@ -154,7 +154,17 @@ function encryptConfig(config: SecurityConfig, password: string): string {
  */
 function clampConfig(config: Record<string, unknown>): void {
   const clamp = (obj: Record<string, unknown>, key: string, min: number, max: number) => {
-    if (typeof obj[key] === 'number') obj[key] = Math.max(min, Math.min(max, obj[key] as number))
+    if (!Object.hasOwn(obj, key)) return
+    // WHY: a non-finite-number (string, null, NaN, Infinity) used to skip the clamp and
+    // then override the default in deepMerge, so sessionLifetimeMs() became NaN (a session
+    // that never expires) or 0. Dropping the key lets deepMerge fall back to DEFAULTS.
+    // The warning names the field only — never the value.
+    if (typeof obj[key] !== 'number' || !Number.isFinite(obj[key])) {
+      console.warn(`[security-config] ignoring non-numeric "${key}" in stored config; using the default`)
+      delete obj[key]
+      return
+    }
+    obj[key] = Math.max(min, Math.min(max, obj[key] as number))
   }
   const ks = config.killSwitch as Record<string, unknown> | undefined
   if (ks) {

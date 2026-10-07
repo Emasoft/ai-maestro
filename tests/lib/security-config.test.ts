@@ -101,3 +101,47 @@ describe('clampConfig — sessionAuth (SUDO-03)', () => {
     expect(loadSecurityConfig().sessionAuth.sudoTokenTtlSeconds).toBe(120)
   })
 })
+
+describe('clampConfig — non-finite-number values fall back to the default', () => {
+  const reload = (mutate: (cfg: Record<string, Record<string, unknown>>) => void) => {
+    const cfg = getSecurityDefaults() as unknown as Record<string, Record<string, unknown>>
+    mutate(cfg)
+    saveSecurityConfig(cfg as never, PASSWORD)
+    lockSecurityConfig()
+    resetSecurityConfigCache()
+    expect(unlockSecurityConfig(PASSWORD)).toBe(true)
+    return loadSecurityConfig()
+  }
+
+  // NaN and Infinity serialise to null in JSON, so they reach the loader as null.
+  for (const bad of ['7', 'abc', null, NaN, Infinity, -Infinity, {}, true]) {
+    it(`sessionTtlDays=${String(bad)} loads as the default 7`, () => {
+      expect(reload(c => { c.sessionAuth.sessionTtlDays = bad }).sessionAuth.sessionTtlDays).toBe(7)
+    })
+  }
+
+  it('sudoTokenTtlSeconds and other clamped numerics get the same treatment', () => {
+    const cfg = reload(c => {
+      c.sessionAuth.sudoTokenTtlSeconds = 'x'
+      c.killSwitch.maxConsecutiveAuthFailures = null
+    })
+    expect(cfg.sessionAuth.sudoTokenTtlSeconds).toBe(60)
+    expect(cfg.killSwitch.maxConsecutiveAuthFailures).toBe(20)
+  })
+
+  it('the warning names the field and not its value', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      reload(c => { c.sessionAuth.sessionTtlDays = 'SECRET-VALUE' })
+      const msgs = warn.mock.calls.map(a => a.join(' ')).join('\n')
+      expect(msgs).toContain('sessionTtlDays')
+      expect(msgs).not.toContain('SECRET-VALUE')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('a valid number still clamps', () => {
+    expect(reload(c => { c.sessionAuth.sessionTtlDays = 500 }).sessionAuth.sessionTtlDays).toBe(90)
+  })
+})

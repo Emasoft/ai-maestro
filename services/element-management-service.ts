@@ -10352,7 +10352,7 @@ export async function CreateAgent(
       const tombstone = loadAgentsForTombstone().find(a =>
         a.deletedAt && a.name?.toLowerCase() === name && a.workingDirectory && existsSync(a.workingDirectory))
       if (tombstone) {
-        result.error = `Agent name "${name}" is held by a soft-deleted agent (id=${tombstone.id}) whose folder ${tombstone.workingDirectory} still exists. Restore that agent from the cemetery, or purge it from the cemetery, to free the name — or choose a different name.`
+        result.error = `Agent name "${name}" is held by a soft-deleted agent (id=${tombstone.id}) whose folder still exists. Restore that agent from the cemetery, or purge it from the cemetery, to free the name — or choose a different name.`
         return result
       }
       ops.push(`G01b: Name "${name}" is unique in registry`)

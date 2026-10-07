@@ -90,6 +90,9 @@ export function ensureSessionsJsonBootstrapped(): { bootstrapped: boolean; writt
 // loop. Upgrade path: a persisted attempt counter + `client-failed` status if a per-boot cap
 // proves too loose.
 const relaunchedOnce = new Set<string>()
+// A boot must not start a whole fleet of clients at once (cost, rate limits): beyond this many
+// relaunches in one sweep the remaining orphans are only killed, as before, and wait for a manual wake.
+const MAX_RELAUNCHES_PER_SWEEP = 5
 
 export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; killed: number; relaunched: number }> {
   const runtime = getRuntime()
@@ -129,7 +132,7 @@ export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; k
       continue // pane still there -- wakeAgent would only report alreadyRunning
     }
 
-    if (agent.status !== 'active' || relaunchedOnce.has(agent.id)) continue
+    if (agent.status !== 'active' || relaunchedOnce.has(agent.id) || relaunched >= MAX_RELAUNCHES_PER_SWEEP) continue
     relaunchedOnce.add(agent.id)
     try {
       const res = await wakeAgent(agent.id, { authContext: { isSystemOwner: true } })

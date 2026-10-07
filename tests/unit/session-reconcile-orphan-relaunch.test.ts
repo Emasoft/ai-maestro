@@ -50,6 +50,14 @@ beforeEach(() => {
 })
 
 describe('reconcileOrphanPanesOnBoot relaunch (TRDD-FM2ERCE6)', () => {
+  it('caps one sweep at 5 relaunches — the rest are killed only, so a boot cannot start a whole fleet', async () => {
+    // Fresh ids: the once-per-process set is module state shared with the other cases.
+    seed(Array.from({ length: 7 }, (_, i) => ({ id: `cap-${i}`, name: `cap-agent-${i}`, status: 'active' })))
+    const res = await reconcileOrphanPanesOnBoot()
+    expect(res).toEqual({ checked: 7, killed: 7, relaunched: 5 })
+    expect(mockWake).toHaveBeenCalledTimes(5)
+  })
+
   it('kills the dead shell then relaunches an active agent through wakeAgent exactly once', async () => {
     seed([{ id: 'id-a', name: 'agent-a', status: 'active' }])
     const res = await reconcileOrphanPanesOnBoot()

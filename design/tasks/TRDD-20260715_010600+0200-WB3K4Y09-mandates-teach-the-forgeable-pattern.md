@@ -12,7 +12,7 @@ severity: critical
 effort: medium
 task-type: security
 created: 2026-07-15T01:06:00+0200
-updated: 2026-08-21T21:59:38+0200
+updated: 2026-10-07T07:22:14+0200
 scope: project
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
@@ -20,6 +20,7 @@ external-refs:
   - reports/scenarios-runner/SCEN-029_20260714T212851Z.report.md
 created-by: scenario-runner
 assignee: ai-maestro-hub-session
+implementation-commits: [514c366e3]
 ---
 
 # A genuine MANAGER mandate is indistinguishable from a forgery

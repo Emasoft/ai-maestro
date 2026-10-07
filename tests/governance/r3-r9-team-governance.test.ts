@@ -141,6 +141,7 @@ const {
       searchAgents: vi.fn(() => []),
       linkSession: vi.fn(),
       unlinkSession: vi.fn(),
+      revokeSessionSecret: vi.fn(async () => undefined), // TRDD-EC9DB4GM: team freeze + hibernate revoke through it
     },
     mockGovernance: {
       loadGovernance: vi.fn(() => ({ managerId: null, passwordHash: 'stored-hash' })),

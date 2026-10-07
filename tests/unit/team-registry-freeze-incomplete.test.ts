@@ -44,6 +44,7 @@ vi.mock('@/lib/agent-registry', () => ({
     if (agent && agent.deletedAt && !includeDeleted) return null
     return agent
   },
+  revokeSessionSecret: async () => undefined, // TRDD-EC9DB4GM: the team freeze revokes through it
 }))
 
 // Killed-session ledger the mock execFile writes to, so a test can assert

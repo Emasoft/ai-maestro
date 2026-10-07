@@ -99,6 +99,8 @@ export function registryMock(store: FakeRegistryStore, registryFile: string) {
     loadAgents: () => [...store.values()],
     loadAgentsStrict: () => [...store.values()],
     saveAgents: () => undefined,
+    // TRDD-EC9DB4GM: the team freeze / hibernate paths revoke the session secret through the registry.
+    revokeSessionSecret: async () => undefined,
     createAgent: async () => null,
     updateAgent: async (id: string, patch: Partial<FakeAgent>) => {
       const existing = store.get(id)

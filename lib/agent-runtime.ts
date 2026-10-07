@@ -125,6 +125,7 @@ export interface AgentRuntime {
   // `^[A-Z_][A-Z0-9_]*$` (standard env-var naming) — anything else is
   // rejected as a defense against injection from caller-controlled strings.
   createSession(name: string, cwd: string, env?: Record<string, string>): Promise<void>
+  /** Kills the session AND revokes its agent's session secret (TRDD-EC9DB4GM). */
   killSession(name: string): Promise<void>
   renameSession(oldName: string, newName: string): Promise<void>
 
@@ -336,7 +337,21 @@ export class TmuxRuntime implements AgentRuntime {
 
   async killSession(name: string): Promise<void> {
     // Use execFileAsync (no shell) to prevent shell injection via session name
-    await execFileAsync('tmux', ['kill-session', '-t', name])
+    let killError: unknown
+    try {
+      await execFileAsync('tmux', ['kill-session', '-t', name])
+    } catch (err) {
+      killError = err
+    }
+    // TRDD-EC9DB4GM: this is the ONE async kill every service path routes through (hibernate,
+    // delete-session, DeleteAgent, refused launches, orphan reconcile…), so the session secret
+    // (AID_AUTH) dies here, with its pane, instead of at each call site. It runs even when tmux
+    // reports the session already gone: "no such session" means the pane is dead, which is the
+    // reason to revoke, not a reason to skip. Dynamic import: agent-registry imports this module.
+    // A revocation failure throws — it is the failure that leaves a live credential behind.
+    const { revokeSessionSecretForSession } = await import('@/lib/agent-registry')
+    await revokeSessionSecretForSession(name)
+    if (killError) throw killError
   }
 
   async renameSession(oldName: string, newName: string): Promise<void> {
@@ -675,6 +690,10 @@ export function sessionExistsSync(name: string, socketPath?: string): boolean {
   }
 }
 
+// TRDD-EC9DB4GM: unlike `TmuxRuntime.killSession`, this does NOT revoke the agent's session secret
+// (it is sync; the registry write is async + locked). Every caller must revoke itself — in-lock
+// registry callers null the hash in their own write, the rest `await revokeSessionSecretForSession`
+// — and tests/unit/session-secret-revoked-on-session-end.test.ts pins the full set of callers.
 export function killSessionSync(name: string): void {
   try {
     // Use nodeExecFileSync (no shell) to prevent shell injection via session name

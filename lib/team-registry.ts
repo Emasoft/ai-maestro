@@ -482,11 +482,11 @@ export async function deleteTeam(id: string): Promise<boolean> {
 async function resolveHibernationDeps() {
   // The imports stay dynamic (not top-of-file) to avoid a static import cycle
   // — team-registry must not statically depend on agent-registry.
-  const { getAgent } = await import('@/lib/agent-registry')
+  const { getAgent, revokeSessionSecret } = await import('@/lib/agent-registry')
   const { execFile } = await import('child_process')
   const { promisify } = await import('util')
   const execFileAsync = promisify(execFile)
-  return { getAgent, execFileAsync }
+  return { getAgent, revokeSessionSecret, execFileAsync }
 }
 
 type HibernationDeps = Awaited<ReturnType<typeof resolveHibernationDeps>>
@@ -520,14 +520,24 @@ async function hibernateTeamAgentSession(agentId: string, deps: HibernationDeps,
       console.warn(`[${logTag}] Refusing to kill session with unsafe name: ${sessionName}`)
       return false
     }
+    let killed = false
     try {
       await deps.execFileAsync('tmux', ['kill-session', '-t', sessionName], { timeout: 5000 })
       console.log(`[${logTag}] Hibernated team agent "${sessionName}" (${agentId})`)
-      return true
+      killed = true
     } catch {
       // Session may not exist (already offline) — not an error
-      return false
     }
+    // TRDD-EC9DB4GM: this kills tmux directly (not via runtime.killSession), so it revokes the
+    // session secret itself — in both outcomes, because "no such session" means a dead pane too.
+    // The outer catch below reads a throw as "agent not found", so a failed revocation is logged
+    // loudly rather than lost.
+    try {
+      await deps.revokeSessionSecret(agentId)
+    } catch (err) {
+      console.error(`[${logTag}] FAILED to revoke the session secret of "${sessionName}" (${agentId}):`, err)
+    }
+    return killed
   } catch {
     // Agent not found in registry — skip
     return false

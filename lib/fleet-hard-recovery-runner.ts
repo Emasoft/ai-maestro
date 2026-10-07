@@ -21,7 +21,7 @@
 // crash_loop is reported on the TRANSITION into it, then held silent until the agent leaves the
 // dead set (which resets its ladder entirely).
 
-import { getAgent } from '@/lib/agent-registry'
+import { getAgent, revokeSessionSecret } from '@/lib/agent-registry'
 import { killSessionSync } from '@/lib/agent-runtime'
 import { computeSessionName } from '@/types/agent'
 import {
@@ -67,6 +67,9 @@ export function defaultHardRecoveryDeps(fireEnabled: boolean, now: () => number 
       const sessions = agent?.sessions || []
       for (const s of sessions) killSessionSync(computeSessionName(name, s.index))
       if (sessions.length === 0) killSessionSync(name)
+      // TRDD-EC9DB4GM: killSessionSync does not revoke. The relaunch that follows mints a fresh
+      // secret, but until it does (or if it is refused) the dead pane's secret must not authenticate.
+      await revokeSessionSecret(agentId)
       return { ok: true, detail: 'remnant teardown attempted' }
     },
     // actuationBlocked + bootRestoreInFlight default to the real readers inside the actuator.

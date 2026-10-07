@@ -53,6 +53,7 @@ import {
   searchAgents,
   linkSession,
   unlinkSession,
+  revokeSessionSecret,
 } from '@/lib/agent-registry'
 import { resolveAgentIdentifier } from '@/lib/messageQueue'
 import { getHosts, getSelfHost, getSelfHostId, isSelf } from '@/lib/hosts-config'
@@ -2710,6 +2711,9 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
       await unlinkSession(agentId, sessionIndex)
       // Clear stale activity so that if this session name is reused, idle-checks start fresh
       sessionActivity.delete(sessionName)
+      // TRDD-EC9DB4GM: a pane that died on its own (crash, tmux server restart) never went through
+      // killSession, so its secret is still valid — revoke it here too.
+      await revokeSessionSecret(agentId)
 
       return {
         data: {
@@ -2754,10 +2758,10 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
 
     // Post-gate: Invalidate AID session secret — the old AID_AUTH is no longer valid
     // A new secret will be generated when the agent is woken again.
-    try {
-      const { updateAgent: updAgent } = await import('@/lib/agent-registry')
-      await updAgent(agentId, { metadata: { sessionSecretHash: null } } as any)
-    } catch { /* non-fatal — secret will be overwritten on next wake */ }
+    // TRDD-EC9DB4GM: runtime.killSession above already revoked it, but its failure is swallowed by
+    // the try/catch around that kill, so this explicit call is the one that surfaces a failure
+    // (no longer "non-fatal": a swallowed failure left a live credential for a dead pane).
+    await revokeSessionSecret(agentId)
 
     // Mark the agent OFFLINE in the registry. The mirror of the wake case: a
     // hibernate whose registry write never lands leaves boot-restore convinced the

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { killSessionSync } from '@/lib/agent-runtime'
+import { revokeSessionSecretForSession } from '@/lib/agent-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 
@@ -34,6 +35,8 @@ export async function POST(
     }
 
     killSessionSync(sessionName)
+    // TRDD-EC9DB4GM: killSessionSync does not revoke; the killed pane's session secret must die with it.
+    await revokeSessionSecretForSession(sessionName)
     return NextResponse.json({ success: true, killed: sessionName })
   } catch (error) {
     console.error('[Sessions Kill] Error:', error)

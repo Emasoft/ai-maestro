@@ -838,6 +838,31 @@ export async function updateAgent(id: string, updates: UpdateAgentRequest): Prom
 }
 
 /**
+ * Revoke an agent's session secret (the mst_ value behind AID_AUTH) by clearing its stored hash.
+ *
+ * WHY THIS EXISTS (TRDD-EC9DB4GM): the secret has no expiry of its own — its only lifetime is
+ * "the hash is in the registry". Only hibernate used to clear it, so a session ended any other
+ * way (kill, delete-session, refused launch, reconcile, team freeze) left a credential that
+ * still authenticated after the pane that held it was gone. Every path that ends a session now
+ * routes through here: `TmuxRuntime.killSession` calls `revokeSessionSecretForSession`, and the
+ * paths that cannot (sync kills, in-lock registry kills) are listed beside `killSessionSync`.
+ *
+ * No-op when no hash is stored, so it never rewrites the registry for nothing. A write failure
+ * propagates — a revocation that silently did not happen is the bug this closes.
+ */
+export async function revokeSessionSecret(agentId: string): Promise<void> {
+  const agent = getAgent(agentId, true)
+  if (!agent?.metadata?.sessionSecretHash) return
+  await updateAgent(agentId, { metadata: { sessionSecretHash: null } })
+}
+
+/** `revokeSessionSecret` for the agent a tmux session name belongs to; no-op for a name that resolves to no agent. */
+export async function revokeSessionSecretForSession(sessionName: string): Promise<void> {
+  const agent = getAgentBySession(sessionName)
+  if (agent) await revokeSessionSecret(agent.id)
+}
+
+/**
  * Update agent metrics
  * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
@@ -905,6 +930,13 @@ export async function incrementAgentMetric(
 function killAgentSessions(agent: Agent): void {
   const agentName = agent.name || agent.alias
   if (!agentName) return
+
+  // TRDD-EC9DB4GM: the pane that held the session secret is being killed, so drop its hash from
+  // the row too. `agent` is the live element of the caller's array and deleteAgent (soft and
+  // hard) saves that array afterwards, so this lands in the same write — no second registry
+  // write inside the lock this runs under. A soft-deleted row is kept for resurrection, and
+  // without this a rolled-back delete would revalidate the dead pane's secret.
+  if (agent.metadata?.sessionSecretHash) agent.metadata.sessionSecretHash = null
 
   // Kill sessions for all indices in the sessions array
   const sessions = agent.sessions || []
@@ -1616,6 +1648,11 @@ export async function removeSessionFromAgent(agentId: string, sessionIndex: numb
       // Session might not exist
     }
   }
+
+  // TRDD-EC9DB4GM: same as killAgentSessions — the killed pane's secret hash goes with it, in this
+  // write. This runs inside the 'agents' lock, so it cannot call revokeSessionSecret.
+  const meta = agents[index].metadata
+  if (meta?.sessionSecretHash) meta.sessionSecretHash = null
 
   // Remove from array
   agents[index].sessions.splice(sessionIdx, 1)

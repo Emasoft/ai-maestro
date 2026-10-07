@@ -77,7 +77,7 @@ vi.mock('child_process', async importOriginal => {
       cb(null, { stdout: '', stderr: '' }),
   }
 })
-vi.mock('@/lib/agent-registry', () => ({ getAgent: () => null }))
+vi.mock('@/lib/agent-registry', () => ({ getAgent: () => null, revokeSessionSecret: async () => undefined }))
 
 // A governance broadcast is a websocket fan-out to live clients — environment, not guard.
 // It MUST return a promise: the callers treat it as fire-and-forget and attach `.catch()`

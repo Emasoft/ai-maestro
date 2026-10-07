@@ -73,6 +73,9 @@ const {
       searchAgents: vi.fn().mockReturnValue([]),
       linkSession: vi.fn(),
       unlinkSession: vi.fn(),
+      // TRDD-EC9DB4GM: hibernateAgent revokes the session secret through this (real impl is pinned
+      // in tests/unit/session-secret-revoked-on-session-end.test.ts).
+      revokeSessionSecret: vi.fn().mockResolvedValue(undefined),
       // R42.8(h): lib/ledger-emit imports registryLedger FROM this module, so the
       // dynamic import in the unblock path resolves through this mock. Without it the
       // service throws and reports 500 — exactly the failure mode the comment on

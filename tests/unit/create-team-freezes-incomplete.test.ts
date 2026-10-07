@@ -62,6 +62,7 @@ vi.mock('@/lib/agent-registry', () => ({
     return agent
   },
   loadAgents: () => Array.from(registry.values()).filter(a => !a.deletedAt),
+  revokeSessionSecret: async () => undefined, // TRDD-EC9DB4GM: the team freeze revokes through it
 }))
 
 vi.mock('@/lib/governance', () => ({

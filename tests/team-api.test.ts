@@ -71,6 +71,7 @@ vi.mock('@/lib/agent-registry', () => ({
   loadAgents: vi.fn(() => []),
   getAgent: vi.fn(() => null),
   updateAgent: vi.fn(),
+  revokeSessionSecret: vi.fn(async () => undefined), // TRDD-EC9DB4GM: team freeze revokes through it
 }))
 
 // Mock agent-auth module - in tests, trust X-Agent-Id directly (no real API keys in test environment)

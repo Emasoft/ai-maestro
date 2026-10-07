@@ -2686,7 +2686,10 @@ const routes: Route[] = [
     })
     const response = await mod.POST(fakeReq)
     const data = await response.json()
-    sendJson(res, response.status, data)
+    // The route mints a fresh session on success (TRDD-32PK69ND); sendJson alone would drop
+    // that Set-Cookie and leave the changer logged out.
+    const setCookie = response.headers.get('set-cookie')
+    sendJson(res, response.status, data, setCookie ? { 'Set-Cookie': setCookie } : undefined)
   }},
   { method: 'GET', pattern: /^\/api\/governance\/reachable$/, paramNames: [], handler: async (req, res, _params, query) => {
     // SECURITY (headless parity with app/api/governance/reachable/route.ts's enforceAuth):

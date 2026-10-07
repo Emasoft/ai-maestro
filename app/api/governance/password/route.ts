@@ -12,6 +12,7 @@ import { enforceSystemOwner } from '@/lib/route-auth'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { loadSecurityConfig } from '@/lib/security-config'
+import { createSession, buildSessionCookie } from '@/lib/session-auth'
 
 const PasswordSchema = z.object({
   password: z.string().min(1).max(256),
@@ -69,6 +70,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Password must be at least ${cfg.minLength} characters` }, { status: 400 })
     }
 
+    // Decide whether the caller gets a replacement cookie BEFORE the change: setPassword() ends
+    // every session, including the one that authenticated THIS request, so re-checking the caller
+    // afterwards finds no session and would never mint (TRDD-32PK69ND).
+    const callerAuth = authenticateFromRequest(request)
+    const callerIsOwner = !callerAuth.error && buildAuthContext(callerAuth).isSystemOwner
+
     const result = await setGovernancePassword(parsed.data)
 
     // Defense-in-depth: guard against service returning undefined at runtime
@@ -79,7 +86,20 @@ export async function POST(request: NextRequest) {
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
-    return NextResponse.json(result.data, { status: result.status })
+    // Owner ruling (TRDD-32PK69ND): "if the person changes the password all sessions are to be
+    // considered expired and a new cookie must be created". setPassword() already ended every
+    // session, including the changer's own; mint the replacement HERE, after success only, so a
+    // failed change neither logs anyone out nor sets a cookie. Mirrors password/reset/route.ts.
+    // Guard the mint on the caller being the system owner, independently of the gate above: an
+    // agent-authenticated caller must never be handed an owner session cookie, even if that earlier
+    // gate is ever moved or loosened.
+    if (!callerIsOwner) {
+      return NextResponse.json(result.data, { status: result.status })
+    }
+    const token = await createSession()
+    const response = NextResponse.json(result.data, { status: result.status })
+    response.headers.set('Set-Cookie', buildSessionCookie(token))
+    return response
   } catch (error) {
     console.error('[governance] password POST error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -4,7 +4,7 @@ status: tasked
 title: TRDD write gate disagreement on mandated-by field between CLI set and API route
 column: todo
 created: 2026-09-06T03:01:01+0200
-updated: 2026-09-06T03:14:48+0200
+updated: 2026-10-07T05:55:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -45,7 +45,7 @@ Note: the canonical spelling of the top rung — `self` vs `none` — is a pendi
 
 ## Acceptance
 
-- [ ] a test proves `trddgrep set <id> mandated-by <off-ladder value>` is refused with the same reason the API route gives
+- [x] a test proves `trddgrep set <id> mandated-by <off-ladder value>` is refused with the same reason the API route gives
 - [ ] a test proves `trddgrep set <id> mandated-by self` and `trddgrep set <id> mandated-by none` are both accepted (readers alias them)
 
 

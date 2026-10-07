@@ -4,7 +4,7 @@ title: A failed read of the agent registry must not be followed by a write that 
 column: todo
 status: tasked
 created: 2026-10-05T07:14:55+0200
-updated: 2026-10-05T07:14:55+0200
+updated: 2026-10-07T05:28:57+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -31,12 +31,12 @@ A writer that built its new content from a read which FAILED must refuse to writ
 
 ## Acceptance
 
-- [ ] The claims above re-read by the implementer at the cited sites before any change
-- [ ] createAgent refuses when the registry exists but is unreadable; nothing is written; the error names the file
-- [ ] the transfer import refuses the same way
-- [ ] the G08 undo path read end to end; fixed or shown safe
-- [ ] a first-run host (no registry file) still creates its first agent
-- [ ] each refusal has a test on a temp state root that fails with the guard removed; no test writes the real registry
+- [x] The claims above re-read by the implementer at the cited sites before any change
+- [x] createAgent refuses when the registry exists but is unreadable; nothing is written; the error names the file
+- [x] the transfer import refuses the same way
+- [x] the G08 undo path read end to end; fixed or shown safe
+- [x] a first-run host (no registry file) still creates its first agent
+- [x] each refusal has a test on a temp state root that fails with the guard removed; no test writes the real registry
 
 ## Approval log
 

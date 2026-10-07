@@ -4,7 +4,7 @@ status: tasked
 title: createNewTeam has no team-level compensation - a failure after saveTeams leaves the team and its COS behind under a 500
 column: todo
 created: 2026-09-06T03:38:49+0200
-updated: 2026-10-07T05:31:40+0200
+updated: 2026-10-07T06:13:32+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -51,6 +51,7 @@ The existing `cosWorkDir` bookkeeping is already a partial precedent for this sh
 
 - [x] a test proves a throw after saveTeams leaves NO team record and NO COS agent behind (fixture: make a later gate throw)
 - [ ] a test proves the compensations run in reverse order and the original error is what the caller receives
+- [x] RECORD 2026-10-07 (main session, alone, Edit tool both ways): with the team-delete step disabled, and separately with the COS agent-delete step disabled, tests/unit/create-team-compensation.test.ts reddens its case 'a throw at the freeze leaves no team record, no COS agent record and no COS folder' (1 of 3 each time); restored, 3 of 3 green, tree diff empty. The workdir-removal step was not neutered separately.
 
 ## Approval log
 

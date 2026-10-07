@@ -140,10 +140,17 @@ export async function mintTrddDecisionToken(
   // Lazy require, exactly as issuerStillValid does it: one lookup shape for mint and verify.
   let callerTitle = ''
   if (ctx.agentId) {
-    const reg = require('@/lib/agent-registry') as {
-      loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
+    // Guarded like issuerStillValid: an unreadable registry must leave the decision standing and
+    // unverifiable (null), never throw out of a mint whose callers await it with no catch.
+    try {
+      const reg = require('@/lib/agent-registry') as {
+        loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
+      }
+      callerTitle = (reg.loadAgents().find(a => a.id === ctx.agentId && !a.deletedAt)?.governanceTitle || '').toLowerCase()
+    } catch (err) {
+      console.error('[trdd-approval-token] issuer title lookup failed; minting nothing:', err)
+      return null
     }
-    callerTitle = (reg.loadAgents().find(a => a.id === ctx.agentId && !a.deletedAt)?.governanceTitle || '').toLowerCase()
   }
   // The SIGNED title must be the issuer's real one. Every non-COS agent used to be signed as
   // 'manager', and the verifier's issuer check compares the signed title to the issuer's current

@@ -178,4 +178,18 @@ describe('mandate-token on create', () => {
     const created = create.createTrdd(designDir, { title: 'a mandate', taskType: 'feature', minApproval: 'manager', authorAuthority: 'manager', author: AUTHOR })
     expect(await tok.recordMandateToken({ isSystemOwner: false, agentId: 'mem-2', governanceTitle: 'manager' }, created)).toBeNull()
   })
+
+  it('an unreadable registry mints nothing and does not throw', async () => {
+    const created = create.createTrdd(designDir, { title: 'a mandate', taskType: 'feature', minApproval: 'manager', authorAuthority: 'manager', author: AUTHOR })
+    const reg = require('@/lib/agent-registry') as { loadAgents: () => unknown }
+    const real = reg.loadAgents
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    reg.loadAgents = () => { throw new Error('registry unreadable') }
+    try {
+      await expect(tok.recordMandateToken(MANAGER_CTX, created)).resolves.toBeNull()
+    } finally {
+      reg.loadAgents = real
+      err.mockRestore()
+    }
+  })
 })

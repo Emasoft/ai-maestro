@@ -50,6 +50,7 @@ import { TRDD_AUTHORITY } from '@/lib/authorization'
 import { readMinApproval } from '@/lib/trdd-authz'
 import { readTrdd } from '@/lib/trdd-store'
 import { randomUUID } from 'crypto'
+import fs from 'fs'
 
 /** The scope every TRDD approval/mandate token carries. */
 export const TRDD_APPROVE_SCOPE = 'trdd:approve'
@@ -133,11 +134,14 @@ export async function mintTrddDecisionToken(
   // SYSTEM_OWNER_ISSUER for why that needs a sentinel rather than a lookup.
   const issuerAgentId = ctx.agentId ?? SYSTEM_OWNER_ISSUER
   const callerTitle = (ctx.governanceTitle || '').toLowerCase()
-  const issuerTitle: PortfolioIssuerTitle = !ctx.agentId
-    ? 'user'
-    : callerTitle === 'chief-of-staff'
-      ? 'chief-of-staff'
-      : 'manager'
+  // The SIGNED title must be the issuer's real one. Every non-COS agent used to be signed as
+  // 'manager', and the verifier's issuer check compares the signed title to the issuer's current
+  // registry title — so an orchestrator's token could never verify (TRDD-ADYYHLIC). A title with
+  // no rung on the approval ladder mints nothing: there is no honest title to sign.
+  const AGENT_ISSUER_TITLES: readonly PortfolioIssuerTitle[] = ['manager', 'chief-of-staff', 'orchestrator']
+  const agentTitle = AGENT_ISSUER_TITLES.find(t => t === callerTitle)
+  if (ctx.agentId && !agentTitle) return null
+  const issuerTitle: PortfolioIssuerTitle = agentTitle ?? 'user'
 
   const now = new Date()
   const token: PortfolioToken = {
@@ -177,6 +181,31 @@ export async function mintTrddDecisionToken(
     console.error('[trdd-approval-token] mint failed; the approval stands but is unverifiable:', err)
     return null
   }
+}
+
+/**
+ * Make a freshly created MANDATE verifiable (TRDD-ADYYHLIC). WHY: `createTrdd` writes
+ * `mandate: true` / `approval-judge:` but mints nothing, so verify rejected every legitimate
+ * server-issued mandate above `none` exactly like a hand-typed forgery. The token needs the
+ * card id, which exists only after createTrdd, so it is minted and recorded here, after.
+ * `none` self-mandates and proposals get no token (verify needs none). A failed mint leaves the
+ * card created without the field — the same degradation as approve — and returns null.
+ */
+export async function recordMandateToken(
+  ctx: AuthContext,
+  created: { id: string; file: string; mandate: boolean; minApproval: string },
+): Promise<string | null> {
+  if (!created.mandate || created.minApproval === 'none') return null
+  const tokenId = await mintTrddDecisionToken(ctx, created.id, 'mandate')
+  if (!tokenId) return null
+  const text = fs.readFileSync(created.file, 'utf8')
+  // createTrdd always writes `approval-datetime:` on a mandate; its absence is a broken invariant.
+  if (!/^approval-datetime: .*$/m.test(text)) throw new Error(`mandate card ${created.id} has no approval-datetime line to anchor mandate-token`)
+  const next = text.replace(/^(approval-datetime: .*)$/m, `$1\n${MANDATE_TOKEN_FIELD}: ${tokenId}`)
+  const tmp = `${created.file}.tmp`
+  fs.writeFileSync(tmp, next, 'utf8')
+  fs.renameSync(tmp, created.file)
+  return tokenId
 }
 
 /** What a caller learns when it asks "is this card's approval real?". */

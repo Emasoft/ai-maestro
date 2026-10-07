@@ -42,6 +42,7 @@ let home: string
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'aim-restore-owner-'))
   vi.stubEnv('HOME', home)
+  vi.resetModules() // or every test after the first reuses modules bound to a deleted HOME
   mockAuthenticate.mockReset(); restore.mockClear(); del.mockClear()
 })
 afterEach(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) })

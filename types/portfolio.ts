@@ -37,7 +37,7 @@ export type PortfolioTokenKind = 'approval' | 'mandate'
  * "issuer authority below what this card requires" — the one approval that must
  * always hold, failing.
  */
-export type PortfolioIssuerTitle = 'manager' | 'chief-of-staff' | 'user'
+export type PortfolioIssuerTitle = 'manager' | 'chief-of-staff' | 'orchestrator' | 'user'
 
 /**
  * The reserved `issuer_agent_id` of a token minted by the HUMAN OWNER, who has no

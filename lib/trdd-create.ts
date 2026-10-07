@@ -194,6 +194,9 @@ export interface CreateTrddResult {
   file: string
   zone: TrddZone
   column: string
+  /** The effective floor written to the card, and whether the author's authority met it (a mandate, not a proposal). */
+  minApproval: string
+  mandate: boolean
   /**
    * Set ONLY when the card was minted WITHOUT `project-id:` — one line naming the
    * source that was missing. The mint still succeeded; this is a nag, not an error,
@@ -385,5 +388,5 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   const tmp = `${file}.tmp`
   fs.writeFileSync(tmp, lines.join('\n'), 'utf8')
   fs.renameSync(tmp, file)
-  return { id, file, zone, column, ...(projectId && 'why' in projectId ? { warning: projectId.why } : {}) }
+  return { id, file, zone, column, minApproval, mandate: isMandate, ...(projectId && 'why' in projectId ? { warning: projectId.why } : {}) }
 }

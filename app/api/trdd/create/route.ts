@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/route-auth'
 import { resolveDesignDir } from '@/lib/trdd-design-dir'
 import { createTrdd } from '@/lib/trdd-create'
+import { recordMandateToken } from '@/lib/trdd-approval-token'
 import { AUTHORITY_RANK } from '@/lib/trdd-vocabulary'
 
 export const dynamic = 'force-dynamic'
@@ -63,7 +64,10 @@ export async function POST(request: NextRequest) {
       eht: list('eht'),
       body: str('body'),
     })
-    return NextResponse.json(result, { status: 201 })
+    // A mandate above `none` is only verifiable with a signed token (TRDD-ADYYHLIC); a null
+    // token (ledger unavailable) leaves the card created and reported unverifiable.
+    const mandateToken = await recordMandateToken(ctx, result)
+    return NextResponse.json({ ...result, ...(mandateToken ? { mandateToken } : {}) }, { status: 201 })
   } catch (err) {
     // createTrdd throws on caller mistakes (bad title/type/column), on the loud RNG
     // backstop, and on a zone it cannot read (a non-ENOENT error from idTaken). The

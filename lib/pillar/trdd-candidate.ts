@@ -47,9 +47,10 @@ export const WRITE_ONCE_FIELDS = ['created-by', 'created'] as const
  * `mandated-by`) are written ONLY by the code paths that make those decisions — `createTrdd` at
  * mint, `promoteTrdd` at approval — never by a generic field write, where they would be a forged
  * approval the D4 watchdog then trusts. `verdict-token` is minted by `advanceColumn`'s callers
- * (TRDD-06G43RK2); a hand-written id is only caught by the verifier, so the tools refuse it too.
+ * (TRDD-06G43RK2); a hand-written id is only caught by the verifier, so the tools refuse it too. `mandate-token` is
+ * minted by the create route (TRDD-ADYYHLIC) for the same reason.
  */
-export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by', 'verdict-token', 'approval-token'] as const
+export const RECORD_ONLY_FIELDS = ['approval-judge', 'approval-datetime', 'mandate', 'mandated-by', 'verdict-token', 'approval-token', 'mandate-token'] as const
 
 /**
  * The ONE sentence both write paths (`trddgrep set` via `protectedFieldViolations`, and the API's

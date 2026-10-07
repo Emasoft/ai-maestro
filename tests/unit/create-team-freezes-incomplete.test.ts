@@ -120,6 +120,9 @@ vi.mock('child_process', () => ({
   },
 }))
 
+// First test pays the cold import of real registries; under a loaded machine 5s flaked.
+vi.setConfig({ testTimeout: 30_000 })
+
 const COS_ID = 'agent-cos'
 const ARCH_ID = 'agent-arch'
 const ORCH_ID = 'agent-orch'
@@ -206,9 +209,9 @@ describe('createNewTeam wires the R31 freeze (TRDD-0KMDJVON)', () => {
     const wokenIds = vi.mocked(wakeAgent).mock.calls.map(call => call[0])
     expect(new Set(wokenIds)).toEqual(new Set([ORCH_ID, INT_ID, MEMBER_ID]))
 
-    // ...and cleared the frozen flag it set.
-    const team = loadTeams().find(t => t.name === 'R31 Compensation Team') as Team
-    expect(team.frozen).not.toBe(true)
+    // ...and the team-level compensation (TRDD-C3CHP8L2) removed the team record the
+    // failed create had persisted, so no frozen husk survives either.
+    expect(loadTeams().find(t => t.name === 'R31 Compensation Team')).toBeUndefined()
 
     // Ordering guard (row37): `frozen` was cleared BEFORE any of these wakes ran, never after —
     // the non-vacuity floor (`length` > 0) proves the assertion actually ran for every wake.
@@ -273,9 +276,8 @@ describe('createNewTeam wires the R31 freeze (TRDD-0KMDJVON)', () => {
     expect(killedSessionNames).toEqual([])
     expect(wakeAgent).not.toHaveBeenCalled()
 
-    // The team record persists (createTeam ran before the freeze), but must
-    // NOT be left in a half-frozen state — the invalid state R51 forbids.
-    const onDisk = loadTeams().find(t => t.name === 'R31 Freeze-Throws Team') as Team
-    expect(onDisk.frozen).not.toBe(true)
+    // createTeam ran before the freeze, so the record existed; the team-level
+    // compensation (TRDD-C3CHP8L2) must have removed it — no half-created team.
+    expect(loadTeams().find(t => t.name === 'R31 Freeze-Throws Team')).toBeUndefined()
   })
 })

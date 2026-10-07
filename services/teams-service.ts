@@ -355,6 +355,15 @@ export async function createNewTeam(
   // freeze (inside the try) can still see what needs undoing.
   let freezeUndo: { teamId: string; hibernated: string[] } | null = null
 
+  // Team-level compensation (TRDD-C3CHP8L2). Everything this call persisted is
+  // recorded here the moment it exists, so the outer catch can reverse it: a
+  // throw after createTeam() used to leave the team record + its auto-created COS
+  // agent behind under a 500 (a husk). `autoCos` is set BEFORE the COS dir/agent
+  // are created so a partial COS creation is still seen; `id` stays null until
+  // createCosAgent returns, and the undo tolerates none/some/all of it done.
+  let createdTeamId: string | null = null
+  const autoCos: { id: string | null; workDir: string | null; dirCreated: boolean } = { id: null, workDir: null, dirCreated: false }
+
   try {
     // Validate chiefOfStaffId if provided: must be an existing AUTONOMOUS agent (not in any team)
     let cosId: string | null = params.chiefOfStaffId || null
@@ -383,6 +392,7 @@ export async function createNewTeam(
       managerId,
       agentNames
     )
+    createdTeamId = team.id
 
     // Auto-create COS agent if none was provided.
     // Every team MUST have a COS. If the caller didn't specify one, we create a new
@@ -414,6 +424,8 @@ export async function createNewTeam(
         const preexisting = existsSync(cosWorkDir)
         await mkdir(cosWorkDir, { recursive: true })
         cosWorkDirCreated = !preexisting
+        autoCos.workDir = cosWorkDir
+        autoCos.dirCreated = cosWorkDirCreated
         try {
           const cosAgent = await createCosAgent({
             name: cosName,
@@ -427,6 +439,7 @@ export async function createNewTeam(
             createSession: false,
           })
           cosId = cosAgent.id
+          autoCos.id = cosAgent.id
           // Add COS to team agentIds and set chiefOfStaffId
           await updateTeam(team.id, {
             chiefOfStaffId: cosId,
@@ -513,9 +526,8 @@ export async function createNewTeam(
     // R51/fail-fast forbids (swallowing this into a console.warn would let the
     // caller believe an unenforced team is compliant). So this call is bare
     // inside the outer try: a throw here propagates to the outer catch, which
-    // runs ONLY the freeze-undo compensation below — createNewTeam has no
-    // team-level rollback (TRDD-C3CHP8L2), so a throw after the team record
-    // and its COS are persisted leaves both behind under a 500 — and
+    // runs the freeze-undo and then the team-level compensation below
+    // (TRDD-C3CHP8L2: team record + auto-created COS are removed), and
     // the caller sees team creation fail rather than a silently-unfrozen team.
     stage('Enforcing R31 incomplete-team freeze')
     const { freezeIncompleteTeam } = await import('@/lib/team-registry')
@@ -620,12 +632,45 @@ export async function createNewTeam(
         }
       }
     }
+    // Team-level compensation (TRDD-C3CHP8L2), reverse order of creation: the
+    // auto-created COS agent and its workdir first, then the team record. Each
+    // step tolerates having nothing to do. A failing undo is NOT swallowed into a
+    // warning (R51: that would report "nothing changed" over a husk): it is
+    // appended to the error as INVALID STATE, while the original error stays first.
+    const undoFailures: string[] = []
+    if (autoCos.id) {
+      try {
+        const { deleteAgent } = await import('@/lib/agent-registry')
+        await deleteAgent(autoCos.id, true)
+      } catch (e) {
+        undoFailures.push(`COS agent ${autoCos.id}: ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    // Only a dir THIS call created is ours to remove (a pre-existing one may hold user data).
+    if (autoCos.dirCreated && autoCos.workDir) {
+      try {
+        const { rm } = await import('fs/promises')
+        await rm(autoCos.workDir, { recursive: true, force: true })
+      } catch (e) {
+        undoFailures.push(`COS workdir ${autoCos.workDir}: ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    if (createdTeamId) {
+      try {
+        await deleteTeam(createdTeamId)
+      } catch (e) {
+        undoFailures.push(`team ${createdTeamId}: ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    const invalidState = undoFailures.length
+      ? ` — INVALID STATE: could not revert ${undoFailures.join('; ')}`
+      : ''
     // TeamValidationException carries a specific HTTP status code from governance rules
     if (error instanceof TeamValidationException) {
-      return { error: error.message, status: error.code }
+      return { error: error.message + invalidState, status: error.code }
     }
     console.error('Failed to create team:', error)
-    return { error: error instanceof Error ? error.message : 'Failed to create team', status: 500 }
+    return { error: (error instanceof Error ? error.message : 'Failed to create team') + invalidState, status: 500 }
   }
 }
 

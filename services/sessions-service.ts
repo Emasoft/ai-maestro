@@ -27,7 +27,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import type { Session } from '@/types/session'
-import { getAgentBySession, getAgentByName, createAgent, deleteAgentBySession, renameAgentSession } from '@/lib/agent-registry'
+import { getAgentBySession, getAgentByName, createAgent, renameAgentSession } from '@/lib/agent-registry'
 import { loadAgents, linkSession, unlinkSession } from '@/lib/agent-registry'
 import { getHosts, getSelfHost, isSelf, getHostById } from '@/lib/hosts-config'
 import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
@@ -1253,9 +1253,8 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
 }
 
 /**
- * Delete a session (kill tmux + soft-delete agent).
- * Uses soft-delete by default — agent data and project folder are preserved.
- * The agent can be restored from the registry (deletedAt is set, not removed).
+ * Delete a session: kill the tmux session and unpersist it. The AGENT RECORD STAYS registered
+ * (offline) — removing an agent is DeleteAgent's job, which archives it to the cemetery first.
  */
 export async function deleteSession(sessionName: string, authContext: import('@/lib/agent-auth').AuthContext | undefined): Promise<ServiceResult<{ success: boolean; name: string; type?: string }>> {
   const agent = getAgentBySession(sessionName)
@@ -1285,11 +1284,9 @@ export async function deleteSession(sessionName: string, authContext: import('@/
   }
 
   if (isCloudAgent) {
-    if (!agent?.id) {
-      return { error: 'Cloud agent ID not found for session', status: 404, data: undefined }
-    }
-    await deleteAgentBySession(agent.id, false)
-    return { data: { success: true, name: sessionName, type: 'cloud' }, status: 200 }
+    // A cloud agent has no session to kill; the only thing this call could do was drop the record,
+    // which must go through DeleteAgent (cemetery archive first, USER ruling 2026-10-05).
+    return { error: 'Cloud agents have no session to delete; delete the agent instead (DELETE /api/agents/[id])', status: 409, data: undefined }
   }
 
   const runtime = getRuntime()
@@ -1300,8 +1297,8 @@ export async function deleteSession(sessionName: string, authContext: import('@/
 
   await runtime.killSession(sessionName)
   await unpersistSession(sessionName)
-  // Soft-delete: preserves agent data, project folder, and backup
-  await deleteAgentBySession(sessionName, false)
+  // Deliberately NO deleteAgentBySession here: a soft-delete of the record wrote no cemetery
+  // archive, so the agent vanished with nothing to resurrect. The agent stays registered, offline.
 
   return { data: { success: true, name: sessionName }, status: 200 }
 }

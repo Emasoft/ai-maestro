@@ -495,7 +495,7 @@ describe('deleteSession', () => {
     expect(result.status).toBe(404)
   })
 
-  it('handles cloud agent deletion without tmux kill', async () => {
+  it('refuses a cloud agent with 409 (no session to kill; DeleteAgent owns record removal)', async () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue({
       id: 'cloud-1',
       deployment: { type: 'cloud' },
@@ -503,21 +503,19 @@ describe('deleteSession', () => {
 
     const result = await deleteSession('cloud-agent', SYSTEM_OWNER_CTX)
 
-    expect(result.status).toBe(200)
-    expect(result.data?.type).toBe('cloud')
+    expect(result.status).toBe(409)
     expect(mockRuntime.killSession).not.toHaveBeenCalled()
-    // Implementation passes agent.id (not sessionName) to deleteAgentBySession for cloud agents
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('cloud-1', false)
+    expect(mockAgentRegistry.deleteAgentBySession).not.toHaveBeenCalled()
   })
 
-  it('removes persisted session and agent registry entry', async () => {
+  it('removes the persisted session but leaves the agent record (no cemetery archive otherwise)', async () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(null)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
     await deleteSession('my-agent', SYSTEM_OWNER_CTX)
 
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('my-agent', false)
+    expect(mockAgentRegistry.deleteAgentBySession).not.toHaveBeenCalled()
   })
 })
 

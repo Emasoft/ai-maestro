@@ -134,7 +134,6 @@ const KNOWN_BYPASSES = [
   'services/creation-helper-service.ts::createAgent',
   'services/help-service.ts::createAgent',
   'services/sessions-service.ts::createAgent',
-  'services/sessions-service.ts::deleteAgentBySession',
   'services/sessions-service.ts::renameAgentSession',
 
   // ── (b) ungated sole path — team-registry. Three of these are API ROUTES writing the store

@@ -3,8 +3,8 @@
  * REAL getAgentBySession must agree on which agent a session name denotes: an agent literally named
  * "alpha_1" is not mistaken for agent "alpha" (index 1), while "alpha_1" with no such agent still
  * reaches "alpha". The target is observed through authorization (a chief-of-staff is allowed only for
- * the team of the agent that really resolved) and, for cloud agents, through the id handed to
- * deleteAgentBySession. Only runtime / persistence / team data and the registry's WRITER are mocked.
+ * the team of the agent that really resolved) and, for cloud agents, through the 409 refusal. The
+ * agent record must survive every deleteSession (registry file byte-identical). Only runtime / persistence / team data are mocked.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import fs from 'fs'
@@ -21,9 +21,8 @@ const { fakeHome } = vi.hoisted(() => {
   return { fakeHome }
 })
 
-const { mockRuntime, mockDeleteAgentBySession, mockSessionPersistence, mockTeams } = vi.hoisted(() => ({
+const { mockRuntime, mockSessionPersistence, mockTeams } = vi.hoisted(() => ({
   mockRuntime: { sessionExists: vi.fn(), killSession: vi.fn() },
-  mockDeleteAgentBySession: vi.fn(),
   mockSessionPersistence: { persistSession: vi.fn(), loadPersistedSessions: vi.fn().mockReturnValue([]), unpersistSession: vi.fn() },
   mockTeams: { loadTeams: vi.fn() },
 }))
@@ -34,11 +33,7 @@ vi.mock('@/lib/agent-runtime', () => ({
   preflightPaneKeychain: vi.fn(),
   SHELL_READY_TIMEOUT_MS: 15000,
 }))
-// Real registry (real getAgentBySession / getAgent); only the destructive writer is replaced.
-vi.mock('@/lib/agent-registry', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/agent-registry')>()),
-  deleteAgentBySession: (...a: unknown[]) => mockDeleteAgentBySession(...a),
-}))
+// Registry is REAL, writer included: "the agent record survives" is observed on the file itself.
 vi.mock('@/lib/session-persistence', () => mockSessionPersistence)
 vi.mock('@/lib/team-registry', () => mockTeams)
 vi.mock('@/lib/governance', () => ({
@@ -57,6 +52,7 @@ vi.mock('@/services/shared-state', () => ({
 vi.mock('@/services/agent-launch-args', () => ({ resolveLaunchArgs: vi.fn() }))
 
 import { deleteSession } from '@/services/sessions-service'
+import { getAgent } from '@/lib/agent-registry'
 import type { AuthContext } from '@/lib/agent-auth'
 
 const registryFile = path.join(fakeHome, '.aimaestro', 'agents', 'registry.json')
@@ -85,7 +81,6 @@ function seed(type: 'local' | 'cloud', withAlpha1: boolean) {
 function expectNoSideEffects() {
   expect(mockRuntime.killSession).not.toHaveBeenCalled()
   expect(mockSessionPersistence.unpersistSession).not.toHaveBeenCalled()
-  expect(mockDeleteAgentBySession).not.toHaveBeenCalled()
   expect(fs.readFileSync(registryFile, 'utf8')).toBe(registryBytes) // no registry write
 }
 
@@ -109,7 +104,9 @@ describe('deleteSession target resolution — local agents', () => {
     const ownTeam = await deleteSession('alpha_1', cosOf('team-b'))
     expect(ownTeam.status).toBe(200)
     expect(mockRuntime.killSession).toHaveBeenCalledWith('alpha_1')
-    expect(mockDeleteAgentBySession).toHaveBeenCalledWith('alpha_1', false)
+    // The agent record must survive the session kill: removing it wrote no cemetery archive.
+    expect(fs.readFileSync(registryFile, 'utf8')).toBe(registryBytes)
+    expect(getAgent('id-alpha1')?.deletedAt).toBeUndefined()
   })
 
   it('both exist: the base session "alpha" still resolves to alpha', async () => {
@@ -131,24 +128,14 @@ describe('deleteSession target resolution — local agents', () => {
 })
 
 describe('deleteSession target resolution — cloud agents', () => {
-  it('both exist: "alpha_1" takes the cloud path for agent alpha_1 (id-alpha1), never id-alpha', async () => {
-    /** deleteAgentBySession receives the resolved AGENT id on the cloud branch: directly observable */
-    seed('cloud', true)
-    const r = await deleteSession('alpha_1', owner)
-    expect(r.status).toBe(200)
-    expect(r.data?.type).toBe('cloud')
-    expect(mockDeleteAgentBySession).toHaveBeenCalledTimes(1)
-    expect(mockDeleteAgentBySession).toHaveBeenCalledWith('id-alpha1', false)
-    expect(mockRuntime.killSession).not.toHaveBeenCalled()
-  })
-
-  it('only "alpha" exists: "alpha_1" takes the cloud path for agent alpha (id-alpha)', async () => {
-    /** Parsed-name fallback on the cloud branch */
-    seed('cloud', false)
-    const r = await deleteSession('alpha_1', owner)
-    expect(r.status).toBe(200)
-    expect(r.data?.type).toBe('cloud')
-    expect(mockDeleteAgentBySession).toHaveBeenCalledWith('id-alpha', false)
+  it('a cloud agent has no session: 409 for the resolved agent, no kill, registry untouched', async () => {
+    /** Both name shapes resolve, but a cloud agent is never removed through its session */
+    for (const both of [true, false]) {
+      seed('cloud', both)
+      const r = await deleteSession('alpha_1', owner)
+      expect(r.status).toBe(409)
+      expectNoSideEffects()
+    }
   })
 
   it('both exist: a chief-of-staff of alpha\'s team is refused on the cloud agent alpha_1', async () => {

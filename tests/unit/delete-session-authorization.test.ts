@@ -137,14 +137,14 @@ describe('deleteSession authorization', () => {
     expect(r.status).toBe(200)
     expect(mockRuntime.killSession).toHaveBeenCalledWith('victim')
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('victim')
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('victim', false)
+    expect(mockAgentRegistry.deleteAgentBySession).not.toHaveBeenCalled()
   })
 
   it('lets the system owner kill the session (positive control)', async () => {
     const r = await deleteSession('victim', owner)
     expect(r.status).toBe(200)
     expect(mockRuntime.killSession).toHaveBeenCalledWith('victim')
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('victim', false)
+    expect(mockAgentRegistry.deleteAgentBySession).not.toHaveBeenCalled()
   })
 
   it('lets a CHIEF-OF-STAFF kill a session of an agent in its own team (positive control)', async () => {
@@ -154,7 +154,7 @@ describe('deleteSession authorization', () => {
     const r = await deleteSession('victim', cos('team-a'))
     expect(r.status).toBe(200)
     expect(mockRuntime.killSession).toHaveBeenCalledWith('victim')
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('victim', false)
+    expect(mockAgentRegistry.deleteAgentBySession).not.toHaveBeenCalled()
   })
 })
 
@@ -171,14 +171,12 @@ describe('deleteSession authorization — cloud agents', () => {
     expect(mockRuntime.killSession).not.toHaveBeenCalled()
   })
 
-  it('lets the MANAGER delete a cloud agent: deleteAgentBySession gets the agent id, no tmux kill (positive control)', async () => {
+  it('a cloud agent has no session: the MANAGER gets 409 pointing at DeleteAgent, nothing is removed', async () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(CLOUD)
     mockAgentRegistry.getAgent.mockReturnValue(CLOUD)
     const r = await deleteSession('cloud-agent', manager)
-    expect(r.status).toBe(200)
-    expect(r.data?.type).toBe('cloud')
-    expect(mockAgentRegistry.deleteAgentBySession).toHaveBeenCalledWith('cloud-1', false)
-    expect(mockRuntime.killSession).not.toHaveBeenCalled()
+    expect(r.status).toBe(409)
+    expectNoSideEffects()
   })
 })
 

@@ -143,6 +143,8 @@ describe('the dispatch actually routes `stats` to the function', () => {
     // request, so "request to /api/teams/stats failed" cannot come from an undispatched verb —
     // and on a CI runner with NO server listening, that line (not an HTTP status) is what a
     // correctly-dispatched call produces. The unknown-command discriminator above is untouched.
-    expect(out).toMatch(/HTTP \d{3}|auth_required|request to \/api\/teams\/stats failed|taskCount/i)
+    // "timed out" is the same proof under load: only cmd_stats names /api/teams/stats, and a slow
+    // server (seen 2026-10-07 in a full-suite run) answers with the CLI's own timeout line.
+    expect(out).toMatch(/HTTP \d{3}|auth_required|request to \/api\/teams\/stats (failed|timed out)|taskCount/i)
   })
 })

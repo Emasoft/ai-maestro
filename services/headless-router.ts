@@ -3811,13 +3811,18 @@ const routes: Route[] = [
   // Forwarded to the Next route, never reimplemented: the copies here ran with NO handler-level
   // authentication, and DELETE passed a hard-coded `{ isSystemOwner: true }` to DeleteAgent, so in
   // headless mode the caller's identity never reached the delete pipeline. One handler, one gate.
-  ...(['GET', 'POST', 'DELETE'] as const).map((method) => ({
-    method, pattern: /^\/api\/help\/agent$/, paramNames: [] as string[],
-    handler: async (req: IncomingMessage, res: ServerResponse) => {
-      const mod = await import('@/app/api/help/agent/route')
-      await delegateNextRoute(req, res, mod[method] as unknown as NextRouteHandler, '/api/help/agent', { method })
-    },
-  })),
+  { method: 'GET', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/help/agent/route')
+    await delegateNextRoute(req, res, mod.GET as unknown as NextRouteHandler, '/api/help/agent', { method: 'GET' })
+  }},
+  { method: 'POST', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/help/agent/route')
+    await delegateNextRoute(req, res, mod.POST as unknown as NextRouteHandler, '/api/help/agent', { method: 'POST' })
+  }},
+  { method: 'DELETE', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/help/agent/route')
+    await delegateNextRoute(req, res, mod.DELETE as unknown as NextRouteHandler, '/api/help/agent', { method: 'DELETE' })
+  }},
 
   // =========================================================================
   // Creation Helper (Haephestos)

@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
     userName: trimmedUserName,
     message: 'Bootstrap complete. You are now logged in.',
   })
-  response.headers.set('Set-Cookie', buildSessionCookie(token))
+  // WHY: same Secure-flag rule as auth/login — every session-minting route must derive it from the request scheme, else an https login cookie is Secure and a password-change/reset/setup cookie for the same session is not.
+  response.headers.set('Set-Cookie', buildSessionCookie(token, request.url.startsWith('https')))
   return response
 }

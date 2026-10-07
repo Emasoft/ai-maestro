@@ -96,9 +96,19 @@ export async function POST(request: NextRequest) {
     if (!callerIsOwner) {
       return NextResponse.json(result.data, { status: result.status })
     }
-    const token = await createSession()
+    // The password HAS changed and every session is gone. If minting the replacement throws, the outer
+    // catch would answer 500 for a change that happened — telling the owner it failed. Report success
+    // with no cookie and tell the client to log in again.
+    let token: string
+    try {
+      token = await createSession()
+    } catch (err) {
+      console.error('[governance] password changed but new session creation failed:', err)
+      return NextResponse.json({ ...result.data, sessionCreated: false, loginRequired: true }, { status: result.status })
+    }
     const response = NextResponse.json(result.data, { status: result.status })
-    response.headers.set('Set-Cookie', buildSessionCookie(token))
+    // WHY: same Secure-flag rule as auth/login — every session-minting route must derive it from the request scheme, else an https login cookie is Secure and a password-change/reset/setup cookie for the same session is not.
+    response.headers.set('Set-Cookie', buildSessionCookie(token, request.url.startsWith('https')))
     return response
   } catch (error) {
     console.error('[governance] password POST error:', error)

@@ -73,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.doUnmock('@/lib/session-auth') // (h) mocks createSession; doMock survives resetModules
   vi.restoreAllMocks()
   rmSync(dir, { recursive: true, force: true })
 })
@@ -107,6 +108,42 @@ describe('password change ends every session and mints a new cookie', () => {
     expect(res.status).toBe(200)
     expect(sess.validateSession(oldToken)).toBe(false)
     expect(sess.validateSession(tokenOf(res.headers.get('set-cookie')))).toBe(true)
+  })
+
+  it('(g) the new cookie carries Secure on an https request and not on http', async () => {
+    await setup()
+    const { POST } = await import('@/app/api/governance/password/route')
+    const mk = (url: string, cur: string) => new NextRequest(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: cur === OLD ? NEW : OLD, currentPassword: cur }),
+    })
+    const https = await POST(mk('https://localhost/api/governance/password', OLD))
+    expect(https.headers.get('set-cookie')).toMatch(/; Secure/)
+    const http = await POST(mk('http://localhost/api/governance/password', NEW))
+    expect(http.headers.get('set-cookie')).toMatch(/aim_session=/)
+    expect(http.headers.get('set-cookie')).not.toMatch(/Secure/)
+  })
+
+  it('(h) the password changed but createSession throws: success status, login-required body, no cookie', async () => {
+    stubGates()
+    const gov = await import('@/lib/governance')
+    await gov.setPassword(OLD)
+    vi.doMock('@/lib/session-auth', async (orig) => ({
+      ...(await orig<object>()),
+      createSession: async () => { throw new Error('session store down') },
+    }))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { POST } = await import('@/app/api/governance/password/route')
+
+    const res = await POST(post({ password: NEW, currentPassword: OLD }))
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('set-cookie')).toBeNull()
+    const j = await res.json()
+    expect(j.loginRequired).toBe(true)
+    expect(j.sessionCreated).toBe(false)
+    expect(await gov.verifyPassword(NEW)).toBe(true) // the change really happened
   })
 
   it('(b) a failed change (wrong current password only) sets no cookie and invalidates nothing', async () => {

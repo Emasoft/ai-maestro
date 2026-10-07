@@ -87,7 +87,7 @@ const WINDOW_MS = 15 * 60_000
  * honestly (only POLICY tuning resets — no secrets live there). Finally the rate-limit bucket is
  * cleared and an auto-login session is minted.
  */
-async function finalizeReset(newPassword: string, rlKey: string): Promise<NextResponse> {
+async function finalizeReset(newPassword: string, rlKey: string, isSecure: boolean): Promise<NextResponse> {
   const wasUnlocked = isUnlocked()
   await setPassword(newPassword)
 
@@ -107,7 +107,8 @@ async function finalizeReset(newPassword: string, rlKey: string): Promise<NextRe
       ? 'Password reset. Custom security-policy settings reverted to their defaults.'
       : 'Password reset. You are now logged in.',
   })
-  response.headers.set('Set-Cookie', buildSessionCookie(token))
+  // WHY: same Secure-flag rule as auth/login — every session-minting route must derive it from the request scheme, else an https login cookie is Secure and a password-change/reset/setup cookie for the same session is not.
+  response.headers.set('Set-Cookie', buildSessionCookie(token, isSecure))
   return response
 }
 
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Proven possession ⇒ run the EXACT same tail as console/email.
-    return finalizeReset(body.newPassword, rlKey)
+    return finalizeReset(body.newPassword, rlKey, request.url.startsWith('https'))
   }
 
   // ── 1. Method gate — FIRST, so a caller we will reject never consumes a rate-limit slot
@@ -293,5 +294,5 @@ export async function POST(request: NextRequest) {
   // ── 6. Verified code IS the authorization — run the shared tail (setPassword with NO
   // old-password check + securityPolicyReset dance + rate-limit clear + auto-login). This is
   // byte-identical to the passkey path, which reaches finalizeReset after verifying its assertion. ──
-  return finalizeReset(body.newPassword, rlKey)
+  return finalizeReset(body.newPassword, rlKey, request.url.startsWith('https'))
 }

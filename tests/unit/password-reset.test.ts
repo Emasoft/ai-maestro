@@ -54,7 +54,7 @@ function stubChannelAndSession() {
     createSession: vi.fn(async () => 'test-session-token'),
     // lib/governance.setPassword now revokes all sessions (TRDD-32PK69ND).
     invalidateAllSessions: vi.fn(),
-    buildSessionCookie: vi.fn((t: string) => `aim_session=${t}; HttpOnly; Path=/`),
+    buildSessionCookie: vi.fn((t: string, secure?: boolean) => `aim_session=${t}; HttpOnly; Path=/${secure ? '; Secure' : ''}`),
   }))
   vi.doMock('@/lib/webauthn-server', () => ({
     hasRegisteredCredentials: vi.fn(() => passkeyHasCreds),
@@ -136,6 +136,22 @@ describe('POST /api/governance/password/reset — presence-only forgot-password 
     expect(await g.verifyPassword('a-brand-new-password')).toBe(true)
     expect(await g.verifyPassword('the-forgotten-one')).toBe(false)
     expect(g.isPasswordInvalidated()).toBe(false)
+  })
+
+  it('the auto-login cookie carries Secure on an https request and not on http (TRDD-32PK69ND follow-up)', async () => {
+    const POST = await loadRoute()
+    const g = await import('@/lib/governance')
+    await g.setPassword('the-forgotten-one')
+    const mk = (url: string) => new NextRequest(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-aim-peer': CONSOLE },
+      body: JSON.stringify({ code: GOOD_CODE, newPassword: 'a-brand-new-password' }),
+    })
+    const https = await POST(mk('https://localhost/api/governance/password/reset'))
+    expect(https.headers.get('set-cookie')).toMatch(/; Secure/)
+    const http = await POST(mk('http://localhost/api/governance/password/reset'))
+    expect(http.headers.get('set-cookie')).toMatch(/aim_session=/)
+    expect(http.headers.get('set-cookie')).not.toMatch(/Secure/)
   })
 
   it('reports securityPolicyReset when the config exists but is locked (the true forgot case)', async () => {

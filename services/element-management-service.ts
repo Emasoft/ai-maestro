@@ -10345,6 +10345,16 @@ export async function CreateAgent(
         result.error = `Agent with name "${name}" already exists (id=${existingByName.id}). Choose a different name.`
         return result
       }
+      // TRDD-HNJ3T3W0: getAgentByName skips tombstones (right for "name free again"), but a
+      // tombstone whose folder is still on disk still claims that folder and its tmux session
+      // name — a new agent would silently adopt them. Refuse until restored or purged.
+      const { loadAgents: loadAgentsForTombstone } = await import('@/lib/agent-registry')
+      const tombstone = loadAgentsForTombstone().find(a =>
+        a.deletedAt && a.name?.toLowerCase() === name && a.workingDirectory && existsSync(a.workingDirectory))
+      if (tombstone) {
+        result.error = `Agent name "${name}" is held by a soft-deleted agent (id=${tombstone.id}) whose folder ${tombstone.workingDirectory} still exists. Restore that agent from the cemetery, or purge it from the cemetery, to free the name — or choose a different name.`
+        return result
+      }
       ops.push(`G01b: Name "${name}" is unique in registry`)
     }
 

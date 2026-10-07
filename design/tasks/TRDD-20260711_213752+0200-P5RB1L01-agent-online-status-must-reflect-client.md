@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-10-07T06:24:02+0200
+updated: 2026-10-07T06:24:20+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 1
@@ -19,7 +19,7 @@ relevant-rules: []
 min-approval-requirement: manager
 external-refs: ["reports/scenarios-runner/SCEN-015_2026-07-11T18-33-14Z.report.md"]
 created-by: scenario-runner
-implementation-commits: []
+implementation-commits: [baec02323]
 ---
 
 ## Problem

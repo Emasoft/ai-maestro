@@ -4,7 +4,7 @@ status: tasked
 title: Registry status and sessions never update for a created agent (general bug, not adoption-specific)
 column: planned
 created: 2026-09-10T09:48:41+0200
-updated: 2026-09-10T09:48:41+0200
+updated: 2026-10-07T05:52:41+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 task-type: bugfix
@@ -113,3 +113,4 @@ before any other event touches the registry).
       re-attempted once this card's finding lands (blocked on this card per
       WLWHVMKT's own STATE block, not tracked here via `blocked-by` since this
       card is independent and does not own WLWHVMKT's lifecycle).
+- 2026-10-07 worker finding: defect already fixed by cbe131d44 (TRDD-YOS36TZI, 2026-07-11, services/sessions-service.ts createSession now calls linkSession -> status active + sessions[]); NOT 13MZ7EFO. Real-module repro in a jailed HOME: createAgent leaves 'offline []', linkSession (what createSession now calls) makes 'active' + 1 session. Live tmux + POST /api/agents on port 23000 not run.

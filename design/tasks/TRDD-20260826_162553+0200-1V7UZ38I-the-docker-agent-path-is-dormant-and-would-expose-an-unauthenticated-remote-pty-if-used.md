@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T16:25:53+0200
-updated: 2026-09-05T10:21:06+0200
+updated: 2026-10-07T05:54:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -143,7 +143,7 @@ defects into three live ones.
       TRDD-EVO7T245's container decision
 - [ ] Duplicate host session removed, or the path made to refuse
 - [ ] Container `/term` authenticated + loopback-bound, or the path made to refuse
-- [ ] `GET /api/docker/info` gated (unconditional — independent of the ruling)
+- [x] `GET /api/docker/info` gated (unconditional — independent of the ruling)
 - [ ] Neuters recorded for every guard added
 - [ ] Positive control proving the added auth does not deny everyone
 - [ ] Ledger confirmed unmoved

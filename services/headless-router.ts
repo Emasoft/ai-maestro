@@ -789,7 +789,10 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/debug\/pty$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await getPtyDebugInfo())
   }},
-  { method: 'GET', pattern: /^\/api\/docker\/info$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'GET', pattern: /^\/api\/docker\/info$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-1V7UZ38I: mirror app/api/docker/info/route.ts (enforceAuth) — the probe must not run for an unauthenticated caller.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await getDockerInfo())
   }},
   // TRDD-R268J32X — DELEGATED, was a hand-rolled twin with NO guard of any kind. It read a

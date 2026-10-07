@@ -123,7 +123,6 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   // hosts (POST/PUT/DELETE), governance/trust (POST/DELETE), POST webhooks/{id}/test, domains/{id} (PATCH/DELETE),
   // POST creation-helper/raw-materials, POST create-persona, POST create-from-toml.
   'GET /^\\/api\\/debug\\/pty$/',
-  'GET /^\\/api\\/docker\\/info$/',
   'GET /^\\/api\\/export\\/jobs\\/([^/]+)$/',
   'DELETE /^\\/api\\/export\\/jobs\\/([^/]+)$/',
   'GET /^\\/api\\/sessions\\/activity$/',

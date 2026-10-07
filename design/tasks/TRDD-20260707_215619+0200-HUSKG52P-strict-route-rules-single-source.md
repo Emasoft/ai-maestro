@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-07T21:56:19+0200
-updated: 2026-10-07T09:30:38+0200
+updated: 2026-10-07T09:34:04+0200
 current-owner: code-review
 assignee: ai-maestro-hub-session
 priority: 1
@@ -94,6 +94,7 @@ change).
 - 2026-08-20T22:20:37+0200 — classified min-approval-requirement: manager (was UNSET, which made this proposal unroutable — nobody could know who to send it to). Floor computed from content: the card rewires the SINGLE SOURCE OF TRUTH for which routes are sudo-gated, currently spelled out in four hand-synced places. No literal D3 signal fires (it touches only this project's own source), but a mistake here UN-GATES a strict route, so it is taken as architectural / high-blast-radius and escalated one tier under the conservative principle — better safe than sorry. No approval is granted by this edit; the card is now merely routable.
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured the premise: security-registry.json, lib/sudo-guard.ts's STRICT_AGENT_RULES and STRICT_ROUTE_TO_PORTFOLIO_OP, and each handler's pathTemplate literal are still four independently hand-synced sources (no canonical table exists); the 4-way duplication this card targets is unchanged since filing.
 - 2026-10-07T09:30:38+0200 — first-request cross-check landed in 9aae7b2d6 (local; full suite pending). A disagreement now throws on every guarded request instead of at module load.
+- 2026-10-07T09:34:04+0200 — notes on 9aae7b2d6: (a) the owner's words named the password route; the check is one module-level block for all strict routes, so it was deferred for every guarded route — an interpretation, to be confirmed. (b) With a bad table every route that calls the guard throws, strict or not. (c) Nothing is logged at startup for a bad table. (d) An absent registry file is treated as checked and never retried. (e) Call-site audit by script, not by full read: 47 call sites in app routes; of the ones inside a try, none has a catch without return or throw in its first 12 lines. What the framework and the headless forwarder turn the throw into was not read. (f) Three neuters run: no call, remembered failure, check restored at load; each reddens the first-request test. (g) Not live until the server is rebuilt and restarted.
 
 ## Acceptance
 

@@ -4,7 +4,7 @@ status: tasked
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
 column: human_review
 created: 2026-07-14T17:49:31+0200
-updated: 2026-10-05T01:57:03+0200
+updated: 2026-10-07T10:25:05+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -226,3 +226,7 @@ DENY, so the fall-through should refuse an action it does not recognise rather t
 is a behaviour change with real blast radius — every MANAGER/COS action that currently relies on
 the fall-through would need an explicit branch first, or it breaks. Sequence it that way round:
 enumerate and gate the actions that legitimately pass today, THEN invert the default.
+
+## Notes
+
+- 2026-10-07T10:25:04+0200 — ahead of ruling 2: POST and DELETE /api/sessions/restore were made system-owner only in 8ec90ca14 (TRDD-SHGIKNLN), stricter than the create-session grant this card leaves unruled (manager, cosOwnTeam). No caller of either verb was found in the repo, the server, the plugin cache or the local plugin source trees. If ruling 2 means MANAGER to keep it, widen that route deliberately.

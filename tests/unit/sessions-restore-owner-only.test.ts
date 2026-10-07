@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { EventEmitter } from 'events'
 import { Readable } from 'stream'
 
@@ -34,7 +37,14 @@ const post = () => new Request('http://localhost/api/sessions/restore', {
 }) as never
 const delReq = () => new Request('http://localhost/api/sessions/restore?sessionId=s1', { method: 'DELETE' }) as never
 
-beforeEach(() => { mockAuthenticate.mockReset(); restore.mockClear(); del.mockClear() })
+// HOME is jailed: the real sessions-service and the whole headless router are imported here.
+let home: string
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), 'aim-restore-owner-'))
+  vi.stubEnv('HOME', home)
+  mockAuthenticate.mockReset(); restore.mockClear(); del.mockClear()
+})
+afterEach(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) })
 
 describe('sessions/restore mutations are system-owner only', () => {
   it('an authenticated AGENT cannot restore, and the service is never reached', async () => {
@@ -82,11 +92,15 @@ async function headless(method: string, url: string, body?: unknown) {
 }
 
 describe('sessions/restore mutations are system-owner only (headless router)', () => {
-  it('an authenticated AGENT is refused on POST and DELETE, and neither service runs', async () => {
+  it('an authenticated AGENT is refused on POST, and the restore service never runs', async () => {
     mockAuthenticate.mockReturnValue({ agentId: 'agent-1' })
     expect(await headless('POST', '/api/sessions/restore', { all: true })).toBe(403)
-    expect(await headless('DELETE', '/api/sessions/restore?sessionId=s1')).toBe(403)
     expect(restore).not.toHaveBeenCalled()
+  })
+
+  it('an authenticated AGENT is refused on DELETE, and the delete service never runs', async () => {
+    mockAuthenticate.mockReturnValue({ agentId: 'agent-1' })
+    expect(await headless('DELETE', '/api/sessions/restore?sessionId=s1')).toBe(403)
     expect(del).not.toHaveBeenCalled()
   })
 

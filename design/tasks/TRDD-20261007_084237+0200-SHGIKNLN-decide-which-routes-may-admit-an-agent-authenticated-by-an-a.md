@@ -4,7 +4,7 @@ title: Decide which routes may admit an agent authenticated by an AMP key alone
 column: dev
 status: tasked
 created: 2026-10-07T08:42:37+0200
-updated: 2026-10-07T10:17:57+0200
+updated: 2026-10-07T10:25:05+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -31,3 +31,4 @@ From the credential spec (CRED-GAP-07, CRED-UNV-07): lib/aid-token.ts describes 
 ## Notes
 
 - 2026-10-07T10:17:56+0200 — a read-only scan of every mutating route was done. First fix landed: 363292910 + 9ec296854, headless /api/help/agent forwards to the authenticated route instead of running unauthenticated copies that deleted with a hard-coded owner context. Full suite on 9ec296854: 618 files, 8177 passed, 2 skipped; eslint 0. 363292910 alone fails the headless auth-ledger test; 9ec296854 completes it. Unpinned: the real delete pipeline's answer to a non-owner caller; GET and POST through the forwarder. A design question for the owner is raised separately.
+- 2026-10-07T10:25:05+0200 — second fix landed: 8ec90ca14, POST and DELETE /api/sessions/restore are system-owner only in both server modes. Full suite 619 files / 8182 passed / 2 skipped, eslint 0, on that commit. GET on the same route stays authentication-only (it reads). The Next route also applies the write-block check; the headless handler does not. Neuters: old route, old headless router, and the headless DELETE check alone each redden their own case.

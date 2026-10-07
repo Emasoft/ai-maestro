@@ -99,6 +99,7 @@ export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; k
   let checked = 0
   let killed = 0
   let relaunched = 0
+  let attempts = 0
 
   for (const agent of loadAgents()) {
     if (agent.deletedAt) continue // skip soft-deleted (tombstone) agents
@@ -132,8 +133,10 @@ export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; k
       continue // pane still there -- wakeAgent would only report alreadyRunning
     }
 
-    if (agent.status !== 'active' || relaunchedOnce.has(agent.id) || relaunched >= MAX_RELAUNCHES_PER_SWEEP) continue
+    // The cap counts ATTEMPTS, not successes: a wake that errors may still have started a client.
+    if (agent.status !== 'active' || relaunchedOnce.has(agent.id) || attempts >= MAX_RELAUNCHES_PER_SWEEP) continue
     relaunchedOnce.add(agent.id)
+    attempts++
     try {
       const res = await wakeAgent(agent.id, { authContext: { isSystemOwner: true } })
       if ('error' in res) {

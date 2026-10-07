@@ -58,6 +58,14 @@ describe('reconcileOrphanPanesOnBoot relaunch (TRDD-FM2ERCE6)', () => {
     expect(mockWake).toHaveBeenCalledTimes(5)
   })
 
+  it('the cap counts attempts: 7 orphans whose wake is refused still cost only 5 wake calls', async () => {
+    mockWake.mockImplementation(async () => ({ error: 'refused', status: 409 }))
+    seed(Array.from({ length: 7 }, (_, i) => ({ id: `err-${i}`, name: `err-agent-${i}`, status: 'active' })))
+    const res = await reconcileOrphanPanesOnBoot()
+    expect(res).toEqual({ checked: 7, killed: 7, relaunched: 0 })
+    expect(mockWake).toHaveBeenCalledTimes(5)
+  })
+
   it('kills the dead shell then relaunches an active agent through wakeAgent exactly once', async () => {
     seed([{ id: 'id-a', name: 'agent-a', status: 'active' }])
     const res = await reconcileOrphanPanesOnBoot()

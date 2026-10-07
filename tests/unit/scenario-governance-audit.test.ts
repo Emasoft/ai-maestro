@@ -180,7 +180,9 @@ describe('assert-clean-governance.sh — predicate discrimination on the live sc
   const SCEN_DIR = path.join(REPO, 'tests', 'scenarios')
 
   function scenPath(prefix: string) {
-    const hit = fs.readdirSync(SCEN_DIR).find((f) => f.startsWith(prefix) && f.endsWith('.scen.md'))
+    // `prefix + '_'`: a split scenario also owns `SCEN-NNN-phase-*.scen.md` burst files (Rule 15), and
+    // `-` sorts before `_`, so a bare prefix would pick a burst file instead of the main scenario file.
+    const hit = fs.readdirSync(SCEN_DIR).find((f) => f.startsWith(`${prefix}_`) && f.endsWith('.scen.md'))
     expect(hit, `no scenario file starting with ${prefix}`).toBeTruthy()
     return path.join(SCEN_DIR, hit as string)
   }

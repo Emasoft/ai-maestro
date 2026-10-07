@@ -4,7 +4,7 @@ status: tasked
 title: Log each alternate's own model-scoped percent on the SCOPED-WALL verdict line
 column: todo
 created: 2026-09-09T12:28:26+0200
-updated: 2026-09-09T12:35:33+0200
+updated: 2026-10-07T05:32:11+0200
 current-owner: governance-rules-session
 created-by: governance-rules-session
 task-type: feature
@@ -25,9 +25,9 @@ ASSUMPTION to verify at verify_assumptions: the alternate loop near tick.ts:1242
 ## Proposed fix
 On a tick whose verdict carries SCOPED-WALL, log one line per alternate `alt=<account> scoped=<model>@<pct>% verdict=safe|vetoed(SAFE_SCOPED=<n>)`, using the same values the veto reads — no second measurement, no change to the veto. Omit the line when the tick is not a SCOPED-WALL (log volume).
 ## Acceptance
-- [ ] on a SCOPED-WALL tick the log names every alternate with its scoped model, percent and safe/vetoed verdict (one test; neuter: drop the percent from the format string → that test reds)
-- [ ] on a non-SCOPED-WALL tick no per-alternate scoped line is emitted (one test)
-- [ ] the veto's behaviour is unchanged: the rotator suites matching isSafeAlternate or planModelFallback stay green, `tsc --noEmit` prints 0 lines
+- [x] on a SCOPED-WALL tick the log names every alternate with its scoped model, percent and safe/vetoed verdict (one test; neuter: drop the percent from the format string → that test reds)
+- [x] on a non-SCOPED-WALL tick no per-alternate scoped line is emitted (one test)
+- [x] the veto's behaviour is unchanged: the rotator suites matching isSafeAlternate or planModelFallback stay green, `tsc --noEmit` prints 0 lines
 
 ## Approval log
 

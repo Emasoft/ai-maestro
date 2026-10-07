@@ -866,3 +866,39 @@ describe('tick — reconcile mirrors a rotated live credential into its own slot
     expect(loadState().slots).not.toHaveProperty('other@x') // but no slot is created for it — the assertion N3 reddens (its captured failing frame is this line)
   })
 })
+
+/** TRDD-8L6GZOSE — a SCOPED-WALL tick logs each alternate's own model-scoped percent (the veto's
+ *  inputs); a non-wall tick logs no such line. Captured through the injected `decide` seam. */
+describe('tick — autoRotate: per-alternate scoped log on a SCOPED-WALL tick', () => {
+  it('SCOPED-WALL tick logs every alternate with model, percent and verdict at different percents', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('low@x', blob('LOW', H8()))
+    addSlot('high@x', blob('HIGH', H8()))
+    const lines: string[] = []
+    const deps: TickDeps = {
+      decide: (m: string) => { lines.push(m) },
+      fetchImpl: stubFetch({
+        LIVE: { fh: 40, sd: 50, scoped: 97 },
+        LOW: { fh: 20, sd: 20, scoped: 10 },
+        HIGH: { fh: 10, sd: 10, scoped: 96 },
+      }),
+    }
+    await autoRotate(deps)
+    const alt = lines.filter((l) => l.includes('SCOPED-WALL alt='))
+    expect(alt.some((l) => /alt=low@x scoped=.+@10% verdict=safe$/.test(l))).toBe(true)
+    expect(alt.some((l) => /alt=high@x scoped=.+@96% verdict=vetoed\(SAFE_SCOPED=95\)$/.test(l))).toBe(true)
+    expect(alt.join('\n')).not.toMatch(/Bearer|accessToken|refreshToken/)
+  })
+
+  it('a non-SCOPED-WALL tick emits no per-alternate scoped line', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('low@x', blob('LOW', H8()))
+    const lines: string[] = []
+    const deps: TickDeps = {
+      decide: (m: string) => { lines.push(m) },
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, LOW: { fh: 20, sd: 20, scoped: 10 } }),
+    }
+    await autoRotate(deps)
+    expect(lines.some((l) => l.includes('alt='))).toBe(false)
+  })
+})

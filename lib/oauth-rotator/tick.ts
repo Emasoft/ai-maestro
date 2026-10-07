@@ -616,14 +616,17 @@ export function modelsInUse(usage: unknown): Set<string> {
  * (janitor#222): its Fable window was spent while the fleet needed no Fable at all. A non-null
  * return means only "this target does not help THIS model"; it never means "this account is
  * unhealthy", and the caller DEPRIORITIZES (the `scopedOnly` bucket) rather than drops. */
-export function scopedVetoPct(inUse: ReadonlySet<string>, candUsage: unknown): number | null {
+export function scopedVetoReading(inUse: ReadonlySet<string>, candUsage: unknown): { model: string; percent: number } | null {
   if (inUse.size === 0) return null // no evidence about the live models → nothing can veto
-  let worst: number | null = null
+  let worst: { model: string; percent: number } | null = null
   for (const l of scopedLimits(candUsage)) {
     if (l.percent === null || !inUse.has(modelFamily(l.model))) continue
-    if (worst === null || l.percent > worst) worst = l.percent
+    if (worst === null || l.percent > worst.percent) worst = { model: l.model, percent: l.percent }
   }
   return worst
+}
+export function scopedVetoPct(inUse: ReadonlySet<string>, candUsage: unknown): number | null {
+  return scopedVetoReading(inUse, candUsage)?.percent ?? null
 }
 
 /** TRUE when the live account's wall is SOLELY model-scoped: some scoped window is at/over
@@ -1276,6 +1279,7 @@ export async function autoRotate(
   // solely when `candidates` is empty — see the fallback below `isAccountWindowSafe`.
   const scopedOnly: Candidate[] = []
   const degraded: Array<[string, CredentialBlob, number]> = [] // (email, blob, expiresInH)
+  const altScopedLines: string[] = [] // per-alternate veto inputs; filled only on a SCOPED-WALL tick
   let indexHealed = false
   for (const email of Object.keys(state.slots ?? {})) {
     if (email === liveEmail) continue
@@ -1331,7 +1335,17 @@ export async function autoRotate(
       // form (`worstScopedPercent(d2)`) vetoed on ANY spent scoped window, which is the shape
       // that sidelined the fleet's healthiest account for ~123h (janitor#222). `scopedVetoPct`
       // fails OPEN on every unknown, so a candidate spent on a model nobody runs stays eligible.
-      if (!isSafeAlternate(bfh, bsd, scopedVetoPct(liveInUse, d2))) {
+      const veto = scopedVetoReading(liveInUse, d2)
+      const vetoPct = veto?.percent ?? null
+      // WHY HERE: this is the one place the veto's inputs exist; logging them later would need a
+      // second measurement. Label (email) + model + percent only — never a token (TRDD-8L6GZOSE).
+      if (scopedWall) {
+        const verdict = isSafeAlternate(bfh, bsd, vetoPct)
+          ? 'safe'
+          : vetoPct === null || vetoPct < SAFE_SCOPED ? 'vetoed(account-window)' : `vetoed(SAFE_SCOPED=${SAFE_SCOPED})`
+        altScopedLines.push(`alt=${email} scoped=${veto ? `${veto.model}@${Math.round(veto.percent)}%` : 'none'} verdict=${verdict}`)
+      }
+      if (!isSafeAlternate(bfh, bsd, vetoPct)) {
         // MODEL-SCOPED-ONLY REJECTS ARE HELD, NOT DROPPED. If this candidate fails ONLY because a
         // model window is spent — its 5h/7d are both healthy — keep it as a second-choice target.
         // It is used below only when NOTHING passes the full test, so the preferred behaviour is
@@ -1349,6 +1363,7 @@ export async function autoRotate(
     }
   }
   if (indexHealed) saveState(state) // before any switchLiveTo (it re-loads state from disk)
+  for (const line of altScopedLines) decide(deps, `auto: SCOPED-WALL ${line}`)
 
   // MODEL-SCOPED FALLBACK — the fix for `stuck: "all-maxed"` declared over a 4%-used account.
   // Placed AFTER the probe loop (it needs the final counts) and BEFORE the drain-guard, which

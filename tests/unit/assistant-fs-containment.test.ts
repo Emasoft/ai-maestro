@@ -34,6 +34,14 @@ vi.mock('@/lib/agent-registry', () => ({
   getAgent: vi.fn(() => ({ governanceTitle: 'assistant' })),
 }))
 
+// The 'wake' trigger also runs the core-plugin row, which — when the plugin is
+// absent from the fixture agent — runs a REAL `claude plugin install` (network,
+// shared ~/.claude/plugins state, ~19 s). That row is unrelated to containment,
+// so contain it at its boundary: report the plugin as present.
+vi.mock('@/services/agents-core-service', () => ({
+  isCorePluginPresent: vi.fn(async () => true),
+}))
+
 // The invariant reads project folders off the registry agent; the mock above
 // fixes the title, and these tests pass the folder lists explicitly through
 // the seeder where they matter. readAssistantLocalFolders reads process.env.

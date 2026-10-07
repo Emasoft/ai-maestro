@@ -4,7 +4,7 @@ title: One assistant-fs-containment test case takes 24 seconds alone and times o
 column: todo
 status: tasked
 created: 2026-10-07T06:13:20+0200
-updated: 2026-10-07T06:13:20+0200
+updated: 2026-10-07T06:17:02+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -29,10 +29,10 @@ The case calls enforceAgentInvariants on the 'wake' trigger for a temp workdir a
 
 ## Acceptance
 
-- [ ] The invariant (and the call inside it) that spends the 24 seconds is named, with file:line, from a measurement and not from reading
-- [ ] If it reaches a real subprocess, the network or the real home: that is contained at the boundary in the test, and stated
-- [ ] The case runs in under 2 seconds alone and still asserts what it asserted; the assertion is not weakened and the timeout is not raised
-- [ ] The same cause checked in tests/unit/teams-stats-verb.test.ts (request timeout under load) and the 60 s ratchet case in tests/governance/enforcement-coverage.test.ts: fixed if it is the same cause, otherwise recorded as separate
+- [x] The invariant (and the call inside it) that spends the 24 seconds is named, with file:line, from a measurement and not from reading
+- [x] If it reaches a real subprocess, the network or the real home: that is contained at the boundary in the test, and stated
+- [x] The case runs in under 2 seconds alone and still asserts what it asserted; the assertion is not weakened and the timeout is not raised
+- [x] The same cause checked in tests/unit/teams-stats-verb.test.ts (request timeout under load) and the 60 s ratchet case in tests/governance/enforcement-coverage.test.ts: fixed if it is the same cause, otherwise recorded as separate
 
 ## Approval log
 

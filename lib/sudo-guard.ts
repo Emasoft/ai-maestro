@@ -215,7 +215,7 @@ export function requireSudoToken(
  * in AGENT_POLICY_PENDING. A strict route in none of them still fails closed,
  * but silently and with a misleading "not available to agents" message.
  */
-export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
+export const SYSTEM_OWNER_ONLY_STRICT: ReadonlySet<string> = new Set<string>([
   'POST /api/governance/password',
   // TRDD-P7XKV3N9: setting/removing the recovery email establishes (or tears down) the
   // MAESTRO's remote password-reset relay. Both handlers gate on enforceSystemOwner —
@@ -306,7 +306,7 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
  * This set is a DEBT LEDGER: the coverage test pins it to an exact inventory,
  * so it can shrink as policies are decided but cannot silently grow.
  */
-export const AGENT_POLICY_PENDING = new Set<string>([
+export const AGENT_POLICY_PENDING: ReadonlySet<string> = new Set<string>([
   // EMPTY — the ledger is discharged (TRDD-K2WJH7RF, USER-approved 2026-07-09).
   //
   // The ten routes that sat here are now DECIDED, not merely refused:
@@ -371,7 +371,10 @@ interface StrictAgentRule {
   portfolioOp?: string
 }
 
-export const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
+// Frozen (TRDD-HUSKG52P): exported so the load-time registry check and the pinning test can
+// read it, and nothing may change it after that check ran — a rule added at runtime would
+// bypass the cross-check against security-registry.json.
+export const STRICT_AGENT_RULES: Readonly<Record<string, Readonly<StrictAgentRule>>> = Object.freeze({
   // ── TRDD-K2WJH7RF Part 1: the 3-pillars TRDD lifecycle write verbs ────────
   // `[id]` here is a TRDD id, NOT an agent id — so `targetFromPathId` must stay
   // OFF. Resolving it as an agent UUID would silently look up a nonexistent
@@ -524,7 +527,7 @@ export const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'POST /api/sessions/[id]/restart': { action: 'restart-session', session: true },
   'POST /api/sessions/[id]/kill': { action: 'delete-session', session: true },
   'DELETE /api/sessions/[id]': { action: 'delete-session', session: true },
-}
+})
 
 /**
  * TRDD-HUSKG52P — the strict set (security-registry.json) and the per-route agent

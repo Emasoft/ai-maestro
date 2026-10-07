@@ -181,12 +181,15 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
     // directly instead, so it still works for the next undecided route that
     // lands here (which is the only reason the empty set is kept at all).
     const probe = 'POST /api/trdd/[id]/approve' // a real strict route
-    AGENT_POLICY_PENDING.add(probe)
+    // The export is typed ReadonlySet so production code cannot change it; this test
+    // injects a route deliberately to reach the mechanism, so it casts on purpose.
+    const pending = AGENT_POLICY_PENDING as Set<string>
+    pending.add(probe)
     try {
       const [method, ...rest] = probe.split(' ')
       expect(await messageFor(method, rest.join(' '))).toBe(PENDING_MESSAGE)
     } finally {
-      AGENT_POLICY_PENDING.delete(probe)
+      pending.delete(probe)
     }
 
     // …and the ledger really is empty again afterwards.

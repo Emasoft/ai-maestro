@@ -8,7 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mocks
 // ============================================================================
 
-let fsStore: Record<string, string> = {}
+// vi.hoisted, not a plain `let`: lib/sudo-guard.ts reads security-registry.json through `fs`
+// at import time (TRDD-HUSKG52P), so the mocked existsSync runs while the route modules load —
+// before a plain top-level `let` leaves its temporal dead zone ("Cannot access 'fsStore'
+// before initialization"). One object, reset IN PLACE in beforeEach, so the mock never holds
+// a stale reference.
+const fsStore = vi.hoisted(() => ({}) as Record<string, string>)
 
 vi.mock('fs', () => {
   const fns = {
@@ -135,7 +140,7 @@ function makeParams(id: string) {
 // ============================================================================
 
 beforeEach(() => {
-  fsStore = {}
+  for (const k of Object.keys(fsStore)) delete fsStore[k]
   uuidCounter = 0
   vi.clearAllMocks()
 })

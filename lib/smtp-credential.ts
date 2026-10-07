@@ -66,11 +66,20 @@ function keychainAvailable(): boolean {
 
 function kcStore(account: string, password: string): void {
   // -U update-if-exists, -A allow any app to read without an ACL prompt (headless).
-  execFileSync(
-    SECURITY_BIN,
-    ['add-generic-password', '-U', '-A', '-s', KEYCHAIN_SERVICE, '-a', account, '-w', password],
-    { stdio: 'ignore' },
-  )
+  try {
+    execFileSync(
+      SECURITY_BIN,
+      ['add-generic-password', '-U', '-A', '-s', KEYCHAIN_SERVICE, '-a', account, '-w', password],
+      { stdio: 'ignore' },
+    )
+  } catch (err) {
+    // WHY: execFileSync's error message is "Command failed: <file> <every argv>", and argv holds
+    // the plaintext password after `-w`. The route does not catch this, so the message would reach
+    // Next's error log and server.mjs's crash.log (which writes error.stack). Rethrow with only the
+    // exit status / errno code; never chain the original as `cause` (it carries the argv).
+    const e = err as NodeJS.ErrnoException & { status?: number | null }
+    throw new Error(`[smtp-credential] keychain write failed (${e.code ?? `exit ${e.status ?? 'unknown'}`})`)
+  }
 }
 function kcGet(account: string): string | null {
   try {

@@ -59,3 +59,41 @@ describe('smtp-credential — file backend', () => {
     expect(mode).toBe(0o600)
   })
 })
+
+// TRDD-X5MVYUTO: the keychain add passes the password in argv, and execFileSync's failure message
+// quotes that argv. The thrown error must not carry the plaintext.
+describe('smtp-credential — keychain write failure does not leak the password', () => {
+  it('throws an error whose message, stack and cause omit the plaintext', async () => {
+    const SECRET = 'PLAINTEXT-SMTP-APP-PASSWORD-9f3a'
+    vi.resetModules()
+    vi.doMock('child_process', () => ({
+      execFileSync: (file: string, args: string[]) => {
+        // Same shape Node produces: message embeds the full command line.
+        throw Object.assign(new Error(`Command failed: ${file} ${args.join(' ')}`), { status: 1 })
+      },
+    }))
+    vi.doMock('fs', async (orig) => {
+      const actual = await orig<typeof import('fs')>()
+      return { ...actual, existsSync: (p: string) => p === '/usr/bin/security' || actual.existsSync(p) }
+    })
+    vi.stubEnv('AIM_SMTP_CRED_BACKEND', '') // let the keychain branch be selected
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    Object.defineProperty(process, 'platform', { value: 'darwin' })
+    const logged: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a) => { logged.push(a.join(' ')) })
+    try {
+      const mod = await import('@/lib/smtp-credential')
+      let caught: unknown
+      try { mod.storeSmtpPassword('me@gmail.com', SECRET) } catch (e) { caught = e }
+      expect(caught).toBeInstanceOf(Error)
+      const err = caught as Error & { cause?: unknown }
+      expect(err.message).toContain('keychain write failed')
+      expect(JSON.stringify({ m: err.message, s: err.stack, c: err.cause, logged })).not.toContain(SECRET)
+    } finally {
+      spy.mockRestore()
+      Object.defineProperty(process, 'platform', platform)
+      vi.doUnmock('child_process')
+      vi.doUnmock('fs')
+    }
+  })
+})

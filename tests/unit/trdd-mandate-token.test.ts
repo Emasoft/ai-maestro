@@ -159,7 +159,23 @@ describe('mandate-token on create', () => {
 
   it('an agent whose title has no rung on the approval ladder is minted nothing', async () => {
     const created = create.createTrdd(designDir, { title: 'a mandate', taskType: 'feature', minApproval: 'manager', authorAuthority: 'manager', author: AUTHOR })
+    agentStub.__setAgents([{ id: 'mem-1', governanceTitle: 'member', deletedAt: null }])
     expect(await tok.recordMandateToken({ isSystemOwner: false, agentId: 'mem-1', governanceTitle: 'member' }, created)).toBeNull()
     expect(text(created.file)).not.toMatch(/^mandate-token:/m)
+  })
+
+  it('an agent with NO title on its auth context (an AMP-key caller) is signed with its REGISTRY title', async () => {
+    // agentStub holds mgr-1 as manager; the context carries the id only.
+    const { created, token } = await mintAs({ isSystemOwner: false, agentId: 'mgr-1' }, 'manager', 'manager')
+    expect(token).toBeTruthy()
+    const v = await tok.verifyTrddDecision(designDir, created.id)
+    expect(v!.issuer_title).toBe('manager')
+    expect(v!.verified).toBe(true)
+  })
+
+  it('a title CLAIMED on the context but absent from the registry signs nothing', async () => {
+    agentStub.__setAgents([{ id: 'mem-2', governanceTitle: 'member', deletedAt: null }])
+    const created = create.createTrdd(designDir, { title: 'a mandate', taskType: 'feature', minApproval: 'manager', authorAuthority: 'manager', author: AUTHOR })
+    expect(await tok.recordMandateToken({ isSystemOwner: false, agentId: 'mem-2', governanceTitle: 'manager' }, created)).toBeNull()
   })
 })

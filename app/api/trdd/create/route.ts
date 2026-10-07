@@ -67,7 +67,14 @@ export async function POST(request: NextRequest) {
     // A mandate above `none` is only verifiable with a signed token (TRDD-ADYYHLIC); a null
     // token (ledger unavailable) leaves the card created and reported unverifiable.
     const mandateToken = await recordMandateToken(ctx, result)
-    return NextResponse.json({ ...result, ...(mandateToken ? { mandateToken } : {}) }, { status: 201 })
+    // Say so when a mandate above `none` could not be given a token: the receiver's verify will
+    // fail on it, and without this the issuer would only learn that from the receiver.
+    const unverifiable = result.mandate && result.minApproval !== 'none' && !mandateToken
+    return NextResponse.json({
+      ...result,
+      ...(mandateToken ? { mandateToken } : {}),
+      ...(unverifiable ? { mandateToken: null, mandateWarning: 'mandate created WITHOUT a mandate-token (the token could not be minted); verify will report it unverifiable — create it again once the audit ledger is available' } : {}),
+    }, { status: 201 })
   } catch (err) {
     // createTrdd throws on caller mistakes (bad title/type/column), on the loud RNG
     // backstop, and on a zone it cannot read (a non-ENOENT error from idTaken). The

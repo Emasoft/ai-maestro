@@ -133,7 +133,18 @@ export async function mintTrddDecisionToken(
   // The issuer IS the approver. A human owner has no agent record — see
   // SYSTEM_OWNER_ISSUER for why that needs a sentinel rather than a lookup.
   const issuerAgentId = ctx.agentId ?? SYSTEM_OWNER_ISSUER
-  const callerTitle = (ctx.governanceTitle || '').toLowerCase()
+  // The title is read from the REGISTRY, the same source the verifier's issuer re-check uses
+  // (lib/portfolio-check.ts issuerStillValid). ctx.governanceTitle is empty for an agent that
+  // authenticated with an AMP key, so reading it would mint nothing for a real MANAGER whose
+  // approval authorize() had just accepted on its registry title.
+  // Lazy require, exactly as issuerStillValid does it: one lookup shape for mint and verify.
+  let callerTitle = ''
+  if (ctx.agentId) {
+    const reg = require('@/lib/agent-registry') as {
+      loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
+    }
+    callerTitle = (reg.loadAgents().find(a => a.id === ctx.agentId && !a.deletedAt)?.governanceTitle || '').toLowerCase()
+  }
   // The SIGNED title must be the issuer's real one. Every non-COS agent used to be signed as
   // 'manager', and the verifier's issuer check compares the signed title to the issuer's current
   // registry title — so an orchestrator's token could never verify (TRDD-ADYYHLIC). A title with

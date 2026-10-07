@@ -65,6 +65,8 @@ export function requireSudoToken(
   method: string,
   pathTemplate: string
 ): NextResponse | null {
+  // Before the non-strict early return: a broken table means "not strict" cannot be trusted.
+  ensureStrictRoutesChecked()
   // Skip entirely if the route is NOT classified strict — keep behavior
   // idempotent so callers can add the guard unconditionally without
   // harming normal routes.
@@ -371,7 +373,7 @@ interface StrictAgentRule {
   portfolioOp?: string
 }
 
-// Frozen at the TOP LEVEL (TRDD-HUSKG52P): exported so the load-time registry check and the
+// Frozen at the TOP LEVEL (TRDD-HUSKG52P): exported so the first-request registry check and the
 // pinning test can read it, and no route may be added or removed after that check ran — a rule
 // added at runtime would bypass the cross-check against security-registry.json. The rule VALUES
 // and the two sets above are readonly by TYPE only; that stops TypeScript callers, not a cast.
@@ -533,13 +535,13 @@ export const STRICT_AGENT_RULES: Readonly<Record<string, Readonly<StrictAgentRul
 /**
  * TRDD-HUSKG52P — the strict set (security-registry.json) and the per-route agent
  * policy (the three declaration tables above) are one fact in two files. This
- * makes a disagreement a THROW at module load instead of a silent runtime default:
+ * makes a disagreement a THROW on the first guarded request instead of a silent runtime default:
  *   - a strict route with no declaration → every agent would get a misleading 403;
  *   - a declaration for a route that is not strict → a dead policy that reads as live;
  *   - a route declared in two tables → decideAidTitle's first-match order silently
  *     picks one (owner-only beats the rule), so which policy applies would depend
  *     on code order nobody reviews.
- * Fail CLOSED: refuse to load the guard at all rather than guess a classification.
+ * Fail CLOSED: refuse every guarded request rather than guess a classification.
  */
 export function assertStrictRoutesDeclared(
   strictKeys: Iterable<string>,
@@ -555,7 +557,7 @@ export function assertStrictRoutesDeclared(
   const multi = [...count].filter(([, n]) => n > 1).map(([k]) => k)
   if (undeclared.length || notStrict.length || multi.length) {
     throw new Error(
-      '[sudo-guard] strict-route tables disagree with security-registry.json — refusing to load.' +
+      '[sudo-guard] strict-route tables disagree with security-registry.json — refusing guarded requests.' +
         (undeclared.length ? `\n  strict but declared nowhere: ${undeclared.join(', ')}` : '') +
         (notStrict.length ? `\n  declared but not strict: ${notStrict.join(', ')}` : '') +
         (multi.length ? `\n  declared in more than one table: ${multi.join(', ')}` : ''),
@@ -565,7 +567,7 @@ export function assertStrictRoutesDeclared(
 
 /** The strict routes of security-registry.json as `METHOD /path` keys (read straight
  * from the JSON: the loader in security-registry.ts is lazy, fail-open on a missing
- * file, and mocked by several guard tests, so it cannot carry a load-time check). */
+ * file, and mocked by several guard tests, so it cannot carry this check). */
 function readStrictRouteKeys(): string[] | null {
   const registryPath = path.join(process.cwd(), 'security-registry.json')
   // An ABSENT file is skipped, not thrown on: security-registry.ts already treats it as
@@ -582,13 +584,22 @@ function readStrictRouteKeys(): string[] | null {
     .map(([key]) => key.replace(/^([A-Z]+)_/, '$1 '))
 }
 
-const strictRouteKeys = readStrictRouteKeys()
-if (strictRouteKeys) {
-  assertStrictRoutesDeclared(strictRouteKeys, {
-    ownerOnly: SYSTEM_OWNER_ONLY_STRICT,
-    pending: AGENT_POLICY_PENDING,
-    rules: Object.keys(STRICT_AGENT_RULES),
-  })
+// Owner ruling 2026-10-07 ("on first request"): the cross-check runs on the first guarded
+// request, not at module load, so a disagreement cannot stop the server (and every route
+// that merely imports this module) from starting. It still fails CLOSED: a failed check is
+// never remembered as passed, so it throws again on every guarded request until fixed.
+let strictRoutesChecked = false
+export function ensureStrictRoutesChecked(): void {
+  if (strictRoutesChecked) return
+  const strictRouteKeys = readStrictRouteKeys()
+  if (strictRouteKeys) {
+    assertStrictRoutesDeclared(strictRouteKeys, {
+      ownerOnly: SYSTEM_OWNER_ONLY_STRICT,
+      pending: AGENT_POLICY_PENDING,
+      rules: Object.keys(STRICT_AGENT_RULES),
+    })
+  }
+  strictRoutesChecked = true
 }
 
 /**

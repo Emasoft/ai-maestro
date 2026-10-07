@@ -140,7 +140,7 @@ describe('strict-route single source (TRDD-HUSKG52P)', () => {
     ).toThrow(/declared in more than one table: POST \/api\/teams/)
   })
 
-  it('the real tables agree with the real registry (this is what the module-load check runs)', () => {
+  it('the real tables agree with the real registry (this is what the first-request check runs)', () => {
     expect(() =>
       assertStrictRoutesDeclared(registryStrictKeys(), {
         ownerOnly: SYSTEM_OWNER_ONLY_STRICT,

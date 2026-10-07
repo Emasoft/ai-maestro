@@ -4,7 +4,7 @@ status: tasked
 title: creation-helper wizard test writes the developer real haephestos workdir
 column: todo
 created: 2026-09-05T20:42:22+0200
-updated: 2026-09-13T04:28:53+0200
+updated: 2026-10-07T05:33:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: bugfix
@@ -74,3 +74,5 @@ Prove containment by snapshotting `~/agents/haephestos/` (recursive listing + mt
 - [ ] routes resolve the agent workdir per call (or the test redirects HOME before the module is first imported)
 - [ ] a containment assertion exists in the test (real-dir snapshot unchanged before/after)
 - [ ] full `yarn test` leaves `~/agents/haephestos` untouched (measured, not assumed)
+INCIDENT 2026-10-07T05:28+0200 (a record, not a box — this card's own bug, for real): the worker proving the new containment test removed the HOME redirect as its neuter and ran the file. Per the worker, the cleanup route then ran against the developer's REAL haephestos workdir: one upload and one Finder metadata file deleted, the workdir's local settings file rewritten, two stray uploads left behind. Read by the main session afterwards: that folder holds only the settings file and the two strays; no backup copy sits beside the settings file and no local snapshot exists. Not recovered; exact file names are in the session's LOCAL notes; the owner decides whether the strays are removed.
+- [ ] Containment for this file is proven against a SECOND temp dir, never by removing the HOME redirect — a neuter that drops the redirect runs the routes against the real home (see the INCIDENT record above).

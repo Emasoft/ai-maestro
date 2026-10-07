@@ -269,6 +269,18 @@ describe('TRDD-DQVPODKW — the wizard-only creation-helper routes are owner-onl
       expect(src, `${dir} must now be owner-gated — the persona no longer calls it over HTTP`).toMatch(/enforceSystemOwner\(/)
     }
   })
+
+  it('CONTAINMENT — the owner upload lands inside the temp HOME, never the developer real one (TRDD-3AUQ2CL9)', async () => {
+    /** Validates the HOME redirect reaches file-picker's module-load UPLOAD_DIR: the written file must exist under TMP_HOME.
+     *  Positive form on purpose — it reads nothing private and fails loudly the moment the override stops working. */
+    mockAuthenticate.mockReturnValue(OWNER)
+    const r = ROUTES.find((x) => x.dir === 'file-picker')!
+    const res = await call({ ...r, body: uploadBody() })
+    expect(res.status).toBeLessThan(400)
+    const { readdirSync } = await import('fs')
+    const uploads = readdirSync(join(TMP_HOME, 'agents', 'haephestos', 'uploads'))
+    expect(uploads.length).toBeGreaterThan(0)
+  })
 })
 
 /**

@@ -4,7 +4,7 @@ title: change-client R51.7 integration test teardown fails ENOTEMPTY under full-
 column: backburner
 status: tasked
 created: 2026-10-07T09:33:55+0200
-updated: 2026-10-07T09:33:55+0200
+updated: 2026-10-07T09:35:52+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: bugfix
@@ -26,3 +26,7 @@ Seen once, 2026-10-07 09:33, full suite on 97833b3b8: tests/integration/change-c
 ## Approval log
 
 - 2026-10-07T09:33:55+0200 — MANDATE issued by main-agent@ai-maestro (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Notes
+
+- 2026-10-07T09:35:52+0200 — correction to the body: 'Unrelated to the commit under test' was not traced. What was measured: the test file does not import lib/sudo-guard.ts; the guard change is a synchronous file read; the new guard test writes only under its own tmp dir; the teardown is rm(dir, {recursive, force}) with no retries. 'The assertion did not fail' is read from the one error line vitest printed. A second full suite on d781147e0 passed (616 files, 8161 passed, 2 skipped). The late writer is still unnamed; if it is a rollback step that is not awaited, that is a product bug, not a test bug.

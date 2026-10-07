@@ -42,7 +42,13 @@ function realStateListing(): string[] {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const rel = prefix ? `${prefix}/${e.name}` : e.name
       out.push(rel)
-      if (e.isDirectory()) {
+      // `statusline-state/` is NOT descended: every running Claude Code session rewrites its
+      // own file there (and rotates `.aim-bak-*` copies) every few seconds, so its contents
+      // change under ANY test run on a machine with a live session. Measured 2026-10-07: 213
+      // of 213 differing paths in a failing run were under it, none anywhere else. The pillar
+      // CLIs never write there. The directory ENTRY is still listed, so its appearance or
+      // disappearance is still caught.
+      if (e.isDirectory() && rel !== 'statusline-state') {
         try {
           walk(path.join(dir, e.name), rel)
         } catch {

@@ -132,6 +132,8 @@ vi.mock('@/lib/team-registry', () => ({
   isAgentInAnyTeam: vi.fn(() => false),
   blockAllTeams: vi.fn(),
   unblockAllTeams: vi.fn(),
+  // ChangeTitle G23 imports this; the mock must export it or the pipeline stops at G06 (no team here, so a no-op).
+  freezeIncompleteTeam: vi.fn(async () => ({ frozen: false, hibernated: [] })),
 }))
 
 // Governance primitives that ChangeTitle consults at Gate 6-8. We stub

@@ -47,7 +47,7 @@ describe('lib/capabilities — the {verb: revision} map (TRDD-TLSE2FEF)', () => 
 
   // Next mode half of "identical JSON in both modes": the route handler is called directly with no
   // credential; the headless half (same capabilitiesResponse()) is in headless-router-auth-mirror.test.ts.
-  it('the Next route answers 200 with exactly {capabilities: {verb: integer}} and no credential', async () => {
+  it('the Next handler returns exactly capabilitiesResponse(): 200, one top-level key, integer revisions', async () => {
     const { GET } = await import('@/app/api/capabilities/route')
     const res = await GET(new Request('http://localhost:23000/api/capabilities'))
     expect(res.status).toBe(200)

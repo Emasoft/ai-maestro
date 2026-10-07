@@ -103,6 +103,8 @@ describe('DeleteAgent — an agent caller may only soft-delete (TRDD-A50RC5G8)',
     const r = await DeleteAgent('victim-1', { authContext: manager, hard: true })
     expect(r.success).toBe(false)
     expect(r.error).toBe(REASON)
+    // The route/headless layers read result.status to answer 403; without it a refusal surfaces as 400/500.
+    expect(r.status).toBe(403)
     expect(r.operations.some((o) => o.startsWith('G01'))).toBe(false)
     expectNoSideEffects()
   })
@@ -134,6 +136,7 @@ describe('DeleteAgent — an agent caller may only soft-delete (TRDD-A50RC5G8)',
     expect(r.operations.some((o) => o.startsWith('G01b'))).toBe(true)
     expect(r.error ?? '').not.toBe(REASON)
     expect(existsSync(workdir)).toBe(true) // soft keeps the folder
+    expect(r.status, 'status must not be set blindly').toBeUndefined()
   })
 
   it('POSITIVE CONTROL: system owner + hard:true is NOT refused by the guard (model OFF context)', async () => {

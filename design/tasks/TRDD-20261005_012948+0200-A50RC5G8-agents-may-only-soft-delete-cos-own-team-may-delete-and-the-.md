@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-07T05:22:52+0200
+updated: 2026-10-07T05:27:13+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -129,6 +129,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] MEASURED 2026-10-05, no change made: the shuffle-false flag is not needed on tests/integration/agent-soft-delete-restore-roundtrip.test.ts today. The vitest config and package.json set no shuffle, so cases in a file run in source order. The file IS order-dependent: one round trip split across 7 cases sharing module-level state (agent id, secret, archive file, restored id). So the flag would only guard against a future config change, and the root fix would be one case or per-case seeding. A worker attempt to add the flag was refused by the write tool; nothing was changed.
 - [x] CORRECTION 2026-10-05 to the MEASURED box above, which was wrong to close the item: my search covered only the config file and package.json. A sibling test comment names the real case, a run with the command-line flag --sequence.shuffle. Measured by the worker before the change: three shuffled runs failed 6, 5 and 5 of 7. ce0118e0d adds shuffle false to the describe; after it 7 of 7 shuffled, three runs by the worker and two by me. The shared module state remains; one case or per-case seeding would remove it.
 - [x] RECORD 2026-10-07 for the status-field box: 320b09993 adds DeleteAgentResult.status, set to 403 by the soft-only guard; the Next route prefers it (neuter: 2 of 3 route tests red). The headless twin does NOT map the same way and was left as is: it answers 403 for every failure that is not 'not found', so the refusal is 403 in both modes but an infrastructure failure is 500 in full mode and 403 in headless. NOT pinned: the producer line itself (the route tests mock the service).
+- Producer line `result.status = 403` (DeleteAgent soft-only guard) is now pinned by tests/unit/delete-agent-soft-only.test.ts (refusal case 'MANAGER agent + hard:true' asserts status 403; soft-delete control asserts status undefined). Neuter (line removed): that test went red, 7 others green; restored: 8/8 green.
 
 ## Approval log
 

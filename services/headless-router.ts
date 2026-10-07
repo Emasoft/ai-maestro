@@ -3904,7 +3904,6 @@ const routes: Route[] = [
       // but InstallElement's G09 guard rejects predefined role-plugins (forces ChangeTitle()
       // path). This endpoint is specifically the low-level install surface for role-plugins
       // without a title change, so installPluginLocally is the correct helper here.
-      // eslint-disable-next-line deprecation/deprecation
       await installPluginLocally(body.pluginName, body.agentDir, marketplace)
       sendJson(res, 200, { success: true })
     } catch (e) { sendJson(res, 500, { error: String(e) }) }

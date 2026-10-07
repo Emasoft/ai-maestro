@@ -4,7 +4,7 @@ status: tasked
 title: SCEN-015 S012 S016 S019 Action fields wait on the agent clock inside a runner step (Rule 15)
 column: todo
 created: 2026-09-06T02:15:58+0200
-updated: 2026-09-10T01:17:44+0200
+updated: 2026-10-07T05:34:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 task-type: docs
@@ -28,9 +28,10 @@ project-id: ai-maestro
 Split each of the three steps into (a) the UI burst — type the Chat directive, screenshot, exit — and (b) a separate verify step whose precondition is "the agent has ALREADY reported back in Chat", stated at the top in a form the runner checks in one cheap call, with the exact `BLOCKED: <precondition>` string to return when unmet. The orchestrator owns the clock between (a) and (b). Do not touch the Goal/Verify fields' script names (the observer's checks).
 
 ## Acceptance
-- [ ] No `- **Action:**` line in SCEN-015 contains "Wait for" followed by an agent name or "to run the command"
-- [ ] Each former wait step has a precondition line and a `BLOCKED:` string
-- [ ] `yarn pillars:lint` rc 0 after the edit
+- [x] No `- **Action:**` line in SCEN-015 contains "Wait for" followed by an agent name or "to run the command"
+- [x] Each former wait step has a precondition line and a `BLOCKED:` string
+- [x] `yarn pillars:lint` rc 0 after the edit
+- [ ] RESIDUE 2026-10-07 (main session, on reading the diff): S012/S016/S019 no longer wait, but the typed directive now lives in a Note that has the ORCHESTRATOR typing it. Typing into a Chat section is a UI act, which Rule 15 gives to a runner burst; the orchestrator only holds the clock. The clean shape is one typing step plus one verify step per exchange, which needs steps added (renumbering), so it was not done here.
 
 ## Approval log
 

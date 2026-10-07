@@ -1,7 +1,7 @@
 ---
 number: 15
 name: AMP End-to-End Messaging
-version: "1.0"
+version: "1.1"
 description: >
   The user creates two AUTONOMOUS Claude agents via the wizard and verifies
   that each has its AMP identity auto-provisioned by CreateAgent G12 (P002).
@@ -150,8 +150,11 @@ author: AI Maestro Team
 
 ## Phase 2: Text Message Round-Trip (Alice → Bob → Alice)
 
+> **Note (Rule 15):** the orchestrator owns the clock. In its own burst it selects agent "scen015-alice" and types into her Chat section: "Send scen015-bob an AMP message with subject 'Hello Bob' and body 'How are you?', and tell me the message id it returns." It then polls cheaply and spawns the runner for this step only once Alice has replied. Per Rule 0, nobody names or pastes the AMP send script; Alice must choose and invoke it on her own.
+> **Precondition (one read-only call):** `find ~/.agent-messaging/agents/<bobId>/messages/inbox -type f -name '*.json' | wc -l` is at least 1. If it is 0 the runner returns `BLOCKED: scen015-alice has not yet delivered the 'Hello Bob' message to scen015-bob's inbox` and exits immediately.
+
 #### S012: Alice sends a text message to Bob
-- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section: "Send scen015-bob an AMP message with subject 'Hello Bob' and body 'How are you?', and tell me the message id it returns." Wait for Alice to run the command in its own terminal and reply in Chat. Per Rule 0, the runner (the human user) never invokes the AMP send script itself, never names it, and never pastes its argv — Alice must choose and invoke it on her own.
+- **Action:** Verify the message Alice sent ALREADY happened: check the precondition above, open Alice's Chat section and read her reply (read-only), and screenshot it. Do not type, wait, or poll.
 - **Goal:** Alice invokes an AMP send script on her own (e.g. amp-send.sh, using her own agent id) and reports a message id in Chat. Expected outcome: message delivered to Bob's inbox.
 - **Creates:** 1 file in `~/.agent-messaging/agents/<bobId>/messages/inbox/scen015-alice_default_aimaestro_local/`, 1 file in `~/.agent-messaging/agents/<aliceId>/messages/sent/scen015-bob_default_aimaestro_local/`
 - **Modifies:** nothing on disk outside the two inboxes
@@ -178,8 +181,11 @@ author: AI Maestro Team
 - **Modifies:** inbox metadata (marks as read)
 - **Verify:** Output contains the exact body string "How are you?". Screenshot: SCEN-015/S015-bob-read-message.png
 
+> **Note (Rule 15):** the orchestrator owns the clock. In its own burst it selects agent "scen015-bob" and types into his Chat section: "Reply to Alice's last message with 'I'm doing well, thanks Alice!' and confirm it went through." It spawns the runner for this step only once Bob has reported back. Per Rule 0, nobody names or pastes the AMP reply script; Bob must choose and invoke it on his own.
+> **Precondition (one read-only call):** `find ~/.agent-messaging/agents/<aliceId>/messages/inbox/scen015-bob_default_aimaestro_local -type f -name '*.json' | wc -l` is at least 1. If it is 0 the runner returns `BLOCKED: scen015-bob has not yet delivered his reply to scen015-alice's inbox` and exits immediately.
+
 #### S016: Bob replies to Alice's message
-- **Action:** Select agent "scen015-bob" in the sidebar and type into its Chat section: "Reply to Alice's last message with 'I'm doing well, thanks Alice!' and confirm it went through." Wait for Bob to run the command in its own terminal and report back in Chat. Per Rule 0, the runner does not invoke the AMP reply script itself, name it, or paste its argv — Bob must choose and invoke it on his own.
+- **Action:** Verify the reply Bob sent ALREADY happened: check the precondition above, open Bob's Chat section and read his confirmation (read-only), and screenshot it. Do not type, wait, or poll.
 - **Goal:** Bob invokes an AMP reply script on his own (e.g. amp-reply.sh) and confirms in Chat that it exited cleanly. Expected outcome: reply delivered to Alice's inbox with `in_reply_to` set to the original message ID.
 - **Creates:** 1 file in `~/.agent-messaging/agents/<aliceId>/messages/inbox/scen015-bob_default_aimaestro_local/`, 1 file in `~/.agent-messaging/agents/<bobId>/messages/sent/scen015-alice_default_aimaestro_local/`
 - **Modifies:** nothing outside those inboxes
@@ -203,8 +209,11 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** File exists, size is exactly 1024 bytes. Record the checksum. Screenshot: SCEN-015/S018-attachment-created.png
 
+> **Note (Rule 15):** the orchestrator owns the clock. In its own burst it selects agent "scen015-alice" and types into her Chat section: "Send scen015-bob an AMP message with subject 'File for you' and body 'Binary payload', attaching the file /tmp/scen015-attachment.bin, and tell me the message id it returns." It spawns the runner for this step only once Alice has replied. Per Rule 0, nobody names or pastes the AMP send script; Alice must choose and invoke it on her own.
+> **Precondition (one read-only call):** `grep -l 'File for you' ~/.agent-messaging/agents/<bobId>/messages/inbox/scen015-alice_default_aimaestro_local/*.json` lists a file. If it lists none the runner returns `BLOCKED: scen015-alice has not yet delivered the 'File for you' attachment message to scen015-bob's inbox` and exits immediately.
+
 #### S019: Alice sends a message with the attachment
-- **Action:** Select agent "scen015-alice" in the sidebar and type into its Chat section: "Send scen015-bob an AMP message with subject 'File for you' and body 'Binary payload', attaching the file /tmp/scen015-attachment.bin, and tell me the message id it returns." Wait for Alice to run the command in its own terminal and report the result in Chat. Per Rule 0, the runner does not invoke the AMP send script itself, name it, or paste its argv — Alice must choose and invoke it on her own.
+- **Action:** Verify the attachment message Alice sent ALREADY happened: check the precondition above, open Alice's Chat section and read her reply (read-only), and screenshot it. Do not type, wait, or poll.
 - **Goal:** Alice invokes an AMP send script on her own (e.g. amp-send.sh) with the attachment, and reports a message id in Chat. Expected outcome: message and attachment delivered to Bob's inbox.
 - **Creates:** 1 message file in Bob's inbox containing an attachment reference
 - **Modifies:** nothing outside the inboxes

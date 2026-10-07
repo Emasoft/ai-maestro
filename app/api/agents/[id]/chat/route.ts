@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConversationMessages, sendChatMessage } from '@/services/agents-chat-service'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 export async function GET(
@@ -18,6 +18,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // TRDD-91TLL7DW: verify the caller for real (middleware.ts only checks the credential's
+    // SHAPE), then hand the verified identity to the service, which refuses any agent that is not
+    // the one named in the path. This GET used to call no auth helper at all.
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(agentId)) {
@@ -31,7 +38,7 @@ export async function GET(
     const rawLimit = parseInt(searchParams.get('limit') || '100', 10) || 100
     const limit = Math.min(Math.max(rawLimit, 1), 500)
 
-    const result = await getConversationMessages(agentId, { since, limit })
+    const result = await getConversationMessages(agentId, { since, limit }, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ success: false, error: result.error }, { status: result.status })
     }

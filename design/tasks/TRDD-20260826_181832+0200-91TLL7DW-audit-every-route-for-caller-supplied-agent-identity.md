@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-10-04T18:40:04+0200
+updated: 2026-10-07T06:39:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -60,6 +60,12 @@ would have to catch is one an existing CLI flag makes look normal.
       `teams/notify` (reaches a tmux keystroke primitive, 0 authz calls), `agents/email-index`
       (no auth call at all -- NOW authenticates), `sessions/activity/update` (unverified `sessionName` -- NOW checks ownership in the SERVICE, both modes). CLOSED 2026-10-04; docs_dev/trdd-91TLL7DW-report.md.
 - [x] A guard test reddens when a new route reads an agent id unchecked.
+2026-10-07 re-audit (worker, own checkout /private/tmp/aim-wt/91TLL7DW): 259 route files + 254 headless entries enumerated; 3 more UNBOUND handlers found and fixed (GET agents/[id]/chat, GET agents/[id]/panel/feedback which DELETES, headless POST/DELETE agents/:id/repos); per-method ledger test tests/unit/agent-id-binding-ledger.test.ts; 9 NEEDS-OWNER read handlers listed in it. Report reports/workers/*-91TLL7DW.md
+- [ ] Every Next route handler and every headless entry that takes an agent or session id from the request is inventoried with the id source, the caller check, the binding and a verdict
+- [x] Each handler whose fix is unambiguous is bound to the verified caller, in the service when both server modes share it
+- [x] Each fixed handler has a test: agent A acting as agent B is refused with status and reason asserted and no side effect, and A acting as A succeeds
+- [ ] A coverage test fails when a new handler addressed by an agent id binds nothing and is not in the reviewed ledger; only GET may be ledgered; a stale ledger line fails
+- [ ] Owner rulings on the 8 items the audit left unchanged (worker report reports/workers/20261007_063549-91TLL7DW.md, section NEEDS OWNER): public agent address lists; unauthenticated GET metadata, session and skills/settings; unauthenticated GET v1 governance requests; who may change or delete a meeting; deleting a webhook with no creator and unauthenticated GET webhook; what register-peer and exchange-peers verify; whether the fleet-monitor reads full, prompt, queue and metrics stay open to every agent; and whether a MANAGER should be able to read another agent's chat transcript
 
 ## Investigation — 2026-08-26 (read-only; inventory delegated, findings verified first-hand)
 

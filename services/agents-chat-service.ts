@@ -6,6 +6,7 @@
  */
 
 import { getAgent } from '@/lib/agent-registry'
+import type { AuthContext } from '@/lib/agent-auth'
 import { getRuntime } from '@/lib/agent-runtime'
 import { injectedPrompts } from '@/services/shared-state'
 import * as fs from 'fs'
@@ -29,11 +30,24 @@ import { ServiceResult } from '@/types/service'
 
 /**
  * Get messages from the agent's current conversation JSONL file.
+ *
+ * TRDD-91TLL7DW: the transcript is everything the agent saw and did, credentials that passed
+ * through its context included, so the CALLER's verified identity decides — never the path id
+ * alone. This used to take no caller at all: any credential-shaped header read any agent's
+ * conversation, while `parseConversationFile` (same file, same data) was already self-or-owner
+ * (TRDD-RC33OAFQ). Enforced here, not in the routes, because the Next route and the headless
+ * handler both call this function. `authContext` is REQUIRED so a future caller cannot omit it.
+ * The test is `isSystemOwner || agentId === id`: a signed-in non-owner user has no agentId and
+ * must not read as the owner.
  */
 export async function getConversationMessages(
   agentId: string,
-  options: { since?: string | null; limit?: number }
+  options: { since?: string | null; limit?: number },
+  authContext: AuthContext
 ): Promise<ServiceResult<Record<string, unknown>>> {
+  if (!authContext.isSystemOwner && authContext.agentId !== agentId) {
+    return { error: 'Forbidden — you may only read your own conversation', status: 403 }
+  }
   const agent = getAgent(agentId)
   if (!agent) {
     return { error: 'Agent not found', status: 404 }

@@ -1544,13 +1544,17 @@ const routes: Route[] = [
   }},
 
   // Chat
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/chat$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/chat$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    // TRDD-91TLL7DW: authenticate and pass the verified caller to the service, which enforces
+    // self-or-owner (the Next twin does the same).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     // Guard limit against NaN (parseInt returns NaN for non-numeric strings).
     const limitVal = query.limit ? parseInt(query.limit) : undefined
     sendServiceResult(res, await getChatMessages(params.id, {
       since: query.since || undefined,
       limit: limitVal !== undefined && !isNaN(limitVal) ? limitVal : undefined,
-    }))
+    }, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/chat$/, paramNames: ['id'], handler: async (req, res, params) => {
     // TRDD-BF3JN4TL (R42) — this handler had NO auth call AT ALL, not even
@@ -1716,11 +1720,29 @@ const routes: Route[] = [
     }
     sendServiceResult(res, listRepos(params.id))
   }},
+  // TRDD-91TLL7DW: these two WRITE an agent's repo list and exist ONLY here (the Next route has
+  // GET alone). They took the target agent from the path and called the service with no caller
+  // check, so any valid credential could rewrite ANY agent's repositories. The sibling GET above
+  // is documented self-only (owner may name any), so the writes carry the same rule. The test is
+  // `isSystemOwner || agentId === id` and NOT `auth.agentId && auth.agentId !== id` like the GET:
+  // a signed-in non-owner user has no agentId, and that spelling would read it as the owner.
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ctx = buildAuthContext(auth)
+    if (!ctx.isSystemOwner && ctx.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only change your own repos' }); return
+    }
     const body = await readJsonBody(req)
     sendServiceResult(res, updateRepos(params.id, body))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const ctx = buildAuthContext(auth)
+    if (!ctx.isSystemOwner && ctx.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only change your own repos' }); return
+    }
     sendServiceResult(res, removeRepo(params.id, query.url || ''))
   }},
 

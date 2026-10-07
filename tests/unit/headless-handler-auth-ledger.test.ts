@@ -137,10 +137,9 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'GET /^\\/api\\/agents$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/session$/',
   'POST /^\\/api\\/agents\\/([^/]+)\\/remove-element$/',
-  'GET /^\\/api\\/agents\\/([^/]+)\\/chat$/',
+  // GUARDED 2026-10-07 (TRDD-91TLL7DW) — removed per this ledger's own rule: GET agents/{id}/chat, POST/DELETE agents/{id}/repos
+  // now authenticateAgent and bind the caller to the addressed agent (self or owner).
   'GET /^\\/api\\/agents\\/([^/]+)\\/skills\\/settings$/',
-  'POST /^\\/api\\/agents\\/([^/]+)\\/repos$/',
-  'DELETE /^\\/api\\/agents\\/([^/]+)\\/repos$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/amp\\/addresses\\/([^/]+)$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/amp\\/addresses$/',
   'GET /^\\/api\\/agents\\/([^/]+)\\/email\\/addresses\\/([^/]+)$/',

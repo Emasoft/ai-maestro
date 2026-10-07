@@ -4,7 +4,7 @@ title: Agents may only soft-delete — COS own team may delete and the cemetery 
 column: dev
 status: tasked
 created: 2026-10-05T01:29:48+0200
-updated: 2026-10-05T07:14:38+0200
+updated: 2026-10-07T05:22:52+0200
 current-owner: main-agent@ai-maestro
 created-by: main-agent@ai-maestro
 task-type: security
@@ -21,7 +21,7 @@ approval-datetime: 2026-10-05T01:29:48+0200
 derived: false
 
 relevant: [TRDD-L6VV9Q7U]
-implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b, fb676e33c, 398b1721d]
+implementation-commits: [68e0c7ade, 080b5ac29, 88b459d1b, fb676e33c, 398b1721d, 320b09993]
 ---
 
 # Agents may only soft-delete — COS own team may delete and the cemetery stays user-only
@@ -70,7 +70,7 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [ ] USER confirms or amends COS_DELETABLE_TITLES (member, architect, orchestrator, integrator), including whether a CHIEF-OF-STAFF may delete its ORCHESTRATOR and so freeze its own team
 - [x] One UN-MOCKED round trip: soft delete, restore from the cemetery, the restored agent authenticates
 - [ ] A new agent taking a soft-deleted agent name adopts the kept folder and its old contents — decide: quarantine the folder, or refuse the name while a tombstone exists
-- [ ] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
+- [x] The 403 for the soft-only refusal is chosen by message substring; replace with a status/code on DeleteAgentResult, and check the headless twin maps the same way
 - [ ] The MANAGER delete branch examined: may a MANAGER delete another MANAGER record or an ASSISTANT (G01b covers the latter?)
 - [ ] UI label "Delete Agents Too" and its help text describe a hard delete; correct for agent callers or state it is the owner behaviour
 - [x] COS grant bound to the registry: caller must be chiefOfStaffId of a team containing the target; token teamId not consulted; all teams searched (77a02304d)
@@ -122,12 +122,13 @@ path that the cemetery archive still exists. Neuter each guard separately. Run t
 - [x] 2026-10-05 398b1721d: the import drops the stored session-secret hash at its one metadata assembly site and the export omits it; session bootstrap writes a fresh one at the next session start (lib/session-env.ts, read by me). My runs: round-trip file 7 of 7; the ten import/export test files together twice, 229 of 229 (an earlier run and the worker's run failed different tests under a load average above 100 — read as load, by inference). Import-side neuter is the worker's.
 - [ ] NOT COVERED by that fix (read by me: app/api/agents/cemetery/route.ts calls importAgent with newName and newId only — no skipKeys): a restored agent keeps the archive's AMP signing keys and fingerprint under its new id. Whether a resurrected agent should keep its old signing identity is a question for the owner (it is the same agent, restored by the owner) — but it must be a decision, not an accident. Also untested: the restore ROUTE itself (the test calls its steps).
 - [x] RECORD 2026-10-05 after 398b1721d: WHOLE SUITE at 013b9004a, clean tree — 593 files / 589 passed, the same 8 known failed tests, tsc 0 lines; the round-trip and foreign-import files are green in it. The earlier failure of the foreign-import file was NOT REPRODUCED in six later runs (two quiet runs of the set, three shuffled, the whole suite); its cause is NOT ESTABLISHED — none of those runs was under load or at the pre-change commit, and shuffling reorders cases inside files, not files. CONSEQUENCE of the fix, accepted on the same footing as the soft-delete containment on TRDD-8E6XMDEX: a still-running session of a restored or imported agent is refused until its next session start. Other readers of an archive's registry row were NOT searched in a way that could find one (my grep matched the live registry's file name); the export route's POST handler and the transcript-export job are unread.
-- [ ] SMALL: tests/integration/agent-soft-delete-restore-roundtrip.test.ts depends on the order of its own cases (each step uses the previous one's state); under vitest's shuffled order 5 to 6 of its 7 cases fail (three runs, 2026-10-05). The suite does not shuffle today, so it is green, but mark the block as sequential (or fold the steps into one case with named assertions) so a future shuffle setting cannot red it for a reason unrelated to the code.
+- [x] SMALL: tests/integration/agent-soft-delete-restore-roundtrip.test.ts depends on the order of its own cases (each step uses the previous one's state); under vitest's shuffled order 5 to 6 of its 7 cases fail (three runs, 2026-10-05). The suite does not shuffle today, so it is green, but mark the block as sequential (or fold the steps into one case with named assertions) so a future shuffle setting cannot red it for a reason unrelated to the code.
 - [x] HYGIENE 2026-10-05: 4 boxes ticked from the same mapping — three records (the neuter/red-set process note, the pins-current-behaviour note whose ruling is carried by the COS_DELETABLE_TITLES box, the triage pointer) and the closing proposal that a later ticked box withdrew (checked: that box is ticked).
 - [ ] CARRIED, per the mapping (each unread by me): (1) a MANAGER may delete another MANAGER (lib/authorization.ts, the delete branch) with no ruling and no test — a question for the owner; (2) seven policy-tail actions for a chair (modify-agent, manage-skills, view-agent, session and group actions) are not established, nor a chair archiving a failed card assigned to itself; (3) this card implementation-commits list lacks commits its own boxes name.
-- [ ] STILL TO APPLY (worker could not edit the line with the edit tool; proven on a scratch copy): add { shuffle: false } to the describe at line 134 of tests/integration/agent-soft-delete-restore-roundtrip.test.ts — describe.sequential does not stop shuffling. Closes the SMALL order-dependence box.
+- [x] STILL TO APPLY (worker could not edit the line with the edit tool; proven on a scratch copy): add { shuffle: false } to the describe at line 134 of tests/integration/agent-soft-delete-restore-roundtrip.test.ts — describe.sequential does not stop shuffling. Closes the SMALL order-dependence box.
 - [x] MEASURED 2026-10-05, no change made: the shuffle-false flag is not needed on tests/integration/agent-soft-delete-restore-roundtrip.test.ts today. The vitest config and package.json set no shuffle, so cases in a file run in source order. The file IS order-dependent: one round trip split across 7 cases sharing module-level state (agent id, secret, archive file, restored id). So the flag would only guard against a future config change, and the root fix would be one case or per-case seeding. A worker attempt to add the flag was refused by the write tool; nothing was changed.
 - [x] CORRECTION 2026-10-05 to the MEASURED box above, which was wrong to close the item: my search covered only the config file and package.json. A sibling test comment names the real case, a run with the command-line flag --sequence.shuffle. Measured by the worker before the change: three shuffled runs failed 6, 5 and 5 of 7. ce0118e0d adds shuffle false to the describe; after it 7 of 7 shuffled, three runs by the worker and two by me. The shared module state remains; one case or per-case seeding would remove it.
+- [x] RECORD 2026-10-07 for the status-field box: 320b09993 adds DeleteAgentResult.status, set to 403 by the soft-only guard; the Next route prefers it (neuter: 2 of 3 route tests red). The headless twin does NOT map the same way and was left as is: it answers 403 for every failure that is not 'not found', so the refusal is 403 in both modes but an infrastructure failure is 500 in full mode and 403 in headless. NOT pinned: the producer line itself (the route tests mock the service).
 
 ## Approval log
 

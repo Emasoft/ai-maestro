@@ -282,11 +282,6 @@ import {
 } from '@/services/marketplace-service'
 
 import {
-  createAssistantAgent,
-  getAssistantStatus,
-} from '@/services/help-service'
-
-import {
   createCreationHelper,
   deleteCreationHelper,
   getCreationHelperStatus,
@@ -3813,31 +3808,16 @@ const routes: Route[] = [
   // =========================================================================
   // Help
   // =========================================================================
-  { method: 'GET', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await getAssistantStatus())
-  }},
-  { method: 'POST', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await createAssistantAgent())
-  }},
-  { method: 'DELETE', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (_req, res) => {
-    // Inline the assistant deletion (replaces deprecated deleteAssistantAgent wrapper)
-    const { getAgentByName } = await import('@/lib/agent-registry')
-    const assistant = getAgentByName('_aim-assistant')
-    if (!assistant) {
-      // Already gone — idempotent success
-      sendJson(res, 200, { success: true })
-      return
-    }
-    const { DeleteAgent } = await import('@/services/element-management-service')
-    const delResult = await DeleteAgent(assistant.id, {
-      authContext: { isSystemOwner: true },
-    })
-    if (!delResult.success) {
-      sendJson(res, 500, { error: delResult.error || 'Failed to delete assistant' })
-      return
-    }
-    sendJson(res, 200, { success: true })
-  }},
+  // Forwarded to the Next route, never reimplemented: the copies here ran with NO handler-level
+  // authentication, and DELETE passed a hard-coded `{ isSystemOwner: true }` to DeleteAgent, so in
+  // headless mode the caller's identity never reached the delete pipeline. One handler, one gate.
+  ...(['GET', 'POST', 'DELETE'] as const).map((method) => ({
+    method, pattern: /^\/api\/help\/agent$/, paramNames: [] as string[],
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      const mod = await import('@/app/api/help/agent/route')
+      await delegateNextRoute(req, res, mod[method] as unknown as NextRouteHandler, '/api/help/agent', { method })
+    },
+  })),
 
   // =========================================================================
   // Creation Helper (Haephestos)

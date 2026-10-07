@@ -7,7 +7,7 @@ approved: true
 approval-judge: ai-maestro-hub-session
 approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-10-07T07:22:14+0200
+updated: 2026-10-07T07:30:38+0200
 current-owner: scenario-runner
 assignee: ai-maestro-hub-session
 priority: 1
@@ -67,3 +67,7 @@ must be additive (never suppress a real delivery on a false negative).
 ## Approval log
 
 - 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: no `agent_not_ready` result type exists anywhere in lib/services/components/app (0 hits) — a chat message to a not-ready client still vanishes silently, same as filed.
+
+## Notes
+
+- 2026-10-07T07:30:38+0200 — busy-agent false-refusal check (main-agent@ai-maestro, read-only): on a live agent pane, #{pane_current_command} = 2.1.285 (the claude process); the tty foreground group (tpgid) is claude's own pgid; its running child (a bash status-line script) sits in its OWN process group with no controlling tty. So Claude Code children do not become the pane's foreground, and a bash child does not make the pane read as a shell. Not directly observed DURING a Bash tool call — confirm on the next busy agent before closing.
